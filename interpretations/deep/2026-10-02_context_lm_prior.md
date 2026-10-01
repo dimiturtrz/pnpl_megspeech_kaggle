@@ -35,3 +35,15 @@ Ablations on the combined val:
 - Selection now uses the macro over val tasks instead of pooling words (train.py, 82faf10). Pooling let Sherlock decide 72% of the score.
 - The next lever is data: MOCHATIMIT/TIMIT runs in train (LibriBrain2 fetch), and a check that per-task val moves.
 - A word-head-only LB submission would separate MEG transfer from LM-prior transfer. Spend one only if two models disagree on it.
+
+## Follow-up: context-v1 (all 129 runs, incl. 14 TIMIT + 2 MOCHATIMIT)
+
+The same ruler is used for both models: three-task val, macro over tasks, and a prior from all train runs, unweighted.
+
+| model | MOCHA (n=518) | Sherlock1 (n=1308) | TheMoth (n=1226) | macro | LB |
+|---|---|---|---|---|---|
+| context-v0 | 0.387 | 0.529 | 0.347 | 0.421 | 0.307 |
+| context-v1 | 0.527 | 0.546 | 0.439 | 0.504 | 0.385 |
+
+- The local macro gain (+0.083) matches the LB gain (+0.078), so the macro-over-tasks val tracks the LB. Most of the gain is on MOCHA (+0.14), where the read-sentence data is in-domain, and on TheMoth (+0.09).
+- v1's word head on MOCHA (0.264) is *below* v0's (0.314), while its context head rose. The extra data mostly bought read-sentence word-order prior, not better single-word MEG decoding. The read-sentence share is still only 5.8% of train words. That motivates `--read-weight` (c4fefd3), which tests whether oversampling those runs moves MOCHA and the LB further.
