@@ -1,0 +1,249 @@
+[project]
+name = "megspeech"
+version = "0.1.0"
+# 3.12 is the floor because strict typing needs `typing.override` (3.12+), and the alternatives were worse:
+# disabling missing-override-decorator weakens the type story, and typing_extensions adds a runtime dep to
+# every consumer for one decorator. No consumer needed 3.11 — synthscape already requires >=3.12 (isaacsim),
+# and the other two had merely inherited this default (bd 166).
+requires-python = ">=3.12"
+dependencies = [
+    "numpy",
+    "jaxtyping",   # Float[Tensor,"B C H W"] shape/dtype annotations — inert at runtime without a checker (no prod cost)
+    "beartype",    # the runtime checker jaxtyping delegates to; wrap as @shapecheck in your types module (see devtools/README)
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov"]
+# The guardrail ANALYZERS are an installed package pinned by scaffold tag (not vendored source) — an engine
+# update is a one-line `devtools_ref` bump on `copier update`, no source diff in your PRs. Imports as
+# `devtools` (`python -m devtools.graph.fitness …`); grimp/networkx arrive transitively. ast-grep/jscpd configs are
+# located from the install via `python -m devtools.tools.config`. Pin lives in .copier-answers.yml (devtools_ref).
+devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git@v1.28.0#subdirectory=sdlc-devtools"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["core*", "megspeech*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--import-mode=importlib"
+# REQUIRED by [tool.structure] test_layout = "mirror". pytest collects `test_*.py` by default, so a
+# mirror tree is not collected AT ALL without this — and an uncollected suite reports green while running
+# zero tests, which is worse than a red one. `devtools.hygiene.mirror --assert` fails on the CONFIG if these two
+# settings ever disagree, so the failure mode cannot hide. Switch both together, or neither.
+python_files = ["*.py"]
+# The convention is `test_<method>` FUNCTIONS (docs/UNIT_TESTS.md) — there are no test classes. Left at the
+# default, pytest tries to collect any imported `Test*` PRODUCTION class as a test and warns on every run.
+python_classes = []
+
+# Dependency hygiene (deptry, ENFORCED): imported-but-undeclared (DEP001) / declared-but-unused (DEP002) /
+# transitive (DEP003) imports. noxfile.py imports the `nox` runner (invoked via uvx, deliberately not a
+# project dep) so it's excluded from the scan.
+[tool.deptry]
+extend_exclude = ["noxfile.py"]
+
+# deptry does not scan tests/ (its default exclude), so DEP002 (declared-but-unused) fires for anything
+# only exercised by the test suite or by tooling. PERMANENT ignores (never imported in scanned source by
+# design): the test-runner deps `pytest`/`pytest-cov`, and `sdlc-devtools` (the analyzers, invoked as a CLI
+# `python -m devtools.*`). STARTERS: the runtime deps the scaffold ships for you to build on
+# (numpy/jaxtyping/beartype/pydantic) — they read as unused until you import them.
+[tool.deptry.per_rule_ignores]
+# >>> LOCAL-SLOT: deptry-unused — PRUNE a starter once you wire it (keep pytest/pytest-cov/sdlc-devtools)
+DEP002 = ["pytest", "pytest-cov", "sdlc-devtools", "numpy", "jaxtyping", "beartype", "pydantic"]
+# <<< LOCAL-SLOT: deptry-unused
+
+[tool.ruff]
+line-length = 120
+# >>> LOCAL-SLOT: ruff-exclude — edit freely, the template will not overwrite intent here
+extend-exclude = ["docs", "learning", "research", "interpretations"]
+# <<< LOCAL-SLOT: ruff-exclude
+
+[tool.ruff.lint]
+select = ["F", "B", "I", "T201", "FBT", "BLE001", "S101", "S110", "C901", "PLR0912", "PLR0913", "PLR0915", "PLR2004", "PLC0415", "RUF100", "N", "E741", "E742", "E743", "PLR0124", "PLR1714", "PLW3301", "RUF012", "RUF005", "RUF007", "RUF010", "RUF022", "RUF046", "C408", "C420", "SIM", "PERF401", "PLW0108", "E731", "E402", "ICN001", "S603", "S607", "PTH123", "E501", "SLF001", "PGH003", "PGH004", "TID251"]
+ignore = [
+    # jaxtyping shape strings are deliberate runtime-checked annotations that ruff's forward-ref parser
+    # misreads (jaxtyping's own FAQ prescribes disabling both): F722 = a multi-token dim string
+    # `Float[Tensor, "b c h w"]` (invalid forward-ref syntax); F821 = a single-axis `Float[Tensor, "n"]`
+    # (a valid forward-ref to the undefined name `n`). Needed so a 1-D shape passes the now-blocking
+    # shape-contracts gate (bd kqk) — the shape gate REQUIRES an annotation the lint would otherwise reject.
+    "F722",
+    "F821",
+]
+
+# pep8-naming (N): case convention is a UNIVERSAL rule; the allowlisted idioms are per-repo FACTS. Every
+# name that carries a meaning renames — only symbols with no honest descriptive form belong here (a dodge
+# makes the gate useless).
+[tool.ruff.lint.pep8-naming]
+# >>> LOCAL-SLOT: pep8-naming — ignore-names VOCAB (this repo's ML/physics idioms); the block is shared,
+# only its contents differ. Add domain symbols (MRI T1/T2/TR/PD, canonical lib aliases…) here.
+ignore-names = ["X*", "Y*", "B", "C", "H", "W", "F"]
+# <<< LOCAL-SLOT: pep8-naming
+
+[tool.ruff.lint.per-file-ignores]
+# Tests get a wider carve-out: literal fixtures (PLR2004) + bool flags (FBT); mock classes mirror external
+# PascalCase APIs + local math/alias scratch (N8xx); fixtures take many params (PLR0913). The SUBSTANTIVE
+# gates (imports-at-top, real bugs, dead code) still apply to tests. SLF001 is enforced house-wide again
+# (bd 8ex reopened) but tests legitimately poke privates-under-test, so it sits in the tests carve-out.
+"__init__.py" = ["F401"]
+"tests/**" = ["S101", "PLR2004", "FBT", "SLF001", "N801", "N802", "N803", "N806", "N812", "PLR0913"]
+# >>> LOCAL-SLOT: per-file-ignores — repo-specific file carve-outs (e.g. a best-effort telemetry shell
+# that must never raise). Add lines here; copier update won't overwrite this region.
+# <<< LOCAL-SLOT: per-file-ignores
+
+# Static type gate (pyrefly, ENFORCED): every def carries annotations (a bare param fails
+# implicit-any-parameter) AND the annotations must CHECK (a mismatch fails bad-return / bad-argument-type)
+# — the R1 type-grade Correctness leg ruff's lint codes can't reach. `preset = "strict"` bundles
+# strict-callable-subtyping + implicit-any + missing-override + unused-ignore. Runs env-aware
+# (`uv run --with pyrefly`) so it reads installed dep stubs (pydantic/numpy ship py.typed). A fresh gen's
+# seed is fully typed (0 errors), so it BLOCKS from day one as a regression guard — no advisory ratchet.
+# `Any` is an annotation that opts OUT of annotation, in a repo where typing is a blocking rule. Banning the
+# IMPORT is what makes this complete: `dict[str, Any]` is caught by no use-site rule (not even ANN401), yet
+# it cannot exist once the name cannot be imported. The unnamed escape hatch — a bare `dict`, an empty
+# container, an unannotated param — is already closed by pyrefly strict's implicit-any family, so the two
+# compose into one rule with no hole. At a genuine JSON boundary, name the shape with a TypedDict/Protocol.
+# ADVISORY for now: it rides ruff_advisory_select until a real tree is clean (bd lph).
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"typing.Any" = { msg = "Any opts out of the type system. Name the real type, or a TypedDict/Protocol at a JSON boundary." }
+
+[tool.pyrefly]
+preset = "strict"
+check-unannotated-defs = true
+search-path = ["."]
+# MUST equal the `requires-python` floor above. pyrefly does NOT infer it from requires-python — left
+# unset it checks against its own default (>=3.12), so a repo declaring 3.11 would get a GREEN type check
+# for `from typing import override` and then ImportError at runtime on the version it claims to support.
+# The checker has to target the oldest interpreter the project promises, not the newest one it is run on.
+# A unit test pins these two together (bd 166).
+python-version = "3.12"
+# Untyped third-party imports ERROR by default (stricter than mypy's silent Any). A dep that ships no
+# py.typed / stubs goes here to be treated as Any — a per-repo FACT vocab, parallel to the deptry/vulture
+# slots. jaxtyping shape strings (`Float[Array, "b n"]`) are a runtime-checked DSL
+# pyrefly's front-end models only partially; if one surfaces a type error, add its module here or suppress
+# at the line with `# pyrefly: ignore[<code>]`.
+# >>> LOCAL-SLOT: pyrefly-ignore-imports — this repo's untyped-dependency modules (treated as Any)
+ignore-missing-imports = []
+# <<< LOCAL-SLOT: pyrefly-ignore-imports
+
+# Tests inject unannotated fixture params (pytest fills them) — mirror the ruff `tests/**` carve-out so the
+# strict annotation requirement doesn't force a type onto every fixture signature. Scope is packages
+# (`lint_paths`) anyway, but this keeps a bare `pyrefly check` clean too.
+[[tool.pyrefly.sub-config]]
+matches = "**/tests/**"
+check-unannotated-defs = false
+
+[tool.vulture]
+min_confidence = 60
+ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer", "@model_serializer", "@computed_field"]
+# ignore_names = symbols vulture must treat as USED — each IS referenced, but through a path its static
+# name-match can't follow (framework dispatch, iteration, string keys, external-lib attribute). NOT a
+# "don't care" list — a FACT VOCAB, per-repo, parallel to the pep8-naming slot (bd fy5). `model_config`
+# is the universal pydantic base (metaclass-read); add this repo's documented FPs below.
+# >>> LOCAL-SLOT: vulture-ignore-names — this repo's documented dead-code false positives
+ignore_names = ["model_config"]
+# <<< LOCAL-SLOT: vulture-ignore-names
+# >>> LOCAL-SLOT: vulture-scan — edit freely, the template will not overwrite intent here
+paths = ["core", "megspeech"]
+exclude = []
+# <<< LOCAL-SLOT: vulture-scan
+
+[tool.coverage.run]
+# >>> LOCAL-SLOT: coverage-scan — edit freely, the template will not overwrite intent here
+source = ["core", "megspeech"]
+omit = []
+# <<< LOCAL-SLOT: coverage-scan
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "^\\s*\\.\\.\\.$",
+    "@(abc\\.)?abstractmethod",
+]
+
+
+# Directional layer gate (import-linter): forbidden-import CONTRACTS graph.py can't express — a one-way
+# `core -> trainer` import is no cycle, so it passes the graph gate but must fail here. The gate is
+# universal (all house repos run it); the SCOPE + contracts are project-local, hence the slot.
+# >>> LOCAL-SLOT: import-contracts — layering scope + your directional rules. `root_packages` is the set
+# import-linter analyses (defaults to `packages`; widen it if a scope-only package such as a viewer carries
+# layer rules but isn't in the arch set). Ships the kernel-independence starter (the FIRST package imports
+# none of the others), the pattern all 3 house repos share. Add viewer/trainer or domain contracts below;
+# edit freely — copier update won't overwrite this region.
+[tool.importlinter]
+root_packages = ["core", "megspeech"]
+
+[[tool.importlinter.contracts]]
+name = "core is an independent kernel (imports none of the other packages)"
+type = "forbidden"
+source_modules = ["core"]
+forbidden_modules = ["megspeech"]
+# <<< LOCAL-SLOT: import-contracts
+
+
+# Forbidden-USE contracts (devtools/contracts.py) — directional rules over the DECOMPOSED arrows
+# (inherits / holds / references / calls / construct), not just imports. import-linter can only say "must
+# not IMPORT"; this says "must not USE", and can target ONE kind — e.g. "nothing outside the composition
+# root may CONSTRUCT a concrete", which an import rule cannot express at all. Empty by default: no
+# contracts means nothing to check, so a fresh project starts green and ratchets. The GATE is universal;
+# the LAYERS are a per-repo FACT, hence the slot.
+# >>> LOCAL-SLOT: arch-contracts — this repo's directional use rules (uncomment + edit)
+# [[tool.arch.forbidden]]
+# name = "domain must not use infra"
+# source = "core.domain"
+# forbidden = ["core.infra"]
+# kinds = ["calls", "holds", "construct"]   # omit `kinds` to forbid EVERY arrow kind
+# <<< LOCAL-SLOT: arch-contracts
+
+# Architecture fitness thresholds read by devtools/graph.py --assert.
+[tool.structure]
+# >>> LOCAL-SLOT: arch-thresholds — tune per repo; the template ships defaults and won't churn these,
+# so a per-project override survives `copier update` without a merge conflict.
+bottleneck_degree = 8    # fan-in AND fan-out both over this = god-module
+file_max = 750           # god-file line ceiling — raise as real files grow
+file_min = 0             # advisory line floor — 0 = OFF (no honest universal floor; raise per repo if wanted)
+betweenness_max = 0.10   # advisory chokepoint threshold
+main_sequence_max = 0.0  # advisory Martin main-sequence distance |A+I-1| ceiling — 0 = OFF (a concrete
+                         # stable leaf legitimately sits at D≈1, so no honest universal floor; raise per repo)
+feature_envy_min = 4     # feature-envy floor: foreign accesses before a method is judged at all. Below
+                         # it the ratio is noise (2 vs 1 proves nothing). Raise it for repos full of
+                         # legitimate delegators (mappers / serializers / visitors) rather than weakening
+                         # the rule; value objects are already excluded by role.
+demeter_max_depth = 2    # Law of Demeter ceiling: attribute hops in one chain. 2 = "reach your own field,
+                         # then talk to it" (`self.store.get(k)`); 3 reaches THROUGH it
+                         # (`self.store.config.name`). Raise it for data-navigation-heavy trees (AST/JSON
+                         # walking), where a deep chain is reading a structure, not coupling to a stranger.
+test_layout = "mirror"   # WHERE a module's unit test lives — read by BOTH mirror gates (file-level, in
+                         # devtools/graph.py, and method-level, in devtools/mirror.py), so they cannot
+                         # disagree about what is covered. See docs/UNIT_TESTS.md.
+                         #   "mirror" tests/unit/<pkg>/<path>/<name>.py — a PATH mirror, so the names match
+                         #            and what a test covers is visible in its path rather than
+                         #            reconstructed by the reader. REQUIRES python_files = ["*.py"] (set
+                         #            above): `test_` is how pytest FINDS files, not a convention, and
+                         #            without that setting nothing is collected at all.
+                         #   "off"    no test-existence gate, and no method-level gate either
+                         # There is deliberately no lenient value. A mode accepting a test "anywhere" is not
+                         # a threshold, it is the RULE meaning something else here — see the o70 union law
+                         # in the scaffold's docs/RULE_INVENTORY.md. Turn it off or meet it.
+# <<< LOCAL-SLOT: arch-thresholds
+
+# magic-literals + complexity are ADVISORY explorers (devtools/magic_literals.py, devtools/complexity.py) —
+# ranked reports, no gate, no config. The FIXED complexity gate is ruff C901 (CC>10). There is no honest
+# universal magic-literal ceiling (0 too strict, N arbitrary), so it stays a report. If a repo later needs
+# to enforce a budget, add a legislated config knob at that point — a knob is added on real need, not now.
+
+# Shape-contract gate (devtools/shape_contracts.py) — a public array/tensor boundary must carry a
+# jaxtyping shape, not a bare `np.ndarray`/`Tensor`. The universal `ndarray`/`Tensor` are builtin; a
+# repo's own array ALIASES (its core.types names that also mean "an array") are the FACT that varies.
+[tool.shape_contracts]
+# >>> LOCAL-SLOT: shape-aliases — this repo's array-alias type names (e.g. Volume, Mask, Image, Batch)
+array_aliases = []
+# <<< LOCAL-SLOT: shape-aliases
+

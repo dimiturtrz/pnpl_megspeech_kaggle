@@ -1,0 +1,31 @@
+name: audit
+
+# NIGHTLY known-CVE scan (pip-audit, the PyPA advisory DB) of the resolved dependency set. Deliberately
+# NOT a per-PR gate: advisories change UNDER you — a new CVE lands against a dependency with no code change
+# on your side — so a schedule + manual dispatch is the honest cadence, and the run FAILS when a known vuln
+# is present (the nightly goes red + notifies). A fresh gen's deps are clean, so it is green from day one.
+on:
+  schedule:
+    - cron: "17 4 * * *"   # ~04:17 UTC daily, off-the-hour to dodge the top-of-hour cron stampede
+  workflow_dispatch: {}
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # Install the full dependency closure (all extras) so pip-audit sees runtime + dev + devtools deps.
+      - name: Install dependencies (all extras)
+        run: uv sync --all-extras
+      # Audit the installed dist metadata against the advisory DB. --skip-editable drops the local / git
+      # source installs (e.g. sdlc-devtools, pinned by git tag) — they carry no PyPI release to look up.
+      # `--with` adds pip-audit to the run without polluting the project deps.
+      - name: Known-CVE scan — enforced nightly (pip-audit)
+        run: uv run --with pip-audit==2.10.1 pip-audit --skip-editable

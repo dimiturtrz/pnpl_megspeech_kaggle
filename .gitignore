@@ -1,0 +1,49 @@
+# Python bytecode / build
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Test / lint / type caches
+.pytest_cache/
+.ruff_cache/
+.import_linter_cache/
+.grimp_cache/
+
+# archmap: graph.json IS committed (the diffable architecture artifact); the interactive viewer shell is
+# regenerated (template-identical, ~700KB of vendored libs) locally / in the Pages workflow — not committed.
+docs/architecture/index.html
+
+# Virtualenv
+.venv/
+
+# Logs / local DBs — anchored to root (`/logs/`, not `logs/`, so a source dir named logs/ isn't ignored)
+/logs/
+*.db
+
+# External git-repo deps: checked out under external/, never vendored. Anchored — a package may
+# legitimately have an `external/` submodule.
+/external/
+
+# Coverage artifacts
+.coverage*
+coverage.xml
+htmlcov/
+
+# Private/local-only docs (generic pattern — reveals no intent in the ignore list itself)
+*.local.md
+
+# ML workflow: data lives OUTSIDE the repo (paths.yaml points at it), MLflow tracking, training runs.
+# Anchored to root (`/data/`, not `data/`) so a source package like core/data/ isn't silently
+# untracked, hiding its tests (bd hhy).
+/data/
+/paths.yaml
+/runs/
+/mlruns/
+
+# Beads / Dolt engine bits (issues.jsonl is tracked; the embedded engine is not)
+.dolt/
+.beads/*.db
+.beads-credential-key
+
+# jscpd (node) — pulled transiently by npx for the duplication gate
+node_modules/

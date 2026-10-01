@@ -1,0 +1,189 @@
+# Commit-event binding of the same gates CI enforces. No-git MVP: LOCAL hooks (repo: local +
+# language: system) that shell out to uvx / uv run with the SPEC-pinned versions — no remote repo+rev
+# (that path is the root .pre-commit-hooks.yaml, unused until this goes remote+versioned).
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-gate
+        name: ruff — enforced (full select)
+        entry: uvx ruff@0.15.13 check core megspeech tests comp --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123,E501,SLF001,PGH003,PGH004,TID251 --ignore F722,F821
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: ruff-format-gate
+        name: ruff — format check (enforced)
+        entry: uvx ruff@0.15.13 format --check .
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true
+
+      - id: pyrefly-gate
+        name: pyrefly — types (strict, enforced)
+        # env-aware (`uv run --with`) so pyrefly reads installed dep stubs; scope = lint_paths (packages).
+        entry: uv run --with pyrefly==1.1.1 pyrefly check core megspeech tests comp
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: vulture-gate
+        name: vulture — dead code (conf>=80)
+        entry: uvx vulture@2.16 --min-confidence 80
+        language: system
+        pass_filenames: false
+        always_run: true
+      
+      - id: importlinter-gate
+        name: import-linter — directional layers
+        entry: uvx --from import-linter lint-imports
+        language: system
+        pass_filenames: false
+        always_run: true
+      
+      - id: arch-fitness
+        name: architecture fitness (graph.py --assert)
+        entry: uv run --extra devtools python -m devtools.graph.fitness --assert core megspeech
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: astgrep-gate
+        name: ast-grep — module shape
+        # NO SHELL. The config lives in the INSTALLED devtools package, and locating it used to need
+        # `bash -c` for a `$(python -m devtools.tools.config sgconfig)` substitution — which meant this gate did
+        # not run on Windows at all, where the bash pre-commit picks cannot find uv. `devtools.astgrep`
+        # does that lookup in Python and runs the scan itself, so the hook is a plain entry like every other.
+        entry: uv run --extra devtools python -m devtools.astgrep core megspeech --assert
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Class-shape smells — advisory explorers (LCOM4 cohesion / Fowler data-clumps / namespace-state).
+      # They only print a ranked report and always exit 0, so as commit hooks they surface findings
+      # without ever blocking — advisory by construction, not by continue-on-error.
+      - id: state-candidates
+        name: class-shape — namespace-state (advisory)
+        entry: uv run --extra devtools python -m devtools.cohesion.state_candidates core megspeech
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: lcom
+        name: class-shape — LCOM4 cohesion (advisory)
+        entry: uv run --extra devtools python -m devtools.cohesion.lcom core megspeech
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: data-clumps
+        name: class-shape — data clumps (advisory)
+        entry: uv run --extra devtools python -m devtools.cohesion.data_clumps core megspeech
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: magic-literals
+        name: magic-literals — advisory (recurring literal / repeated key-set report)
+        entry: uv run --extra devtools python -m devtools.hygiene.magic_literals core megspeech
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: complexity
+        name: complexity — advisory (radon CC ranking; ruff C901 is the fixed gate)
+        entry: uv run --extra devtools python -m devtools.cohesion.complexity core megspeech
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: composition-cycles
+        name: composition cycles — enforced (no mutually-owning classes)
+        entry: uv run --extra devtools python -m devtools.coupling.composition core megspeech --assert
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: feature-envy
+        name: feature envy — enforced (a method that belongs on another class)
+        entry: uv run --extra devtools python -m devtools.coupling.envy core megspeech --assert
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: use-contracts
+        name: forbidden-use contracts — enforced (directional rules over the typed arrows)
+        entry: uv run --extra devtools python -m devtools.coupling.contracts core megspeech --assert
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: demeter
+        name: law of demeter — enforced (no calling through a field into a stranger)
+        entry: uv run --extra devtools python -m devtools.coupling.demeter core megspeech --assert
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: purity
+        name: property purity — enforced (a @property must not assign to self)
+        entry: uv run --extra devtools python -m devtools.coupling.purity core megspeech --assert
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: test-mirror
+        name: test mirror — enforced (every public method has a test_<method> that calls it and asserts)
+        entry: uv run --extra devtools python -m devtools.hygiene.mirror core megspeech --assert
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: unit-test-size
+        name: unit test size — enforced (no external data, network, sleep, or unseeded RNG)
+        entry: uv run --extra devtools python -m devtools.hygiene.small core megspeech --assert
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: arrows
+        name: class arrows — advisory (inherits / holds / references; the import edge decomposed by WHY)
+        entry: uv run --extra devtools python -m devtools.graph.arrows core megspeech
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: calls
+        name: call arrows — advisory (calls reach the CONTRACT, construct reaches the CONCRETE)
+        entry: uv run --extra devtools python -m devtools.graph.calls core megspeech
+        language: system
+        pass_filenames: false
+        always_run: true
+      # Architecture graph — REGEN at PRE-PUSH (c80): rewrites docs/architecture/{graph.json,index.html} from
+      # the current import graph, then keeps the committed graph.json current so the /architecture/ page it
+      # feeds is fresh on the next deploy — with no manual `nox -s archmap`. Pre-push, not per-commit: commits
+      # stay fast and the graph refreshes once before the push that deploys. If graph.json drifted it stages
+      # the regen and BLOCKS the push — commit it and push again (the diff stays your reviewable
+      # architecture-erosion signal; auto-committing in a hook can't join the in-flight push). Doc-gen, not
+      # enforcement (import-linter is the directional gate; CI `archmap --check` is the backstop).
+      - id: archmap
+        name: architecture graph — regenerate docs/architecture/ at pre-push (commit the graph.json diff)
+        # NO SHELL. This was `bash -c 'archmap ...; git diff --quiet || { git add ...; exit 1; }'` and had two
+        # faults. The `;` discarded the regen's exit code, so when archmap failed the following diff saw no
+        # change and the hook reported Passed — green precisely when its job did not happen (bd v3c.2). And
+        # `bash` cannot reliably find `uv` on Windows, so the one hook needing a shell was the one hook that
+        # did not run on the scaffold's own primary dev platform. `--regen` does both steps in the engine:
+        # regenerate, then exit 1 if the committed graph.json HAD been stale. It no longer `git add`s for
+        # you — the message tells you to — because staging would drag git into an engine kept git-free.
+        entry: uv run --extra devtools python -m devtools.graph.archmap core megspeech --regen
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: shape-contracts
+        name: shape-contracts — enforced (array/tensor boundaries need a jaxtyping shape; vip.4)
+        entry: uv run --extra devtools python -m devtools.shape_contracts core megspeech --assert
+        language: system
+        pass_filenames: false
+        always_run: true
+      # Fast unit suite at the PRE-PUSH stage (not pre-commit): shift-left the CI `tests` gate so a change
+      # that lints clean but breaks a test CONTRACT (e.g. a signature change a mirror test still calls the old
+      # way) is caught locally before the push round-trip, not after. pre-push (pushes are rare) not pre-commit
+      # (torch-import + tests every commit kills flow); tests/unit only (no integration/e2e/GPU/download — fast
+      # + deterministic); NOT coverage (the floor stays a CI job). Enable once: `pre-commit install --hook-type
+      # pre-push` (it is NOT installed by the default `pre-commit install`, which wires only the commit stage).
+      - id: unit-tests
+        name: unit tests — pre-push (fast contract check; shift-left the CI test gate)
+        entry: uv run --extra dev pytest tests/unit -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      

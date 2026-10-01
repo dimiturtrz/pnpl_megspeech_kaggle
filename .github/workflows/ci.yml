@@ -1,0 +1,202 @@
+name: ci
+
+# Gate for the dev -> main flow: `lint` + `tests` must pass on every PR (and on pushes to main).
+# Enforced as required status checks via branch protection. Shipped example code is clean, so the
+# gates BLOCK from the first generation (they are regression guards, not a mid-ratchet backlog).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A newer push to the same ref cancels the older in-flight run (no stacking on rapid pushes).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # ENFORCED (blocks the merge): the full house select over shipped source. Clean on a fresh gen;
+      # catches REGRESSION (new unused import / undefined name / unsorted imports / magic number / ...).
+      # An explicit --select BYPASSES pyproject [tool.ruff.lint] ignore, so the ml jaxtyping waiver must be
+      # repeated on the CLI — F722 (multi-token dim strings "b c h w") + F821 (single-axis "n" = an undefined
+      # forward-ref). Else a fresh ml gen with any jaxtyping annotation red-CIs on its own config (skr/kqk).
+      - name: Lint — enforced (shipped source, full select)
+        run: uvx ruff@0.15.13 check core megspeech tests comp --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123,E501,SLF001,PGH003,PGH004,TID251 --ignore F722,F821
+      # ADVISORY (never blocks): the full enforced select over the WHOLE tree (`.` vs the enforced `lint_paths`)
+      # — surfaces any pending families outside the shipped source. `ruff_advisory_select` is empty by default
+      # (E501/SLF001 graduated into the enforced union, bd 4c2/8ex); the extend flag rides only when it's set.
+      - name: Lint — advisory full (non-blocking)
+        run: uvx ruff@0.15.13 check . --statistics || true
+      # ENFORCED: pre-commit has always run this for real, so leaving CI advisory meant the merge gate
+      # passed a tree that could not be committed. A generated repo arrives formatted.
+      - name: Format — enforced
+        run: uvx ruff@0.15.13 format --check .
+      # Dead code — the axis ruff can't see (paths/ignores in [tool.vulture]). BLOCKS at conf>=80
+      # (near-certain: unreachable, unused locals — precision high enough to fail the merge).
+      - name: Dead code — enforced (vulture conf>=80)
+        run: uvx vulture@2.16 --min-confidence 80
+      # WARNS at conf>=60 (dead funcs/classes — real signal, but eats no-fan-in FPs so it can't block).
+      # continue-on-error keeps the job green (yellow); output is reshaped to ::warning:: PR annotations.
+      - name: Dead code — advisory (vulture conf>=60, warns)
+        continue-on-error: true
+        run: |
+          uvx vulture@2.16 --min-confidence 60 | sed -E 's#^([^:]+):([0-9]+): (.*)$#::warning file=\1,line=\2::\3#'
+      
+      # Import layers — ENFORCED: forbidden-import (directional) contracts, the axis graph.py's cycle
+      # check can't express (a one-way core->trainer import is no cycle). Contracts in [tool.importlinter].
+      - name: Import layers — enforced (import-linter)
+        run: uvx --from import-linter lint-imports
+      
+      # Module shape — ast-grep: the SYNTACTIC axis ruff has no plugin API for (in-a-class house rule +
+      # no import-time side effects). Rules are data under devtools/sg-rules/*.yml, severity=error (BLOCKS).
+      # config lives in the INSTALLED devtools package (no vendored devtools/ dir) — `python -m
+      # `devtools.astgrep` locates the packaged config and runs the scan itself — one home for how the rule
+      # set is invoked, and no `$(…)` substitution, which is what kept this gate off Windows entirely.
+      - name: "Module shape — enforced (ast-grep)"
+        run: uv run --extra devtools python -m devtools.astgrep core megspeech --assert
+      # Duplication — the DRY axis (jscpd) the coupling tools can't see. Threshold in devtools/jscpd.json.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Duplication — enforced (jscpd, DRY axis; blocks over threshold)
+        run: npx --yes jscpd core megspeech --config "$(uv run -q --extra devtools python -m devtools.tools.config jscpd)"
+      # >>> LOCAL-SLOT: ci-lint-steps — repo-specific lint/shape steps that ride ON TOP of the base gates
+      # (a viewer-tree extra lint, an un-silenced advisory family, a repo-only static gate). The base gates
+      # above are template-owned + regenerated; steps added in this region survive copier update. Empty by
+      # default — mechanism identical across repos, only the CONTENTS are a per-repo FACT (bd skr GAP3).
+      # <<< LOCAL-SLOT: ci-lint-steps
+
+  tests:
+    runs-on: ubuntu-latest
+    # No dataset on the runner -> point the data root at an empty POSIX dir so data-gated tests skip
+    # cleanly (adapters glob an absent raw/ -> no subjects -> pytest.skip) instead of erroring. The env var
+    # NAME is a per-repo FACT (data_env_var, bd skr GAP3a) — a repo whose adapters read a different name
+    # overrides it in .copier-answers.yml so tests SKIP here instead of erroring on a missing env.
+    env:
+      MEGSPEECH_DATA: /tmp/nodata
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install dependencies (locked, + dev/devtools extras for pytest + graph tests)
+        run: uv sync --frozen --extra dev --extra devtools
+      # One instrumented run = the test gate AND the coverage data (.coverage), no double suite exec.
+      # Config (source/omit/exclude) is in [tool.coverage.*].
+      - name: Tests + coverage (tests block)
+        run: uv run pytest tests --cov --cov-report=term-missing -q
+      # Coverage floor — below the floor fails the merge. Reads the .coverage from the run above.
+      - name: Coverage floor — enforced (>=90, blocks)
+        run: uv run coverage report --fail-under=90
+      # Coverage target — advisory (>=95 warns, never blocks). always() so it shows even if the floor failed.
+      - name: Coverage target — advisory (>=95, warns)
+        if: always()
+        continue-on-error: true
+        run: uv run coverage report --fail-under=95 || echo "::warning::coverage below the 95% target"
+      # Architecture fitness — the METRIC arch axis (god-module = fan-in AND fan-out over a degree /
+      # import cycle / god-file) as a GATE on the grimp+networkx import graph, the axis import-linter's
+      # categorical contracts can't express. Thresholds in [tool.structure]. Runs here for the synced env.
+      - name: Architecture fitness — enforced (devtools/graph.py --assert)
+        run: uv run --extra devtools python -m devtools.graph.fitness --assert core megspeech
+      # Dependency hygiene — deptry: imported-but-undeclared (DEP001) + declared-but-unused (DEP002) +
+      # transitive (DEP003). Runs in the synced env (`--with` adds deptry) so it reads installed dist
+      # metadata. Config (excludes + per-rule ignores) in [tool.deptry]. Blocks the merge.
+      - name: Dependency hygiene — enforced (deptry)
+        run: uv run --with deptry==0.25.1 deptry .
+      # Types — ENFORCED (pyrefly strict): every def annotated (implicit-any-parameter) + the annotations
+      # CHECK (bad-return / bad-argument-type). Runs in the synced env (`--with` adds pyrefly) so it resolves
+      # installed dep stubs (pydantic/numpy py.typed) — the R1 type-grade Correctness leg ruff can't reach.
+      # Config + tests carve-out + untyped-dep slot in [tool.pyrefly]; scope=lint_paths. Blocks the merge.
+      # Object graph — ENFORCED: a `holds` cycle (A owns a B that owns an A) means neither can be built or
+      # tested alone. Catches the intra-file case the import-cycle check structurally cannot represent.
+      - name: Composition cycles — enforced (devtools/composition.py --assert)
+        run: uv run --extra devtools python -m devtools.coupling.composition core megspeech --assert
+      # Feature envy — ENFORCED: a METHOD more interested in one other class than its own object, i.e. it
+      # probably belongs on that class. Judged against a SINGLE foreign class (spreading calls across
+      # collaborators is orchestration, not envy) and never against a value object. Floor is
+      # [tool.structure] feature_envy_min.
+      - name: Feature envy — enforced (devtools/envy.py --assert)
+        run: uv run --extra devtools python -m devtools.coupling.envy core megspeech --assert
+      # Forbidden-USE contracts — ENFORCED: directional rules over the DECOMPOSED arrows, so a contract can
+      # forbid CONSTRUCTING a concrete while still permitting use — precision imports cannot express.
+      # Contracts live in [[tool.arch.forbidden]]; empty by default, so a fresh gen is green.
+      - name: Forbidden-use contracts — enforced (devtools/contracts.py --assert)
+        run: uv run --extra devtools python -m devtools.coupling.contracts core megspeech --assert
+      # Law of Demeter — ENFORCED: CALLING a method through a field into a stranger
+      # (`self.store.config.reload()`) couples this class to a type it never declared. Ceiling is
+      # [tool.structure] demeter_max_depth (2 = reach your own field, then talk to it). Only chains ending
+      # in a CALL count — reading `cfg.a.b.c` is data navigation. A fresh gen has no code so it starts
+      # clean and ratchets; raise the ceiling for data-navigation-heavy trees.
+      - name: Law of Demeter — enforced (devtools/demeter.py --assert)
+        run: uv run --extra devtools python -m devtools.coupling.demeter core megspeech --assert
+      # Property purity — ENFORCED: a `@property` that assigns to `self` makes every reader a writer
+      # without saying so. The setter is the declared exception. This is also the premise the Demeter gate
+      # rests on: skipping attribute chains is only honest while a property is a pure read.
+      - name: Property purity — enforced (devtools/purity.py --assert)
+        run: uv run --extra devtools python -m devtools.coupling.purity core megspeech --assert
+      # Method-level test mirror — ENFORCED (bd mjo). graph's file-level mirror asks only whether a module
+      # HAS a test file, which one smoke test satisfies for a module of twenty methods. This asks for a
+      # `test_<method>` that CALLS each public method and ASSERTS. A fresh gen has no methods and passes, so
+      # it ratchets from the first one added. Layout comes from [tool.structure] test_layout ("off" disables
+      # both mirrors); per-method escape is `# devtools-ignore: test-mirror`. See docs/UNIT_TESTS.md, which
+      # also states the case AGAINST the convention.
+      - name: Test mirror — enforced (devtools/mirror.py --assert)
+        run: uv run --extra devtools python -m devtools.hygiene.mirror core megspeech --assert
+      # Unit test size — ENFORCED (bd ar6/1j3): a unit test touches nothing it did not create — no external
+      # data root, no network, no sleep, no unseeded RNG. Each of those lets a test fail for a reason that
+      # has nothing to do with the code, and a suite that fails for unrelated reasons stops being read.
+      # UNIT ONLY: an integration test SHOULD read a real fixture and an e2e SHOULD shell out.
+      - name: Unit test size — enforced (devtools/small.py --assert)
+        run: uv run --extra devtools python -m devtools.hygiene.small core megspeech --assert
+      - name: Types — enforced (pyrefly strict)
+        run: uv run --with pyrefly==1.1.1 pyrefly check core megspeech tests comp
+      # Shape contracts — ENFORCED (GRADUATED advisory->blocking, bd vip.4): every public array/tensor
+      # boundary must carry a jaxtyping shape, not a bare np.ndarray/Tensor. A fresh gen has 0 boundaries
+      # (passes); from the first typed boundary on, a bare one fails the merge — the ratchet at work. Aliases
+      # in [tool.shape_contracts]. (Was advisory; graduated once cardiac proved a real ml tree stays clean.)
+      - name: Shape contracts — enforced (jaxtyping boundaries; devtools/shape_contracts.py --assert)
+        run: uv run --extra devtools python -m devtools.shape_contracts core megspeech --assert
+      # ADVISORY explorers (never block): LCOM4 cohesion, Fowler data-clumps, namespace-state, recurring
+      # magic literals (StrEnum/dataclass candidates — the non-comparison axis ruff PLR2004 can't see), and
+      # radon cyclomatic complexity (ruff C901 is the FIXED gate; this just ranks). Reviewer signal only.
+      - name: Class-shape + literal + complexity smells — advisory
+        continue-on-error: true
+        run: |
+          uv run --extra devtools python -m devtools.cohesion.state_candidates core megspeech
+          uv run --extra devtools python -m devtools.cohesion.lcom core megspeech
+          uv run --extra devtools python -m devtools.cohesion.data_clumps core megspeech
+          uv run --extra devtools python -m devtools.hygiene.magic_literals core megspeech
+          uv run --extra devtools python -m devtools.cohesion.complexity core megspeech
+          uv run --extra devtools python -m devtools.graph.arrows core megspeech
+          uv run --extra devtools python -m devtools.graph.calls core megspeech
+      # ADVISORY (never blocks): flag a stale docs/architecture/graph.json — the committed graph drifted from
+      # the real import graph. Regenerate locally with `nox -s archmap` and commit. Doc-gen, not enforcement
+      # (import-linter is the directional gate); graduates to a gate per the creep-to-gate program.
+      - name: Architecture graph — advisory (archmap --check, stale graph.json)
+        continue-on-error: true
+        run: uv run --extra devtools python -m devtools.graph.archmap core megspeech --check || echo "::warning::docs/architecture/graph.json is stale — run 'nox -s archmap' and commit"
+      # Architecture CHANGELOG — ADVISORY (never blocks): how this PR moved the architecture, in REAL
+      # dependency terms — which arrow KIND appeared or vanished, not just that a JSON file changed. Posted
+      # to the job summary so it is read in review. The gates say what is FORBIDDEN; this says what MOVED,
+      # which is the part someone deciding whether to trust a change actually needs. Baseline is the merge
+      # target's committed graph.json; a repo without one yet simply reports no change.
+      - name: Architecture changelog — advisory (archmap --diff vs the merge target)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          git fetch -q --depth=1 origin "${{ github.base_ref }}"
+          git show FETCH_HEAD:docs/architecture/graph.json > /tmp/arch-base.json 2>/dev/null || echo '{}' > /tmp/arch-base.json
+          uv run --extra devtools python -m devtools.graph.archmap core megspeech --diff /tmp/arch-base.json | tee /tmp/arch-diff.txt
+          { echo '### Architecture changes'; echo '```'; cat /tmp/arch-diff.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      # >>> LOCAL-SLOT: ci-test-steps — repo-specific test/coverage/gate steps on top of the base (e.g. a
+      # separate viewer-coverage floor calibrated to library logic, or a repo-only enforced check). Survives
+      # copier update; empty by default (bd skr GAP3).
+      # <<< LOCAL-SLOT: ci-test-steps
+

@@ -1,0 +1,25 @@
+# Line-ending + binary normalization.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+
+# --- Generated but TRACKED files: stay committed, stay out of the way ---
+# Three tiers, from two git/GitHub knobs:
+#   linguist-generated=true  (GitHub): collapse in a PR's Files-changed (one click expands) + drop from the
+#                            repo language bar. The diff stays REACHABLE.
+#   -diff                    (git):    treat as binary -> no textual diff anywhere (local or GitHub). Hidden.
+#   merge=union              (git):    on conflict keep BOTH sides. Safe ONLY for line-oriented files
+#                            regenerated wholesale (a stray dup line self-heals next regen); CORRUPTS
+#                            structured files (json object / toml) — never union those.
+#
+# tier 1 — churny line file you never read by hand (fully hidden + auto-merged):
+.beads/issues.jsonl            -diff linguist-generated=true merge=union
+# tier 2 — generated JSON, never hand-read: hide the 10k-line git churn. The erosion signal is NOT this raw
+# diff (unreadable) — it is CI's archmap --diff semantic changelog, which reads file CONTENT (immune to -diff).
+# Never union a JSON object:
+docs/architecture/graph.json   -diff linguist-generated=true
+# >>> LOCAL-SLOT: generated-tracked paths — this repo's own generated-but-committed files. Pick a tier:
+#   tier 1  line file, never read (beads-like):   <path>  -diff linguist-generated=true merge=union
+#   tier 2  structured dump, never read:          <path>  -diff linguist-generated=true
+#   tier 3  generated, diff meaningful:           <path>  linguist-generated=true
+# <<< LOCAL-SLOT: generated-tracked paths

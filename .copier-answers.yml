@@ -1,0 +1,15 @@
+# Managed by copier — do not edit by hand. Records the template version + your answers so
+# `copier update` can re-apply template improvements and heal drift.
+_commit: v1.28.0
+_src_path: https://github.com/dimiturtrz/sdlc-scaffold.git
+archviz_pages: false
+author: dimiturtrz
+coverage_floor: 90
+data_env_var: MEGSPEECH_DATA
+domain: ml
+jscpd_paths: core megspeech
+lint_paths: core megspeech tests comp
+packages: core,megspeech
+project_name: megspeech
+repo_url: https://github.com/dimiturtrz/pnpl_megspeech_kaggle
+
