@@ -41,6 +41,25 @@ Deep needs the `.h5` + `.tsv` only (what `pnpl`'s `LibriBrainWord` reads with
 `preprocessing_str="bads+headpos+sss+notch+bp+ds"`). D: had 319 GB free at setup — the raw `.fif` would
 not fit and is not used.
 
+**Preprocessing is fixed**, train and test alike (file names: `proc-bads+headpos+sss+notch+lfreq01+hfreq125+sfreq250`):
+bad-channel marking → cHPI head-position → SSS/Maxwell with movement compensation → line-noise notch →
+0.1–125 Hz band-pass → 250 Hz. No raw holdout exists, so anything we do must be a transform of THAT
+signal applicable at test time (re-filtering inside the band, spatial projections, alignment,
+normalization). Raw `.fif` is at most a pretraining source.
+
+**Holdout format** (`.npz` headers read 2026-10-01; 80 files = 40 subjects × 2):
+
+| file | arrays |
+|---|---|
+| `subjXX_holdout2_word.npz` | `meg` (92, 306, 250) f32 — 1 s windows, `tmin` 0, `tmax` 1; `sfreq` 250 |
+| `subjXX_holdout01_sentence.npz` | `meg` (156, 306, 1030) f32 + `sentence_sample_mask`, `sentence_n_times`; `word_onsets_s` / `word_mask` (156, 9); `sentence_extra_end_s` 1.0 |
+
+The sentence holdout carries every word's onset with its surrounding MEG — the only place cross-word
+context is available at test time.
+
+**Layout** (root `D:/data/neural`, shared with mindscape; `core/paths.py`): `raw/pnpl_libribrain/`,
+`processed/pnpl_libribrain/`, `models/pnpl_libribrain/` (ours), `models/foreign/<name>/` (MEG-XL etc.).
+
 ## Structure
 
 - `megspeech/` — the pipeline (data → model → eval → submission). `core/` — task-agnostic kernel.
@@ -53,7 +72,8 @@ SOTA gather → replicate → build past it.
 
 1. **Replicate** the Deep reference on the official splits — the ruler every later number is read against.
 2. **Levers** (ranked by plausible size): contrastive alignment to pretrained speech/word embeddings
-   (Défossez 2023 recipe), MEG-XL fine-tune, longer context window around the word.
+   (Défossez 2023 recipe), MEG-XL fine-tune, sentence context on the sentence holdout (neighbouring
+   words' MEG + a language prior over the 50-word vocabulary).
 3. **Broad**: Deep backbone + per-subject alignment (Euclidean/Riemannian) or subject layer; report the
    minutes-vs-accuracy curve.
 
@@ -61,3 +81,4 @@ SOTA gather → replicate → build past it.
 
 - GPU split with `rsna_knee_kaggle` (deadline 2026-10-22).
 - Exact Broad derivative footprint in `LibriBrain2` (measure before pulling).
+- Which holdout subject ids are Deep (subj00?) vs Broad, and how word vs sentence holdouts are scored.
