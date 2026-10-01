@@ -1,0 +1,15 @@
+# Copy to paths.yaml (gitignored — machine-specific absolute paths).
+#   cp paths.example.yaml paths.yaml   # then set the one path below
+#
+# ONE data root. Everything else is derived:
+#   <data>/raw/pnpl_libribrain/        HF downloads (LibriBrain .h5/.tsv, competition holdout .npz), never written to
+#   <data>/processed/pnpl_libribrain/  caches, splits, embeddings — created automatically
+#
+# Env MEGSPEECH_DATA overrides this file (CI points it at an empty dir so data-gated tests skip).
+data: /path/to/data/neural/meg
+
+# OPTIONAL per-kind override. A top-level key named for a kind redirects that kind ALONE, so the
+# cache can live on a fast scratch disk while the download stays on the slow one. Unset kinds stay
+# at <data>/<kind>.
+#
+# processed: /fast/scratch/processed

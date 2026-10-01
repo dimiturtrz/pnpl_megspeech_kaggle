@@ -3,7 +3,8 @@
 [![ci](https://github.com/dimiturtrz/pnpl_megspeech_kaggle/actions/workflows/ci.yml/badge.svg)](https://github.com/dimiturtrz/pnpl_megspeech_kaggle/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-One-line description of megspeech. (Replace me.)
+Decoding heard words from non-invasive MEG — an entry to the PNPL 2026 / LibriBrain100 competition
+(Deep: one subject, ~80 h; Broad: 32 subjects, minutes of calibration). Plan and numbers: [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Layout
 

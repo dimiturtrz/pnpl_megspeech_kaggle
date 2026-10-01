@@ -7,12 +7,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## Now
 
-- [ ] Scaffold generated; gates green on a fresh generation.
+- [x] Scaffold generated (sdlc-scaffold v1.28.0) + beads.
+- [ ] Pull subj0 preprocessed `.h5` (~60 GB) + competition holdout (5.7 GB).
+- [ ] Reproduce the Deep reference (73.23% BAcc@10) on the official splits.
 
 ## Next
 
-- [ ] _(placeholder)_ First real capability in `core/`.
+- [ ] Deep levers: contrastive alignment to speech embeddings, MEG-XL fine-tune, context window.
+- [ ] First submission.
 
 ## Later
 
-- [ ] _(placeholder)_ Headline-metric harness.
+- [ ] Broad: Deep backbone + subject alignment; minutes-vs-accuracy curve.
