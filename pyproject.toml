@@ -11,6 +11,7 @@ dependencies = [
     "jaxtyping",   # Float[Tensor,"B C H W"] shape/dtype annotations — inert at runtime without a checker (no prod cost)
     "beartype",    # the runtime checker jaxtyping delegates to; wrap as @shapecheck in your types module (see devtools/README)
     "pydantic>=2",
+    "pyyaml",      # paths.yaml — the one machine-local config (core/paths.py)
 ]
 
 [project.optional-dependencies]
