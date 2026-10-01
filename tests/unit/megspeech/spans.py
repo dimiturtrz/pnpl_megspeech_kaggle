@@ -1,0 +1,34 @@
+import numpy as np
+import pandas as pd
+
+from megspeech.spans import MAX_WORDS, PAD, Spans
+
+
+def test_by_gap() -> None:
+    onset = np.array([0.0, 0.2, 0.4, 2.0, 2.3, 0.1])
+    spans = Spans.by_gap(onset)
+    assert spans.index[:, :3].tolist() == [[0, 1, 2], [3, 4, PAD], [5, PAD, PAD]]
+    assert np.allclose(spans.onset[1, :2], [0.0, 0.3])
+
+
+def test_by_gap_chunks_long_runs() -> None:
+    spans = Spans.by_gap(np.arange(MAX_WORDS + 2) * 0.1)
+    assert spans.lengths.tolist() == [MAX_WORDS, 2]
+    assert np.allclose(spans.onset[1, :2], [0.0, 0.1])
+
+
+def test_by_key() -> None:
+    keys = pd.DataFrame({"source": ["sentence"] * 3 + ["word"], "group": [0, 0, 1, -4]})
+    spans = Spans.by_key(keys, np.array([0.0, 0.2, 0.0, 0.0]))
+    assert spans.index[:, :2].tolist() == [[0, 1], [2, PAD], [3, PAD]]
+    assert np.allclose(spans.onset[0, :2], [0.0, 0.2])
+
+
+def test_assemble() -> None:
+    spans = Spans.assemble(np.array([0, 0, 1]), np.array([0, 1, 0]), np.array([1.0, 1.5, 3.0]))
+    assert spans.index.shape == (2, MAX_WORDS)
+    assert np.allclose(spans.onset[:, :2], [[0.0, 0.5], [0.0, 0.0]])
+
+
+def test_lengths() -> None:
+    assert Spans.by_gap(np.array([0.0, 5.0, 5.1])).lengths.tolist() == [1, 2]

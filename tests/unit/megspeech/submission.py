@@ -47,6 +47,14 @@ def test_write_constant(tmp_path: Path):
     assert np.allclose(frame.iloc[:, 1:].to_numpy(), 0.02)
 
 
+def test_write(tmp_path: Path):
+    primary = np.tile(np.eye(50)[0], (ROWS, 1))
+    path = Submission(FakeHoldout()).write(tmp_path / "s.csv", primary, np.full((ROWS, 50), 0.02))
+    frame = pd.read_csv(path)
+    assert frame.shape == (ROWS, 101)
+    assert frame.iloc[:, 1].tolist() == [1.0] * ROWS
+
+
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """The prior is read from every non-empty subject-0 events file; `--submit` uploads to the Deep track."""
     raw = tmp_path / "raw" / "pnpl_libribrain"

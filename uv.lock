@@ -1215,6 +1215,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "beartype" },
+    { name = "h5py" },
     { name = "huggingface-hub" },
     { name = "jaxtyping" },
     { name = "numpy" },
@@ -1222,6 +1223,7 @@ dependencies = [
     { name = "pnpl" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "scipy" },
     { name = "torch" },
 ]
 
@@ -1237,6 +1239,7 @@ devtools = [
 [package.metadata]
 requires-dist = [
     { name = "beartype" },
+    { name = "h5py", specifier = ">=3.16.0" },
     { name = "huggingface-hub", specifier = ">=2.1.1" },
     { name = "jaxtyping" },
     { name = "numpy" },
@@ -1246,6 +1249,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pyyaml" },
+    { name = "scipy", specifier = ">=1.18.1" },
     { name = "sdlc-devtools", marker = "extra == 'devtools'", git = "https://github.com/dimiturtrz/sdlc-scaffold.git?subdirectory=sdlc-devtools&rev=v1.28.0" },
     { name = "torch", specifier = ">=2.7", index = "https://download.pytorch.org/whl/cu130" },
 ]

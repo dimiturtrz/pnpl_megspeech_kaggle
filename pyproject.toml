@@ -17,6 +17,8 @@ dependencies = [
     "pnpl>=0.2.0",  # LibriBrain100 loaders, competition holdout + submission writer (BSD-3)
     "huggingface-hub>=2.1.1",
     "pandas>=3.0.6",
+    "h5py>=3.16.0",
+    "scipy>=1.18.1",
 ]
 
 [project.optional-dependencies]

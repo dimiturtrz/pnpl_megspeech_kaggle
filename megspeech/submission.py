@@ -9,7 +9,6 @@ the floor that proves the CSV, the vocabulary order and the scorer agree before 
 
 import argparse
 import logging
-import re
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -23,11 +22,11 @@ from pnpl.competition import PRIMARY_VOCAB, SECONDARY_VOCAB, submit_to_kaggle, w
 from pnpl.competition.holdout import LibriBrainCompetitionHoldout
 
 from core.paths import DataRoot
+from megspeech.vocabulary import Vocabulary
 
 LOG = logging.getLogger(__name__)
 
 COMPETITION = "pnpl-competition-2026-deep"
-NON_WORD = re.compile(r"[^a-z’]")
 
 
 @dataclass(frozen=True)
@@ -43,7 +42,7 @@ class FrequencyPrior:
         for path in paths:
             events = pd.read_csv(path, sep="\t", usecols=["kind", "segment"])
             words = events.loc[events["kind"] == "word", "segment"].dropna()
-            counts.update(NON_WORD.sub("", word.lower().replace("'", "’")) for word in words)
+            counts.update(Vocabulary.spell(word) for word in words)
         return cls(counts)
 
     def probabilities(self, vocabulary: list[str]) -> Float[np.ndarray, " v"]:
@@ -66,15 +65,14 @@ class Submission:
 
     holdout: Rows
 
+    def write(self, path: Path, primary: Float[np.ndarray, "n v"], secondary: Float[np.ndarray, "n w"]) -> Path:
+        """One probability row per holdout window, in canonical order."""
+        return write_submission(path, self.holdout.indices, primary, secondary)
+
     def write_constant(self, path: Path, primary: Float[np.ndarray, " v"], secondary: Float[np.ndarray, " w"]) -> Path:
-        """Write the same probability rows for every holdout window."""
+        """The same probability rows for every holdout window."""
         rows = len(self.holdout)
-        return write_submission(
-            path,
-            self.holdout.indices,
-            np.tile(primary, (rows, 1)),
-            np.tile(secondary, (rows, 1)),
-        )
+        return self.write(path, np.tile(primary, (rows, 1)), np.tile(secondary, (rows, 1)))
 
 
 def main() -> None:
