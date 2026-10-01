@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "megspeech",
+  "project_id": "a421c8b3-65cb-4c43-8e50-40c6bc44ce0c"
+}
