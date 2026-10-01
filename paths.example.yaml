@@ -6,7 +6,7 @@
 #   <data>/processed/pnpl_libribrain/  caches, splits, embeddings — created automatically
 #
 # Env MEGSPEECH_DATA overrides this file (CI points it at an empty dir so data-gated tests skip).
-data: /path/to/data/neural/meg
+data: /path/to/data/neural
 
 # OPTIONAL per-kind override. A top-level key named for a kind redirects that kind ALONE, so the
 # cache can live on a fast scratch disk while the download stays on the slow one. Unset kinds stay
