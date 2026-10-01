@@ -42,6 +42,14 @@ def test_gather() -> None:
     assert gathered.index.shape[0] == 2
 
 
+def test_on_device() -> None:
+    held = Split.on_device(
+        torch.zeros(3, CHANNELS, SAMPLES), np.array([0, 1, 2]), Spans.by_gap(np.array([0.0, 0.1, 9.0]))
+    )
+    assert held.y.tolist() == [0, 1, 2]
+    assert held.index.shape[0] == 2
+
+
 def test_log_prior() -> None:
     assert torch.allclose(split().log_prior().exp().sum(), torch.tensor(1.0))
 

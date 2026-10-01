@@ -117,18 +117,29 @@ class Split:
     def from_arrays(
         cls, x: Float[np.ndarray, "n c t"], y: Int[np.ndarray, " n"], spans: Spans, device: torch.device
     ) -> "Split":
+        return cls.on_device(torch.from_numpy(x).to(device), y, spans)
+
+    @classmethod
+    def on_device(cls, x: Float[Tensor, "n c t"], y: Int[np.ndarray, " n"], spans: Spans) -> "Split":
+        device = x.device
         return cls(
-            torch.from_numpy(x).to(device),
+            x,
             torch.from_numpy(y).to(device),
             torch.from_numpy(spans.index).to(device),
             torch.from_numpy(spans.onset).float().to(device),
         )
 
     @classmethod
-    def gather(cls, epochs: list[Epochs], device: torch.device) -> "Split":
-        onset = np.concatenate([e.onset for e in epochs])
-        x, y = np.concatenate([e.x for e in epochs]), np.concatenate([e.y for e in epochs])
-        return cls.from_arrays(x, y, Spans.by_gap(onset), device)
+    def gather(cls, epochs: Iterable[Epochs], device: torch.device) -> "Split":
+        """Runs streamed to the device one at a time, so host memory never holds the whole split."""
+        xs: list[Tensor] = []
+        ys: list[np.ndarray] = []
+        onsets: list[np.ndarray] = []
+        for run in epochs:
+            xs.append(torch.from_numpy(run.x).to(device))
+            ys.append(run.y)
+            onsets.append(run.onset)
+        return cls.on_device(torch.cat(xs), np.concatenate(ys), Spans.by_gap(np.concatenate(onsets)))
 
     @classmethod
     def from_holdout(cls, holdout: Windows, device: torch.device) -> "Split":
@@ -245,10 +256,10 @@ def main() -> None:
     root = DataRoot.from_config()
     epocher = Epocher(root.processed() / "epochs")
     runs = Run.discover(root.raw())
-    train = Split.gather([epocher.cached(r) for r in runs if r.partition is Partition.TRAIN], device)
+    train = Split.gather((epocher.cached(r) for r in runs if r.partition is Partition.TRAIN), device)
     held = [r for r in runs if r.partition is Partition.VALIDATION]
     validation = {
-        task: Split.gather([epocher.cached(r) for r in held if r.key[0] == task], device)
+        task: Split.gather((epocher.cached(r) for r in held if r.key[0] == task), device)
         for task in sorted({r.key[0] for r in held})
     }
     LOG.info("train %d words / %d spans", len(train.y), len(train.index))
