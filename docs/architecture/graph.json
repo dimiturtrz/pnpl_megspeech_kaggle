@@ -13,6 +13,12 @@
       "weight": 1
     },
     {
+      "kind": "import",
+      "source": "megspeech.submission",
+      "target": "core.paths",
+      "weight": 1
+    },
+    {
       "kind": "calls",
       "source": "core.native_path.NativePath.resolve",
       "target": "core.native_path.NativePath.detect_wsl",
@@ -119,6 +125,42 @@
       "source": "megspeech.fetch.main",
       "target": "core.paths.DataRoot.from_config",
       "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.submission.FrequencyPrior",
+      "target": "megspeech.submission.FrequencyPrior",
+      "weight": 1
+    },
+    {
+      "kind": "holds",
+      "source": "megspeech.submission.Submission",
+      "target": "megspeech.submission.Rows",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.submission.main",
+      "target": "core.paths.DataRoot.from_config",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.submission.main",
+      "target": "megspeech.submission.FrequencyPrior.from_events",
+      "weight": 1
+    },
+    {
+      "kind": "construct",
+      "source": "megspeech.submission.main",
+      "target": "megspeech.submission.Submission",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.submission.main",
+      "target": "megspeech.submission.Submission.write_constant",
+      "weight": 1
     }
   ],
   "nodes": [
@@ -147,7 +189,7 @@
       "role": null
     },
     {
-      "descendants": 1,
+      "descendants": 2,
       "id": "megspeech",
       "label": "megspeech",
       "level": "module",
@@ -158,6 +200,14 @@
       "descendants": 0,
       "id": "megspeech.fetch",
       "label": "fetch",
+      "level": "module",
+      "parent": "megspeech",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.submission",
+      "label": "submission",
       "level": "module",
       "parent": "megspeech",
       "role": null
@@ -184,6 +234,30 @@
       "label": "Source",
       "level": "class",
       "parent": "megspeech.fetch",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.submission.FrequencyPrior",
+      "label": "FrequencyPrior",
+      "level": "class",
+      "parent": "megspeech.submission",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.submission.Rows",
+      "label": "Rows",
+      "level": "class",
+      "parent": "megspeech.submission",
+      "role": "primary"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.submission.Submission",
+      "label": "Submission",
+      "level": "class",
+      "parent": "megspeech.submission",
       "role": "satellite"
     },
     {
@@ -312,6 +386,46 @@
       "label": "main",
       "level": "method",
       "parent": "megspeech.fetch",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.submission.FrequencyPrior.from_events",
+      "label": "from_events",
+      "level": "method",
+      "parent": "megspeech.submission.FrequencyPrior",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.submission.FrequencyPrior.probabilities",
+      "label": "probabilities",
+      "level": "method",
+      "parent": "megspeech.submission.FrequencyPrior",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.submission.Rows.__len__",
+      "label": "__len__",
+      "level": "method",
+      "parent": "megspeech.submission.Rows",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.submission.Submission.write_constant",
+      "label": "write_constant",
+      "level": "method",
+      "parent": "megspeech.submission.Submission",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.submission.main",
+      "label": "main",
+      "level": "method",
+      "parent": "megspeech.submission",
       "role": null
     }
   ]

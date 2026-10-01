@@ -16,6 +16,7 @@ dependencies = [
     "torch>=2.7",
     "pnpl>=0.2.0",  # LibriBrain100 loaders, competition holdout + submission writer (BSD-3)
     "huggingface-hub>=2.1.1",
+    "pandas>=3.0.6",
 ]
 
 [project.optional-dependencies]
