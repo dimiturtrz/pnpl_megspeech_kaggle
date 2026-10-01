@@ -1,3 +1,4 @@
+import dataclasses
 from typing import override
 
 import numpy as np
@@ -37,21 +38,23 @@ def test_from_arrays() -> None:
 
 def test_gather() -> None:
     epochs = Epochs(np.zeros((2, CHANNELS, SAMPLES), np.float32), np.array([0, 1]), np.array([0.0, 0.1]))
-    gathered = Split.gather([epochs, epochs], CPU)
+    gathered = Split.gather([(epochs, 1.0), (epochs, 3.0)], CPU)
     assert len(gathered.y) == 4
     assert gathered.index.shape[0] == 2
+    assert gathered.weight.tolist() == [1.0, 1.0, 3.0, 3.0]
 
 
 def test_on_device() -> None:
-    held = Split.on_device(
-        torch.zeros(3, CHANNELS, SAMPLES), np.array([0, 1, 2]), Spans.by_gap(np.array([0.0, 0.1, 9.0]))
-    )
+    spans = Spans.by_gap(np.array([0.0, 0.1, 9.0]))
+    held = Split.on_device(torch.zeros(3, CHANNELS, SAMPLES), np.array([0, 1, 2]), spans, np.ones(3))
     assert held.y.tolist() == [0, 1, 2]
     assert held.index.shape[0] == 2
 
 
 def test_log_prior() -> None:
     assert torch.allclose(split().log_prior().exp().sum(), torch.tensor(1.0))
+    heavy = dataclasses.replace(split(), weight=(torch.arange(12) % 3 == 0).float() * 100)
+    assert heavy.log_prior().argmax() == 0
 
 
 def test_batch() -> None:

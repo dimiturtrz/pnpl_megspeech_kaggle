@@ -48,6 +48,10 @@ DENSE = 4
 """Validation spans this long or longer look like holdout sentences (94% of which carry 4-9 words)."""
 
 
+READ = frozenset({"TIMIT", "MOCHATIMIT"})
+"""Tasks of read sentences, the holdout's domain; the rest is narrative (Sherlock, TheMoth)."""
+
+
 class Head(StrEnum):
     CONTEXT = "context"
     WORD = "word"
@@ -61,6 +65,8 @@ class TrainConfig:
     weight_decay: float = 0.05
     label_smoothing: float = 0.1
     seed: int = 0
+    read_weight: float = 1.0
+    """Sampling weight of read-sentence runs (TIMIT, MOCHA-TIMIT) — the holdout's domain — against narrative ones."""
 
 
 class Windows(Protocol):
@@ -106,40 +112,50 @@ class Epoch:
 
 @dataclass(frozen=True)
 class Split:
-    """Word windows on the device, with the spans that group them."""
+    """Word windows on the device, with the spans that group them and each word's sampling weight."""
 
     x: Float[Tensor, "n c t"]
     y: Int[Tensor, " n"]
     index: Int[Tensor, "g w"]
     onset: Float[Tensor, "g w"]
+    weight: Float[Tensor, " n"]
 
     @classmethod
     def from_arrays(
         cls, x: Float[np.ndarray, "n c t"], y: Int[np.ndarray, " n"], spans: Spans, device: torch.device
     ) -> "Split":
-        return cls.on_device(torch.from_numpy(x).to(device), y, spans)
+        return cls.on_device(torch.from_numpy(x).to(device), y, spans, np.ones(len(y)))
 
     @classmethod
-    def on_device(cls, x: Float[Tensor, "n c t"], y: Int[np.ndarray, " n"], spans: Spans) -> "Split":
+    def on_device(
+        cls, x: Float[Tensor, "n c t"], y: Int[np.ndarray, " n"], spans: Spans, weight: Float[np.ndarray, " n"]
+    ) -> "Split":
         device = x.device
         return cls(
             x,
             torch.from_numpy(y).to(device),
             torch.from_numpy(spans.index).to(device),
             torch.from_numpy(spans.onset).float().to(device),
+            torch.from_numpy(weight).float().to(device),
         )
 
     @classmethod
-    def gather(cls, epochs: Iterable[Epochs], device: torch.device) -> "Split":
-        """Runs streamed to the device one at a time, so host memory never holds the whole split."""
+    def gather(cls, runs: Iterable[tuple[Epochs, float]], device: torch.device) -> "Split":
+        """Runs, each with its sampling weight, streamed to the device one at a time.
+
+        Host memory never holds the whole split. Onsets restart with every run, so no span crosses two.
+        """
         xs: list[Tensor] = []
         ys: list[np.ndarray] = []
         onsets: list[np.ndarray] = []
-        for run in epochs:
+        weights: list[np.ndarray] = []
+        for run, weight in runs:
             xs.append(torch.from_numpy(run.x).to(device))
             ys.append(run.y)
             onsets.append(run.onset)
-        return cls.on_device(torch.cat(xs), np.concatenate(ys), Spans.by_gap(np.concatenate(onsets)))
+            weights.append(np.full(len(run.y), weight))
+        spans = Spans.by_gap(np.concatenate(onsets))
+        return cls.on_device(torch.cat(xs), np.concatenate(ys), spans, np.concatenate(weights))
 
     @classmethod
     def from_holdout(cls, holdout: Windows, device: torch.device) -> "Split":
@@ -154,7 +170,8 @@ class Split:
         return cls.from_arrays(x, np.zeros(len(x), dtype=np.int64), spans, device)
 
     def log_prior(self) -> Float[Tensor, " v"]:
-        counts = torch.bincount(self.y, minlength=WORDS).float() + 1
+        """Label prior as training samples it, so logit adjustment undoes the same distribution."""
+        counts = torch.bincount(self.y, self.weight, minlength=WORDS).float() + 1
         return (counts / counts.sum()).log()
 
     def batch(self, spans: Int[Tensor, " b"]) -> tuple[Tensor, Tensor, Tensor, Tensor]:
@@ -225,7 +242,8 @@ class Trainer:
         best, best_state = -1.0, model.state_dict()
         for epoch in range(self.config.epochs):
             model.train()
-            for spans in torch.randperm(len(train.index), device=self.device).split(self.config.batch):
+            draws = torch.multinomial(train.weight[train.index[:, 0]], len(train.index), replacement=True)
+            for spans in draws.split(self.config.batch):
                 x, onset, mask, words = train.batch(spans)
                 with torch.autocast("cuda", dtype=torch.bfloat16):
                     context, word = model(x, onset, mask)
@@ -249,17 +267,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--name", required=True)
     parser.add_argument("--epochs", type=int, default=TrainConfig.epochs)
+    parser.add_argument("--read-weight", type=float, default=TrainConfig.read_weight)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    config = TrainConfig(epochs=args.epochs)
+    config = TrainConfig(epochs=args.epochs, read_weight=args.read_weight)
     device = torch.device("cuda")
     root = DataRoot.from_config()
     epocher = Epocher(root.processed() / "epochs")
     runs = Run.discover(root.raw())
-    train = Split.gather((epocher.cached(r) for r in runs if r.partition is Partition.TRAIN), device)
+    train_runs = [r for r in runs if r.partition is Partition.TRAIN]
+    train = Split.gather(
+        ((epocher.cached(r), config.read_weight if r.key[0] in READ else 1.0) for r in train_runs), device
+    )
     held = [r for r in runs if r.partition is Partition.VALIDATION]
     validation = {
-        task: Split.gather((epocher.cached(r) for r in held if r.key[0] == task), device)
+        task: Split.gather(((epocher.cached(r), 1.0) for r in held if r.key[0] == task), device)
         for task in sorted({r.key[0] for r in held})
     }
     LOG.info("train %d words / %d spans", len(train.y), len(train.index))
