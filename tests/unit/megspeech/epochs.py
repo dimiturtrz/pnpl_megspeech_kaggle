@@ -75,12 +75,14 @@ def test_cached(tmp_path: Path) -> None:
     assert np.array_equal(epocher.cached(run).x, first.x)
 
 
-def test_labels(tmp_path: Path) -> None:
+def test_labelled(tmp_path: Path) -> None:
     epocher = Epocher(tmp_path / "cache", WORDS)
     run = recording(tmp_path)
     epocher.cached(run)
     run.meg.unlink()
-    assert epocher.labels(run).tolist() == [0, 1]
+    y, onset = epocher.labelled(run)
+    assert y.tolist() == [0, 1]
+    assert onset.tolist() == [0.5, 2.0]
 
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

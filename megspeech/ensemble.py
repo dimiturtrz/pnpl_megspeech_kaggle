@@ -65,11 +65,12 @@ def main() -> None:
     epocher = Epocher(root.processed() / "epochs")
     runs = Run.discover(root.raw())
     model = Ensemble.load([root.models() / name / "model.pt" for name in args.names]).to(device)
-    labels = np.concatenate([epocher.labels(r) for r in runs if r.partition is Partition.TRAIN])
+    labelled = [epocher.labelled(r) for r in runs if r.partition is Partition.TRAIN]
+    labels = np.concatenate([y for y, _ in labelled])
     log_prior = Split.prior(torch.from_numpy(labels), torch.ones(len(labels))).to(device)
-    trainer = Trainer(TrainConfig(), device)
+    trainer = Trainer(TrainConfig(), device, Split.seen(labelled))
     report = trainer.report(model, Split.validation(epocher, runs, device), log_prior, 0, 0.0)
-    LOG.info("%s", {task: round(r.context.bacc10, 4) for task, r in report.domains.items()})
+    LOG.info("%s", {task: (round(r.context.bacc10, 4), round(r.novel.bacc10, 4)) for task, r in report.domains.items()})
     LOG.info("macro %.4f tau %s over %d words", report.macro.bacc10, report.macro.tau, report.macro.n)
     out = root.models() / args.out
     out.mkdir(parents=True, exist_ok=True)

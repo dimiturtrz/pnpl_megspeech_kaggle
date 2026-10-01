@@ -67,6 +67,18 @@ def test_prior() -> None:
     assert torch.allclose(prior.exp().sum(), torch.tensor(1.0))
 
 
+def test_seen() -> None:
+    seen = Split.seen([(np.array([4, 5, 6]), np.array([0.0, 0.2, 9.0]))])
+    assert seen == {(4, 5), (6,)}
+
+
+def test_novel() -> None:
+    held = split()
+    everything = Split.seen([(held.y.numpy(), np.r_[np.arange(DENSE) * 0.2, 10 + np.arange(12 - DENSE) * 2.0])])
+    assert len(held.novel(everything)) == 0
+    assert held.novel(frozenset()).tolist() == list(range(DENSE))
+
+
 def test_batch() -> None:
     x, onset, mask, words = split().batch(torch.tensor([0]))
     assert len(x) == mask.sum() == DENSE
@@ -100,21 +112,25 @@ def test_best() -> None:
 def test_assess() -> None:
     report = Trainer(TrainConfig(), CPU).assess(Constant(), split(), torch.zeros(WORDS))
     assert report.dense.n == DENSE
+    assert report.novel.n == DENSE
     assert report.context.n == len(split().y)
 
 
 def test_report() -> None:
     domains = {"a": split(), "b": split(n=8, seed=1)}
-    report = Trainer(TrainConfig(), CPU).report(Constant(), domains, torch.zeros(WORDS), 3, 0.5)
+    report = Trainer(TrainConfig(min_novel=1), CPU).report(Constant(), domains, torch.zeros(WORDS), 3, 0.5)
     assert report.epoch == 3
     assert set(report.domains) == {"a", "b"}
-    assert report.macro.n == 12 + 8
-    mean = (report.domains["a"].context.by_tau[0.0] + report.domains["b"].context.by_tau[0.0]) / 2
+    counted = list(report.domains.values())
+    assert report.macro.n == sum(r.novel.n for r in counted)
+    mean = np.mean([r.novel.by_tau[0.0] for r in counted])
     assert report.macro.by_tau[ADJUSTMENTS[0]] == pytest.approx(mean)
 
 
 def test_fit() -> None:
-    model, history = Trainer(TrainConfig(epochs=1, batch=4), CPU).fit(split(), {"a": split(seed=1)}, torch.zeros(WORDS))
+    model, history = Trainer(TrainConfig(epochs=1, batch=4, min_novel=1), CPU).fit(
+        split(), {"a": split(seed=1)}, torch.zeros(WORDS)
+    )
     assert len(history) == 1
     assert isinstance(model, nn.Module)
 

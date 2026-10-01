@@ -67,6 +67,8 @@ class TrainConfig:
     label_smoothing: float = 0.1
     seed: int = 0
     read_weight: float = 1.0
+    min_novel: int = 100
+    """Unseen-span words a domain needs to count toward selection: two per class of the 50 on average."""
     """Sampling weight of read-sentence runs (TIMIT, MOCHA-TIMIT) — the holdout's domain — against narrative ones."""
 
 
@@ -93,17 +95,18 @@ class Score:
 
 @dataclass(frozen=True)
 class Report:
-    """One validation domain: both heads, the context head on holdout-like spans, and its top-1."""
+    """One validation domain: both heads, the context head on holdout-like and on unseen spans, and its top-1."""
 
     context: Score
     word: Score
     dense: Score
+    novel: Score
     bacc1: float
 
 
 @dataclass(frozen=True)
 class Epoch:
-    """One validation pass over every domain, and the context head's macro over domains that selects."""
+    """One validation pass over every domain, and the macro over domains' unseen spans that selects."""
 
     epoch: int
     loss: float
@@ -194,6 +197,26 @@ class Split:
         words = index[mask]
         return self.x[words], self.onset[spans], mask, words
 
+    @staticmethod
+    def seen(labelled: Iterable[tuple[Int[np.ndarray, " n"], Float[np.ndarray, " n"]]]) -> frozenset[tuple[int, ...]]:
+        """Every span's label sequence across runs of (labels, onsets) — the word orders training has heard."""
+        sequences: set[tuple[int, ...]] = set()
+        for y, onset in labelled:
+            index = Spans.by_gap(onset).index
+            sequences.update(tuple(y[row[row != PAD]].tolist()) for row in index)
+        return frozenset(sequences)
+
+    def novel(self, seen: frozenset[tuple[int, ...]]) -> Int[Tensor, " k"]:
+        """Words in multi-word spans whose label sequence training never heard.
+
+        The holdout's sentences are new stimuli, so a span recited from training measures memorised word order.
+        """
+        index = self.index.cpu().numpy()
+        labels = self.y.cpu().numpy()
+        rows = [row[row != PAD] for row in index]
+        keep = [row for row in rows if len(row) > 1 and tuple(labels[row].tolist()) not in seen]
+        return torch.from_numpy(np.concatenate([np.empty(0, np.int64), *keep])).to(self.y.device)
+
     def dense(self) -> Int[Tensor, " d"]:
         """Words in spans at least `DENSE` long — the holdout-like subset."""
         long = self.index[(self.index != PAD).sum(dim=1) >= DENSE]
@@ -204,6 +227,7 @@ class Split:
 class Trainer:
     config: TrainConfig
     device: torch.device
+    seen: frozenset[tuple[int, ...]] = frozenset()
 
     def logits(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
         """Both heads' logits for every word of `split`, in the split's word order."""
@@ -228,20 +252,23 @@ class Trainer:
     def assess(self, model: nn.Module, split: Split, log_prior: Float[Tensor, " v"]) -> Report:
         logits = self.logits(model, split)
         dense = split.dense()
+        novel = split.novel(self.seen)
         return Report(
             self.evaluate(logits[Head.CONTEXT], split.y, log_prior),
             self.evaluate(logits[Head.WORD], split.y, log_prior),
             self.evaluate(logits[Head.CONTEXT][dense], split.y[dense], log_prior),
+            self.evaluate(logits[Head.CONTEXT][novel], split.y[novel], log_prior),
             BalancedTopK(1)(logits[Head.CONTEXT].cpu().numpy(), split.y.cpu().numpy()),
         )
 
     def report(
         self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], epoch: int, loss: float
     ) -> Epoch:
-        """Every domain scored alone; read selection off the macro so the biggest domain cannot drown the rest."""
+        """Every domain scored alone; selection reads the macro over unseen spans of domains with enough of them."""
         reports = {name: self.assess(model, split, log_prior) for name, split in domains.items()}
-        by_tau = {tau: float(np.mean([r.context.by_tau[tau] for r in reports.values()])) for tau in ADJUSTMENTS}
-        return Epoch(epoch, loss, reports, Score.best(by_tau, sum(r.context.n for r in reports.values())))
+        counted = [r.novel for r in reports.values() if r.novel.n >= self.config.min_novel]
+        by_tau = {tau: float(np.mean([score.by_tau[tau] for score in counted])) for tau in ADJUSTMENTS}
+        return Epoch(epoch, loss, reports, Score.best(by_tau, sum(score.n for score in counted)))
 
     def fit(
         self, train: Split, validation: dict[str, Split], log_prior: Float[Tensor, " v"]
@@ -302,10 +329,11 @@ def main() -> None:
         ((epocher.cached(r), config.read_weight if r.key[0] in READ else 1.0) for r in train_runs), device
     )
     validation = Split.validation(epocher, runs, device)
+    seen = Split.seen(epocher.labelled(r) for r in train_runs)
     LOG.info("train %d words / %d spans", len(train.y), len(train.index))
     LOG.info("validation %s", {task: len(split.y) for task, split in validation.items()})
     log_prior = train.log_prior()
-    trainer = Trainer(config, device)
+    trainer = Trainer(config, device, seen)
     model, history = trainer.fit(train, validation, log_prior)
     out = root.models() / args.name
     out.mkdir(parents=True, exist_ok=True)

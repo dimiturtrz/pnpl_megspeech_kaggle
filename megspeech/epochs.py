@@ -101,10 +101,10 @@ class Epocher:
         path = self.cache / f"{run.name}.npz"
         return Epochs.load(path) if path.exists() else Epochs.load(self.epoch(run).save(path))
 
-    def labels(self, run: Run) -> Int[np.ndarray, " n"]:
-        """A cached run's labels alone, without reading its windows."""
+    def labelled(self, run: Run) -> tuple[Int[np.ndarray, " n"], Float[np.ndarray, " n"]]:
+        """A cached run's labels and onsets, without reading its windows."""
         with np.load(self.cache / f"{run.name}.npz") as stored:
-            return stored["y"]
+            return stored["y"], stored["onset"]
 
 
 def main() -> None:
