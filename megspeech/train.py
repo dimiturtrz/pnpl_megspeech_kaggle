@@ -78,17 +78,30 @@ class Score:
     by_tau: dict[float, float]
     n: int
 
+    @classmethod
+    def best(cls, by_tau: dict[float, float], n: int) -> "Score":
+        tau = max(by_tau, key=by_tau.__getitem__)
+        return cls(tau, by_tau[tau], by_tau, n)
+
 
 @dataclass(frozen=True)
-class Epoch:
-    """One validation pass: both heads, the context head on holdout-like spans, and its top-1."""
+class Report:
+    """One validation domain: both heads, the context head on holdout-like spans, and its top-1."""
 
-    epoch: int
-    loss: float
     context: Score
     word: Score
     dense: Score
     bacc1: float
+
+
+@dataclass(frozen=True)
+class Epoch:
+    """One validation pass over every domain, and the context head's macro over domains that selects."""
+
+    epoch: int
+    loss: float
+    domains: dict[str, Report]
+    macro: Score
 
 
 @dataclass(frozen=True)
@@ -168,22 +181,29 @@ class Trainer:
         metric = BalancedTopK()
         truth = labels.cpu().numpy()
         by_tau = {tau: metric((logits - tau * log_prior).cpu().numpy(), truth) for tau in ADJUSTMENTS}
-        tau = max(by_tau, key=by_tau.__getitem__)
-        return Score(tau, by_tau[tau], by_tau, len(truth))
+        return Score.best(by_tau, len(truth))
 
-    def report(self, model: nn.Module, split: Split, log_prior: Float[Tensor, " v"], epoch: int, loss: float) -> Epoch:
+    def assess(self, model: nn.Module, split: Split, log_prior: Float[Tensor, " v"]) -> Report:
         logits = self.logits(model, split)
         dense = split.dense()
-        return Epoch(
-            epoch,
-            loss,
+        return Report(
             self.evaluate(logits[Head.CONTEXT], split.y, log_prior),
             self.evaluate(logits[Head.WORD], split.y, log_prior),
             self.evaluate(logits[Head.CONTEXT][dense], split.y[dense], log_prior),
             BalancedTopK(1)(logits[Head.CONTEXT].cpu().numpy(), split.y.cpu().numpy()),
         )
 
-    def fit(self, train: Split, validation: Split, log_prior: Float[Tensor, " v"]) -> tuple[nn.Module, list[Epoch]]:
+    def report(
+        self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], epoch: int, loss: float
+    ) -> Epoch:
+        """Every domain scored alone; read selection off the macro so the biggest domain cannot drown the rest."""
+        reports = {name: self.assess(model, split, log_prior) for name, split in domains.items()}
+        by_tau = {tau: float(np.mean([r.context.by_tau[tau] for r in reports.values()])) for tau in ADJUSTMENTS}
+        return Epoch(epoch, loss, reports, Score.best(by_tau, sum(r.context.n for r in reports.values())))
+
+    def fit(
+        self, train: Split, validation: dict[str, Split], log_prior: Float[Tensor, " v"]
+    ) -> tuple[nn.Module, list[Epoch]]:
         torch.manual_seed(self.config.seed)
         model = SentenceNet(Scaler(train.x)).to(self.device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.config.lr, weight_decay=self.config.weight_decay)
@@ -206,8 +226,8 @@ class Trainer:
             row = self.report(model, validation, log_prior, epoch, value.item())
             history.append(row)
             LOG.info("%s", asdict(row))
-            if row.context.bacc10 > best:
-                best = row.context.bacc10
+            if row.macro.bacc10 > best:
+                best = row.macro.bacc10
                 best_state = {k: v.clone() for k, v in model.state_dict().items()}
         model.load_state_dict(best_state)
         return model, history
@@ -225,30 +245,27 @@ def main() -> None:
     root = DataRoot.from_config()
     epocher = Epocher(root.processed() / "epochs")
     runs = Run.discover(root.raw())
-    train, validation = (
-        Split.gather([epocher.cached(r) for r in runs if r.partition is partition], device)
-        for partition in (Partition.TRAIN, Partition.VALIDATION)
-    )
-    LOG.info(
-        "train %d words / %d spans, validation %d / %d",
-        len(train.y),
-        len(train.index),
-        len(validation.y),
-        len(validation.index),
-    )
+    train = Split.gather([epocher.cached(r) for r in runs if r.partition is Partition.TRAIN], device)
+    held = [r for r in runs if r.partition is Partition.VALIDATION]
+    validation = {
+        task: Split.gather([epocher.cached(r) for r in held if r.key[0] == task], device)
+        for task in sorted({r.key[0] for r in held})
+    }
+    LOG.info("train %d words / %d spans", len(train.y), len(train.index))
+    LOG.info("validation %s", {task: len(split.y) for task, split in validation.items()})
     log_prior = train.log_prior()
     trainer = Trainer(config, device)
     model, history = trainer.fit(train, validation, log_prior)
     out = root.models() / args.name
     out.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out / "model.pt")
-    best = max(history, key=lambda row: row.context.bacc10)
-    summary = {"config": asdict(config), "train": len(train.y), "validation": len(validation.y), "best": asdict(best)}
+    best = max(history, key=lambda row: row.macro.bacc10)
+    summary = {"config": asdict(config), "train": len(train.y), "best": asdict(best)}
     (out / "metrics.json").write_text(json.dumps({**summary, "history": [asdict(row) for row in history]}, indent=1))
     LOG.info("best %s", best)
     holdout = LibriBrainCompetitionHoldout("deep", data_path=root.raw(), download=False)
     logits = trainer.logits(model, Split.from_holdout(holdout, device))[Head.CONTEXT]
-    primary = torch.softmax(logits - best.context.tau * log_prior, dim=-1).cpu().numpy()
+    primary = torch.softmax(logits - best.macro.tau * log_prior, dim=-1).cpu().numpy()
     secondary = np.tile(FrequencyPrior(Counter()).probabilities(list(SECONDARY.words)), (len(primary), 1))
     Submission(holdout).write(out / "submission.csv", primary, secondary)
 

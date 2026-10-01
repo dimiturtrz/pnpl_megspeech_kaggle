@@ -8,7 +8,7 @@ from torch import nn
 
 from megspeech.epochs import Epochs
 from megspeech.spans import Spans
-from megspeech.train import DENSE, Head, Split, TrainConfig, Trainer
+from megspeech.train import ADJUSTMENTS, DENSE, Head, Score, Split, TrainConfig, Trainer
 from megspeech.wordnet import CHANNELS, WORDS
 
 SAMPLES = 50
@@ -71,14 +71,29 @@ def test_evaluate() -> None:
     assert result.n == 3
 
 
-def test_report() -> None:
-    report = Trainer(TrainConfig(), CPU).report(Constant(), split(), torch.zeros(WORDS), 3, 0.5)
-    assert report.epoch == 3
+def test_best() -> None:
+    score = Score.best({0.0: 0.2, 0.5: 0.4, 1.0: 0.3}, 7)
+    assert (score.tau, score.bacc10, score.n) == (0.5, 0.4, 7)
+
+
+def test_assess() -> None:
+    report = Trainer(TrainConfig(), CPU).assess(Constant(), split(), torch.zeros(WORDS))
     assert report.dense.n == DENSE
+    assert report.context.n == len(split().y)
+
+
+def test_report() -> None:
+    domains = {"a": split(), "b": split(n=8, seed=1)}
+    report = Trainer(TrainConfig(), CPU).report(Constant(), domains, torch.zeros(WORDS), 3, 0.5)
+    assert report.epoch == 3
+    assert set(report.domains) == {"a", "b"}
+    assert report.macro.n == 12 + 8
+    mean = (report.domains["a"].context.by_tau[0.0] + report.domains["b"].context.by_tau[0.0]) / 2
+    assert report.macro.by_tau[ADJUSTMENTS[0]] == pytest.approx(mean)
 
 
 def test_fit() -> None:
-    model, history = Trainer(TrainConfig(epochs=1, batch=4), CPU).fit(split(), split(seed=1), torch.zeros(WORDS))
+    model, history = Trainer(TrainConfig(epochs=1, batch=4), CPU).fit(split(), {"a": split(seed=1)}, torch.zeros(WORDS))
     assert len(history) == 1
     assert isinstance(model, nn.Module)
 
