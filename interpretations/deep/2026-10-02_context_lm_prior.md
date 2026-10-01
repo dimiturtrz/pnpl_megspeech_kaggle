@@ -47,3 +47,29 @@ The same ruler is used for both models: three-task val, macro over tasks, and a 
 
 - The local macro gain (+0.083) matches the LB gain (+0.078), so the macro-over-tasks val tracks the LB. Most of the gain is on MOCHA (+0.14), where the read-sentence data is in-domain, and on TheMoth (+0.09).
 - v1's word head on MOCHA (0.264) is *below* v0's (0.314), while its context head rose. The extra data mostly bought read-sentence word-order prior, not better single-word MEG decoding. The read-sentence share is still only 5.8% of train words. That motivates `--read-weight` (c4fefd3), which tests whether oversampling those runs moves MOCHA and the LB further.
+
+## Correction: MOCHA val is memorised material; the macro mis-selected
+
+The val spans were matched against training: a span's exact sequence of vocab labels was looked up among every training span's.
+
+| val run | spans ≥3 words | of those, verbatim in train | words in unseen multi-word spans |
+|---|---|---|---|
+| MOCHATIMIT | 61 | 61 (100%) | 2 / 518 |
+| Sherlock1 | 192 | 91 (47%) | 499 / 1308 |
+| TheMoth | 188 | 33 (18%) | 980 / 1226 |
+
+MOCHA-TIMIT reuses TIMIT prompts, so every MOCHA val sentence is also read in a TIMIT train run. Sherlock1 val repeats a book the subject heard in earlier sessions.
+
+The macro over tasks mis-selected because of this. It ranked a v1+v2 ensemble first (0.542), but the ensemble scored 0.310 on the LB, against 0.385 for v1. The ensemble is dominated by context-v2 (`--read-weight 4`), which memorised TIMIT word order: v2 scores 0.646 on MOCHA val but 0.446 on unseen spans. The earlier reading that "the LB tracks MOCHA val" was wrong. That correlation came from v0→v1 adding the same TIMIT data that both helps recitation and helps a little genuinely.
+
+Two views do NOT separate the models: shuffling word order within spans, and isolating each word. On both, the ensemble ≥ v1. So the ensemble's MEG evidence is not worse. What hurts it on new sentences is a stronger, wrong word-order prior.
+
+Context BAcc@10 on words in unseen spans, as the mean of Sherlock1 and TheMoth:
+
+| model | unseen-span mean | LB |
+|---|---|---|
+| v0 | 0.479 | 0.307 |
+| v1 | 0.525 | 0.385 |
+| ens | 0.496 | 0.310 |
+
+This ranking matches the LB order; the magnitudes do not (ens is closer to v1 locally than on the LB). That makes it a better ruler, not a calibrated one. It is the selection metric since e06fbeb.
