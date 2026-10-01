@@ -1,5 +1,6 @@
 import dataclasses
-from typing import override
+from pathlib import Path
+from typing import cast, override
 
 import numpy as np
 import pandas as pd
@@ -7,7 +8,10 @@ import pytest
 import torch
 from torch import nn
 
-from megspeech.epochs import Epochs
+from core.paths import DataRoot
+from megspeech import train as module
+from megspeech.epochs import Epocher, Epochs
+from megspeech.runs import Run
 from megspeech.spans import Spans
 from megspeech.train import ADJUSTMENTS, DENSE, Head, Score, Split, TrainConfig, Trainer
 from megspeech.wordnet import CHANNELS, WORDS
@@ -55,6 +59,12 @@ def test_log_prior() -> None:
     assert torch.allclose(split().log_prior().exp().sum(), torch.tensor(1.0))
     heavy = dataclasses.replace(split(), weight=(torch.arange(12) % 3 == 0).float() * 100)
     assert heavy.log_prior().argmax() == 0
+
+
+def test_prior() -> None:
+    prior = Split.prior(torch.tensor([0, 0, 1]), torch.ones(3))
+    assert prior.argmax() == 0
+    assert torch.allclose(prior.exp().sum(), torch.tensor(1.0))
 
 
 def test_batch() -> None:
@@ -109,22 +119,64 @@ def test_fit() -> None:
     assert isinstance(model, nn.Module)
 
 
+class Holdout:
+    def __init__(self, *_: object, **__: object) -> None:
+        pass
+
+    def metadata_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "index": [0, 1, 2],
+                "subject": 0,
+                "source": ["sentence", "sentence", "word"],
+                "epoch": [0, 0, 0],
+                "onset_s": [0.0, 0.3, 0.0],
+            }
+        )
+
+    def iter_windows(self, batch_size: int) -> list[tuple[np.ndarray, None]]:
+        return [(np.zeros((3, CHANNELS, 250)), None)]
+
+
+class Written:
+    def __init__(self, holdout: object) -> None:
+        self.holdout = holdout
+
+    def write(self, path: Path, primary: np.ndarray, secondary: np.ndarray) -> Path:
+        np.savez(path, primary=primary, secondary=secondary)
+        return path
+
+
+class Root:
+    def __init__(self, raw: Path) -> None:
+        self.path = raw
+
+    def raw(self) -> Path:
+        return self.path
+
+
 def test_from_holdout() -> None:
-    class Holdout:
-        def metadata_frame(self) -> pd.DataFrame:
-            return pd.DataFrame(
-                {
-                    "index": [0, 1, 2],
-                    "subject": 0,
-                    "source": ["sentence", "sentence", "word"],
-                    "epoch": [0, 0, 0],
-                    "onset_s": [0.0, 0.3, 0.0],
-                }
-            )
-
-        def iter_windows(self, batch_size: int) -> list[tuple[np.ndarray, None]]:
-            return [(np.zeros((3, CHANNELS, 250)), None)]
-
     held = Split.from_holdout(Holdout(), CPU)
     assert held.x.shape == (3, CHANNELS, SAMPLES)
     assert held.index[:, :2].tolist() == [[0, 1], [2, -1]]
+
+
+def test_validation(tmp_path: Path) -> None:
+    epochs = Epochs(np.zeros((2, CHANNELS, SAMPLES), np.float32), np.array([0, 1]), np.array([0.0, 0.1]))
+    names = ["sub-0_ses-11_task-Sherlock1_run-2_meg.h5", "sub-0_ses-2_task-MOCHATIMIT_run-1_meg.h5"]
+    runs = [Run(tmp_path / name) for name in [*names, "sub-0_ses-1_task-Sherlock1_run-1_meg.h5"]]
+    for run in runs:
+        epochs.save(tmp_path / "cache" / f"{run.name}.npz")
+    held = Split.validation(Epocher(tmp_path / "cache"), runs, CPU)
+    assert set(held) == {"Sherlock1", "MOCHATIMIT"}
+    assert len(held["Sherlock1"].y) == 2
+
+
+def test_submit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(module, "LibriBrainCompetitionHoldout", Holdout)
+    monkeypatch.setattr(module, "Submission", Written)
+    root = cast("DataRoot", Root(tmp_path))
+    path = Trainer(TrainConfig(), CPU).submit(Constant(), root, torch.zeros(WORDS), 0.5, tmp_path / "s.npz")
+    stored = np.load(path)
+    assert stored["primary"].shape == (3, WORDS)
+    assert np.allclose(stored["primary"].sum(axis=1), 1, atol=1e-5)

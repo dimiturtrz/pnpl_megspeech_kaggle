@@ -18,6 +18,7 @@ from collections import Counter
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from enum import StrEnum
+from pathlib import Path
 from typing import Protocol
 
 import numpy as np
@@ -158,6 +159,15 @@ class Split:
         return cls.on_device(torch.cat(xs), np.concatenate(ys), spans, np.concatenate(weights))
 
     @classmethod
+    def validation(cls, epocher: Epocher, runs: list[Run], device: torch.device) -> dict[str, "Split"]:
+        """The official validation runs, one split per task so each domain is scored alone."""
+        held = [r for r in runs if r.partition is Partition.VALIDATION]
+        return {
+            task: cls.gather(((epocher.cached(r), 1.0) for r in held if r.key[0] == task), device)
+            for task in sorted({r.key[0] for r in held})
+        }
+
+    @classmethod
     def from_holdout(cls, holdout: Windows, device: torch.device) -> "Split":
         """Every holdout window, grouped by sentence; isolated word rows are spans of one."""
         frame = holdout.metadata_frame()
@@ -171,7 +181,11 @@ class Split:
 
     def log_prior(self) -> Float[Tensor, " v"]:
         """Label prior as training samples it, so logit adjustment undoes the same distribution."""
-        counts = torch.bincount(self.y, self.weight, minlength=WORDS).float() + 1
+        return self.prior(self.y, self.weight)
+
+    @staticmethod
+    def prior(y: Int[Tensor, " n"], weight: Float[Tensor, " n"]) -> Float[Tensor, " v"]:
+        counts = torch.bincount(y, weight, minlength=WORDS).float() + 1
         return (counts / counts.sum()).log()
 
     def batch(self, spans: Int[Tensor, " b"]) -> tuple[Tensor, Tensor, Tensor, Tensor]:
@@ -261,6 +275,14 @@ class Trainer:
         model.load_state_dict(best_state)
         return model, history
 
+    def submit(self, model: nn.Module, root: DataRoot, log_prior: Float[Tensor, " v"], tau: float, path: Path) -> Path:
+        """Context-head probabilities for every holdout row, logit-adjusted by `tau`, written as a submission."""
+        holdout = LibriBrainCompetitionHoldout("deep", data_path=root.raw(), download=False)
+        logits = self.logits(model, Split.from_holdout(holdout, self.device))[Head.CONTEXT]
+        primary = torch.softmax(logits - tau * log_prior, dim=-1).cpu().numpy()
+        secondary = np.tile(FrequencyPrior(Counter()).probabilities(list(SECONDARY.words)), (len(primary), 1))
+        return Submission(holdout).write(path, primary, secondary)
+
 
 def main() -> None:
     """Train, write metrics + checkpoint + holdout submission under models/pnpl_libribrain/<name>."""
@@ -279,11 +301,7 @@ def main() -> None:
     train = Split.gather(
         ((epocher.cached(r), config.read_weight if r.key[0] in READ else 1.0) for r in train_runs), device
     )
-    held = [r for r in runs if r.partition is Partition.VALIDATION]
-    validation = {
-        task: Split.gather(((epocher.cached(r), 1.0) for r in held if r.key[0] == task), device)
-        for task in sorted({r.key[0] for r in held})
-    }
+    validation = Split.validation(epocher, runs, device)
     LOG.info("train %d words / %d spans", len(train.y), len(train.index))
     LOG.info("validation %s", {task: len(split.y) for task, split in validation.items()})
     log_prior = train.log_prior()
@@ -296,11 +314,7 @@ def main() -> None:
     summary = {"config": asdict(config), "train": len(train.y), "best": asdict(best)}
     (out / "metrics.json").write_text(json.dumps({**summary, "history": [asdict(row) for row in history]}, indent=1))
     LOG.info("best %s", best)
-    holdout = LibriBrainCompetitionHoldout("deep", data_path=root.raw(), download=False)
-    logits = trainer.logits(model, Split.from_holdout(holdout, device))[Head.CONTEXT]
-    primary = torch.softmax(logits - best.macro.tau * log_prior, dim=-1).cpu().numpy()
-    secondary = np.tile(FrequencyPrior(Counter()).probabilities(list(SECONDARY.words)), (len(primary), 1))
-    Submission(holdout).write(out / "submission.csv", primary, secondary)
+    trainer.submit(model, root, log_prior, best.macro.tau, out / "submission.csv")
 
 
 if __name__ == "__main__":

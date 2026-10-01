@@ -75,6 +75,14 @@ def test_cached(tmp_path: Path) -> None:
     assert np.array_equal(epocher.cached(run).x, first.x)
 
 
+def test_labels(tmp_path: Path) -> None:
+    epocher = Epocher(tmp_path / "cache", WORDS)
+    run = recording(tmp_path)
+    epocher.cached(run)
+    run.meg.unlink()
+    assert epocher.labels(run).tolist() == [0, 1]
+
+
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     run = recording(tmp_path)
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: FakeRoot(tmp_path)))
