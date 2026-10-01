@@ -79,6 +79,13 @@ def test_novel() -> None:
     assert held.novel(frozenset()).tolist() == list(range(DENSE))
 
 
+def test_recurring() -> None:
+    epochs = Epochs(np.zeros((4, CHANNELS, SAMPLES), np.float32), np.array([0, 1, 0, 1]), np.array([0, 0.1, 9, 9.1]))
+    twice = Split.gather([(epochs, 1.0)], CPU)
+    assert twice.recurring(1.0).weight.tolist() == [0.5] * 4
+    assert twice.recurring(0.0).weight.tolist() == [1.0] * 4
+
+
 def test_batch() -> None:
     x, onset, mask, words = split().batch(torch.tensor([0]))
     assert len(x) == mask.sum() == DENSE

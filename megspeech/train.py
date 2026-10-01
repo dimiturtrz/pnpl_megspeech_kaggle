@@ -16,7 +16,7 @@ import logging
 import math
 from collections import Counter
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
@@ -67,9 +67,11 @@ class TrainConfig:
     label_smoothing: float = 0.1
     seed: int = 0
     read_weight: float = 1.0
+    """Sampling weight of read-sentence runs (TIMIT, MOCHA-TIMIT) — the holdout's domain — against narrative ones."""
+    repeat_power: float = 0.0
+    """A span heard `k` times in training is drawn with weight `k ** -repeat_power`; 1 draws each sentence once."""
     min_novel: int = 100
     """Unseen-span words a domain needs to count toward selection: two per class of the 50 on average."""
-    """Sampling weight of read-sentence runs (TIMIT, MOCHA-TIMIT) — the holdout's domain — against narrative ones."""
 
 
 class Windows(Protocol):
@@ -217,6 +219,18 @@ class Split:
         keep = [row for row in rows if len(row) > 1 and tuple(labels[row].tolist()) not in seen]
         return torch.from_numpy(np.concatenate([np.empty(0, np.int64), *keep])).to(self.y.device)
 
+    def recurring(self, power: float) -> "Split":
+        """Each span's words reweighted by how often training repeats its label sequence, to the `-power`."""
+        index = self.index.cpu().numpy()
+        labels = self.y.cpu().numpy()
+        rows = [row[row != PAD] for row in index]
+        sequences = [tuple(labels[row].tolist()) for row in rows]
+        counts = Counter(sequences)
+        scale = np.ones(len(labels))
+        for row, sequence in zip(rows, sequences, strict=True):
+            scale[row] = counts[sequence] ** -power
+        return replace(self, weight=self.weight * torch.from_numpy(scale).float().to(self.weight.device))
+
     def dense(self) -> Int[Tensor, " d"]:
         """Words in spans at least `DENSE` long — the holdout-like subset."""
         long = self.index[(self.index != PAD).sum(dim=1) >= DENSE]
@@ -317,9 +331,10 @@ def main() -> None:
     parser.add_argument("--name", required=True)
     parser.add_argument("--epochs", type=int, default=TrainConfig.epochs)
     parser.add_argument("--read-weight", type=float, default=TrainConfig.read_weight)
+    parser.add_argument("--repeat-power", type=float, default=TrainConfig.repeat_power)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    config = TrainConfig(epochs=args.epochs, read_weight=args.read_weight)
+    config = TrainConfig(epochs=args.epochs, read_weight=args.read_weight, repeat_power=args.repeat_power)
     device = torch.device("cuda")
     root = DataRoot.from_config()
     epocher = Epocher(root.processed() / "epochs")
@@ -327,7 +342,7 @@ def main() -> None:
     train_runs = [r for r in runs if r.partition is Partition.TRAIN]
     train = Split.gather(
         ((epocher.cached(r), config.read_weight if r.key[0] in READ else 1.0) for r in train_runs), device
-    )
+    ).recurring(config.repeat_power)
     validation = Split.validation(epocher, runs, device)
     seen = Split.seen(epocher.labelled(r) for r in train_runs)
     LOG.info("train %d words / %d spans", len(train.y), len(train.index))
