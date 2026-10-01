@@ -15,6 +15,7 @@ dependencies = [
     # torch >=2.7 for NVIDIA Blackwell (sm_120, RTX 5090); the CUDA build comes from the index below.
     "torch>=2.7",
     "pnpl>=0.2.0",  # LibriBrain100 loaders, competition holdout + submission writer (BSD-3)
+    "huggingface-hub>=2.1.1",
 ]
 
 [project.optional-dependencies]

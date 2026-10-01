@@ -1,0 +1,318 @@
+{
+  "edges": [
+    {
+      "kind": "import",
+      "source": "core.paths",
+      "target": "core.native_path",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.fetch",
+      "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.native_path.NativePath.resolve",
+      "target": "core.native_path.NativePath.detect_wsl",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.native_path.NativePath.resolve",
+      "target": "core.native_path.NativePath.mount_drive",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.native_path.NativePath.resolve",
+      "target": "core.native_path.NativePath.to_mount",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.native_path.NativePath.resolve",
+      "target": "core.native_path.NativePath.to_windows",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.native_path.NativePath.resolve",
+      "target": "core.native_path.NativePath.win_drive",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.native_path.NativePath.to_mount",
+      "target": "core.native_path.NativePath.win_drive",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.native_path.NativePath.to_windows",
+      "target": "core.native_path.NativePath.mount_drive",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "core.paths.DataRoot",
+      "target": "core.paths.DataRoot",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.paths.DataRoot.foreign",
+      "target": "core.paths.DataRoot._created",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.paths.DataRoot.foreign",
+      "target": "core.paths.DataRoot.kind",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.paths.DataRoot.from_config",
+      "target": "core.native_path.NativePath.resolve",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.paths.DataRoot.kind",
+      "target": "core.native_path.NativePath.resolve",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.paths.DataRoot.models",
+      "target": "core.paths.DataRoot._created",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.paths.DataRoot.models",
+      "target": "core.paths.DataRoot.kind",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.paths.DataRoot.processed",
+      "target": "core.paths.DataRoot._created",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.paths.DataRoot.processed",
+      "target": "core.paths.DataRoot.kind",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.paths.DataRoot.raw",
+      "target": "core.paths.DataRoot.kind",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.fetch.main",
+      "target": "core.paths.DataRoot.from_config",
+      "weight": 1
+    }
+  ],
+  "nodes": [
+    {
+      "descendants": 2,
+      "id": "core",
+      "label": "core",
+      "level": "module",
+      "parent": null,
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.native_path",
+      "label": "native_path",
+      "level": "module",
+      "parent": "core",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.paths",
+      "label": "paths",
+      "level": "module",
+      "parent": "core",
+      "role": null
+    },
+    {
+      "descendants": 1,
+      "id": "megspeech",
+      "label": "megspeech",
+      "level": "module",
+      "parent": null,
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.fetch",
+      "label": "fetch",
+      "level": "module",
+      "parent": "megspeech",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.native_path.NativePath",
+      "label": "NativePath",
+      "level": "class",
+      "parent": "core.native_path",
+      "role": "primary"
+    },
+    {
+      "descendants": 0,
+      "id": "core.paths.DataRoot",
+      "label": "DataRoot",
+      "level": "class",
+      "parent": "core.paths",
+      "role": "primary"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.fetch.Source",
+      "label": "Source",
+      "level": "class",
+      "parent": "megspeech.fetch",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "core.native_path.NativePath.detect_wsl",
+      "label": "detect_wsl",
+      "level": "method",
+      "parent": "core.native_path.NativePath",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.native_path.NativePath.mount_drive",
+      "label": "mount_drive",
+      "level": "method",
+      "parent": "core.native_path.NativePath",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.native_path.NativePath.resolve",
+      "label": "resolve",
+      "level": "method",
+      "parent": "core.native_path.NativePath",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.native_path.NativePath.to_mount",
+      "label": "to_mount",
+      "level": "method",
+      "parent": "core.native_path.NativePath",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.native_path.NativePath.to_windows",
+      "label": "to_windows",
+      "level": "method",
+      "parent": "core.native_path.NativePath",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.native_path.NativePath.win_drive",
+      "label": "win_drive",
+      "level": "method",
+      "parent": "core.native_path.NativePath",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.paths.DataRoot.__init__",
+      "label": "__init__",
+      "level": "method",
+      "parent": "core.paths.DataRoot",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.paths.DataRoot._created",
+      "label": "_created",
+      "level": "method",
+      "parent": "core.paths.DataRoot",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.paths.DataRoot.foreign",
+      "label": "foreign",
+      "level": "method",
+      "parent": "core.paths.DataRoot",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.paths.DataRoot.from_config",
+      "label": "from_config",
+      "level": "method",
+      "parent": "core.paths.DataRoot",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.paths.DataRoot.kind",
+      "label": "kind",
+      "level": "method",
+      "parent": "core.paths.DataRoot",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.paths.DataRoot.models",
+      "label": "models",
+      "level": "method",
+      "parent": "core.paths.DataRoot",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.paths.DataRoot.processed",
+      "label": "processed",
+      "level": "method",
+      "parent": "core.paths.DataRoot",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.paths.DataRoot.raw",
+      "label": "raw",
+      "level": "method",
+      "parent": "core.paths.DataRoot",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.fetch.Source.fetch",
+      "label": "fetch",
+      "level": "method",
+      "parent": "megspeech.fetch.Source",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.fetch.main",
+      "label": "main",
+      "level": "method",
+      "parent": "megspeech.fetch",
+      "role": null
+    }
+  ]
+}

@@ -134,6 +134,14 @@ tests — this repo's tests cover only ITS packages. Consumer-specific detector 
   `research/` = external / field synthesis (theirs); `interpretations/<task>/<date>_<topic>.md` =
   sense-making of *our own* results (per task, `converging/` for cross-task). The build log is git history;
   portfolio READMEs carry the result + link out.
+- **Gate shapes to write TO** — a unit test mirrors its module WITHOUT a `test_` prefix
+  (`megspeech/fetch.py` → `tests/unit/megspeech/fetch.py`); no top-level functions except `main` (make it a
+  method on the class that owns it); every import is a declared dependency (deptry DEP003); generics are fully
+  parameterised (pyrefly: `list[dict[str, object]]`, not `list[dict]`).
+- **Competition loop** — data comes from `python -m megspeech.fetch` (the `pnpl/*` HF repos are public, so it
+  fetches with `token=False`; a stale local HF token cannot break it). Spend a Kaggle submission only on a
+  model scored locally on the official val split, and record LB vs local in its beads issue. The GPU is shared
+  with other projects — check `nvidia-smi` before launching.
 
 
 

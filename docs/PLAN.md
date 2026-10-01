@@ -37,7 +37,8 @@ eligibility, not rank.
 
 - **Kaggle:** `pnpl-competition-2026-deep` / `-broad`; 10 submissions/day, team ≤ 10; closes **2026-10-16 12:00 UTC**
   (the site says 15 Oct AoE, about the same instant).
-- **CSV:** `index` plus one column per vocabulary word, in `pnpl/competition/data/vocabulary.csv` order. That
+- **CSV:** `index`, 50 primary-vocabulary columns in `pnpl/competition/data/vocabulary.csv` order, then 50
+  `moses_<word>` columns (secondary vocab, unscored per pnpl; 101 columns, 960 rows in the Kaggle example). That
   file spells `it’s` with a curly apostrophe; d'Ascoli's list uses `its`. Values must be finite and ≥ 0.
   Write it with `pnpl.competition.submission.write_submission`; never hand-roll it.
 - **Rows:** deep has 960 = 868 sentence-word + 92 word. Broad has 37,439, covering subjects 1–39 (33–39 are
@@ -57,7 +58,9 @@ All CC-BY-NC-4.0, on HuggingFace under `pnpl/`. Sizes measured from the HF tree 
 | `LibriBrain` Sherlock1–7 (subj0) | preprocessed `.h5` + events `.tsv` | **~60 GB** |
 | same | raw `.fif` (BIDS) | ~484 GB — **not needed** |
 | `LibriBrain-Competition-2026` | holdout `.npz` | 5.7 GB |
-| `LibriBrain2` | Broad subjects, raw + derivatives | 239 GB total — pull derivatives only |
+| `LibriBrain2` sub-0 | Sherlock8–9, TIMIT, MOCHATIMIT, TheMoth (= Podcasts) `.h5` + `.tsv` | **~36 GB** |
+| `LibriBrain2` subj 1–32 | Sherlock1 ses-11/12 `.h5` (0.1–0.5 GB each) | ~20 GB |
+| `LibriBrain2` | everything incl. raw `.fif` | 239 GB — never pulled whole |
 
 Deep needs the `.h5` + `.tsv` only; `pnpl`'s download fetches nothing else (default
 `preprocessing_str="bads+headpos+sss+notch+bp+ds"`). D: had 319 GB free at setup — the raw `.fif` would
@@ -73,8 +76,8 @@ not fit and is not used.
 | sub-0 Podcasts | all others | 29 | 30 |
 | subjects 1–32 | none | Sherlock1 ses-11 run1 | Sherlock1 ses-12 run1 |
 
-The Deep training set is therefore Sherlock1–**9** plus TIMIT, MOCHA and Podcasts. The ~60 GB above measured
-Sherlock1–7 only, so re-measure before fetching. For Broad, `validation` IS the SFT set: `partition="train"`
+The Deep training set is therefore Sherlock1–**9** plus TIMIT, MOCHA and Podcasts (HF dirs `MOCHATIMIT`,
+`TheMoth`) — ~96 GB of sub-0 `.h5` across the two repos (measured 2026-10-01). Fetch: `python -m megspeech.fetch`. For Broad, `validation` IS the SFT set: `partition="train"`
 raises.
 
 **`pnpl` loader pitfalls:**
