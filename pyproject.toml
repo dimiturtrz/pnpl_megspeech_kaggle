@@ -12,6 +12,9 @@ dependencies = [
     "beartype",    # the runtime checker jaxtyping delegates to; wrap as @shapecheck in your types module (see devtools/README)
     "pydantic>=2",
     "pyyaml",      # paths.yaml — the one machine-local config (core/paths.py)
+    # torch >=2.7 for NVIDIA Blackwell (sm_120, RTX 5090); the CUDA build comes from the index below.
+    "torch>=2.7",
+    "pnpl>=0.2.0",  # LibriBrain100 loaders, competition holdout + submission writer (BSD-3)
 ]
 
 [project.optional-dependencies]
@@ -25,6 +28,20 @@ devtools = ["sdlc-devtools @ git+https://github.com/dimiturtrz/sdlc-scaffold.git
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+# LOCAL MOD (not slotted), as in mindscape: torch is pinned to the working cu130 build so an unrelated
+# `uv lock` cannot drift the ML stack; a torch upgrade is a deliberate change.
+[tool.uv]
+constraint-dependencies = ["torch==2.12.1+cu130"]
+
+# torch's CUDA build lives on the PyTorch index, not PyPI. `explicit` = only pinned packages use it.
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
 
 [tool.setuptools.packages.find]
 include = ["core*", "megspeech*"]
@@ -55,7 +72,7 @@ extend_exclude = ["noxfile.py"]
 # (numpy/jaxtyping/beartype/pydantic) — they read as unused until you import them.
 [tool.deptry.per_rule_ignores]
 # >>> LOCAL-SLOT: deptry-unused — PRUNE a starter once you wire it (keep pytest/pytest-cov/sdlc-devtools)
-DEP002 = ["pytest", "pytest-cov", "sdlc-devtools", "numpy", "jaxtyping", "beartype", "pydantic"]
+DEP002 = ["pytest", "pytest-cov", "sdlc-devtools", "numpy", "jaxtyping", "beartype", "pydantic", "torch", "pnpl"]
 # <<< LOCAL-SLOT: deptry-unused
 
 [tool.ruff]

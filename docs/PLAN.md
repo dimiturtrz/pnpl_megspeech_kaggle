@@ -19,12 +19,34 @@ holdout split into public + final partitions. Site: libribrain.com/editions/2026
 
 ## Headline metrics
 
-BAcc@10 (balanced top-10 accuracy, chance 20%); tiebreak BAcc@1; OVMI also reported.
+BAcc@10 (balanced top-10 accuracy over the 50 words, chance 20%); tiebreak BAcc@1; OVMI also reported.
+Kaggle lists the metric as `Balanced-Acccuracy` (sic); `pnpl`'s `write_submission` docstring says "argmax",
+which contradicts the FAQ's BAcc@10. Which one the live scorer computes is unverified, so we report both.
 
-| track | reference | BAcc@10 | BAcc@1 | ours |
-|---|---|---|---|---|
-| Deep | d'Ascoli 2025 | 73.23% | 25.60% | — |
-| Broad | MEG-XL | 42.96% | — | — |
+| track | reference | paper BAcc@10 (own test split) | holdout BAcc@10 (3rd-party rerun) | LB top (2026-10-01) | ours |
+|---|---|---|---|---|---|
+| Deep | d'Ascoli 2025 | 73.23% (BAcc@1 25.60%) | 46.7% | 76.5% (63 teams) | — |
+| Broad | MEG-XL | 42.96% | 30.8% | 72.9% (28 teams) | — |
+
+The paper numbers are NOT the holdout ruler. The holdout rerun is from gereonelvers/2026-pnpl-competition-baselines,
+which has no license. It found both baselines need sentence context: d'Ascoli's CNN branch alone scores below
+chance on isolated words. The leaderboard is far above the references, so a faithful replication buys
+eligibility, not rank.
+
+## Submission
+
+- **Kaggle:** `pnpl-competition-2026-deep` / `-broad`; 10 submissions/day, team ≤ 10; closes **2026-10-16 12:00 UTC**
+  (the site says 15 Oct AoE, about the same instant).
+- **CSV:** `index` plus one column per vocabulary word, in `pnpl/competition/data/vocabulary.csv` order. That
+  file spells `it’s` with a curly apostrophe; d'Ascoli's list uses `its`. Values must be finite and ≥ 0.
+  Write it with `pnpl.competition.submission.write_submission`; never hand-roll it.
+- **Rows:** deep has 960 = 868 sentence-word + 92 word. Broad has 37,439, covering subjects 1–39 (33–39 are
+  zero-shot per the code; the site says 1–32). Canonical order: subjects ascending, sentence before word,
+  then stored order — iterate `LibriBrainCompetitionHoldout` and the order matches by construction.
+- **Scored rows:** the public/private split is not exposed. Third-party notes have word rows as Ignored.
+  Rules: "final rankings are determined on independent holdout data recorded with stimuli that are entirely
+  different" — the mechanism is unstated. Overfitting the public LB is therefore doubly pointless.
+- **Prize:** must beat the reference baselines; the top 3 provide checkpoints and maybe training code.
 
 ## Data
 
@@ -37,9 +59,32 @@ All CC-BY-NC-4.0, on HuggingFace under `pnpl/`. Sizes measured from the HF tree 
 | `LibriBrain-Competition-2026` | holdout `.npz` | 5.7 GB |
 | `LibriBrain2` | Broad subjects, raw + derivatives | 239 GB total — pull derivatives only |
 
-Deep needs the `.h5` + `.tsv` only (what `pnpl`'s `LibriBrainWord` reads with
+Deep needs the `.h5` + `.tsv` only; `pnpl`'s download fetches nothing else (default
 `preprocessing_str="bads+headpos+sss+notch+bp+ds"`). D: had 319 GB free at setup — the raw `.fif` would
 not fit and is not used.
+
+**Partitions** (`pnpl` 0.2.0 `datasets/libribrain100/manifest.py`):
+
+| data | train | validation | test |
+|---|---|---|---|
+| sub-0 Sherlock1–9 | everything else | Sherlock1 ses-11 run2 | Sherlock1 ses-12 run2 |
+| sub-0 TIMIT | all 14 sessions | – | – |
+| sub-0 MOCHA | ses 1, 4 | ses 2 | ses 3 |
+| sub-0 Podcasts | all others | 29 | 30 |
+| subjects 1–32 | none | Sherlock1 ses-11 run1 | Sherlock1 ses-12 run1 |
+
+The Deep training set is therefore Sherlock1–**9** plus TIMIT, MOCHA and Podcasts. The ~60 GB above measured
+Sherlock1–7 only, so re-measure before fetching. For Broad, `validation` IS the SFT set: `partition="train"`
+raises.
+
+**`pnpl` loader pitfalls:**
+- `LibriBrain100Word` builds its vocabulary from every word in the selected runs, sorted. It does no
+  lowercasing, has no 50-word restriction, and maps an unknown word to label 0. Map onto the competition
+  vocabulary ourselves.
+- Standardisation is a z-score clipped at ±10, with stats pooled over the dataset's own runs. Each partition
+  computes its own stats unless `channel_means`/`channel_stds` are passed in. Train stats must be carried
+  to val/test/holdout.
+- The default window is 0–0.5 s; the holdout gives 1 s.
 
 **Preprocessing is fixed**, train and test alike (file names: `proc-bads+headpos+sss+notch+lfreq01+hfreq125+sfreq250`):
 bad-channel marking → cHPI head-position → SSS/Maxwell with movement compensation → line-noise notch →
@@ -71,6 +116,18 @@ context is available at test time.
 SOTA gather → replicate → build past it.
 
 1. **Replicate** the Deep reference on the official splits — the ruler every later number is read against.
+   Recipe (github.com/neural-processing-lab/dascoli-word-decoding, CC-BY-NC-4.0):
+   - Backbone: SimpleConvTimeAgg CNN — hidden 160, depth 5, ChannelMerger 306→270, subject layers,
+     attention time-pooling, 1024-d output.
+   - Context: a sentence Transformer on top — depth 16, 16 heads, dim 1024, rotary.
+   - Objective: SigLIP against frozen t5-large word embeddings (layer 12/25, token-mean); prediction is
+     cosine retrieval over the 50 words.
+   - Input: 3 s window from onset; re-band-pass 0.1–40 Hz; 50 Hz; RobustScaler per channel; baseline
+     0–0.5 s; clamp ±5.
+   - Training: AdamW lr 1e-4, wd 0, cosine over 50 epochs, patience 10, batch 128. Early-stop on val
+     BAcc@10 (macro, 50-word vocab).
+   - Check: the holdout gives each word only 1 s plus sentence context (`sentence_extra_end_s` 1.0), not 3 s.
+     How the 3 s window maps onto the sentence holdout is the first thing to read in their code.
 2. **Levers** (ranked by plausible size): contrastive alignment to pretrained speech/word embeddings
    (Défossez 2023 recipe), MEG-XL fine-tune, sentence context on the sentence holdout (neighbouring
    words' MEG + a language prior over the 50-word vocabulary).
@@ -81,4 +138,6 @@ SOTA gather → replicate → build past it.
 
 - GPU split with `rsna_knee_kaggle` (deadline 2026-10-22).
 - Exact Broad derivative footprint in `LibriBrain2` (measure before pulling).
-- Which holdout subject ids are Deep (subj00?) vs Broad, and how word vs sentence holdouts are scored.
+- Does the live scorer compute top-10 or argmax, does it score word rows, and how does it match `it’s`?
+  The first submission (the example CSV, then a trivial prior) answers the format half.
+- MEG-XL (MIT, 2 × ~284 MB checkpoints; wants a 40–80 GiB GPU): does it fine-tune within the 5090's 32 GB?
