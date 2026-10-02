@@ -53,6 +53,9 @@ SEGMENT = 37 * DOWNSAMPLING
 8.7 s, rounded up to whole tokens."""
 WORD = RATE // 2
 """Samples after its onset whose tokens make a word's feature: MEG-XL's own word read."""
+SEGMENT_CHUNK = CHUNK * RATE // SEGMENT
+"""Segments per forward pass: as many samples as a chunk of 1-s windows, the most that fit in VRAM; a full chunk of
+segments spills to host memory through the driver's fallback."""
 
 Reader = Callable[[Float[Tensor, "b c t"]], Float[Tensor, "b f k"]]
 Extraction = Callable[[Split], Float[Tensor, "n f k"]]
@@ -149,7 +152,7 @@ class Segments:
     extractor: Extractor
     project: Callable[[Float[Tensor, "*b d"]], Float[Tensor, "*b k"]]
     length: int = SEGMENT
-    chunk: int = CHUNK
+    chunk: int = SEGMENT_CHUNK
 
     def __call__(self, split: Split) -> Float[Tensor, "n c k"]:
         spans = torch.arange(len(split.index), device=split.index.device)
