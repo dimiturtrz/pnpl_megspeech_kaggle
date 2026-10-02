@@ -19,6 +19,8 @@ SECONDS = 4
 CPU = torch.device("cpu")
 TRAIN = "sub-0_ses-1_task-Sherlock1_run-1_meg.h5"
 HELD = "sub-0_ses-11_task-Sherlock1_run-2_meg.h5"
+OTHER = "sub-3_ses-12_task-Sherlock1_run-1_meg.h5"
+POOLED = "sub-3_ses-11_task-Sherlock1_run-1_meg.h5"
 THE, A = PRIMARY.labels(["the", "a"]).tolist()
 
 
@@ -44,6 +46,7 @@ def corpus_root(tmp_path: Path) -> DataRoot:
     heard = {
         TRAIN: [("the", 0.5, 0, 2.2), ("zebra", 0.9, 0, 2.2), ("a", 1.3, 0, 2.2), ("was", 3.9, 1, 4.9)],
         HELD: [("the", 0.5, 0, 2.0), ("a", 1.0, 0, 2.0)],
+        OTHER: [("the", 0.5, 0, 2.0)],
     }
     rows: list[tuple[str, float, str, int, float]] = []
     for number, (name, words) in enumerate(heard.items()):
@@ -72,12 +75,21 @@ def test_trains_on(tmp_path: Path) -> None:
     assert [only.trains_on(r) for r in (sherlock, timit, held)] == [True, False, False]
     assert DataConfig().trains_on(timit)
     assert [DataConfig(refit=True).trains_on(r) for r in (sherlock, held)] == [True, True]
+    other, pooled = Run(tmp_path / OTHER), Run(tmp_path / POOLED)
+    assert [DataConfig().trains_on(r) for r in (other, pooled)] == [False, False]
+    assert [DataConfig(subjects=(0, 3)).trains_on(r) for r in (sherlock, other, pooled)] == [True, True, False]
+    assert not DataConfig(subjects=(0, 3), refit=True).trains_on(pooled)
 
 
 def runs(path: Path) -> list[Run]:
     keys = [("Sherlock1", s, 1) for s in (1, 2, 3)] + [("Sherlock1", 11, 2), ("Sherlock2", 1, 1), ("Sherlock2", 2, 1)]
     keys += [("TheMoth", s, 1) for s in (1, 2, 29)] + [("TIMIT", 1, 1)]
     return [Run(path / f"sub-0_ses-{s}_task-{task}_run-{r}_meg.h5") for task, s, r in keys]
+
+
+def subjects(path: Path) -> list[Run]:
+    """Subject 0's runs with two other subjects' Sherlock1 sessions 11 and 12."""
+    return runs(path) + [Run(path / f"sub-{n}_ses-{s}_task-Sherlock1_run-1_meg.h5") for n in (3, 4) for s in (11, 12)]
 
 
 def test_stratum() -> None:
@@ -92,6 +104,9 @@ def test_extras(tmp_path: Path) -> None:
     keys = [r.key for r in DataConfig(extra=3).extras(runs(tmp_path))]
     assert keys == [("Sherlock1", 3, 1), ("Sherlock2", 2, 1), ("Sherlock1", 2, 1), ("TheMoth", 2, 1), ("TheMoth", 1, 1)]
     assert DataConfig().extras(runs(tmp_path)) == []
+    assert DataConfig(extra=3, subjects=(0, 3, 4)).extras(subjects(tmp_path)) == DataConfig(extra=3).extras(
+        runs(tmp_path)
+    )
 
 
 def test_trained(tmp_path: Path) -> None:
@@ -101,6 +116,9 @@ def test_trained(tmp_path: Path) -> None:
     assert {("Sherlock1", 3, 1), ("TheMoth", 2, 1)}.isdisjoint(trained)
     assert len(trained) == len(every) - 4
     assert len(DataConfig(extra=1, refit=True).trained(every)) == len(every)
+    assert DataConfig(extra=1).trained(subjects(tmp_path)) == DataConfig(extra=1).trained(every)
+    pooled = DataConfig(subjects=(0, 3)).trained(subjects(tmp_path))
+    assert [r.name for r in pooled if r.subject] == ["sub-3_ses-12_task-Sherlock1_run-1"]
 
 
 def test_trained_folds(tmp_path: Path) -> None:
@@ -111,6 +129,9 @@ def test_trained_folds(tmp_path: Path) -> None:
     assert all(k < every for k in kept)
     assert set().union(*dropped) == every
     assert sum(map(len, dropped)) == len(every)
+    assert [DataConfig(folds=3, fold=f).trained(subjects(tmp_path)) for f in range(3)] == [
+        DataConfig(folds=3, fold=f).trained(runs(tmp_path)) for f in range(3)
+    ]
 
 
 def test_held(tmp_path: Path) -> None:
@@ -121,6 +142,7 @@ def test_held(tmp_path: Path) -> None:
     held = DataConfig(extra=1).held(runs(tmp_path))
     assert list(held) == ["Sherlock1", "TheMoth", "Sherlock+", "TheMoth+"]
     assert [r.key for r in held["Sherlock+"]] == [("Sherlock1", 3, 1)]
+    assert DataConfig(extra=1, subjects=(0, 3, 4)).held(subjects(tmp_path)) == held
 
 
 def test_samples() -> None:
@@ -225,6 +247,8 @@ def test_heard(tmp_path: Path) -> None:
     heard = Corpus.heard(DataConfig().decimator(root).cache, found, DataConfig())
     assert heard["word"].tolist() == ["the", "zebra", "a"]
     assert Corpus.heard(DataConfig().decimator(root).cache, found, DataConfig(extra=1)).empty
+    pooled = Corpus.heard(DataConfig().decimator(root).cache, found, DataConfig(subjects=(0, 3)))
+    assert pooled["word"].tolist() == ["the", "zebra", "a", "the"]
 
 
 def test_sequences(tmp_path: Path) -> None:
@@ -245,3 +269,6 @@ def test_load(tmp_path: Path) -> None:
     assert len(widened.train.y) == 0
     assert set(widened.validation) == {"Sherlock1", "Sherlock+"}
     assert widened.seen == frozenset()
+    pooled = Corpus.load(DataConfig(subjects=(0, 3)), corpus_root(tmp_path / "pooled"), CPU)
+    assert pooled.train.y.tolist() == [THE, IGNORE, A, THE]
+    assert set(pooled.validation) == {"Sherlock1"}

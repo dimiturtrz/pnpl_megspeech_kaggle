@@ -18,7 +18,7 @@ from core.tree import Tree
 from megspeech.data.continuous import Continuous, Decimator
 from megspeech.data.epochs import DECIMATE, RATE, SFREQ
 from megspeech.data.grouping import Grouping
-from megspeech.data.runs import Partition, Run
+from megspeech.data.runs import DEEP, Partition, Run
 from megspeech.data.split import Split
 from megspeech.data.vocabulary import ABSENT, IGNORE, PRIMARY
 from megspeech.data.windows import Windows
@@ -68,6 +68,8 @@ class DataConfig:
     """Bagging: training runs, in key order, dealt round-robin into `folds` folds; 1 trains on them all."""
     fold: int = 0
     """The fold left out of training when `folds` > 1, so each bagged member sees `1 - 1/folds` of the runs."""
+    subjects: tuple[int, ...] = (DEEP,)
+    """Subjects whose training runs train; validation is always subject 0's, and pooled runs never train."""
 
     @classmethod
     def saved(cls, directory: Path) -> "DataConfig":
@@ -119,7 +121,9 @@ class DataConfig:
 
     def trains_on(self, run: Run) -> bool:
         trained = (Partition.TRAIN, Partition.VALIDATION) if self.refit else (Partition.TRAIN,)
-        return run.partition in trained and (not self.tasks or run.key[0] in self.tasks)
+        return (
+            run.partition in trained and run.subject in self.subjects and (not self.tasks or run.key[0] in self.tasks)
+        )
 
     @staticmethod
     def stratum(task: str) -> str:
@@ -129,7 +133,8 @@ class DataConfig:
     def extras(self, runs: Sequence[Run]) -> list[Run]:
         """The `extra` training runs per narrative stratum held out: every book's last session, then every book's
         second-to-last, books in order."""
-        train = sorted((r for r in runs if r.partition is Partition.TRAIN), key=lambda r: r.key, reverse=True)
+        deep = (r for r in runs if r.partition is Partition.TRAIN and r.subject == DEEP)
+        train = sorted(deep, key=lambda r: r.key, reverse=True)
         ranked = sorted(
             ((rank, run.key[0]), run)
             for _, book in itertools.groupby(train, key=lambda r: r.key[0])
@@ -145,7 +150,7 @@ class DataConfig:
         """The runs training reads: `trains_on`, less the extra validation runs unless refitting on validation."""
         withheld = set() if self.refit else {r.name for r in self.extras(runs)}
         kept = [r for r in runs if self.trains_on(r) and r.name not in withheld]
-        ordered = sorted(kept, key=lambda r: r.key)
+        ordered = sorted(kept, key=lambda r: (r.key, r.subject))
         bagged = {r.name for at, r in enumerate(ordered) if self.folds == 1 or at % self.folds != self.fold}
         return [r for r in kept if r.name in bagged]
 
@@ -224,10 +229,14 @@ class Corpus:
 
     @classmethod
     def heard(cls, cache: Path, runs: Sequence[Run], data: DataConfig) -> pd.DataFrame:
-        """Every training-partition word `data.grouping` carries outside the extra validation runs, read from the
-        word table without any MEG: the text a novel span must not repeat."""
+        """Every training-partition word of `data.subjects` that `data.grouping` carries outside the extra validation
+        runs, read from the word table without any MEG: the text a novel span must not repeat."""
         withheld = {r.name for r in data.extras(runs)}
-        names = [r.name for r in runs if r.partition is Partition.TRAIN and r.name not in withheld]
+        names = [
+            r.name
+            for r in runs
+            if r.partition is Partition.TRAIN and r.subject in data.subjects and r.name not in withheld
+        ]
         return cls.words(Continuous.table(cache, names, data.rate), data.grouping, data.rate)
 
     @staticmethod
