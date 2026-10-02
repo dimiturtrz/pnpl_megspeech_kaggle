@@ -74,6 +74,45 @@ def test_trains_on(tmp_path: Path) -> None:
     assert [DataConfig(refit=True).trains_on(r) for r in (sherlock, held)] == [True, True]
 
 
+def runs(path: Path) -> list[Run]:
+    keys = [("Sherlock1", s, 1) for s in (1, 2, 3)] + [("Sherlock1", 11, 2), ("Sherlock2", 1, 1), ("Sherlock2", 2, 1)]
+    keys += [("TheMoth", s, 1) for s in (1, 2, 29)] + [("TIMIT", 1, 1)]
+    return [Run(path / f"sub-0_ses-{s}_task-{task}_run-{r}_meg.h5") for task, s, r in keys]
+
+
+def test_stratum() -> None:
+    assert [DataConfig.stratum(t) for t in ("Sherlock3", "TheMoth", "MOCHATIMIT")] == [
+        "Sherlock",
+        "TheMoth",
+        "MOCHATIMIT",
+    ]
+
+
+def test_extras(tmp_path: Path) -> None:
+    keys = [r.key for r in DataConfig(extra=3).extras(runs(tmp_path))]
+    assert keys == [("Sherlock1", 3, 1), ("Sherlock2", 2, 1), ("Sherlock1", 2, 1), ("TheMoth", 2, 1), ("TheMoth", 1, 1)]
+    assert DataConfig().extras(runs(tmp_path)) == []
+
+
+def test_trained(tmp_path: Path) -> None:
+    every = runs(tmp_path)
+    assert len(DataConfig().trained(every)) == len(every) - 2
+    trained = {r.key for r in DataConfig(extra=1).trained(every)}
+    assert {("Sherlock1", 3, 1), ("TheMoth", 2, 1)}.isdisjoint(trained)
+    assert len(trained) == len(every) - 4
+    assert len(DataConfig(extra=1, refit=True).trained(every)) == len(every)
+
+
+def test_held(tmp_path: Path) -> None:
+    assert {k: [r.key for r in v] for k, v in DataConfig().held(runs(tmp_path)).items()} == {
+        "Sherlock1": [("Sherlock1", 11, 2)],
+        "TheMoth": [("TheMoth", 29, 1)],
+    }
+    held = DataConfig(extra=1).held(runs(tmp_path))
+    assert list(held) == ["Sherlock1", "TheMoth", "Sherlock+", "TheMoth+"]
+    assert [r.key for r in held["Sherlock+"]] == [("Sherlock1", 3, 1)]
+
+
 def test_samples() -> None:
     assert DataConfig().samples == RATE
     assert DataConfig(window=2.5).samples == round(2.5 * RATE)
@@ -97,7 +136,9 @@ def test_shared(tmp_path: Path) -> None:
     scaled = record(tmp_path / "scaled", {"data": {"standardised": True}})
     assert DataConfig.shared([one, one], Grouping.GAP) == DataConfig(grouping=Grouping.GAP)
     assert DataConfig.shared([scaled], Grouping.SENTENCE).standardised
-    with pytest.raises(ValueError, match=r"\[\(1.0, False\), \(2.0, False\)\]"):
+    widened = record(tmp_path / "widened", {"data": {"extra": 2}})
+    assert DataConfig.shared([widened], Grouping.SENTENCE).extra == 2
+    with pytest.raises(ValueError, match=r"\[\(1.0, False, 0\), \(2.0, False, 0\)\]"):
         DataConfig.shared([one, two], Grouping.SENTENCE)
     with pytest.raises(ValueError, match="an ensemble needs one"):
         DataConfig.shared([one, scaled], Grouping.SENTENCE)
@@ -134,20 +175,23 @@ def test_split(tmp_path: Path) -> None:
 def test_domains(tmp_path: Path) -> None:
     loaded = source(tmp_path)
     words = Corpus.words(loaded.words, Grouping.SENTENCE)
-    validation = Corpus.domains(loaded, words, [Run(tmp_path / HELD)], DataConfig())
-    assert list(validation) == ["Sherlock1"]
+    validation = Corpus.domains(loaded, words, {"Sherlock1": [Run(tmp_path / HELD)], "Sherlock+": []}, DataConfig())
+    assert list(validation) == ["Sherlock1", "Sherlock+"]
     assert validation["Sherlock1"].y.tolist() == [THE, A]
+    assert validation["Sherlock+"].y.tolist() == []
 
 
 def test_heard(tmp_path: Path) -> None:
     root = corpus_root(tmp_path)
-    heard = Corpus.heard(root.processed() / DIRECTORY, Run.discover(root.raw()), Grouping.SENTENCE)
+    found = Run.discover(root.raw())
+    heard = Corpus.heard(root.processed() / DIRECTORY, found, DataConfig())
     assert heard["word"].tolist() == ["the", "zebra", "a"]
+    assert Corpus.heard(root.processed() / DIRECTORY, found, DataConfig(extra=1)).empty
 
 
 def test_sequences(tmp_path: Path) -> None:
     root = corpus_root(tmp_path)
-    heard = Corpus.heard(root.processed() / DIRECTORY, Run.discover(root.raw()), Grouping.GAP)
+    heard = Corpus.heard(root.processed() / DIRECTORY, Run.discover(root.raw()), DataConfig(grouping=Grouping.GAP))
     assert Corpus.sequences(heard, Grouping.GAP) == {tokens("the", "a")}
     assert Corpus.sequences(heard.iloc[:0], Grouping.GAP) == frozenset()
 
@@ -157,3 +201,7 @@ def test_load(tmp_path: Path) -> None:
     assert corpus.train.y.tolist() == [THE, IGNORE, A]
     assert set(corpus.validation) == {"Sherlock1"}
     assert corpus.seen == {tokens("the", "zebra", "a")}
+    widened = Corpus.load(DataConfig(extra=1), corpus_root(tmp_path / "widened"), CPU)
+    assert len(widened.train.y) == 0
+    assert set(widened.validation) == {"Sherlock1", "Sherlock+"}
+    assert widened.seen == frozenset()

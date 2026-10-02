@@ -1,7 +1,9 @@
 """What a training run reads: which runs train and at what weight, cut from the continuous cache with validation."""
 
+import itertools
 import json
 import logging
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +31,9 @@ METRICS = "metrics.json"
 READ = frozenset({"TIMIT", "MOCHATIMIT"})
 """Tasks of read sentences, the holdout's domain; the rest is narrative (Sherlock, TheMoth)."""
 
+NARRATIVE = ("Sherlock", "TheMoth")
+"""The strata the ruler scores: Sherlock's nine books are one, TheMoth's stories another."""
+
 
 @dataclass(frozen=True)
 class DataConfig:
@@ -49,6 +54,11 @@ class DataConfig:
     """Each recording — training or validation run, holdout archive — robust-scaled per channel by its own median and
     IQR before the model's scaler. Across the 162 runs a channel's IQR over its median run spans 0.78-1.28 (p5-p95);
     the holdout sentence archive's sits at 0.90."""
+    extra: int = 0
+    """Whole training sessions per narrative stratum held out as one more validation domain, `<stratum>+`, beside
+    the official run: each book's or story's last session first. One official run per stratum leaves the macro's
+    interval near +-0.035; `k` more runs of similar size shrink it by about `sqrt(1 + k)`, for `k` runs of the
+    ~150 trained."""
 
     @classmethod
     def saved(cls, directory: Path) -> "DataConfig":
@@ -60,11 +70,11 @@ class DataConfig:
     def shared(cls, directories: Sequence[Path], grouping: Grouping) -> "DataConfig":
         """The holdout reading — window and standardisation — every run in `directories` trained on, spans cut by
         `grouping`; members that read MEG differently cannot share one set of holdout windows."""
-        readings = {(saved.window, saved.standardised) for saved in map(cls.saved, directories)}
+        readings = {(saved.window, saved.standardised, saved.extra) for saved in map(cls.saved, directories)}
         if len(readings) != 1:
-            raise ValueError(f"runs trained at (window, standardised) {sorted(readings)}; an ensemble needs one")
-        window, standardised = readings.pop()
-        return cls(grouping=grouping, window=window, standardised=standardised)
+            raise ValueError(f"runs trained at (window, standardised, extra) {sorted(readings)}; an ensemble needs one")
+        window, standardised, extra = readings.pop()
+        return cls(grouping=grouping, window=window, standardised=standardised, extra=extra)
 
     @property
     def samples(self) -> int:
@@ -74,6 +84,38 @@ class DataConfig:
     def trains_on(self, run: Run) -> bool:
         trained = (Partition.TRAIN, Partition.VALIDATION) if self.refit else (Partition.TRAIN,)
         return run.partition in trained and (not self.tasks or run.key[0] in self.tasks)
+
+    @staticmethod
+    def stratum(task: str) -> str:
+        """The task without its book number: `Sherlock3` reads as `Sherlock`."""
+        return re.sub(r"\d+$", "", task)
+
+    def extras(self, runs: Sequence[Run]) -> list[Run]:
+        """The `extra` training runs per narrative stratum held out: every book's last session, then every book's
+        second-to-last, books in order."""
+        train = sorted((r for r in runs if r.partition is Partition.TRAIN), key=lambda r: r.key, reverse=True)
+        ranked = sorted(
+            ((rank, run.key[0]), run)
+            for _, book in itertools.groupby(train, key=lambda r: r.key[0])
+            for rank, run in enumerate(book)
+        )
+        return [
+            run
+            for stratum in NARRATIVE
+            for _, run in [entry for entry in ranked if self.stratum(entry[0][1]) == stratum][: self.extra]
+        ]
+
+    def trained(self, runs: Sequence[Run]) -> list[Run]:
+        """The runs training reads: `trains_on`, less the extra validation runs unless refitting on validation."""
+        withheld = set() if self.refit else {r.name for r in self.extras(runs)}
+        return [r for r in runs if self.trains_on(r) and r.name not in withheld]
+
+    def held(self, runs: Sequence[Run]) -> dict[str, list[Run]]:
+        """The validation domains' runs: each official validation run under its task, the extras under `<stratum>+`."""
+        official = [r for r in runs if r.partition is Partition.VALIDATION]
+        domains = {task: [r for r in official if r.key[0] == task] for task in sorted({r.key[0] for r in official})}
+        extras = {f"{s}+": [r for r in self.extras(runs) if self.stratum(r.key[0]) == s] for s in NARRATIVE}
+        return domains | {name: chosen for name, chosen in extras.items() if chosen}
 
 
 @dataclass(frozen=True)
@@ -88,16 +130,16 @@ class Corpus:
     def load(cls, data: DataConfig, root: DataRoot, device: torch.device) -> "Corpus":
         cache = root.processed() / DIRECTORY
         runs = Run.discover(root.raw())
-        trained = [r for r in runs if data.trains_on(r)]
-        held = [r for r in runs if r.partition is Partition.VALIDATION]
-        source = Continuous.load(cache, device, [r.name for r in trained + held], standardised=data.standardised)
+        trained, held = data.trained(runs), data.held(runs)
+        reading = [r.name for r in trained] + [r.name for group in held.values() for r in group]
+        source = Continuous.load(cache, device, list(dict.fromkeys(reading)), standardised=data.standardised)
         words = cls.words(source.words, data.grouping)
         weights = {r.name: data.read_weight if r.key[0] in READ else 1.0 for r in trained}
         chosen = words[words["run"].isin(weights)]
         weight = chosen["run"].map(weights).to_numpy(dtype=np.float64)
         train = cls.split(source, chosen, data, weight).recurring(data.repeat_power)
         validation = cls.domains(source, words, held, data)
-        heard = cls.heard(cache, runs, data.grouping)
+        heard = cls.heard(cache, runs, data)
         LOG.info("cache %.2f GB on %s", source.gigabytes, device)
         LOG.info("train %d words (%d labelled) / %d spans", len(train.y), len(train.labelled()), len(train.index))
         LOG.info("validation %s", {task: len(split.labelled()) for task, split in validation.items()})
@@ -124,18 +166,19 @@ class Corpus:
 
     @classmethod
     def domains(
-        cls, source: Continuous, words: pd.DataFrame, held: Sequence[Run], data: DataConfig
+        cls, source: Continuous, words: pd.DataFrame, held: dict[str, list[Run]], data: DataConfig
     ) -> dict[str, Split]:
-        """The official validation runs' `words`, one split per task so each domain is scored alone."""
-        tasks = {task: [r.name for r in held if r.key[0] == task] for task in sorted({r.key[0] for r in held})}
-        chosen = {task: words[words["run"].isin(names)] for task, names in tasks.items()}
-        return {task: cls.split(source, rows, data, np.ones(len(rows))) for task, rows in chosen.items()}
+        """Each validation domain's `words` (`DataConfig.held`), one split per domain so each is scored alone."""
+        chosen = {name: words[words["run"].isin([r.name for r in runs])] for name, runs in held.items()}
+        return {name: cls.split(source, rows, data, np.ones(len(rows))) for name, rows in chosen.items()}
 
     @classmethod
-    def heard(cls, cache: Path, runs: Sequence[Run], grouping: Grouping) -> pd.DataFrame:
-        """Every training-partition word `grouping` carries, read from the word table without any MEG."""
-        names = [r.name for r in runs if r.partition is Partition.TRAIN]
-        return cls.words(Continuous.table(cache, names), grouping)
+    def heard(cls, cache: Path, runs: Sequence[Run], data: DataConfig) -> pd.DataFrame:
+        """Every training-partition word `data.grouping` carries outside the extra validation runs, read from the
+        word table without any MEG: the text a novel span must not repeat."""
+        withheld = {r.name for r in data.extras(runs)}
+        names = [r.name for r in runs if r.partition is Partition.TRAIN and r.name not in withheld]
+        return cls.words(Continuous.table(cache, names), data.grouping)
 
     @staticmethod
     def sequences(heard: pd.DataFrame, grouping: Grouping) -> frozenset[tuple[int, ...]]:
