@@ -66,9 +66,8 @@ def test_normalise() -> None:
     assert torch.allclose(normalised[1:].std(-1, unbiased=False), torch.ones(3, 5), atol=1e-4)
 
 
-def test_normalise_flat_sensor_is_zero() -> None:
-    net = WordNet(ConvConfig(hidden=8, dilations=(1, 2), instance=True))
-    flat = net.normalise(torch.full((1, 2, SAMPLES), 7.0), torch.ones(1, 1, SAMPLES, dtype=torch.bool))
+def test_standardise() -> None:
+    flat = WordNet.standardise(torch.full((1, 2, SAMPLES), 7.0), torch.ones(1, 1, SAMPLES, dtype=torch.bool))
     assert torch.all(flat == 0)
 
 

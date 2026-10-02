@@ -17,6 +17,7 @@ from megspeech.data.corpus import Corpus
 from megspeech.data.split import Split
 from megspeech.data.vocabulary import IGNORE, WORDS
 from megspeech.evaluation.report import Epoch, Evaluator
+from megspeech.model.megxl import Trunk
 from megspeech.model.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.heads import Objective
@@ -82,7 +83,7 @@ class Trainer:
         """AdamW as one fused kernel on the GPU; per-parameter launches were most of a step's device time."""
         optim = self.config.optim
         fused = self.evaluator.device.type == "cuda"
-        groups = anchor.groups(model, optim.weight_decay)
+        groups = Trunk.groups(model, anchor.groups(model, optim.weight_decay), optim.lr * optim.pretrained)
         return torch.optim.AdamW(groups, lr=optim.lr, weight_decay=optim.weight_decay, fused=fused)
 
     def balanced(self, y: Int[Tensor, " n"]) -> Float[Tensor, " v"] | None:
@@ -128,7 +129,8 @@ class Trainer:
         per_epoch = math.ceil(len(train.index) / optim.batch)
         anchor = Anchor.of(optim.anchor, optim.lr, optim.epochs * per_epoch)
         optimizer = self.optimizer(model, anchor)
-        schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, optim.lr, total_steps=optim.epochs * per_epoch)
+        peaks = [group["lr"] for group in optimizer.param_groups]
+        schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, peaks, total_steps=optim.epochs * per_epoch)
         state = Step(
             model,
             optimizer,

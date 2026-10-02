@@ -8,7 +8,7 @@ import torch
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.model.megxl import CHECKPOINT, MAGNETOMETER, ROTATIONS, Checkpoint, Geometry, Trunk
+from megspeech.model.megxl import CHECKPOINT, LATENT, MAGNETOMETER, ROTATIONS, Checkpoint, Geometry, Trunk
 
 GRADIOMETER = 3012
 
@@ -40,7 +40,10 @@ class Features(nn.Module):
         assert not apply_mask
         tokens = raw.unfold(-1, 2, 2).mean(-1, keepdim=True)
         sensors = (xyz.sum(-1) + abc.sum(-1) + kind)[..., None, None]
-        return {"features": self.scale * tokens + sensors}
+        return {"features": (self.scale * tokens + sensors).expand(-1, -1, -1, LATENT)}
+
+    def enable_gradient_checkpointing(self) -> None:
+        self.checkpointed = True
 
 
 def test_of():
@@ -87,6 +90,7 @@ def test_trunk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     path = tmp_path / "w.ckpt"
     module = saved(path, {"scale": torch.tensor(3.0), f"layer.{ROTATIONS}": torch.zeros(2)}).trunk()
     assert module.state_dict()["scale"].item() == 3.0
+    assert module.checkpointed
     with pytest.raises(ValueError, match="unexpected"):
         saved(path, {"scale": torch.tensor(3.0), "other": torch.zeros(1)}).trunk()
 
@@ -95,7 +99,7 @@ def test_forward():
     trunk = Trunk(Features(), Geometry.of(CHANNELS))
     x = torch.ones(3, 2, 8)
     features = trunk.forward(x)
-    assert features.shape == (3, 2, 4, 1)
+    assert features.shape == (3, 2, 4, LATENT)
     expected = torch.tensor([-1 + 1 + 1, 1 + 1 + 0], dtype=torch.float32) + 1
     torch.testing.assert_close(features[0, :, 0, 0], expected)
 
@@ -107,3 +111,12 @@ def test_pretrained(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(Geometry, "neuromag", classmethod(lambda cls, _path: cls.of(CHANNELS)))
     trunk = Trunk.pretrained(root)
     assert trunk.kind.tolist() == [1, 0]
+
+
+def test_groups():
+    trunk = Trunk(Features(), Geometry.of(CHANNELS))
+    model = nn.Sequential(nn.Linear(2, 2), trunk)
+    groups = Trunk.groups(model, [{"params": list(model.parameters()), "weight_decay": 0.0}], lr=1e-4)
+    ids = [{id(p) for p in group.pop("params")} for group in groups]
+    assert ids == [{id(p) for p in model[0].parameters()}, {id(p) for p in trunk.parameters()}]
+    assert groups == [{"weight_decay": 0.0}, {"lr": 1e-4}]

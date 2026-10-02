@@ -10,7 +10,6 @@ from megspeech.data.runs import CHANNELS
 from megspeech.model.onsets import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.span import SpanConformer
 from megspeech.model.subjects import SubjectLayer, Unseen
-from megspeech.model.wordnet import WordNet
 
 
 class SentenceNet(nn.Module):
@@ -31,7 +30,7 @@ class SentenceNet(nn.Module):
         super().__init__()
         self.scale = scale
         self.subjects = SubjectLayer.of(context.subjects, CHANNELS, unseen)
-        self.words = WordNet(context.conv)
+        self.words = context.encoder.build(context.conv)
         self.project = nn.Linear(self.words.width, context.width)
         self.clock = context.clock
         self.onsets = OnsetEncoding(context)

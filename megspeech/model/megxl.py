@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import override
+from typing import cast, override
 
 import numpy as np
 import torch
@@ -33,6 +33,9 @@ DOWNSAMPLING = 12
 
 ROTATIONS = "rope_embedding_layer.rotate"
 """The checkpoint's RoPE tables, sized to its pretraining length; the trunk recomputes them for any length."""
+
+LATENT = 512
+"""The width of every token's features, the checkpoint's `latent_dim`."""
 
 
 @dataclass(frozen=True)
@@ -95,6 +98,7 @@ class Checkpoint:
         missing, unexpected = module.load_state_dict(state, strict=False)
         if unexpected or any(ROTATIONS not in key for key in missing):
             raise ValueError(f"{self.weights.name}: missing {missing}, unexpected {unexpected}")
+        module.enable_gradient_checkpointing()
         return module
 
 
@@ -127,3 +131,11 @@ class Trunk(nn.Module):
             self.kind.expand(batch, -1),
             apply_mask=False,
         )["features"]
+
+    @staticmethod
+    def groups(model: nn.Module, groups: list[dict[str, object]], lr: float) -> list[dict[str, object]]:
+        """`groups` with every trunk's parameters in `model` moved to a group of their own at `lr`."""
+        pretrained = [p for m in model.modules() if isinstance(m, Trunk) for p in m.parameters()]
+        ids = {id(p) for p in pretrained}
+        rest = [{**g, "params": [p for p in cast("list[Tensor]", g["params"]) if id(p) not in ids]} for g in groups]
+        return [*rest, {"params": pretrained, "lr": lr}]

@@ -70,8 +70,11 @@ class WordNet(nn.Module):
     def normalise(self, x: Float[Tensor, "b c t"], present: Bool[Tensor, "b 1 t"]) -> Float[Tensor, "b c t"]:
         """`x` z-scored per window and sensor over its `present` samples, zero elsewhere; unchanged unless
         `instance`."""
-        if not self.instance:
-            return x
+        return self.standardise(x, present) if self.instance else x
+
+    @staticmethod
+    def standardise(x: Float[Tensor, "b c t"], present: Bool[Tensor, "b 1 t"]) -> Float[Tensor, "b c t"]:
+        """`x` z-scored per window and sensor over its `present` samples, zero elsewhere."""
         count = present.sum(-1, keepdim=True).clamp(min=1)
         centred = (x - (x * present).sum(-1, keepdim=True) / count) * present
         spread = (centred.square().sum(-1, keepdim=True) / count).sqrt()

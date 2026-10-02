@@ -12,6 +12,7 @@ from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
 from core.tree import Tree
+from megspeech.model.encoder import Encoder
 from megspeech.model.wordnet import CONV, ConvConfig
 from megspeech.objective.heads import Objective
 
@@ -44,6 +45,8 @@ class ContextConfig:
     objective: Objective = Objective.SOFTMAX
     conv: ConvConfig = CONV
     """The per-word encoder the transformer reads."""
+    encoder: Encoder = Encoder.CONV
+    """Whether that encoder is the CNN `conv` shapes or MEG-XL, which reads only its `instance` and `dropout`."""
     mixing: int = 0
     subjects: int = 0
     """Depthwise kernel, in words, of a convolution module after each transformer layer (`span.SpanConformer`); 0
