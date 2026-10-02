@@ -68,7 +68,39 @@ def test_graded() -> None:
     assert hits.all()
 
 
+def test_scored() -> None:
+    evaluator, domain = Evaluator(CPU), split()
+    logits = evaluator.logits(Constant(), domain)
+    assert evaluator.scored(logits, domain, torch.zeros(WORDS)) == evaluator.assess(
+        Constant(), domain, torch.zeros(WORDS)
+    )
+
+
+def test_grade() -> None:
+    evaluator, domains = Evaluator(CPU, min_novel=1), {"a": split()}
+    context = {"a": evaluator.logits(Constant(), domains["a"])[Head.CONTEXT]}
+    graded = evaluator.grade(context, domains, torch.zeros(WORDS), 0.0)
+    expected = evaluator.graded(Constant(), domains, torch.zeros(WORDS), 0.0)
+    assert all(torch.equal(graded.domains["a"][i], expected.domains["a"][i]) for i in range(2))
+
+
+class Counting(Constant):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+
+    @override
+    def forward(self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        self.calls += 1
+        return super().forward(x, onset, slot)
+
+
 def test_report() -> None:
+    model = Counting()
+    Evaluator(CPU, min_novel=1).report(model, {"a": split()}, torch.zeros(WORDS), 0, 0.0)
+    once = model.calls
+    Evaluator(CPU).logits(model, split())
+    assert model.calls == 2 * once
     domains = {"a": split(), "b": split(n=8, seed=1)}
     report = Evaluator(CPU, min_novel=1).report(Constant(), domains, torch.zeros(WORDS), 3, 0.5)
     assert report.epoch == 3

@@ -101,7 +101,10 @@ class Evaluator:
         return Score.best(by_tau, len(labels))
 
     def assess(self, model: nn.Module, split: Split, log_prior: Float[Tensor, " v"]) -> Report:
-        logits = self.logits(model, split)
+        return self.scored(self.logits(model, split), split, log_prior)
+
+    def scored(self, logits: dict[Head, Float[Tensor, "n v"]], split: Split, log_prior: Float[Tensor, " v"]) -> Report:
+        """One domain's report from its already computed logits."""
         dense = split.dense()
         novel = split.novel(self.seen)
         top1 = Ruler(k=1)
@@ -116,27 +119,41 @@ class Evaluator:
 
     def graded(self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], tau: float) -> Graded:
         """The context head's per-word hits on the unseen spans of every domain that counts toward selection."""
-        novel = {name: split.novel(self.seen) for name, split in domains.items()}
-        counted = {name: split for name, split in domains.items() if len(novel[name]) >= self.min_novel}
+        counted = {name: split for name, split in domains.items() if len(split.novel(self.seen)) >= self.min_novel}
+        context = {name: self.logits(model, split)[Head.CONTEXT] for name, split in counted.items()}
+        return self.grade(context, counted, log_prior, tau)
+
+    def grade(
+        self,
+        context: dict[str, Float[Tensor, "n v"]],
+        domains: dict[str, Split],
+        log_prior: Float[Tensor, " v"],
+        tau: float,
+    ) -> Graded:
+        """`graded` from each counted domain's already computed context logits."""
+        novel = {name: domains[name].novel(self.seen) for name in context}
         return Graded(
             {
                 name: (
-                    self.ruler.hits(
-                        self.logits(model, split)[Head.CONTEXT][novel[name]] - tau * log_prior, split.y[novel[name]]
-                    ),
-                    split.y[novel[name]],
+                    self.ruler.hits(logits[novel[name]] - tau * log_prior, domains[name].y[novel[name]]),
+                    domains[name].y[novel[name]],
                 )
-                for name, split in counted.items()
+                for name, logits in context.items()
             }
         )
 
     def report(
         self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], epoch: int, loss: float
     ) -> Epoch:
-        """Every domain scored alone; selection reads the macro over unseen spans of domains with enough of them."""
-        reports = {name: self.assess(model, split, log_prior) for name, split in domains.items()}
-        counted = [r.novel for r in reports.values() if r.novel.n >= self.min_novel]
-        by_tau = {tau: float(np.mean([score.by_tau[tau] for score in counted])) for tau in ADJUSTMENTS}
-        macro = Score.best(by_tau, sum(score.n for score in counted))
-        interval = self.ruler.interval(self.ruler.macro(self.graded(model, domains, log_prior, macro.tau)))
+        """Every domain scored alone; selection reads the macro over unseen spans of domains with enough of them.
+
+        Each domain's logits are computed once and serve both its report and the interval's per-word hits.
+        """
+        logits = {name: self.logits(model, split) for name, split in domains.items()}
+        reports = {name: self.scored(logits[name], split, log_prior) for name, split in domains.items()}
+        counted = {name: r.novel for name, r in reports.items() if r.novel.n >= self.min_novel}
+        by_tau = {tau: float(np.mean([score.by_tau[tau] for score in counted.values()])) for tau in ADJUSTMENTS}
+        macro = Score.best(by_tau, sum(score.n for score in counted.values()))
+        context = {name: logits[name][Head.CONTEXT] for name in counted}
+        interval = self.ruler.interval(self.ruler.macro(self.grade(context, domains, log_prior, macro.tau)))
         return Epoch(epoch, loss, reports, macro, interval)
