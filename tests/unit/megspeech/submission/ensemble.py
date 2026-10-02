@@ -1,0 +1,59 @@
+import functools
+import json
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from typing import override
+
+import numpy as np
+import pytest
+import torch
+from torch import nn
+
+from core.paths import DataRoot
+from megspeech.data.runs import CHANNELS, Run
+from megspeech.data.spans import Spans
+from megspeech.data.split import DENSE, Split
+from megspeech.data.vocabulary import WORDS
+from megspeech.evaluation.report import Evaluator
+from megspeech.submission import ensemble as module
+from megspeech.submission.ensemble import main
+
+CPU = torch.device("cpu")
+SAMPLES = 50
+ROWS = 12
+
+
+class Constant(nn.Module):
+    @override
+    def forward(self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        logits = torch.zeros(*slot.shape, WORDS)
+        logits[..., 0] = 1
+        return logits, logits
+
+
+def validation() -> dict[str, Split]:
+    x = np.random.default_rng(0).normal(size=(ROWS, CHANNELS, SAMPLES)).astype(np.float32)
+    onset = np.r_[np.arange(DENSE) * 0.2, 10 + np.arange(ROWS - DENSE) * 2.0]
+    return {"Sherlock1": Split.from_arrays(x, np.arange(ROWS) % 3, Spans.by_gap(onset), CPU)}
+
+
+def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    written: list[Path] = []
+    train = Run(tmp_path / "sub-0_ses-1_task-Sherlock1_run-1_meg.h5")
+    devices = SimpleNamespace(device=lambda _: CPU, from_numpy=torch.from_numpy, ones=torch.ones)
+    monkeypatch.setattr(module, "torch", devices)
+    monkeypatch.setattr(module, "Evaluator", functools.partial(Evaluator, min_novel=1))
+    monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))
+    monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: [train]))
+    monkeypatch.setattr(module.Epocher, "labelled", lambda _self, _run: (np.array([0, 1]), np.array([0.0, 0.1])))
+    monkeypatch.setattr(module.Split, "validation", classmethod(lambda *_: validation()))
+    monkeypatch.setattr(module.Ensemble, "load", classmethod(lambda *_: Constant()))
+    monkeypatch.setattr(module.Submitter, "submit", lambda _self, *args: written.append(args[-1]))
+    monkeypatch.setattr(sys, "argv", ["ensemble", "--out", "both", "a", "b"])
+    main()
+    out = DataRoot(tmp_path).models() / "both"
+    metrics = json.loads((out / "metrics.json").read_text())
+    assert metrics["members"] == ["a", "b"]
+    assert set(metrics["best"]["domains"]) == {"Sherlock1"}
+    assert written == [out / "submission.csv"]

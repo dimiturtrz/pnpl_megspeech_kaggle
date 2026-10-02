@@ -1,0 +1,131 @@
+import dataclasses
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import torch
+
+from megspeech.data.epochs import Epocher, Epochs
+from megspeech.data.runs import CHANNELS, Run
+from megspeech.data.spans import PAD, Spans
+from megspeech.data.split import DENSE, Split
+from megspeech.data.vocabulary import IGNORE
+
+SAMPLES = 50
+CPU = torch.device("cpu")
+
+
+def split(n: int = 12, seed: int = 0) -> Split:
+    rng = np.random.default_rng(seed)
+    x = rng.normal(size=(n, CHANNELS, SAMPLES)).astype(np.float32)
+    y = np.arange(n) % 3
+    onset = np.r_[np.arange(DENSE) * 0.2, 10 + np.arange(n - DENSE) * 2.0]
+    return Split.from_arrays(x, y, Spans.by_gap(onset), CPU)
+
+
+class Holdout:
+    def metadata_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "index": [0, 1, 2],
+                "subject": 0,
+                "source": ["sentence", "sentence", "word"],
+                "epoch": [0, 0, 0],
+                "onset_s": [0.0, 0.3, 0.0],
+            }
+        )
+
+    def iter_windows(self, batch_size: int) -> list[tuple[np.ndarray, None]]:
+        return [(np.zeros((3, CHANNELS, 250)), None)]
+
+
+def test_from_arrays() -> None:
+    assert split().x.shape == (12, CHANNELS, SAMPLES)
+
+
+def test_gather() -> None:
+    epochs = Epochs(np.zeros((2, CHANNELS, SAMPLES), np.float32), np.array([0, 1]), np.array([0.0, 0.1]))
+    gathered = Split.gather([(epochs, 1.0), (epochs, 3.0)], CPU)
+    assert len(gathered.y) == 4
+    assert gathered.index.shape[0] == 2
+    assert gathered.weight.tolist() == [1.0, 1.0, 3.0, 3.0]
+
+
+def test_on_device() -> None:
+    spans = Spans.by_gap(np.array([0.0, 0.1, 9.0]))
+    held = Split.on_device(torch.zeros(3, CHANNELS, SAMPLES), np.array([0, 1, 2]), spans, np.ones(3))
+    assert held.y.tolist() == [0, 1, 2]
+    assert held.index.shape[0] == 2
+
+
+def test_log_prior() -> None:
+    assert torch.allclose(split().log_prior().exp().sum(), torch.tensor(1.0))
+    heavy = dataclasses.replace(split(), weight=(torch.arange(12) % 3 == 0).float() * 100)
+    assert heavy.log_prior().argmax() == 0
+
+
+def test_prior() -> None:
+    prior = Split.prior(torch.tensor([0, 0, 1]), torch.ones(3))
+    assert prior.argmax() == 0
+    assert torch.allclose(prior.exp().sum(), torch.tensor(1.0))
+
+
+def test_seen() -> None:
+    seen = Split.seen([(np.array([4, 5, 6]), np.array([0.0, 0.2, 9.0]))])
+    assert seen == {(4, 5), (6,)}
+
+
+def test_novel() -> None:
+    held = split()
+    everything = Split.seen([(held.y.numpy(), np.r_[np.arange(DENSE) * 0.2, 10 + np.arange(12 - DENSE) * 2.0])])
+    assert len(held.novel(everything)) == 0
+    assert held.novel(frozenset()).tolist() == list(range(DENSE))
+
+
+def test_recurring() -> None:
+    onset = np.array([0, 0.1, 0.2, 9, 9.1, 9.2, 20, 20.1, 30, 30.1])
+    y = np.array([0, 1, 2, 0, 1, 2, 3, 4, 3, 4])
+    twice = Split.gather([(Epochs(np.zeros((10, CHANNELS, SAMPLES), np.float32), y, onset), 1.0)], CPU)
+    assert twice.recurring(1.0).weight.tolist() == [0.5] * 6 + [1.0] * 4
+    assert twice.recurring(0.0).weight.tolist() == [1.0] * 10
+
+
+def test_batch() -> None:
+    batch = split().batch(torch.tensor([1, 0]), rows=6)
+    assert batch.slot[:, :DENSE].tolist() == [[0, 6, 6, 6], [1, 2, 3, 4]]
+    assert torch.equal(batch.x[:5], split().x[[DENSE, 0, 1, 2, 3]])
+    assert batch.onset.shape == batch.slot.shape
+    overflow = split().batch(torch.tensor([0]), rows=2)
+    assert overflow.slot[:, :DENSE].tolist() == [[0, 1, 2, 2]]
+    assert overflow.index[:, :DENSE].tolist() == [[0, 1, PAD, PAD]]
+
+
+def test_target() -> None:
+    data = split()
+    assert data.batch(torch.tensor([0]), rows=2).target(data.y)[:, :DENSE].tolist() == [[0, 1, IGNORE, IGNORE]]
+
+
+def test_capacity() -> None:
+    assert split().capacity(1) == 8
+    assert split().capacity(100) == 192
+
+
+def test_dense() -> None:
+    assert split().dense().tolist() == list(range(DENSE))
+
+
+def test_from_holdout() -> None:
+    held = Split.from_holdout(Holdout(), CPU)
+    assert held.x.shape == (3, CHANNELS, SAMPLES)
+    assert held.index[:, :2].tolist() == [[0, 1], [2, -1]]
+
+
+def test_validation(tmp_path: Path) -> None:
+    epochs = Epochs(np.zeros((2, CHANNELS, SAMPLES), np.float32), np.array([0, 1]), np.array([0.0, 0.1]))
+    names = ["sub-0_ses-11_task-Sherlock1_run-2_meg.h5", "sub-0_ses-2_task-MOCHATIMIT_run-1_meg.h5"]
+    runs = [Run(tmp_path / name) for name in [*names, "sub-0_ses-1_task-Sherlock1_run-1_meg.h5"]]
+    for run in runs:
+        epochs.save(tmp_path / "cache" / f"{run.name}.npz")
+    held = Split.validation(Epocher(tmp_path / "cache"), runs, CPU)
+    assert set(held) == {"Sherlock1", "MOCHATIMIT"}
+    assert len(held["Sherlock1"].y) == 2

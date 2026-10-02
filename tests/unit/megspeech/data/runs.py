@@ -1,0 +1,41 @@
+from pathlib import Path
+
+import pytest
+
+from megspeech.data.runs import Partition, Run
+
+NAME = "sub-0_ses-11_task-Sherlock1_run-2"
+
+
+def meg(root: Path, name: str = NAME) -> Path:
+    path = root / "Sherlock1" / "derivatives" / "serialised" / f"{name}_proc-bads+headpos+sss+notch+bp+ds_meg.h5"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch()
+    return path
+
+
+def test_key(tmp_path: Path) -> None:
+    assert Run(meg(tmp_path)).key == ("Sherlock1", 11, 2)
+    with pytest.raises(ValueError, match="other"):
+        _ = Run(tmp_path / "other.h5").key
+
+
+def test_name(tmp_path: Path) -> None:
+    assert Run(meg(tmp_path)).name == NAME
+
+
+def test_events(tmp_path: Path) -> None:
+    assert Run(meg(tmp_path)).events == tmp_path / "Sherlock1" / "derivatives" / "events" / f"{NAME}_events.tsv"
+
+
+def test_partition(tmp_path: Path) -> None:
+    assert Run(meg(tmp_path)).partition is Partition.VALIDATION
+    assert Run(meg(tmp_path, "sub-0_ses-1_task-Sherlock1_run-1")).partition is Partition.TRAIN
+
+
+def test_discover(tmp_path: Path) -> None:
+    ready, partial = Run(meg(tmp_path)), Run(meg(tmp_path, "sub-0_ses-1_task-Sherlock1_run-1"))
+    ready.events.parent.mkdir(parents=True)
+    ready.events.write_text("kind\n")
+    partial.events.touch()
+    assert Run.discover(tmp_path) == [ready]
