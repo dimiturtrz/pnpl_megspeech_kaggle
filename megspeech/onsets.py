@@ -11,6 +11,8 @@ import torch
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
+from megspeech.heads import Objective
+
 HOLDOUT_GAP = 0.21
 """Median seconds between consecutive vocabulary words in a holdout sentence."""
 
@@ -37,6 +39,7 @@ class ContextConfig:
     """Onset periods span two 50 Hz samples up to a nine-word span at the holdout's widest gap."""
     timescales: int = 16
     clock: Clock = Clock.ONSET
+    objective: Objective = Objective.SOFTMAX
 
     def save(self, directory: Path) -> Path:
         path = directory / FILE
@@ -50,7 +53,7 @@ class ContextConfig:
         if not path.exists():
             return CONTEXT
         config = cls(**json.loads(path.read_text()))
-        return replace(config, clock=Clock(config.clock))
+        return replace(config, clock=Clock(config.clock), objective=Objective(config.objective))
 
 
 FILE = "context.json"

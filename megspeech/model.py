@@ -6,7 +6,7 @@ from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
 from megspeech.onsets import CONTEXT, ContextConfig, OnsetEncoding
-from megspeech.wordnet import CONV, WORDS, ConvConfig, WordNet
+from megspeech.wordnet import CONV, ConvConfig, WordNet
 
 
 class SentenceNet(nn.Module):
@@ -16,7 +16,13 @@ class SentenceNet(nn.Module):
     isolated-word classifier and the sentence-context one.
     """
 
-    def __init__(self, scale: nn.Module, conv: ConvConfig = CONV, context: ContextConfig = CONTEXT) -> None:
+    def __init__(
+        self,
+        scale: nn.Module,
+        conv: ConvConfig = CONV,
+        context: ContextConfig = CONTEXT,
+        prototypes: Float[Tensor, "v d"] | None = None,
+    ) -> None:
         super().__init__()
         self.scale = scale
         self.words = WordNet(conv)
@@ -27,7 +33,7 @@ class SentenceNet(nn.Module):
             context.width, context.heads, 4 * context.width, context.dropout, batch_first=True, norm_first=True
         )
         self.context = nn.TransformerEncoder(layer, context.layers, enable_nested_tensor=False)
-        self.head = nn.Linear(context.width, WORDS)
+        self.head = context.objective.head(context.width, prototypes)
 
     @override
     def forward(

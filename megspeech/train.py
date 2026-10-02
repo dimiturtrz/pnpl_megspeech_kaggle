@@ -30,8 +30,10 @@ from torch import Tensor, nn
 
 from core.paths import DataRoot
 from megspeech.epochs import Epocher, Epochs, Window
+from megspeech.heads import Objective
 from megspeech.model import SentenceNet
 from megspeech.onsets import CONTEXT, Clock, ContextConfig
+from megspeech.prototypes import Prototypes
 from megspeech.runs import Partition, Run
 from megspeech.scaler import Scaler
 from megspeech.score import BalancedTopK
@@ -252,6 +254,7 @@ class Trainer:
     config: TrainConfig
     device: torch.device
     seen: frozenset[tuple[int, ...]] = frozenset()
+    prototypes: Float[Tensor, "v d"] | None = None
 
     def logits(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
         """Both heads' logits for every word of `split`, in the split's word order."""
@@ -298,11 +301,12 @@ class Trainer:
         self, train: Split, validation: dict[str, Split], log_prior: Float[Tensor, " v"]
     ) -> tuple[nn.Module, list[Epoch]]:
         torch.manual_seed(self.config.seed)
-        model = SentenceNet(Scaler(train.x), context=self.config.context).to(self.device)
+        model = SentenceNet(Scaler(train.x), context=self.config.context, prototypes=self.prototypes).to(self.device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.config.lr, weight_decay=self.config.weight_decay)
         steps = self.config.epochs * math.ceil(len(train.index) / self.config.batch)
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, self.config.lr, total_steps=steps)
         loss = nn.CrossEntropyLoss(label_smoothing=self.config.label_smoothing)
+        objective = self.config.context.objective
         history: list[Epoch] = []
         best, best_state = -1.0, model.state_dict()
         for epoch in range(self.config.epochs):
@@ -312,7 +316,9 @@ class Trainer:
                 x, onset, mask, words = train.batch(spans)
                 with torch.autocast("cuda", dtype=torch.bfloat16):
                     context, word = model(x, onset, mask)
-                    value = loss(context[mask], train.y[words]) + loss(word[mask], train.y[words])
+                    value = objective.loss(context[mask], train.y[words], self.config.label_smoothing) + loss(
+                        word[mask], train.y[words]
+                    )
                 optimizer.zero_grad(set_to_none=True)
                 value.backward()
                 optimizer.step()
@@ -348,10 +354,13 @@ def main() -> None:
     parser.add_argument("--heads", type=int, default=CONTEXT.heads)
     parser.add_argument("--layers", type=int, default=CONTEXT.layers)
     parser.add_argument("--clock", type=Clock, default=CONTEXT.clock, choices=list(Clock))
+    parser.add_argument("--objective", type=Objective, default=CONTEXT.objective, choices=list(Objective))
     parser.add_argument("--tasks", nargs="*", default=list(TrainConfig.tasks))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    context = replace(CONTEXT, width=args.width, heads=args.heads, layers=args.layers, clock=args.clock)
+    context = replace(
+        CONTEXT, width=args.width, heads=args.heads, layers=args.layers, clock=args.clock, objective=args.objective
+    )
     config = TrainConfig(
         epochs=args.epochs,
         lr=args.lr,
@@ -374,7 +383,9 @@ def main() -> None:
     LOG.info("train %d words / %d spans", len(train.y), len(train.index))
     LOG.info("validation %s", {task: len(split.y) for task, split in validation.items()})
     log_prior = train.log_prior()
-    trainer = Trainer(config, device, seen)
+    siglip = context.objective is Objective.SIGLIP
+    prototypes = Prototypes.load(Prototypes.path(root)).vectors if siglip else None
+    trainer = Trainer(config, device, seen, prototypes)
     model, history = trainer.fit(train, validation, log_prior)
     out = root.models() / args.name
     out.mkdir(parents=True, exist_ok=True)

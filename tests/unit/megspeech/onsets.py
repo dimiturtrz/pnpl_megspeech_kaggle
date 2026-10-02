@@ -2,6 +2,7 @@ from pathlib import Path
 
 import torch
 
+from megspeech.heads import Objective
 from megspeech.onsets import CONTEXT as DEFAULT
 from megspeech.onsets import HOLDOUT_GAP, Clock, ContextConfig, OnsetEncoding
 
@@ -25,6 +26,9 @@ def test_load(tmp_path: Path) -> None:
     ordered = ContextConfig(clock=Clock.ORDER)
     ordered.save(tmp_path)
     assert ContextConfig.load(tmp_path).clock is Clock.ORDER
+    retrieval = ContextConfig(objective=Objective.SIGLIP)
+    retrieval.save(tmp_path)
+    assert ContextConfig.load(tmp_path).objective is Objective.SIGLIP
 
 
 def test_times() -> None:
