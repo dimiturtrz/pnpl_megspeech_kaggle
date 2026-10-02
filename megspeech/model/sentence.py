@@ -49,7 +49,8 @@ class SentenceNet(nn.Module):
         """The transformer's input at each span position, and the position's word embedding (zeros when empty)."""
         rows = len(x)
         valid = torch.zeros(rows + 1, dtype=torch.bool, device=x.device).index_fill_(0, slot.flatten(), value=True)
-        embedded = self.words.embed(self.scale(x), valid[:rows])
+        scaled = self.words.normalise(self.scale(x), x.ne(0).any(dim=1, keepdim=True))
+        embedded = self.words.embed(scaled, valid[:rows])
         slots = nn.functional.pad(embedded, (0, 0, 0, 1))[slot]
         return self.project(slots) + self.onsets(self.clock.times(onset, slot < rows)), slots
 

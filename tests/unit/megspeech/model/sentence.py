@@ -45,6 +45,18 @@ def test_features() -> None:
     assert slots[slot == len(x)].eq(0).all()
 
 
+def test_features_instance_ignores_window_offset_and_gain() -> None:
+    model = SentenceNet(nn.Identity(), replace(CONTEXT, conv=replace(CONTEXT.conv, instance=True))).eval()
+    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    x[:, :, 40:] = 0
+    shifted = x.clone()
+    shifted[:, :, :40] = 5.0 + 3.0 * x[:, :, :40]
+    h, _ = model.features(x, torch.zeros(2, 3), slot)
+    moved, _ = model.features(shifted, torch.zeros(2, 3), slot)
+    assert torch.allclose(h, moved, atol=1e-4)
+
+
 def test_classify() -> None:
     model = SentenceNet(nn.Identity(), CONTEXT).eval()
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])

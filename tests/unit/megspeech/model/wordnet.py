@@ -46,6 +46,25 @@ def test_embed_ssm_appends_one_layer() -> None:
     assert len(WordNet(SMALL).blocks) == 2
 
 
+def test_normalise() -> None:
+    x = 3.0 + 2.0 * torch.randn(4, 5, SAMPLES, generator=GENERATOR)
+    present = torch.ones(4, 1, SAMPLES, dtype=torch.bool)
+    present[0, :, 40:] = False
+    assert torch.equal(WordNet(SMALL).normalise(x, present), x)
+    normalised = WordNet(ConvConfig(hidden=8, dilations=(1, 2), instance=True)).normalise(x, present)
+    assert torch.all(normalised[0, :, 40:] == 0)
+    kept = normalised[0, :, :40]
+    assert torch.allclose(kept.mean(-1), torch.zeros(5), atol=1e-5)
+    assert torch.allclose(kept.std(-1, unbiased=False), torch.ones(5), atol=1e-4)
+    assert torch.allclose(normalised[1:].std(-1, unbiased=False), torch.ones(3, 5), atol=1e-4)
+
+
+def test_normalise_flat_sensor_is_zero() -> None:
+    net = WordNet(ConvConfig(hidden=8, dilations=(1, 2), instance=True))
+    flat = net.normalise(torch.full((1, 2, SAMPLES), 7.0), torch.ones(1, 1, SAMPLES, dtype=torch.bool))
+    assert torch.all(flat == 0)
+
+
 def test_conv_config_rejects_even_kernel() -> None:
     with pytest.raises(ValueError, match="odd"):
         ConvConfig(kernels=(3, 4))

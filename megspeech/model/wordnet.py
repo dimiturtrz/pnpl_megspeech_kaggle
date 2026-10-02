@@ -12,6 +12,8 @@ from megspeech.data.vocabulary import WORDS
 from megspeech.model.block import Block
 from megspeech.model.ssm import Ssm
 
+EPSILON = 1e-6
+
 
 @dataclass(frozen=True)
 class ConvConfig:
@@ -25,6 +27,9 @@ class ConvConfig:
     """Equal time chunks the readout pools mean and max over; more keep when in the window the response came."""
     ssm: int = 0
     """Modes per direction of a bidirectional state-space layer after the convolutions; 0 adds none."""
+    instance: bool = False
+    """Z-score each sensor within each window over its recorded samples: MEGConformer (LibriBrain 2025 phoneme
+    winner) found per-window normalisation critical for the shift to the holdout."""
 
     def __post_init__(self) -> None:
         if any(kernel % 2 == 0 for kernel in self.kernels):
@@ -38,6 +43,7 @@ class WordNet(nn.Module):
     def __init__(self, config: ConvConfig = CONV) -> None:
         super().__init__()
         self.segments = config.segments
+        self.instance = config.instance
         self.width = 2 * config.hidden * config.segments
         self.spatial = nn.Conv1d(CHANNELS, config.hidden, 1)
         self.blocks = nn.ModuleList(Block(config.hidden, d, config.dropout, config.kernels) for d in config.dilations)
@@ -55,6 +61,16 @@ class WordNet(nn.Module):
             nn.functional.adaptive_max_pool1d(h, self.segments),
         ]
         return torch.cat([p.flatten(1) for p in pooled], dim=-1)
+
+    def normalise(self, x: Float[Tensor, "b c t"], present: Bool[Tensor, "b 1 t"]) -> Float[Tensor, "b c t"]:
+        """`x` z-scored per window and sensor over its `present` samples, zero elsewhere; unchanged unless
+        `instance`."""
+        if not self.instance:
+            return x
+        count = present.sum(-1, keepdim=True).clamp(min=1)
+        centred = (x - (x * present).sum(-1, keepdim=True) / count) * present
+        spread = (centred.square().sum(-1, keepdim=True) / count).sqrt()
+        return centred / (spread + EPSILON)
 
     @override
     def forward(self, x: Float[Tensor, "b c t"]) -> Float[Tensor, "b v"]:
