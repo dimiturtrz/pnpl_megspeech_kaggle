@@ -6,8 +6,10 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
+from megspeech.data.runs import CHANNELS
 from megspeech.model.onsets import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.span import SpanConformer
+from megspeech.model.subjects import SubjectLayer
 from megspeech.model.wordnet import WordNet
 
 
@@ -26,6 +28,7 @@ class SentenceNet(nn.Module):
     ) -> None:
         super().__init__()
         self.scale = scale
+        self.subjects = SubjectLayer.of(context.subjects, CHANNELS)
         self.words = WordNet(context.conv)
         self.project = nn.Linear(self.words.width, context.width)
         self.clock = context.clock
@@ -45,19 +48,27 @@ class SentenceNet(nn.Module):
 
     @override
     def forward(
-        self, x: Float[Tensor, "r c t"], onset: Float[Tensor, "g w"], slot: Int[Tensor, "g w"]
+        self,
+        x: Float[Tensor, "r c t"],
+        onset: Float[Tensor, "g w"],
+        slot: Int[Tensor, "g w"],
+        subject: Int[Tensor, " r"],
     ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
         """`slot` is each span position's row of `x`; `len(x)` marks an empty position, and rows no slot names are
         padding that neither normalises nor reaches the transformer."""
-        return self.classify(*self.features(x, onset, slot), slot < len(x))
+        return self.classify(*self.features(x, onset, slot, subject), slot < len(x))
 
     def features(
-        self, x: Float[Tensor, "r c t"], onset: Float[Tensor, "g w"], slot: Int[Tensor, "g w"]
+        self,
+        x: Float[Tensor, "r c t"],
+        onset: Float[Tensor, "g w"],
+        slot: Int[Tensor, "g w"],
+        subject: Int[Tensor, " r"],
     ) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"]]:
         """The transformer's input at each span position, and the position's word embedding (zeros when empty)."""
         rows = len(x)
         valid = torch.zeros(rows + 1, dtype=torch.bool, device=x.device).index_fill_(0, slot.flatten(), value=True)
-        scaled = self.words.normalise(self.scale(x), x.ne(0).any(dim=1, keepdim=True))
+        scaled = self.words.normalise(self.subjects(self.scale(x), subject), x.ne(0).any(dim=1, keepdim=True))
         embedded = self.words.embed(scaled, valid[:rows])
         slots = nn.functional.pad(embedded, (0, 0, 0, 1))[slot]
         return self.project(slots) + self.onsets(self.clock.times(onset, slot < rows)), slots

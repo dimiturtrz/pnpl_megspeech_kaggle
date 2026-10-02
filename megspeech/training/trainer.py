@@ -23,6 +23,7 @@ from megspeech.objective.heads import Objective
 from megspeech.objective.prototypes import Prototypes
 from megspeech.training.auxiliary import Auxiliary, Silent
 from megspeech.training.config import RunConfig
+from megspeech.training.curriculum import Annealed
 from megspeech.training.ema import Ema
 
 LOG = logging.getLogger(__name__)
@@ -86,7 +87,7 @@ class Trainer:
         """One optimiser step on the words of `spans`; returns the loss without syncing it to the host."""
         batch = train.batch(spans, state.rows, self.config.augment.jitter)
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            context, word, *extra = state.model(self.config.augment(batch.x), batch.onset, batch.slot)
+            context, word, *extra = state.model(self.config.augment(batch.x), batch.onset, batch.slot, batch.subject)
             smoothing, objective, y = (
                 self.config.optim.label_smoothing,
                 self.config.context.objective,
@@ -123,7 +124,8 @@ class Trainer:
         best_state = net.state_dict()
         for epoch in range(optim.epochs):
             model.train()
-            draws = torch.multinomial(train.weight[train.index[:, 0]], per_epoch * optim.batch, replacement=True)
+            weights = Annealed.of(optim.curriculum).weights(train, epoch, optim.epochs)
+            draws = torch.multinomial(weights, per_epoch * optim.batch, replacement=True)
             value = torch.stack([self.step(state, train, spans) for spans in draws.split(optim.batch)]).mean().item()
             if not math.isfinite(value):
                 raise FloatingPointError(f"non-finite loss at epoch {epoch}")

@@ -25,7 +25,9 @@ def split(n: int = 12, seed: int = 0) -> Split:
 
 class Constant(nn.Module):
     @override
-    def forward(self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         logits = torch.zeros(*slot.shape, WORDS)
         logits[..., 0] = 1
         return logits, logits
@@ -93,9 +95,11 @@ class Counting(Constant):
         self.calls = 0
 
     @override
-    def forward(self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         self.calls += 1
-        return super().forward(x, onset, slot)
+        return super().forward(x, onset, slot, subject)
 
 
 def test_report() -> None:

@@ -49,6 +49,7 @@ class Batch:
     onset: Float[Tensor, "g w"]
     slot: Int[Tensor, "g w"]
     index: Int[Tensor, "g w"]
+    subject: Int[Tensor, " r"]
 
     def target(self, labels: Int[Tensor, " n"]) -> Int[Tensor, "g w"]:
         """Each position's label from the split's `labels`; `IGNORE` where the position is empty."""
@@ -69,6 +70,7 @@ class Split:
     index: Int[Tensor, "g w"]
     onset: Float[Tensor, "g w"]
     weight: Float[Tensor, " n"]
+    subject: Int[Tensor, " n"]
 
     @classmethod
     def from_arrays(
@@ -83,8 +85,9 @@ class Split:
         words: tuple[Int[np.ndarray, " n"], Int[np.ndarray, " n"]],
         spans: Spans,
         weight: Float[np.ndarray, " n"],
+        subject: Int[np.ndarray, " n"] | None = None,
     ) -> "Split":
-        """A split of `windows` whose `words` are (label, token) per window."""
+        """A split of `windows` whose `words` are (label, token) per window, heard by `subject` (all 0 when None)."""
         device = windows.device
         y, token = words
         return cls(
@@ -94,6 +97,7 @@ class Split:
             torch.from_numpy(spans.index).to(device),
             torch.from_numpy(spans.onset).float().to(device),
             torch.tensor(weight, dtype=torch.float32, device=device),
+            torch.tensor(np.zeros(len(y), dtype=np.int64) if subject is None else subject, device=device),
         )
 
     @classmethod
@@ -106,7 +110,13 @@ class Split:
         group = np.where(sentence, frame["epoch"], -1 - frame["index"])
         keys = frame.assign(group=group)[["subject", "source", "group"]]
         spans = Spans.by_key(keys, frame["onset_s"].to_numpy())
-        return cls.of(windows, (np.zeros(len(frame), dtype=np.int64),) * 2, spans, np.ones(len(frame)))
+        return cls.of(
+            windows,
+            (np.zeros(len(frame), dtype=np.int64),) * 2,
+            spans,
+            np.ones(len(frame)),
+            frame["subject"].to_numpy(),
+        )
 
     def sample(self, count: int) -> Float[Tensor, "k c t"]:
         """Up to `count` windows drawn without replacement."""
@@ -134,7 +144,7 @@ class Split:
         slot = torch.where((index != PAD) & (order < rows), order, rows)
         index = torch.where(slot < rows, index, PAD)
         words = index.new_zeros(rows + 1).scatter_(0, slot.flatten(), index.clamp(min=0).flatten())[:rows]
-        return Batch(self.windows(words, jitter), self.onset[spans], slot, index)
+        return Batch(self.windows(words, jitter), self.onset[spans], slot, index, self.subject[words])
 
     def capacity(self, batch: int) -> int:
         """Word rows for `batch` spans drawn as training draws them: the expected count plus `SIGMAS` deviations."""

@@ -77,7 +77,7 @@ def test_silent_loss() -> None:
 def test_joint_loss() -> None:
     rule = Joint((aligned(), pronounced()))
     model = rule.trained(net(), identity)
-    _, _, projected, phonetic = model(x(), ONSET, SLOT)
+    _, _, projected, phonetic = model(x(), ONSET, SLOT, torch.zeros(len(x()), dtype=torch.long))
     value = rule.loss(model, [projected, phonetic], TOKENS)
     heads = cast("Pretraining", model).heads
     parts = [

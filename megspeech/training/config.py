@@ -40,6 +40,10 @@ class OptimConfig:
     mean 1, so 0.5 is 1/sqrt(count) (the PNPL 2025 phoneme winner's). The metric is balanced accuracy, and the
     ruler's `tau` already corrects the class prior after training (Menon et al. 2021 logit adjustment); balancing
     during training overlaps it, so an arm asks whether it adds beyond `tau`. SigLIP's context loss is unweighted."""
+    curriculum: float = 0.0
+    """The Deep subject's share of the spans drawn at the last epoch, annealed linearly from an equal share per
+    subject at the first (`megspeech.training.curriculum.Annealed`); 0 draws every subject's spans at their own
+    weight. Only meaningful when `DataConfig.subjects` trains on more than the Deep subject."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
 

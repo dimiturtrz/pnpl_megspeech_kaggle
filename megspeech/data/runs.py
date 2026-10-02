@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+from jaxtyping import Int
+
 CHANNELS = 306
 
 DEEP = 0
@@ -57,6 +61,11 @@ class Run:
     @property
     def subject(self) -> int:
         return int(self.parsed["subject"])
+
+    @staticmethod
+    def subjects(names: "pd.Series[str]") -> Int[np.ndarray, " n"]:
+        """The subject of each run `name` (as `Run.name` spells it)."""
+        return (names + "_").str.extract(NAME)["subject"].astype(np.int64).to_numpy()
 
     @property
     def key(self) -> tuple[str, int, int]:

@@ -45,6 +45,7 @@ class ContextConfig:
     conv: ConvConfig = CONV
     """The per-word encoder the transformer reads."""
     mixing: int = 0
+    subjects: int = 0
     """Depthwise kernel, in words, of a convolution module after each transformer layer (`span.SpanConformer`); 0
     keeps the plain transformer. Holdout sentences run 1-9 words, so 3 mixes each word with its neighbours."""
 

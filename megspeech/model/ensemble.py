@@ -32,9 +32,13 @@ class Ensemble(nn.Module):
 
     @override
     def forward(
-        self, x: Float[Tensor, "r c t"], onset: Float[Tensor, "g w"], slot: Int[Tensor, "g w"]
+        self,
+        x: Float[Tensor, "r c t"],
+        onset: Float[Tensor, "g w"],
+        slot: Int[Tensor, "g w"],
+        subject: Int[Tensor, " r"],
     ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
-        outputs = [member(x, onset, slot) for member in self.members]
+        outputs = [member(x, onset, slot, subject) for member in self.members]
         context = torch.stack([out[0].float().log_softmax(-1) for out in outputs]).mean(0)
         word = torch.stack([out[1].float().log_softmax(-1) for out in outputs]).mean(0)
         return context, word

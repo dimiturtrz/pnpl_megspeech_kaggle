@@ -217,7 +217,7 @@ class Corpus:
             baseline=data.centring,
         )
         labels = (words["target"].to_numpy(), words["token"].to_numpy())
-        return Split.of(windows, labels, data.grouping.spans(words), weight)
+        return Split.of(windows, labels, data.grouping.spans(words), weight, Run.subjects(words["run"]))
 
     @classmethod
     def domains(

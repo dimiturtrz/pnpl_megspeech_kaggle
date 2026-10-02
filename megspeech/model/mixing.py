@@ -20,5 +20,5 @@ class Mixing(nn.Module):
     @override
     def forward(self, h: Float[Tensor, "g w d"], padding: Bool[Tensor, "g w"]) -> Float[Tensor, "g w d"]:
         gated = nn.functional.glu(self.pointwise(self.norm(h)), dim=-1).masked_fill(padding[..., None], 0.0)
-        mixed = self.out(self.depthwise(gated.transpose(1, 2)).transpose(1, 2))
+        mixed = self.out(self.depthwise(gated.transpose(1, 2)).transpose(1, 2).contiguous())
         return h + mixed.masked_fill(padding[..., None], 0.0)

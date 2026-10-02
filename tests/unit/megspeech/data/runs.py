@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from megspeech.data.runs import Partition, Run
@@ -56,3 +57,8 @@ def test_discover(tmp_path: Path) -> None:
     other = Run(meg(tmp_path, OTHER))
     other.events.write_text("kind\n")
     assert Run.discover(tmp_path) == [ready, other]
+
+
+def test_subjects() -> None:
+    names = pd.Series(["sub-0_ses-1_task-Sherlock1_run-1", "sub-17_ses-12_task-Sherlock1_run-1"])
+    assert Run.subjects(names).tolist() == [0, 17]

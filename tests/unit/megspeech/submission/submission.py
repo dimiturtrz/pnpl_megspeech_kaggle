@@ -132,7 +132,9 @@ class Root:
 
 class Constant(nn.Module):
     @override
-    def forward(self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         logits = torch.zeros(*slot.shape, WORDS)
         logits[..., 0] = 1
         return logits, logits
