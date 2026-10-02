@@ -38,13 +38,15 @@ class Ssm(nn.Module):
 
     @override
     def forward(self, x: Float[Tensor, "b h t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b h t"]:
-        """`valid` rows alone set the batch statistics; the rest are padding."""
+        """`valid` rows alone set the batch statistics; the rest are padding. The convolution runs in float32 even
+        under autocast, which FFTs do not support at half precision."""
         length = x.shape[-1]
         size = 2 * length
-        forward, backward = torch.fft.rfft(self.kernel(length), n=size)
-        signal = x.float()
-        ahead = torch.fft.irfft(torch.fft.rfft(signal, n=size) * forward, n=size)[..., :length]
-        behind = torch.fft.irfft(torch.fft.rfft(signal.flip(-1), n=size) * backward, n=size)[..., :length].flip(-1)
-        mixed = (ahead + behind + self.skip[:, None] * signal).to(x.dtype)
+        with torch.autocast(x.device.type, enabled=False):
+            forward, backward = torch.fft.rfft(self.kernel(length), n=size)
+            signal = x.float()
+            ahead = torch.fft.irfft(torch.fft.rfft(signal, n=size) * forward, n=size)[..., :length]
+            behind = torch.fft.irfft(torch.fft.rfft(signal.flip(-1), n=size) * backward, n=size)[..., :length]
+            mixed = (ahead + behind.flip(-1) + self.skip[:, None] * signal).to(x.dtype)
         norm, act, drop = self.body
         return x + drop(act(norm(mixed, valid)))

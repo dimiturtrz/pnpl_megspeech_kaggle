@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from megspeech.model.ssm import Ssm
@@ -40,3 +41,13 @@ def test_forward_valid() -> None:
     x = torch.randn(3, 4, 10, generator=GENERATOR)
     valid = torch.tensor([True, True, False])
     assert torch.allclose(ssm.forward(x, valid)[:2], ssm.forward(x[:2]), atol=1e-5)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="cuFFT rejects bfloat16; CPU FFT accepts it")
+def test_forward_under_autocast() -> None:
+    ssm = Ssm(4, 3, 0.0).eval().cuda()
+    x = torch.randn(2, 4, 10, generator=GENERATOR).to("cuda", torch.bfloat16)
+    with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+        mixed = ssm.forward(x)
+    assert mixed.dtype == torch.bfloat16
+    assert torch.isfinite(mixed).all()
