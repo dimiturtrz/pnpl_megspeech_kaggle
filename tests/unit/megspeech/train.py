@@ -161,8 +161,9 @@ def test_report() -> None:
 
 
 def test_model() -> None:
-    model = Trainer(TrainConfig(), CPU).model(split())
+    model = Trainer(TrainConfig(compiled=True), CPU).model(split())
     assert next(model.parameters()).device == CPU
+    assert "_orig_mod" not in next(iter(model.state_dict()))
 
 
 def test_optimizer() -> None:

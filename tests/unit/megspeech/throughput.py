@@ -35,7 +35,7 @@ def test_eval_share() -> None:
 
 
 def test_phase() -> None:
-    phase = Throughput(rows=3).phase(lambda: torch.ones(64, 64) @ torch.ones(64, 64), CPU)
+    phase = Throughput(rows=3, host=True).phase(lambda: torch.ones(64, 64) @ torch.ones(64, 64), CPU)
     assert phase.seconds > 0
     assert phase.device == 0
     assert "mm" in phase.table

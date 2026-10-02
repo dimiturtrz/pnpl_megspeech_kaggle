@@ -56,6 +56,7 @@ class Throughput:
     steps: int = STEPS
     warmup: int = WARMUP
     rows: int = ROWS
+    host: bool = False
 
     def phase(self, work: Callable[[], object], device: torch.device) -> Phase:
         """Time `work` unprofiled and synchronised, then run it again under the profiler for the op table."""
@@ -71,7 +72,7 @@ class Throughput:
         events = prof.key_averages()
         host = sum(e.self_cpu_time_total for e in events) / 1e6
         on_device = sum(e.self_device_time_total for e in events) / 1e6
-        sort = "self_cuda_time_total" if device.type == "cuda" else "self_cpu_time_total"
+        sort = "self_cuda_time_total" if device.type == "cuda" and not self.host else "self_cpu_time_total"
         return Phase(seconds, host, on_device, events.table(sort_by=sort, row_limit=self.rows))
 
     def measure(self, trainer: Trainer, corpus: Corpus, full_spans: int) -> Projection:
@@ -105,13 +106,15 @@ def main() -> None:
     parser.add_argument("--tasks", nargs="*", default=["Sherlock1"])
     parser.add_argument("--steps", type=int, default=STEPS)
     parser.add_argument("--full-spans", type=int, default=FULL_SPANS)
+    parser.add_argument("--compiled", action="store_true", help="compile the model")
+    parser.add_argument("--host", action="store_true", help="rank ops by host time")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    config = TrainConfig(tasks=tuple(args.tasks))
+    config = TrainConfig(tasks=tuple(args.tasks), compiled=args.compiled)
     root = DataRoot.from_config()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     corpus = Corpus.load(config, root, device)
-    out = Throughput(steps=args.steps).measure(corpus.trainer(config, root), corpus, args.full_spans)
+    out = Throughput(steps=args.steps, host=args.host).measure(corpus.trainer(config, root), corpus, args.full_spans)
     for name, phase in (("train steps", out.train), ("report", out.report)):
         LOG.info(
             "%s: wall %.2fs host %.2fs device %.2fs\n%s", name, phase.seconds, phase.host, phase.device, phase.table

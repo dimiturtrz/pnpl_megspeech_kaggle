@@ -20,6 +20,7 @@ dependencies = [
     "h5py>=3.16.0",
     "scipy>=1.18.1",
     "transformers>=5",
+    "triton-windows>=3.8.0.post29 ; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
@@ -77,7 +78,7 @@ extend_exclude = ["noxfile.py"]
 # (numpy/jaxtyping/beartype/pydantic) — they read as unused until you import them.
 [tool.deptry.per_rule_ignores]
 # >>> LOCAL-SLOT: deptry-unused — PRUNE a starter once you wire it (keep pytest/pytest-cov/sdlc-devtools)
-DEP002 = ["pytest", "pytest-cov", "sdlc-devtools", "numpy", "jaxtyping", "beartype", "pydantic", "torch", "pnpl"]
+DEP002 = ["pytest", "pytest-cov", "sdlc-devtools", "numpy", "jaxtyping", "beartype", "pydantic", "torch", "pnpl", "triton-windows"]
 # <<< LOCAL-SLOT: deptry-unused
 
 [tool.ruff]

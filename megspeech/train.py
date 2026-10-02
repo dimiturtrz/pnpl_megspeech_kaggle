@@ -84,6 +84,8 @@ class TrainConfig:
     context: ContextConfig = CONTEXT
     tasks: tuple[str, ...] = ()
     """Training restricted to these tasks' runs; empty trains on every task."""
+    compiled: bool = False
+    """Compile the model's forward on the GPU (no gain measured yet: shapes change every batch)."""
 
     def trains_on(self, run: Run) -> bool:
         return run.partition is Partition.TRAIN and (not self.tasks or run.key[0] in self.tasks)
@@ -337,7 +339,10 @@ class Trainer:
         return Epoch(epoch, loss, reports, macro, interval)
 
     def model(self, train: Split) -> nn.Module:
-        return SentenceNet(Scaler(train.x), context=self.config.context, prototypes=self.prototypes).to(self.device)
+        model = SentenceNet(Scaler(train.x), context=self.config.context, prototypes=self.prototypes).to(self.device)
+        if self.config.compiled and self.device.type == "cuda":
+            model.compile(dynamic=True)
+        return model
 
     def optimizer(self, model: nn.Module) -> torch.optim.AdamW:
         """AdamW as one fused kernel on the GPU; per-parameter launches were most of a step's device time."""
