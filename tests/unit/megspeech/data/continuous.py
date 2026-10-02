@@ -39,7 +39,14 @@ def recording(root: Path, session: int = 1, rate: float = SFREQ) -> Run:
 
 def test_path(tmp_path: Path) -> None:
     run = recording(tmp_path)
-    assert Decimator(tmp_path / "cache").path(run) == tmp_path / "cache" / f"{run.name}.npy"
+    assert Decimator(tmp_path / "cache").path(run.name) == tmp_path / "cache" / f"{run.name}.npy"
+
+
+def test_ready(tmp_path: Path) -> None:
+    decimator = Decimator(tmp_path / "a" / "cache")
+    assert decimator.ready() == decimator.cache
+    assert decimator.cache.is_dir()
+    assert decimator.ready() == decimator.cache
 
 
 def test_signal(tmp_path: Path) -> None:
@@ -58,6 +65,26 @@ def test_signal_saturates(tmp_path: Path) -> None:
     signal = Decimator(tmp_path).signal(run)
     assert np.isfinite(signal).all()
     assert float(signal.max()) == HALF
+
+
+def test_decimated() -> None:
+    """The run's transform on any stretch: a stretch not a multiple of `DECIMATE` keeps its rounded-up length."""
+    meg = np.full((CHANNELS, 2 * SFREQ + 3), 1e-12, dtype=np.float32)
+    down = Decimator(Path()).decimated(meg)
+    assert down.dtype == np.float16
+    assert down.shape == (CHANNELS, Decimator(Path()).length(np.array([meg.shape[1]]))[0])
+    assert np.allclose(down[:, RATE // 5 : -RATE // 5], 1.0, atol=1e-2)
+
+
+def test_length() -> None:
+    assert Decimator(Path()).length(np.array([0, 1, 5, 6, 1030])).tolist() == [0, 1, 1, 2, 206]
+
+
+def test_save(tmp_path: Path) -> None:
+    signal = np.arange(6, dtype=np.float16).reshape(2, 3)
+    path = Decimator.save(tmp_path / "r.npy", signal)
+    assert np.array_equal(np.load(path), signal)
+    assert not list(tmp_path.glob("*.partial"))
 
 
 def test_write(tmp_path: Path) -> None:
@@ -85,7 +112,7 @@ def test_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     table = decimator.build(runs)
     assert len(table) == 2 * 3
     assert (decimator.cache / WORDS).exists()
-    assert all(decimator.path(run).exists() for run in runs)
+    assert all(decimator.path(run.name).exists() for run in runs)
 
 
 def test_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -97,7 +124,7 @@ def test_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert loaded.meg.shape == (CHANNELS, 2 * SAMPLES)
     assert loaded.meg.dtype == torch.float16
     assert loaded.offsets.tolist() == [0, SAMPLES, 2 * SAMPLES]
-    second = torch.from_numpy(np.load(decimator.path(runs[1])))
+    second = torch.from_numpy(np.load(decimator.path(runs[1].name)))
     assert torch.equal(loaded.meg[:, SAMPLES:], second)
     assert loaded.words["word"].tolist().count("null") == len(runs)
     assert loaded.words["at"].tolist() == [25, 100, 150, SAMPLES + 25, SAMPLES + 100, SAMPLES + 150]
@@ -123,6 +150,15 @@ def test_inside() -> None:
     table = pd.DataFrame({"sample": [-1, 0, 150, 151], "samples": SAMPLES})
     assert Continuous.inside(table).tolist() == [False, True, True, False]
     assert Continuous.inside(table, length=10, offset=-5).tolist() == [False, False, True, True]
+
+
+def test_windows() -> None:
+    meg = torch.arange(2 * 100, dtype=torch.float32).reshape(2, 100)
+    loaded = Continuous(meg, np.array([0, 100]), ("r",), pd.DataFrame({"at": [40, 0]}))
+    windows = loaded.windows()
+    assert len(windows) == len(loaded.words)
+    assert windows(torch.tensor([0])).shape == (1, 2, RATE)
+    assert windows.at.tolist() == [40, 0]
 
 
 def test_gigabytes() -> None:

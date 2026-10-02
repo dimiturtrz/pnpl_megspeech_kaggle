@@ -25,6 +25,7 @@ from torch import Tensor, nn
 
 from core.paths import DataRoot
 from megspeech.data.continuous import MISSING
+from megspeech.data.holdout import TRACK, HoldoutCache
 from megspeech.data.split import Split
 from megspeech.data.vocabulary import SECONDARY, Vocabulary
 from megspeech.evaluation.report import Evaluator, Head
@@ -88,8 +89,11 @@ class Submitter:
 
     def submit(self, model: nn.Module, root: DataRoot, log_prior: Float[Tensor, " v"], tau: float, path: Path) -> Path:
         """Context-head probabilities for every holdout row, logit-adjusted by `tau`, written as a submission."""
-        holdout = LibriBrainCompetitionHoldout("deep", data_path=root.raw(), download=False)
-        logits = self.evaluator.logits(model, Split.from_holdout(holdout, self.evaluator.device))[Head.CONTEXT]
+        holdout = LibriBrainCompetitionHoldout(TRACK, data_path=root.raw(), download=False)
+        cache = HoldoutCache.of(root)
+        cache.build()
+        split = Split.from_holdout(holdout, cache.windows(self.evaluator.device))
+        logits = self.evaluator.logits(model, split)[Head.CONTEXT]
         primary = torch.softmax(logits - tau * log_prior, dim=-1).cpu().numpy()
         secondary = np.tile(FrequencyPrior(Counter()).probabilities(list(SECONDARY.words)), (len(primary), 1))
         return Submission(holdout).write(path, primary, secondary)
@@ -106,7 +110,7 @@ def main() -> None:
     events = [path for path in sorted(raw.rglob("*sub-0_*_events.tsv")) if path.stat().st_size]
     prior = FrequencyPrior.from_events(events)
     LOG.info("prior from %d heard words", sum(prior.counts.values()))
-    holdout = LibriBrainCompetitionHoldout("deep", data_path=raw, download=False)
+    holdout = LibriBrainCompetitionHoldout(TRACK, data_path=raw, download=False)
     csv = Submission(holdout).write_constant(
         args.out, prior.probabilities(PRIMARY_VOCAB), prior.probabilities(SECONDARY_VOCAB)
     )

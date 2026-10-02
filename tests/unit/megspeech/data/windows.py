@@ -6,11 +6,12 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
+from scipy.signal import resample_poly
 
 from megspeech.data import continuous
 from megspeech.data.continuous import RATE, Continuous, Decimator
 from megspeech.data.corpus import Corpus
-from megspeech.data.epochs import DECIMATE, SFREQ, WINDOW, Window
+from megspeech.data.epochs import DECIMATE, PICO, SFREQ, WINDOW
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import Run
 from megspeech.data.vocabulary import PRIMARY
@@ -76,7 +77,7 @@ def recording(root: Path) -> tuple[Run, list[tuple[str, float]]]:
 
 
 def test_call_reproduces_the_epoch_window(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The gathered window equals the old epoch cut (`Window` over 1 s of raw MEG from `floor(onset * SFREQ)`).
+    """The gathered window equals a 1 s epoch of raw MEG from `floor(onset * SFREQ)` decimated on its own.
 
     Equal event set, labels and order; equal values on samples both decimations compute from the same inputs —
     away from `resample_poly`'s zero-padded window edges, on onsets on the 50 Hz grid — up to float16 rounding.
@@ -96,7 +97,8 @@ def test_call_reproduces_the_epoch_window(tmp_path: Path, monkeypatch: pytest.Mo
     start = (onset * SFREQ).astype(np.int64)
     labels = PRIMARY.labels([word for word, _ in heard])
     old = (labels >= 0) & (start >= 0) & (start + WINDOW <= raw.shape[1])
-    epoch = Window()(raw[:, start[old, None] + np.arange(WINDOW)].transpose(1, 0, 2))
+    cut = raw[:, start[old, None] + np.arange(WINDOW)].transpose(1, 0, 2).astype(np.float64) * PICO
+    epoch = resample_poly(cut, 1, DECIMATE, axis=-1)
 
     assert words["onset"].tolist() == onset[old].tolist()
     assert words["target"].tolist() == labels[old].tolist()

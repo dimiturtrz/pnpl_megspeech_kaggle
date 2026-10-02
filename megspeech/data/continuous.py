@@ -3,7 +3,8 @@
 A continuous copy lets word windows be gathered on the device at any offset and length (`windows.Windows`).
 The recordings are 250 Hz and already low-passed at 125 Hz; d'Ascoli 2025 decode at 50 Hz, and 250 / 50 = 5
 is an integer, so `resample_poly(x, 1, 5)` is a pure polyphase decimation whose FIR filter removes everything
-above the new 25 Hz Nyquist before keeping every fifth sample — the same `DECIMATE` the holdout windows use.
+above the new 25 Hz Nyquist before keeping every fifth sample. The holdout is cached the same way
+(`megspeech.data.holdout`).
 
     uv run python -m megspeech.data.continuous     # cache every downloaded run under processed/continuous50
 """
@@ -25,13 +26,11 @@ from scipy.signal import resample_poly
 from torch import Tensor
 
 from core.paths import DataRoot
-from megspeech.data.epochs import DECIMATE, HALF, PICO, SFREQ, WORKERS
+from megspeech.data.epochs import DECIMATE, HALF, PICO, RATE, SFREQ, WORKERS
 from megspeech.data.runs import Run
+from megspeech.data.windows import Windows
 
 LOG = logging.getLogger(__name__)
-
-RATE = SFREQ // DECIMATE
-"""50 Hz: the cached rate, and the rate a word onset in seconds is multiplied by to find its sample."""
 
 DIRECTORY = f"continuous{RATE}"
 WORDS = "words.tsv"
@@ -49,8 +48,13 @@ class Decimator:
     cache: Path
     decimate: int = DECIMATE
 
-    def path(self, run: Run) -> Path:
-        return self.cache / f"{run.name}.npy"
+    def path(self, name: str) -> Path:
+        return self.cache / f"{name}.npy"
+
+    def ready(self) -> Path:
+        """The cache directory, created if missing."""
+        self.cache.mkdir(parents=True, exist_ok=True)
+        return self.cache
 
     def signal(self, run: Run) -> Float[np.ndarray, "c s"]:
         """The whole run decimated, in picotesla, saturated to the float16 range rather than overflowing to inf."""
@@ -59,17 +63,31 @@ class Decimator:
             if rate != SFREQ:
                 raise ValueError(f"{run.meg.name} is {rate} Hz, not {SFREQ}")
             meg = stored["data"][:]
+        return self.decimated(meg)
+
+    def decimated(self, meg: Float[np.ndarray, "c t"]) -> Float[np.ndarray, "c s"]:
+        """One continuous 250 Hz stretch in tesla as cached: decimated, in picotesla, saturated, float16."""
         down = resample_poly(meg * np.float32(PICO), 1, self.decimate, axis=-1)
         return np.clip(down, -HALF, HALF).astype(np.float16)
 
+    def length(self, samples: Int[np.ndarray, " n"]) -> Int[np.ndarray, " n"]:
+        """Samples `decimated` keeps of `samples`: `resample_poly` rounds `samples / decimate` up."""
+        return -(-samples // self.decimate)
+
     def write(self, run: Run) -> Path:
-        """Cache one run; a run already cached is skipped, and a crash mid-write never leaves a final-named file."""
-        path = self.path(run)
+        """Cache one run; a run already cached is skipped."""
+        path = self.path(run.name)
         if not path.exists():
-            partial = path.with_suffix(".partial")
-            with partial.open("wb") as handle:
-                np.save(handle, self.signal(run))
-            partial.replace(path)
+            self.save(path, self.signal(run))
+        return path
+
+    @staticmethod
+    def save(path: Path, signal: Float[np.ndarray, "c s"]) -> Path:
+        """Write `signal` to `path` so that a crash mid-write never leaves a final-named file."""
+        partial = path.with_suffix(".partial")
+        with partial.open("wb") as handle:
+            np.save(handle, signal)
+        partial.replace(path)
         return path
 
     @staticmethod
@@ -94,7 +112,7 @@ class Decimator:
 
     def build(self, runs: Sequence[Run], workers: int = WORKERS) -> pd.DataFrame:
         """Cache every run in parallel, then write the word table of all of them."""
-        self.cache.mkdir(parents=True, exist_ok=True)
+        self.ready()
         with ProcessPoolExecutor(workers) as pool:
             for path in pool.map(self.write, runs):
                 LOG.info("%s", path.name)
@@ -147,6 +165,12 @@ class Continuous:
         begin = table["sample"].to_numpy() + offset
         return (begin >= 0) & (begin + length <= table["samples"].to_numpy())
 
+    def windows(self) -> Windows:
+        """Every word of `words`, in its order, as a window gathered from `meg`."""
+        return Windows(
+            self.meg, torch.from_numpy(self.words["at"].to_numpy(dtype=np.int64, copy=True)).to(self.meg.device)
+        )
+
     @property
     def gigabytes(self) -> float:
         return self.meg.element_size() * self.meg.numel() / GB
@@ -163,7 +187,7 @@ def main() -> None:
     runs = Run.discover(root.raw())
     began = time.perf_counter()
     table = decimator.build(runs, args.workers)
-    size = sum(decimator.path(run).stat().st_size for run in runs) / GB
+    size = sum(decimator.path(run.name).stat().st_size for run in runs) / GB
     LOG.info(
         "%d runs, %d words, %.2f GB float16 in %s, %.0f s",
         len(runs),
