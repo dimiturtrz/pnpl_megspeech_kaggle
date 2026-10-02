@@ -1,9 +1,11 @@
+import json
 from pathlib import Path
 
 import torch
 
 from megspeech.model.onsets import CONTEXT as DEFAULT
-from megspeech.model.onsets import HOLDOUT_GAP, Clock, ContextConfig, OnsetEncoding
+from megspeech.model.onsets import FILE, HOLDOUT_GAP, Clock, ContextConfig, OnsetEncoding
+from megspeech.model.wordnet import ConvConfig
 from megspeech.objective.heads import Objective
 
 CONTEXT = ContextConfig(width=16, timescales=4)
@@ -36,3 +38,11 @@ def test_times() -> None:
     mask = torch.tensor([[True, True, False]])
     assert torch.equal(Clock.ONSET.times(onset, mask), onset)
     assert torch.allclose(Clock.ORDER.times(onset, mask)[0, :2], torch.tensor([0.0, HOLDOUT_GAP]))
+
+
+def test_load_conv(tmp_path: Path) -> None:
+    shaped = ContextConfig(conv=ConvConfig(kernels=(3, 5, 7), segments=4))
+    shaped.save(tmp_path)
+    assert ContextConfig.load(tmp_path) == shaped
+    (tmp_path / FILE).write_text(json.dumps({"width": 16, "clock": "order"}))
+    assert ContextConfig.load(tmp_path) == ContextConfig(width=16, clock=Clock.ORDER)

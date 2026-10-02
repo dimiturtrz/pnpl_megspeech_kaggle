@@ -2,7 +2,7 @@
 
 import json
 import math
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import override
@@ -11,6 +11,8 @@ import torch
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
+from core.tree import Tree
+from megspeech.model.wordnet import CONV, ConvConfig
 from megspeech.objective.heads import Objective
 
 HOLDOUT_GAP = 0.21
@@ -40,6 +42,8 @@ class ContextConfig:
     timescales: int = 16
     clock: Clock = Clock.ONSET
     objective: Objective = Objective.SOFTMAX
+    conv: ConvConfig = CONV
+    """The per-word encoder the transformer reads."""
 
     def save(self, directory: Path) -> Path:
         path = directory / FILE
@@ -48,12 +52,9 @@ class ContextConfig:
 
     @classmethod
     def load(cls, directory: Path) -> "ContextConfig":
-        """The shape a model in `directory` was trained with; models saved before it was recorded used the default."""
+        """The shape a model in `directory` was trained with; fields recorded before they existed keep the default."""
         path = directory / FILE
-        if not path.exists():
-            return CONTEXT
-        config = cls(**json.loads(path.read_text()))
-        return replace(config, clock=Clock(config.clock), objective=Objective(config.objective))
+        return Tree(cls).load(json.loads(path.read_text())) if path.exists() else CONTEXT
 
 
 FILE = "context.json"

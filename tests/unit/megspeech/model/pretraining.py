@@ -17,7 +17,7 @@ ONSET = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
 
 def net() -> SentenceNet:
     return SentenceNet(
-        nn.Identity(), ConvConfig(hidden=8, dilations=(1, 2)), ContextConfig(width=16, heads=2, layers=1)
+        nn.Identity(), ContextConfig(width=16, heads=2, layers=1, conv=ConvConfig(hidden=8, dilations=(1, 2)))
     )
 
 

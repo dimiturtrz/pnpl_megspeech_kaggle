@@ -9,14 +9,13 @@ from megspeech.model.onsets import ContextConfig
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.wordnet import ConvConfig
 
-SMALL = ConvConfig(hidden=8, dilations=(1, 2))
-CONTEXT = ContextConfig(width=16, heads=2, layers=1)
+CONTEXT = ContextConfig(width=16, heads=2, layers=1, conv=ConvConfig(hidden=8, dilations=(1, 2)))
 SAMPLES = 50
 GENERATOR = torch.Generator().manual_seed(0)
 
 
 def test_sentence_net_forward() -> None:
-    model = SentenceNet(nn.Identity(), SMALL, CONTEXT).eval()
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     context, word = model.forward(x, torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]]), slot)
@@ -25,7 +24,7 @@ def test_sentence_net_forward() -> None:
 
 
 def test_padding_rows_change_nothing() -> None:
-    model = SentenceNet(nn.Identity(), replace(SMALL, dropout=0.0), replace(CONTEXT, dropout=0.0)).train()
+    model = SentenceNet(nn.Identity(), replace(CONTEXT, dropout=0.0, conv=replace(CONTEXT.conv, dropout=0.0))).train()
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
     exact = model.forward(x, onset, torch.tensor([[0, 1, 3], [2, 3, 3]]))
@@ -37,7 +36,7 @@ def test_padding_rows_change_nothing() -> None:
 
 
 def test_features() -> None:
-    model = SentenceNet(nn.Identity(), SMALL, CONTEXT).eval()
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     h, slots = model.features(x, torch.zeros(2, 3), slot)
@@ -47,7 +46,7 @@ def test_features() -> None:
 
 
 def test_classify() -> None:
-    model = SentenceNet(nn.Identity(), SMALL, CONTEXT).eval()
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])

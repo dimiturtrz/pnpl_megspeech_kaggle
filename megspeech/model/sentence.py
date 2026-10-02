@@ -7,7 +7,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from megspeech.model.onsets import CONTEXT, ContextConfig, OnsetEncoding
-from megspeech.model.wordnet import CONV, ConvConfig, WordNet
+from megspeech.model.wordnet import WordNet
 
 
 class SentenceNet(nn.Module):
@@ -20,13 +20,12 @@ class SentenceNet(nn.Module):
     def __init__(
         self,
         scale: nn.Module,
-        conv: ConvConfig = CONV,
         context: ContextConfig = CONTEXT,
         prototypes: Float[Tensor, "v d"] | None = None,
     ) -> None:
         super().__init__()
         self.scale = scale
-        self.words = WordNet(conv)
+        self.words = WordNet(context.conv)
         self.project = nn.Linear(self.words.width, context.width)
         self.clock = context.clock
         self.onsets = OnsetEncoding(context)
