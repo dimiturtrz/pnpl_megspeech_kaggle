@@ -43,3 +43,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert (out / "model.pt").is_file()
     assert (out / "hits.pt").is_file()
     assert written == [out / "submission.csv"]
+    monkeypatch.setattr(sys, "argv", ["train", "--help"])
+    monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: pytest.fail("help read paths.yaml")))
+    with pytest.raises(SystemExit):
+        main()
