@@ -57,7 +57,7 @@ def lexicon() -> Lexicon:
 
 def cache(root: Path) -> None:
     """One cached run that heard `The cat the zebra`, the last word too late for its window."""
-    directory = root / DIRECTORY
+    directory = root / DIRECTORY.format(rate=RATE)
     directory.mkdir(parents=True)
     np.save(directory / "run.npy", np.zeros((CHANNELS, 4 * RATE), np.float16))
     heard = [("The", 0.5), ("cat", 1.0), ("the", 1.5), ("zebra", 3.9)]

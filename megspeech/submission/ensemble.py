@@ -11,7 +11,7 @@ from dataclasses import asdict
 import torch
 
 from core.paths import DataRoot
-from megspeech.data.continuous import DIRECTORY, Continuous
+from megspeech.data.continuous import Continuous
 from megspeech.data.corpus import METRICS, Corpus, DataConfig
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import Run
@@ -33,17 +33,18 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     device = torch.device("cuda")
     root = DataRoot.from_config()
-    cache, runs = root.processed() / DIRECTORY, Run.discover(root.raw())
+    runs = Run.discover(root.raw())
     model = Ensemble.load([root.models() / name / "model.pt" for name in args.names]).to(device)
     data = DataConfig.shared([root.models() / name for name in args.names], args.grouping)
+    cache = data.decimator(root).cache
     heard = Corpus.heard(cache, runs, data)
     labels = heard["target"].to_numpy()
     log_prior = Split.prior(torch.tensor(labels), torch.ones(len(labels))).to(device)
     evaluator = Evaluator(device, Corpus.sequences(heard, args.grouping))
     held = data.held(runs)
     names = [r.name for group in held.values() for r in group]
-    source = Continuous.load(cache, device, names, standardised=data.standardised)
-    validation = Corpus.domains(source, Corpus.words(source.words, args.grouping), held, data)
+    source = Continuous.load(cache, device, names, standardised=data.standardised, rate=data.rate)
+    validation = Corpus.domains(source, Corpus.words(source.words, args.grouping, data.rate), held, data)
     report = evaluator.report(model, validation, log_prior, 0, 0.0)
     LOG.info("%s", {task: (round(r.context.bacc10, 4), round(r.novel.bacc10, 4)) for task, r in report.domains.items()})
     LOG.info("macro %.4f tau %s over %d words", report.macro.bacc10, report.macro.tau, report.macro.n)

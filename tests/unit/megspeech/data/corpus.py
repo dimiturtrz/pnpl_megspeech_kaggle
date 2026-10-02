@@ -39,7 +39,7 @@ class Root:
 
 def corpus_root(tmp_path: Path) -> DataRoot:
     """A train run heard `the zebra a | was` (`was` too late for a window) and a validation run heard `the a`."""
-    cache = tmp_path / "processed" / DIRECTORY
+    cache = tmp_path / "processed" / DIRECTORY.format(rate=RATE)
     cache.mkdir(parents=True)
     heard = {
         TRAIN: [("the", 0.5, 0, 2.2), ("zebra", 0.9, 0, 2.2), ("a", 1.3, 0, 2.2), ("was", 3.9, 1, 4.9)],
@@ -61,7 +61,7 @@ def corpus_root(tmp_path: Path) -> DataRoot:
 
 def source(tmp_path: Path) -> Continuous:
     names = [Run(tmp_path / name).name for name in (TRAIN, HELD)]
-    return Continuous.load(corpus_root(tmp_path).processed() / DIRECTORY, CPU, names)
+    return Continuous.load(corpus_root(tmp_path).processed() / DIRECTORY.format(rate=RATE), CPU, names)
 
 
 def test_trains_on(tmp_path: Path) -> None:
@@ -116,11 +116,25 @@ def test_held(tmp_path: Path) -> None:
 def test_samples() -> None:
     assert DataConfig().samples == RATE
     assert DataConfig(window=2.5).samples == round(2.5 * RATE)
+    assert DataConfig(decimate=2).samples == 125
 
 
 def test_centring() -> None:
     assert DataConfig().centring == 0
     assert DataConfig(baseline=0.5).centring == round(0.5 * RATE)
+    assert DataConfig(baseline=0.5, decimate=2).centring == 62
+
+
+def test_rate() -> None:
+    assert DataConfig().rate == RATE
+    assert DataConfig(decimate=4).rate == 62.5
+
+
+def test_decimator(tmp_path: Path) -> None:
+    root = corpus_root(tmp_path)
+    assert DataConfig().decimator(root).cache == root.processed() / "continuous50"
+    fast = DataConfig(decimate=2).decimator(root)
+    assert (fast.cache.name, fast.rate) == ("continuous125", 125.0)
 
 
 def record(directory: Path, config: dict[str, object]) -> Path:
@@ -145,7 +159,8 @@ def test_shared(tmp_path: Path) -> None:
     assert DataConfig.shared([widened], Grouping.SENTENCE).extra == 2
     based = record(tmp_path / "based", {"data": {"baseline": 0.5}})
     assert DataConfig.shared([based], Grouping.SENTENCE).baseline == 0.5
-    with pytest.raises(ValueError, match=r"\[\(1.0, False, 0, 0.0\), \(2.0, False, 0, 0.0\)\]"):
+    assert DataConfig.shared([record(tmp_path / "fast", {"data": {"decimate": 2}})], Grouping.SENTENCE).decimate == 2
+    with pytest.raises(ValueError, match=r"\[\(1.0, False, 0, 0.0, 5\), \(2.0, False, 0, 0.0, 5\)\]"):
         DataConfig.shared([one, two], Grouping.SENTENCE)
     with pytest.raises(ValueError, match="an ensemble needs one"):
         DataConfig.shared([one, scaled], Grouping.SENTENCE)
@@ -197,14 +212,16 @@ def test_domains(tmp_path: Path) -> None:
 def test_heard(tmp_path: Path) -> None:
     root = corpus_root(tmp_path)
     found = Run.discover(root.raw())
-    heard = Corpus.heard(root.processed() / DIRECTORY, found, DataConfig())
+    heard = Corpus.heard(DataConfig().decimator(root).cache, found, DataConfig())
     assert heard["word"].tolist() == ["the", "zebra", "a"]
-    assert Corpus.heard(root.processed() / DIRECTORY, found, DataConfig(extra=1)).empty
+    assert Corpus.heard(DataConfig().decimator(root).cache, found, DataConfig(extra=1)).empty
 
 
 def test_sequences(tmp_path: Path) -> None:
     root = corpus_root(tmp_path)
-    heard = Corpus.heard(root.processed() / DIRECTORY, Run.discover(root.raw()), DataConfig(grouping=Grouping.GAP))
+    heard = Corpus.heard(
+        DataConfig().decimator(root).cache, Run.discover(root.raw()), DataConfig(grouping=Grouping.GAP)
+    )
     assert Corpus.sequences(heard, Grouping.GAP) == {tokens("the", "a")}
     assert Corpus.sequences(heard.iloc[:0], Grouping.GAP) == frozenset()
 

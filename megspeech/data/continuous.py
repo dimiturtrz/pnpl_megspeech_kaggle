@@ -6,7 +6,8 @@ is an integer, so `resample_poly(x, 1, 5)` is a pure polyphase decimation whose 
 above the new 25 Hz Nyquist before keeping every fifth sample. The holdout is cached the same way
 (`megspeech.data.holdout`).
 
-    uv run python -m megspeech.data.continuous     # cache every downloaded run under processed/continuous50
+    uv run python -m megspeech.data.continuous                # cache every downloaded run under processed/continuous50
+    uv run python -m megspeech.data.continuous --decimate 2   # the same at 125 Hz, under processed/continuous125
 """
 
 import argparse
@@ -32,7 +33,8 @@ from megspeech.data.windows import Windows
 
 LOG = logging.getLogger(__name__)
 
-DIRECTORY = f"continuous{RATE}"
+DIRECTORY = "continuous{rate:g}"
+"""A cache's directory under `processed/`, named by its rate; the default 50 Hz cache is `continuous50`."""
 WORDS = "words.tsv"
 NO_SENTENCE = -1
 GB = 1e9
@@ -55,6 +57,16 @@ class Decimator:
 
     cache: Path
     decimate: int = DECIMATE
+
+    @classmethod
+    def under(cls, processed: Path, decimate: int = DECIMATE) -> "Decimator":
+        """The cache at `decimate` in its own directory of `processed`, so caches at different rates coexist."""
+        return cls(processed / DIRECTORY.format(rate=SFREQ / decimate), decimate)
+
+    @property
+    def rate(self) -> float:
+        """Samples per second the cache keeps."""
+        return SFREQ / self.decimate
 
     def path(self, name: str) -> Path:
         return self.cache / f"{name}.npy"
@@ -154,9 +166,10 @@ class Continuous:
         names: Sequence[str] | None = None,
         *,
         standardised: bool = False,
+        rate: float = RATE,
     ) -> "Continuous":
         """Load the named runs (default: every cached run) into one preallocated tensor, one run at a time, each
-        `standardised` on its own if asked."""
+        `standardised` on its own if asked; `rate` is the cache's (`Decimator.rate`)."""
         chosen = tuple(names) if names is not None else tuple(sorted(path.stem for path in cache.glob("*.npy")))
         stored = [np.load(cache / f"{name}.npy", mmap_mode="r") for name in chosen]
         offsets = np.r_[0, np.cumsum([signal.shape[1] for signal in stored])].astype(np.int64)
@@ -166,7 +179,7 @@ class Continuous:
             run.copy_(torch.from_numpy(np.array(signal)))
             if standardised:
                 cls.standardise(run)
-        words = cls.table(cache, chosen)
+        words = cls.table(cache, chosen, rate)
         words["start"] = words["run"].map(dict(zip(chosen, offsets[:-1].tolist(), strict=True)))
         words["at"] = words["start"] + words["sample"]
         return cls(meg, offsets, chosen, words)
@@ -182,19 +195,19 @@ class Continuous:
         run.copy_((run.float() - median) / (high - low))
 
     @staticmethod
-    def table(cache: Path, names: Sequence[str]) -> pd.DataFrame:
+    def table(cache: Path, names: Sequence[str], rate: float = RATE) -> pd.DataFrame:
         """The named runs' words, run by run in `names` order, with each word's onset `sample` in its run, the
         run's length in `samples` — read from the cache's headers, so no signal is loaded — and the exclusive
-        `stop` sample of its `end`, never before its 1 s window nor past its run."""
+        `stop` sample of its `end`, never before its 1 s window nor past its run, all at the cache's `rate`."""
         samples = {name: np.load(cache / f"{name}.npy", mmap_mode="r").shape[1] for name in names}
         table = pd.read_csv(cache / WORDS, sep="	", keep_default_na=False, na_values=MISSING)
         table = table[table["run"].isin(samples)]
         order = table["run"].map({name: position for position, name in enumerate(names)}).to_numpy()
         table = table.iloc[np.argsort(order, kind="stable")].reset_index(drop=True)
-        table["sample"] = np.round(table["onset"] * RATE).astype(np.int64)
+        table["sample"] = np.round(table["onset"] * rate).astype(np.int64)
         table["samples"] = table["run"].map(samples).astype(np.int64)
-        stop = np.round(table["end"].to_numpy() * RATE).astype(np.int64)
-        table["stop"] = np.minimum(np.maximum(stop, table["sample"] + RATE), table["samples"])
+        stop = np.round(table["end"].to_numpy() * rate).astype(np.int64)
+        table["stop"] = np.minimum(np.maximum(stop, table["sample"] + round(rate)), table["samples"])
         return table
 
     @staticmethod
@@ -219,13 +232,14 @@ class Continuous:
 
 
 def main() -> None:
-    """Cache every downloaded run at 50 Hz and report the cache's size and wall time."""
+    """Cache every downloaded run at 250 Hz / `--decimate` and report the cache's size and wall time."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workers", type=int, default=WORKERS)
+    parser.add_argument("--decimate", type=int, default=DECIMATE)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    decimator = Decimator(root.processed() / DIRECTORY)
+    decimator = Decimator.under(root.processed(), args.decimate)
     runs = Run.discover(root.raw())
     began = time.perf_counter()
     table = decimator.build(runs, args.workers)

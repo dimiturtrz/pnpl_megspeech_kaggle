@@ -93,7 +93,7 @@ class Submitter:
     def submit(self, model: nn.Module, root: DataRoot, log_prior: Float[Tensor, " v"], tau: float, path: Path) -> Path:
         """Context-head probabilities for every holdout row, logit-adjusted by `tau`, written as a submission."""
         holdout = LibriBrainCompetitionHoldout(TRACK, data_path=root.raw(), download=False)
-        cache = HoldoutCache.of(root)
+        cache = HoldoutCache.of(root, self.data.decimate)
         cache.build()
         windows = cache.windows(self.evaluator.device, self.data.samples, standardised=self.data.standardised)
         windows = replace(windows, baseline=self.data.centring)

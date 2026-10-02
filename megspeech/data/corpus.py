@@ -15,8 +15,8 @@ from jaxtyping import Float, Int
 
 from core.paths import DataRoot
 from core.tree import Tree
-from megspeech.data.continuous import DIRECTORY, Continuous
-from megspeech.data.epochs import RATE
+from megspeech.data.continuous import Continuous, Decimator
+from megspeech.data.epochs import DECIMATE, RATE, SFREQ
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import Partition, Run
 from megspeech.data.split import Split
@@ -62,6 +62,8 @@ class DataConfig:
     baseline: float = 0.0
     """Seconds from each window's start its centring mean is taken over; 0 centres on the whole window. The
     reference pipeline baselines on 0-0.5 s, the pre-response stretch, so the word's evoked field is kept whole."""
+    decimate: int = DECIMATE
+    """The 250 Hz recordings' decimation factor: which continuous cache training reads (`Decimator.under`)."""
 
     @classmethod
     def saved(cls, directory: Path) -> "DataConfig":
@@ -74,24 +76,42 @@ class DataConfig:
         """The holdout reading — window and standardisation — every run in `directories` trained on, spans cut by
         `grouping`; members that read MEG differently cannot share one set of holdout windows."""
         readings = {
-            (saved.window, saved.standardised, saved.extra, saved.baseline) for saved in map(cls.saved, directories)
+            (saved.window, saved.standardised, saved.extra, saved.baseline, saved.decimate)
+            for saved in map(cls.saved, directories)
         }
         if len(readings) != 1:
             raise ValueError(
-                f"runs trained at (window, standardised, extra, baseline) {sorted(readings)}; an ensemble needs one"
+                f"runs trained at (window, standardised, extra, baseline, decimate) {sorted(readings)}; an ensemble "
+                "needs one"
             )
-        window, standardised, extra, baseline = readings.pop()
-        return cls(grouping=grouping, window=window, standardised=standardised, extra=extra, baseline=baseline)
+        window, standardised, extra, baseline, decimate = readings.pop()
+        return cls(
+            grouping=grouping,
+            window=window,
+            standardised=standardised,
+            extra=extra,
+            baseline=baseline,
+            decimate=decimate,
+        )
+
+    @property
+    def rate(self) -> float:
+        """Samples per second of the cache training reads."""
+        return SFREQ / self.decimate
 
     @property
     def samples(self) -> int:
-        """The window in samples at the cache's `RATE`."""
-        return round(self.window * RATE)
+        """The window in samples at the cache's `rate`."""
+        return round(self.window * self.rate)
 
     @property
     def centring(self) -> int:
         """The centring baseline in samples; 0 centres on the whole window."""
-        return round(self.baseline * RATE)
+        return round(self.baseline * self.rate)
+
+    def decimator(self, root: DataRoot) -> Decimator:
+        """The continuous cache training reads, at `decimate`."""
+        return Decimator.under(root.processed(), self.decimate)
 
     def trains_on(self, run: Run) -> bool:
         trained = (Partition.TRAIN, Partition.VALIDATION) if self.refit else (Partition.TRAIN,)
@@ -140,12 +160,13 @@ class Corpus:
 
     @classmethod
     def load(cls, data: DataConfig, root: DataRoot, device: torch.device) -> "Corpus":
-        cache = root.processed() / DIRECTORY
+        cache = data.decimator(root).cache
         runs = Run.discover(root.raw())
         trained, held = data.trained(runs), data.held(runs)
         reading = [r.name for r in trained] + [r.name for group in held.values() for r in group]
-        source = Continuous.load(cache, device, list(dict.fromkeys(reading)), standardised=data.standardised)
-        words = cls.words(source.words, data.grouping)
+        names = list(dict.fromkeys(reading))
+        source = Continuous.load(cache, device, names, standardised=data.standardised, rate=data.rate)
+        words = cls.words(source.words, data.grouping, data.rate)
         weights = {r.name: data.read_weight if r.key[0] in READ else 1.0 for r in trained}
         chosen = words[words["run"].isin(weights)]
         weight = chosen["run"].map(weights).to_numpy(dtype=np.float64)
@@ -158,13 +179,13 @@ class Corpus:
         return cls(train, validation, cls.sequences(heard, data.grouping))
 
     @staticmethod
-    def words(table: pd.DataFrame, grouping: Grouping) -> pd.DataFrame:
-        """The words of `table` that `grouping` carries and whose window fits in their run, with their `target`
-        and `token` (the lower-cased word, hashed)."""
+    def words(table: pd.DataFrame, grouping: Grouping, rate: float = RATE) -> pd.DataFrame:
+        """The words of `table` (sampled at `rate`) that `grouping` carries and whose 1 s window fits in their run,
+        with their `target` and `token` (the lower-cased word, hashed)."""
         labels = PRIMARY.labels(table["word"])
         target = np.where(labels == ABSENT, IGNORE, labels)
         return table.assign(target=target, token=Corpus.token(table["word"]))[
-            grouping.keep(target) & Continuous.inside(table)
+            grouping.keep(target) & Continuous.inside(table, round(rate))
         ]
 
     @staticmethod
@@ -200,7 +221,7 @@ class Corpus:
         word table without any MEG: the text a novel span must not repeat."""
         withheld = {r.name for r in data.extras(runs)}
         names = [r.name for r in runs if r.partition is Partition.TRAIN and r.name not in withheld]
-        return cls.words(Continuous.table(cache, names), data.grouping)
+        return cls.words(Continuous.table(cache, names, data.rate), data.grouping, data.rate)
 
     @staticmethod
     def sequences(heard: pd.DataFrame, grouping: Grouping) -> frozenset[tuple[int, ...]]:

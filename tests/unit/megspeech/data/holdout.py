@@ -108,7 +108,7 @@ def test_rows_follow_competition_order(tmp_path: Path) -> None:
     cache = holdout(tmp_path / "raw")
     table = cache.build()
     frame = LibriBrainCompetitionHoldout(subjects=[0], data_path=tmp_path / "raw", download=False).metadata_frame()
-    assert len(table) == len(frame) == len(cache.windows("cpu"))
+    assert len(table) == len(frame) == len(cache.windows("cpu", RATE))
     lead = Decimator(Path()).length(np.array([LEAD]))[0] / RATE
     start = np.where(frame["source"] == "sentence", frame["epoch"] * lead, 0.0)
     assert table["sentence"].tolist() == frame["epoch"].tolist()
@@ -180,7 +180,9 @@ def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
     cache = HoldoutCache.of(DataRoot.from_config())
     assert cache.raw.name == HOLDOUT_SUBDIR
-    assert cache.decimator.cache.parts[-2:] == (DIRECTORY, HOLDOUT)
+    assert cache.decimator.cache.parts[-2:] == (DIRECTORY.format(rate=RATE), HOLDOUT)
+    fast = HoldoutCache.of(DataRoot.from_config(), 2).decimator
+    assert (fast.cache.parts[-2:], fast.rate) == (("continuous125", HOLDOUT), SFREQ / 2)
 
 
 def test_archives(tmp_path: Path) -> None:
@@ -204,7 +206,7 @@ def test_build(tmp_path: Path) -> None:
 def test_windows(tmp_path: Path) -> None:
     cache = holdout(tmp_path / "raw")
     cache.build()
-    windows = cache.windows("cpu")
+    windows = cache.windows("cpu", RATE)
     assert len(windows) == 1 + len(ONSETS) + WORD_EPOCHS
     assert torch.isfinite(windows(torch.arange(len(windows)))).all()
     lead = Decimator(Path()).length(np.array([LEAD]))[0] - round(0.1 * RATE)

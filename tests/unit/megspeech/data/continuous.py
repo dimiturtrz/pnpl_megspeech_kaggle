@@ -42,6 +42,16 @@ def test_path(tmp_path: Path) -> None:
     assert Decimator(tmp_path / "cache").path(run.name) == tmp_path / "cache" / f"{run.name}.npy"
 
 
+def test_under(tmp_path: Path) -> None:
+    assert Decimator.under(tmp_path) == Decimator(tmp_path / "continuous50")
+    assert Decimator.under(tmp_path, 4) == Decimator(tmp_path / "continuous62.5", 4)
+
+
+def test_rate() -> None:
+    assert Decimator(Path()).rate == RATE
+    assert Decimator(Path(), 2).rate == SFREQ / 2
+
+
 def test_ready(tmp_path: Path) -> None:
     decimator = Decimator(tmp_path / "a" / "cache")
     assert decimator.ready() == decimator.cache
@@ -160,6 +170,9 @@ def test_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert table["stop"].tolist() == [90, 170, SAMPLES] * 2
     assert table.index.tolist() == list(range(6))
     assert Continuous.table(decimator.cache, [runs[0].name])["word"].tolist() == ["The", "null", "end"]
+    doubled = Continuous.table(decimator.cache, [runs[0].name], 2 * RATE)
+    assert doubled["sample"].tolist() == [50, 200, 300]
+    assert doubled["stop"].tolist() == [180, SAMPLES, SAMPLES]
 
 
 def test_inside() -> None:
@@ -199,7 +212,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "ProcessPoolExecutor", FakePool)
     monkeypatch.setattr("sys.argv", ["continuous"])
     main()
-    assert (tmp_path / "processed" / DIRECTORY / f"{run.name}.npy").exists()
+    assert (tmp_path / "processed" / DIRECTORY.format(rate=RATE) / f"{run.name}.npy").exists()
 
 
 class FakeRoot:

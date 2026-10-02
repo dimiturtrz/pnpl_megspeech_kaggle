@@ -27,8 +27,8 @@ from jaxtyping import Bool, Float, Int
 from pnpl.competition.holdout import DEEP_SUBJECTS, HOLDOUT_SUBDIR, LibriBrainCompetitionHoldout
 
 from core.paths import DataRoot
-from megspeech.data.continuous import DIRECTORY, WORDS, Continuous, Decimator
-from megspeech.data.epochs import RATE, SFREQ
+from megspeech.data.continuous import WORDS, Continuous, Decimator
+from megspeech.data.epochs import DECIMATE, SFREQ
 from megspeech.data.windows import Windows
 
 LOG = logging.getLogger(__name__)
@@ -114,11 +114,12 @@ class Archive:
         start = np.r_[0, np.cumsum(kept)[:-1]]
         epoch, slot = np.nonzero(epochs.mask)
         onset = epochs.onset[epoch, slot]
-        begin = np.round(onset * RATE)
-        if ((begin < 0) | (begin + RATE > kept[epoch])).any():
+        rate = decimator.rate
+        begin = np.round(onset * rate)
+        if ((begin < 0) | (begin + round(rate) > kept[epoch])).any():
             raise ValueError(f"{self.name}: a word's window runs past its epoch")
-        at = (start[epoch] + begin) / RATE
-        end = (start + kept)[epoch] / RATE
+        at = (start[epoch] + begin) / rate
+        end = (start + kept)[epoch] / rate
         return pd.DataFrame({"run": self.name, "onset": at, "word": "", "sentence": epoch, "end": end})
 
 
@@ -131,8 +132,10 @@ class HoldoutCache:
     subjects: tuple[int, ...] = DEEP_SUBJECTS
 
     @classmethod
-    def of(cls, root: DataRoot) -> "HoldoutCache":
-        return cls(root.raw() / HOLDOUT_SUBDIR, Decimator(root.processed() / DIRECTORY / HOLDOUT))
+    def of(cls, root: DataRoot, decimate: int = DECIMATE) -> "HoldoutCache":
+        """The holdout cached inside the training cache at `decimate`."""
+        trained = Decimator.under(root.processed(), decimate)
+        return cls(root.raw() / HOLDOUT_SUBDIR, Decimator(trained.cache / HOLDOUT, decimate))
 
     def archives(self) -> list[Archive]:
         return [Archive(self.raw / f"subj{subject:02d}_{source}.npz") for subject in self.subjects for source in Source]
@@ -147,11 +150,12 @@ class HoldoutCache:
         table.to_csv(cache / WORDS, sep="\t", index=False)
         return table
 
-    def windows(self, device: torch.device | str, length: int = RATE, *, standardised: bool = False) -> Windows:
+    def windows(self, device: torch.device | str, length: int, *, standardised: bool = False) -> Windows:
         """Every holdout row's `length`-sample window, in canonical order, from the built cache, each archive
         `standardised` on its own if asked."""
         names = [archive.name for archive in self.archives()]
-        return Continuous.load(self.decimator.cache, device, names, standardised=standardised).windows(length)
+        cache, rate = self.decimator.cache, self.decimator.rate
+        return Continuous.load(cache, device, names, standardised=standardised, rate=rate).windows(length)
 
 
 def main() -> None:
@@ -160,13 +164,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--window", type=float, default=1.0, help="window length in seconds")
+    parser.add_argument("--decimate", type=int, default=DECIMATE)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    cache = HoldoutCache.of(root)
+    cache = HoldoutCache.of(root, args.decimate)
     cache.build()
     rows = len(LibriBrainCompetitionHoldout(TRACK, data_path=root.raw(), download=False))
-    windows = cache.windows(args.device, round(args.window * RATE))
+    windows = cache.windows(args.device, round(args.window * cache.decimator.rate))
     x = windows(torch.arange(len(windows), device=windows.device))
     finite = float(torch.isfinite(x).float().mean())
     zeroed = float((x == 0).all(dim=1).float().mean())

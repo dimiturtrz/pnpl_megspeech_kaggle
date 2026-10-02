@@ -102,7 +102,7 @@ class Cache:
     standardised: ClassVar[list[bool]] = []
 
     @classmethod
-    def of(cls, _: object) -> "Cache":
+    def of(cls, *_: object) -> "Cache":
         return cls()
 
     def build(self) -> None:

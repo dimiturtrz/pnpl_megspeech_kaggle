@@ -19,7 +19,7 @@ from torch import Tensor
 from transformers import AutoTokenizer, T5EncoderModel
 
 from core.paths import DataRoot
-from megspeech.data.continuous import DIRECTORY, Continuous
+from megspeech.data.continuous import Continuous, Decimator
 from megspeech.data.corpus import Corpus
 from megspeech.data.grouping import Grouping
 from megspeech.data.vocabulary import PRIMARY
@@ -128,7 +128,7 @@ class Lexicon:
     @classmethod
     def write(cls, root: DataRoot, tokenizer: Tokenizer, encoder: Encoder) -> Path:
         """Every word of every cached run's table, as the sentence path reads them."""
-        cache = root.processed() / DIRECTORY
+        cache = Decimator.under(root.processed()).cache
         names = sorted(path.stem for path in cache.glob("*.npy"))
         lexicon = cls.encode(Corpus.words(Continuous.table(cache, names), Grouping.SENTENCE), tokenizer, encoder, LAYER)
         LOG.info("%d distinct words from %d runs", len(lexicon.keys), len(names))

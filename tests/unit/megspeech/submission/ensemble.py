@@ -51,7 +51,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     heard = pd.DataFrame({"run": "r", "sentence": 0, "onset": [0.0, 0.1], "target": [0, 1], "token": [7, 8]})
     monkeypatch.setattr(module.Corpus, "heard", classmethod(lambda *_: heard))
     monkeypatch.setattr(module.Continuous, "load", classmethod(lambda *_, **__: SimpleNamespace(words=heard)))
-    monkeypatch.setattr(module.Corpus, "words", staticmethod(lambda table, _: table))
+    monkeypatch.setattr(module.Corpus, "words", staticmethod(lambda table, *_: table))
     monkeypatch.setattr(module.Corpus, "domains", classmethod(lambda *_: validation()))
     monkeypatch.setattr(module.Ensemble, "load", classmethod(lambda *_: Constant()))
     monkeypatch.setattr(module.Submitter, "submit", lambda self, *args: written.append((self.data, args[-1])))
