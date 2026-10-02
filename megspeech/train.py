@@ -335,9 +335,12 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=TrainConfig.epochs)
     parser.add_argument("--read-weight", type=float, default=TrainConfig.read_weight)
     parser.add_argument("--repeat-power", type=float, default=TrainConfig.repeat_power)
+    parser.add_argument("--seed", type=int, default=TrainConfig.seed)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    config = TrainConfig(epochs=args.epochs, read_weight=args.read_weight, repeat_power=args.repeat_power)
+    config = TrainConfig(
+        epochs=args.epochs, read_weight=args.read_weight, repeat_power=args.repeat_power, seed=args.seed
+    )
     device = torch.device("cuda")
     root = DataRoot.from_config()
     epocher = Epocher(root.processed() / "epochs")
