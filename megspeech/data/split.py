@@ -63,10 +63,12 @@ class Split:
     """Word windows on the device, with the spans that group them and each word's sampling weight.
 
     A word labelled `IGNORE` is outside the vocabulary: its window feeds its span's context, but nothing scores it.
+    `token` names each word itself, in or out of the vocabulary, so a span's token sequence is its sentence text.
     """
 
     windows: Windows
     y: Int[Tensor, " n"]
+    token: Int[Tensor, " n"]
     index: Int[Tensor, "g w"]
     onset: Float[Tensor, "g w"]
     weight: Float[Tensor, " n"]
@@ -75,14 +77,23 @@ class Split:
     def from_arrays(
         cls, x: Float[np.ndarray, "n c t"], y: Int[np.ndarray, " n"], spans: Spans, device: torch.device
     ) -> "Split":
-        return cls.of(Windows.stacked(torch.from_numpy(x).to(device)), y, spans, np.ones(len(y)))
+        return cls.of(Windows.stacked(torch.from_numpy(x).to(device)), (y, y), spans, np.ones(len(y)))
 
     @classmethod
-    def of(cls, windows: Windows, y: Int[np.ndarray, " n"], spans: Spans, weight: Float[np.ndarray, " n"]) -> "Split":
+    def of(
+        cls,
+        windows: Windows,
+        words: tuple[Int[np.ndarray, " n"], Int[np.ndarray, " n"]],
+        spans: Spans,
+        weight: Float[np.ndarray, " n"],
+    ) -> "Split":
+        """A split of `windows` whose `words` are (label, token) per window."""
         device = windows.device
+        y, token = words
         return cls(
             windows,
             torch.tensor(y, device=device),
+            torch.tensor(token, device=device),
             torch.from_numpy(spans.index).to(device),
             torch.from_numpy(spans.onset).float().to(device),
             torch.tensor(weight, dtype=torch.float32, device=device),
@@ -139,32 +150,33 @@ class Split:
 
     @staticmethod
     def seen(runs: Iterable[tuple[Int[np.ndarray, " n"], Spans]]) -> frozenset[tuple[int, ...]]:
-        """Every span's label sequence across runs of (labels, spans) — the word orders training has heard."""
+        """Every span's token sequence across runs of (tokens, spans) — the sentences training has heard."""
         sequences: set[tuple[int, ...]] = set()
-        for y, spans in runs:
-            sequences.update(tuple(y[row[row != PAD]].tolist()) for row in spans.index)
+        for token, spans in runs:
+            sequences.update(tuple(token[row[row != PAD]].tolist()) for row in spans.index)
         return frozenset(sequences)
 
     def novel(self, seen: frozenset[tuple[int, ...]]) -> Int[Tensor, " k"]:
-        """Labelled words in multi-word spans whose label sequence training never heard.
+        """Labelled words in multi-word spans whose text training never heard.
 
-        The holdout's sentences are new stimuli, so a span recited from training measures memorised word order.
+        The holdout's sentences are new stimuli, so a span recited from training measures memorised word order. Text,
+        not labels: under sentence spans every out-of-vocabulary word labels alike, so distinct sentences would collide.
         """
         index = self.index.cpu().numpy()
-        labels = self.y.cpu().numpy()
+        token = self.token.cpu().numpy()
         rows = [row[row != PAD] for row in index]
-        keep = [row for row in rows if len(row) > 1 and tuple(labels[row].tolist()) not in seen]
+        keep = [row for row in rows if len(row) > 1 and tuple(token[row].tolist()) not in seen]
         novel = np.concatenate([np.empty(0, np.int64), *keep])
-        return torch.from_numpy(novel[labels[novel] != IGNORE]).to(self.y.device)
+        return torch.from_numpy(novel[self.y.cpu().numpy()[novel] != IGNORE]).to(self.y.device)
 
     def recurring(self, power: float) -> "Split":
-        """Each recited span's words reweighted by how often training repeats its label sequence, to the `-power`."""
+        """Each recited span's words reweighted by how often training repeats its text, to the `-power`."""
         index = self.index.cpu().numpy()
-        labels = self.y.cpu().numpy()
+        token = self.token.cpu().numpy()
         rows = [row[row != PAD] for row in index]
-        sequences = [tuple(labels[row].tolist()) for row in rows]
+        sequences = [tuple(token[row].tolist()) for row in rows]
         counts = Counter(sequences)
-        scale = np.ones(len(labels))
+        scale = np.ones(len(token))
         for row, sequence in zip(rows, sequences, strict=True):
             scale[row] = counts[sequence] ** -power if len(row) >= RECITED else 1.0
         return replace(self, weight=self.weight * torch.from_numpy(scale).float().to(self.weight.device))

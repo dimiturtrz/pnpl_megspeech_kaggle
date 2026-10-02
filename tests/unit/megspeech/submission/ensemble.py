@@ -47,7 +47,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "Evaluator", functools.partial(Evaluator, min_novel=1))
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))
     monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: [train]))
-    heard = pd.DataFrame({"run": "r", "sentence": 0, "onset": [0.0, 0.1], "target": [0, 1]})
+    heard = pd.DataFrame({"run": "r", "sentence": 0, "onset": [0.0, 0.1], "target": [0, 1], "token": [7, 8]})
     monkeypatch.setattr(module.Corpus, "heard", classmethod(lambda *_: heard))
     monkeypatch.setattr(module.Continuous, "load", classmethod(lambda *_: SimpleNamespace(words=heard)))
     monkeypatch.setattr(module.Corpus, "words", staticmethod(lambda table, _: table))

@@ -19,6 +19,10 @@ HELD = "sub-0_ses-11_task-Sherlock1_run-2_meg.h5"
 THE, A = PRIMARY.labels(["the", "a"]).tolist()
 
 
+def tokens(*words: str) -> tuple[int, ...]:
+    return tuple(pd.util.hash_array(np.array(words, dtype=object)).view(np.int64).tolist())
+
+
 class Root:
     def __init__(self, raw: Path) -> None:
         self.path = raw
@@ -103,7 +107,7 @@ def test_heard(tmp_path: Path) -> None:
 def test_sequences(tmp_path: Path) -> None:
     root = corpus_root(tmp_path)
     heard = Corpus.heard(root.processed() / DIRECTORY, Run.discover(root.raw()), Grouping.GAP)
-    assert Corpus.sequences(heard, Grouping.GAP) == {(THE, A)}
+    assert Corpus.sequences(heard, Grouping.GAP) == {tokens("the", "a")}
     assert Corpus.sequences(heard.iloc[:0], Grouping.GAP) == frozenset()
 
 
@@ -111,4 +115,4 @@ def test_load(tmp_path: Path) -> None:
     corpus = Corpus.load(DataConfig(), corpus_root(tmp_path), CPU)
     assert corpus.train.y.tolist() == [THE, IGNORE, A]
     assert set(corpus.validation) == {"Sherlock1"}
-    assert corpus.seen == {(THE, IGNORE, A)}
+    assert corpus.seen == {tokens("the", "zebra", "a")}

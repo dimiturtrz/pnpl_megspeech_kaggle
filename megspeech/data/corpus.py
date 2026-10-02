@@ -68,16 +68,19 @@ class Corpus:
 
     @staticmethod
     def words(table: pd.DataFrame, grouping: Grouping) -> pd.DataFrame:
-        """The words of `table` that `grouping` carries and whose window fits in their run, with their `target`."""
+        """The words of `table` that `grouping` carries and whose window fits in their run, with their `target`
+        and `token` (the lower-cased word, hashed)."""
         labels = PRIMARY.labels(table["word"])
         target = np.where(labels == ABSENT, IGNORE, labels)
-        return table.assign(target=target)[grouping.keep(target) & Continuous.inside(table)]
+        token = pd.util.hash_array(table["word"].astype(str).str.lower().to_numpy()).view(np.int64)
+        return table.assign(target=target, token=token)[grouping.keep(target) & Continuous.inside(table)]
 
     @staticmethod
     def split(source: Continuous, words: pd.DataFrame, grouping: Grouping, weight: Float[np.ndarray, " n"]) -> Split:
         """`words` (rows of `source.words`) as a split whose windows are gathered from `source`'s device signal."""
         at = torch.from_numpy(source.words["at"].to_numpy()[words.index.to_numpy()]).to(source.meg.device)
-        return Split.of(Windows(source.meg, at), words["target"].to_numpy(), grouping.spans(words), weight)
+        labels = (words["target"].to_numpy(), words["token"].to_numpy())
+        return Split.of(Windows(source.meg, at), labels, grouping.spans(words), weight)
 
     @classmethod
     def domains(
@@ -96,6 +99,6 @@ class Corpus:
 
     @staticmethod
     def sequences(heard: pd.DataFrame, grouping: Grouping) -> frozenset[tuple[int, ...]]:
-        """The label sequence of every span of `heard`, spans cut run by run."""
+        """The text of every span of `heard` as its token sequence, spans cut run by run."""
         runs = heard.groupby("run", sort=False)
-        return Split.seen((run["target"].to_numpy(), grouping.spans(run)) for _, run in runs)
+        return Split.seen((run["token"].to_numpy(), grouping.spans(run)) for _, run in runs)

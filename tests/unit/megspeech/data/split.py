@@ -46,7 +46,7 @@ def test_from_arrays() -> None:
 def test_of() -> None:
     spans = Spans.by_gap(np.array([0.0, 0.1, 9.0]))
     windows = Windows(torch.zeros(CHANNELS, 100), torch.tensor([0, 10, 20]))
-    held = Split.of(windows, np.array([0, 1, 2]), spans, np.array([1.0, 1.0, 3.0]))
+    held = Split.of(windows, (np.array([0, 1, 2]),) * 2, spans, np.array([1.0, 1.0, 3.0]))
     assert held.y.tolist() == [0, 1, 2]
     assert held.index.shape[0] == 2
     assert held.weight.tolist() == [1.0, 1.0, 3.0]
@@ -87,6 +87,8 @@ def test_novel() -> None:
     assert held.novel(frozenset()).tolist() == list(range(DENSE))
     unknown = dataclasses.replace(held, y=torch.where(torch.arange(12) == 1, IGNORE, held.y))
     assert unknown.novel(frozenset()).tolist() == [0, 2, 3]
+    retold = dataclasses.replace(held, token=held.token + 100)
+    assert retold.novel(everything).tolist() == list(range(DENSE))
 
 
 def test_recurring() -> None:
