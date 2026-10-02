@@ -1,11 +1,12 @@
 import sys
+from fnmatch import fnmatch
 from pathlib import Path
 
 import pytest
 
 from core.paths import ENV_OVERRIDE
 from megspeech import fetch as module
-from megspeech.fetch import HOLDOUT, SOURCES, Source, main
+from megspeech.fetch import HOLDOUT, OTHERS, SOURCES, Source, main
 
 Calls = list[dict[str, object]]
 
@@ -50,3 +51,19 @@ def test_main_holdout_only(calls: Calls, tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setattr(sys, "argv", ["fetch", "--holdout-only"])
     main()
     assert [call["repo_id"] for call in calls] == [HOLDOUT.repo]
+
+
+def test_main_others(calls: Calls, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
+    monkeypatch.setattr(sys, "argv", ["fetch", "--others"])
+    main()
+    assert [call["allow_patterns"] for call in calls] == [list(OTHERS.patterns)]
+
+
+def test_others_exclude_subject0():
+    names = [
+        "Sherlock1/derivatives/serialised/sub-0_ses-1_task-Sherlock1_run-1_meg.h5",
+        "x/sub-12_ses-1_task-Sherlock1_run-1_meg.h5",
+        "x/sub-3_ses-2_events.tsv",
+    ]
+    assert [any(fnmatch(n, p) for p in OTHERS.patterns) for n in names] == [False, True, True]

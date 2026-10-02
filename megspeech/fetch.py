@@ -5,6 +5,7 @@ root lets its loaders find the files instead of re-fetching them. Only subject 0
 events `.tsv` are pulled; the raw `.fif` (hundreds of GB) is never needed.
 
     uv run python -m megspeech.fetch            # holdout, then LibriBrain, then LibriBrain2
+    uv run python -m megspeech.fetch --others   # subjects 1-32 (~44 min each), for cross-subject training
 """
 
 import argparse
@@ -20,6 +21,9 @@ LOG = logging.getLogger(__name__)
 
 SUBJECT0 = ("*sub-0_*_meg.h5", "*sub-0_*_events.tsv")
 """Subject 0's preprocessed recordings and their word/phoneme events, in any task directory."""
+
+OTHER_SUBJECTS = ("*sub-[1-9]*_meg.h5", "*sub-[1-9]*_events.tsv")
+"""Subjects 1-32's two Sherlock runs each; never subject 0, whose files `SUBJECT0` already covers."""
 
 PARALLEL_FILES = 8
 """Concurrent file downloads; HF serves each file from a CDN, so throughput scales with streams."""
@@ -55,15 +59,19 @@ SOURCES = (
 )
 """Fetch order: the 5.7 GB holdout first, so submission plumbing can start before the training data lands."""
 
+OTHERS = Source("pnpl/LibriBrain2", OTHER_SUBJECTS)
+
 
 def main() -> None:
-    """Fetch every source (or only the holdout) into the competition's raw directory."""
+    """Fetch every source (or only the holdout, or only the other subjects) into the competition's raw directory."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--holdout-only", action="store_true")
+    choice = parser.add_mutually_exclusive_group()
+    choice.add_argument("--holdout-only", dest="sources", action="store_const", const=(HOLDOUT,), default=SOURCES)
+    choice.add_argument("--others", dest="sources", action="store_const", const=(OTHERS,))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     destination = DataRoot.from_config().raw()
-    for source in (HOLDOUT,) if args.holdout_only else SOURCES:
+    for source in args.sources:
         source.fetch(destination)
 
 
