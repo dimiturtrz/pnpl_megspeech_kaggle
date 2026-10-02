@@ -24,6 +24,7 @@ from pnpl.competition.holdout import LibriBrainCompetitionHoldout
 from torch import Tensor, nn
 
 from core.paths import DataRoot
+from megspeech.data.continuous import MISSING
 from megspeech.data.split import Split
 from megspeech.data.vocabulary import SECONDARY, Vocabulary
 from megspeech.evaluation.report import Evaluator, Head
@@ -44,7 +45,7 @@ class FrequencyPrior:
         """Count the `word` rows of LibriBrain events files, spelled the way the competition vocabulary is."""
         counts: Counter[str] = Counter()
         for path in paths:
-            events = pd.read_csv(path, sep="\t", usecols=["kind", "segment"])
+            events = pd.read_csv(path, sep="\t", usecols=["kind", "segment"], keep_default_na=False, na_values=MISSING)
             words = events.loc[events["kind"] == "word", "segment"].dropna()
             counts.update(Vocabulary.spell(word) for word in words)
         return cls(counts)

@@ -34,9 +34,10 @@ def events(path: Path, words: list[str]) -> Path:
 
 
 def test_from_events(tmp_path: Path):
-    """Words are lower-cased, stripped of punctuation, and straight apostrophes become the vocabulary's curly one."""
-    prior = FrequencyPrior.from_events([events(tmp_path / "a.tsv", ["The", "it's", "the."])])
-    assert prior.counts == {"the": 2, "it’s": 1}
+    """Words are lower-cased, stripped of punctuation, and straight apostrophes become the vocabulary's curly one;
+    a heard `None` is a word, not a missing cell."""
+    prior = FrequencyPrior.from_events([events(tmp_path / "a.tsv", ["The", "it's", "the.", "None"])])
+    assert prior.counts == {"the": 2, "it’s": 1, "none": 1}
 
 
 def test_probabilities():
