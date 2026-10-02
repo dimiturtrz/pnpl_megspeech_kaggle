@@ -44,7 +44,9 @@ class Windows:
         return self.meg.device
 
     def __call__(self, words: Int[Tensor, " k"], jitter: int = 0) -> Float[Tensor, "k c s"]:
-        """The windows of `words`, in the signal's dtype; centring runs in float32 so float16 only rounds once.
+        """The windows of `words`, in the signal's dtype; centring runs in float32 so float16 only rounds once, and
+        saturates at the dtype's range: a sensor jump can centre past float16's, which no scaler clamp undoes once
+        an augmentation's spread or spectrum turns the infinity into NaN.
 
         A window whose samples are all valid is centred by its plain mean (the rescale is then exactly 1). `jitter`
         moves each window's start by its own uniform draw in [-jitter, jitter] samples, still stopped at `end`."""
@@ -59,4 +61,5 @@ class Windows:
         counted = valid & (torch.arange(self.length, device=self.meg.device) < (self.baseline or self.length))
         mean = torch.where(counted, cut, 0.0).mean(dim=-1, keepdim=True)
         mean = mean * (self.length / counted.sum(dim=-1, keepdim=True).clamp(min=1))
-        return torch.where(valid, cut - mean, 0.0).to(self.meg.dtype)
+        largest = torch.finfo(self.meg.dtype).max
+        return torch.where(valid, cut - mean, 0.0).clamp(-largest, largest).to(self.meg.dtype)

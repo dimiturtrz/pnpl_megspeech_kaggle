@@ -43,6 +43,15 @@ def test_call_noise_scales_with_spread_and_spares_padding() -> None:
     assert torch.all(Augment(noise=0.5)(x)[..., 40:] == 0)
 
 
+def test_call_half_precision_near_overflow_stays_finite() -> None:
+    torch.manual_seed(0)
+    x = torch.full((64, 4, 50), 60000.0, dtype=torch.float16)
+    x[..., ::2] = -60000.0
+    perturbed = Augment(gain=0.5, band=4, noise=0.5)(x)
+    assert perturbed.dtype == torch.float32
+    assert torch.isfinite(perturbed).all()
+
+
 def test_masked() -> None:
     x = torch.ones(2, 1, 4)
     assert torch.equal(Augment.masked(x, 0, 4), x)

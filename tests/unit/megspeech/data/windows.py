@@ -63,6 +63,13 @@ def test_call_bounded_past_the_window_is_the_plain_centred_cut() -> None:
     assert torch.equal(Windows(meg, at, torch.full_like(at, 400))(words), plain)
 
 
+def test_call_jump_past_float16_range_saturates() -> None:
+    meg = torch.tensor([[-60000.0] * 7 + [60000.0]], dtype=torch.float16)
+    at = torch.tensor([0])
+    cut = Windows(meg, at, at + 8, 8)(at)
+    assert cut[0, 0].tolist() == [-15000.0] * 7 + [torch.finfo(torch.float16).max]
+
+
 def test_call_baseline_centres_on_the_window_head() -> None:
     """A `baseline` centres on the valid samples among the window's first `baseline`; a bound inside it narrows it."""
     meg = torch.arange(20.0)[None].repeat(2, 1)

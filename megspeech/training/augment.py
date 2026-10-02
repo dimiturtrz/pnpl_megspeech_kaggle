@@ -25,17 +25,19 @@ class Augment:
     """Gaussian noise added to each sensor, as a share of that sensor's spread over the window."""
 
     def __call__(self, x: Float[Tensor, "n c t"]) -> Float[Tensor, "n c t"]:
+        """The perturbed windows in float32: the half-precision cache's largest values sit near its overflow."""
+        x = x.float()
         shape = (*x.shape[:2], 1)
         keep = torch.rand(shape, device=x.device) >= self.dropout
         scale = torch.exp(self.gain * torch.randn(shape, device=x.device))
-        x = x * (keep * scale).to(x.dtype)
+        x = x * (keep * scale)
         x = self.masked(x, self.mask, x.shape[-1])
         if self.band:
-            spectrum = self.masked(torch.fft.rfft(x.float(), dim=-1), self.band, x.shape[-1] // 2 + 1)
-            x = torch.fft.irfft(spectrum, n=x.shape[-1], dim=-1).to(x.dtype)
+            spectrum = self.masked(torch.fft.rfft(x, dim=-1), self.band, x.shape[-1] // 2 + 1)
+            x = torch.fft.irfft(spectrum, n=x.shape[-1], dim=-1)
         if self.noise:
-            spread = x.float().std(dim=-1, keepdim=True)
-            x = x + (self.noise * spread * torch.randn_like(x, dtype=torch.float32)).to(x.dtype) * (x != 0)
+            spread = x.std(dim=-1, keepdim=True)
+            x = x + self.noise * spread * torch.randn_like(x) * (x != 0)
         return x
 
     @staticmethod
