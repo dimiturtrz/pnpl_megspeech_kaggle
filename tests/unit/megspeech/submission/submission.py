@@ -9,6 +9,7 @@ import torch
 from torch import nn
 
 from core.paths import ENV_OVERRIDE, DataRoot
+from megspeech.data.epochs import RATE
 from megspeech.data.runs import CHANNELS
 from megspeech.data.vocabulary import WORDS
 from megspeech.data.windows import Windows
@@ -106,8 +107,8 @@ class Cache:
     def build(self) -> None:
         self.built.append(True)
 
-    def windows(self, device: torch.device) -> Windows:
-        return Windows.stacked(torch.zeros(3, CHANNELS, 50, device=device))
+    def windows(self, device: torch.device, length: int) -> Windows:
+        return Windows.stacked(torch.zeros(3, CHANNELS, length, device=device))
 
 
 class Written:
@@ -140,7 +141,7 @@ def test_submit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "Submission", Written)
     monkeypatch.setattr(module, "HoldoutCache", Cache)
     root = cast("DataRoot", Root(tmp_path))
-    submitter = Submitter(Evaluator(torch.device("cpu")))
+    submitter = Submitter(Evaluator(torch.device("cpu")), 2 * RATE)
     path = submitter.submit(Constant(), root, torch.zeros(WORDS), 0.5, tmp_path / "s.npz")
     stored = np.load(path)
     assert stored["primary"].shape == (3, WORDS)

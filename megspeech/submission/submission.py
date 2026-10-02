@@ -86,13 +86,15 @@ class Submitter:
     """A model's holdout predictions, read through the same evaluator that scored it on validation."""
 
     evaluator: Evaluator
+    length: int
+    """The window in samples the model trained on."""
 
     def submit(self, model: nn.Module, root: DataRoot, log_prior: Float[Tensor, " v"], tau: float, path: Path) -> Path:
         """Context-head probabilities for every holdout row, logit-adjusted by `tau`, written as a submission."""
         holdout = LibriBrainCompetitionHoldout(TRACK, data_path=root.raw(), download=False)
         cache = HoldoutCache.of(root)
         cache.build()
-        split = Split.from_holdout(holdout, cache.windows(self.evaluator.device))
+        split = Split.from_holdout(holdout, cache.windows(self.evaluator.device, self.length))
         logits = self.evaluator.logits(model, split)[Head.CONTEXT]
         primary = torch.softmax(logits - tau * log_prior, dim=-1).cpu().numpy()
         secondary = np.tile(FrequencyPrior(Counter()).probabilities(list(SECONDARY.words)), (len(primary), 1))

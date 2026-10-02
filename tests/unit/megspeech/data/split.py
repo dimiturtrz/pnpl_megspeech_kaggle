@@ -43,7 +43,8 @@ def test_from_arrays() -> None:
 
 def test_of() -> None:
     spans = Spans.by_gap(np.array([0.0, 0.1, 9.0]))
-    windows = Windows(torch.zeros(CHANNELS, 100), torch.tensor([0, 10, 20]))
+    at = torch.tensor([0, 10, 20])
+    windows = Windows(torch.zeros(CHANNELS, 100), at, at + 50)
     held = Split.of(windows, (np.array([0, 1, 2]),) * 2, spans, np.array([1.0, 1.0, 3.0]))
     assert held.y.tolist() == [0, 1, 2]
     assert held.index.shape[0] == 2

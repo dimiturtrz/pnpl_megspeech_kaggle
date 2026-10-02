@@ -1,5 +1,6 @@
 """What a training run reads: which runs train and at what weight, cut from the continuous cache with validation."""
 
+import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -11,7 +12,9 @@ import torch
 from jaxtyping import Float
 
 from core.paths import DataRoot
+from core.tree import Tree
 from megspeech.data.continuous import DIRECTORY, Continuous
+from megspeech.data.epochs import RATE
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import Partition, Run
 from megspeech.data.split import Split
@@ -19,6 +22,9 @@ from megspeech.data.vocabulary import ABSENT, IGNORE, PRIMARY
 from megspeech.data.windows import Windows
 
 LOG = logging.getLogger(__name__)
+
+METRICS = "metrics.json"
+"""The record a finished run leaves in its directory, its config under `config`."""
 
 READ = frozenset({"TIMIT", "MOCHATIMIT"})
 """Tasks of read sentences, the holdout's domain; the rest is narrative (Sherlock, TheMoth)."""
@@ -37,6 +43,28 @@ class DataConfig:
     refit: bool = False
     """Train on the validation runs too, for a final fit of an already selected recipe; validation then scores
     words training heard, so it can no longer select."""
+    window: float = 1.0
+    """Seconds of MEG from each word's onset; a model is scored and submitted at the window it trained on."""
+
+    @classmethod
+    def saved(cls, directory: Path) -> "DataConfig":
+        """The data config a run in `directory` recorded; a record without one, or a flat one, falls to defaults."""
+        config = json.loads((directory / METRICS).read_text())["config"]
+        return Tree(cls).load(config.get("data", {}))
+
+    @classmethod
+    def window_of(cls, directories: Sequence[Path]) -> float:
+        """The one window the runs in `directories` trained on; members trained at different windows cannot share
+        one set of holdout windows."""
+        windows = {cls.saved(directory).window for directory in directories}
+        if len(windows) != 1:
+            raise ValueError(f"runs trained at windows {sorted(windows)}; an ensemble needs one")
+        return windows.pop()
+
+    @property
+    def samples(self) -> int:
+        """The window in samples at the cache's `RATE`."""
+        return round(self.window * RATE)
 
     def trains_on(self, run: Run) -> bool:
         trained = (Partition.TRAIN, Partition.VALIDATION) if self.refit else (Partition.TRAIN,)
@@ -62,8 +90,8 @@ class Corpus:
         weights = {r.name: data.read_weight if r.key[0] in READ else 1.0 for r in trained}
         chosen = words[words["run"].isin(weights)]
         weight = chosen["run"].map(weights).to_numpy(dtype=np.float64)
-        train = cls.split(source, chosen, data.grouping, weight).recurring(data.repeat_power)
-        validation = cls.domains(source, words, held, data.grouping)
+        train = cls.split(source, chosen, data, weight).recurring(data.repeat_power)
+        validation = cls.domains(source, words, held, data)
         heard = cls.heard(cache, runs, data.grouping)
         LOG.info("cache %.2f GB on %s", source.gigabytes, device)
         LOG.info("train %d words (%d labelled) / %d spans", len(train.y), len(train.labelled()), len(train.index))
@@ -80,20 +108,23 @@ class Corpus:
         return table.assign(target=target, token=token)[grouping.keep(target) & Continuous.inside(table)]
 
     @staticmethod
-    def split(source: Continuous, words: pd.DataFrame, grouping: Grouping, weight: Float[np.ndarray, " n"]) -> Split:
-        """`words` (rows of `source.words`) as a split whose windows are gathered from `source`'s device signal."""
-        at = torch.from_numpy(source.words["at"].to_numpy()[words.index.to_numpy()]).to(source.meg.device)
+    def split(source: Continuous, words: pd.DataFrame, data: DataConfig, weight: Float[np.ndarray, " n"]) -> Split:
+        """`words` (rows of `source.words`) as a split whose `data.window`-long windows are gathered from `source`'s
+        device signal, each stopped where `data.grouping` bounds it."""
+        windows = Windows(
+            source.meg, source.samples(words["at"]), source.samples(data.grouping.bound(words)), data.samples
+        )
         labels = (words["target"].to_numpy(), words["token"].to_numpy())
-        return Split.of(Windows(source.meg, at), labels, grouping.spans(words), weight)
+        return Split.of(windows, labels, data.grouping.spans(words), weight)
 
     @classmethod
     def domains(
-        cls, source: Continuous, words: pd.DataFrame, held: Sequence[Run], grouping: Grouping
+        cls, source: Continuous, words: pd.DataFrame, held: Sequence[Run], data: DataConfig
     ) -> dict[str, Split]:
         """The official validation runs' `words`, one split per task so each domain is scored alone."""
         tasks = {task: [r.name for r in held if r.key[0] == task] for task in sorted({r.key[0] for r in held})}
         chosen = {task: words[words["run"].isin(names)] for task, names in tasks.items()}
-        return {task: cls.split(source, rows, grouping, np.ones(len(rows))) for task, rows in chosen.items()}
+        return {task: cls.split(source, rows, data, np.ones(len(rows))) for task, rows in chosen.items()}
 
     @classmethod
     def heard(cls, cache: Path, runs: Sequence[Run], grouping: Grouping) -> pd.DataFrame:

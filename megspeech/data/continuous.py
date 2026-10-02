@@ -37,6 +37,11 @@ WORDS = "words.tsv"
 NO_SENTENCE = -1
 GB = 1e9
 
+TAIL = 1.0
+"""Seconds a holdout sentence epoch runs past its sentence's last word (`sentence_extra_end_s`), measured from the
+word's end: the epochs' tails after their last onset are never under 1.022 s, though one in nine training sentences
+ends on a vocabulary word whose tail from its onset would be exactly 1 s."""
+
 MISSING = [""]
 """The only missing cell: with pandas' default NA spellings a heard `None` or `null` would read as no word."""
 
@@ -92,21 +97,25 @@ class Decimator:
 
     @staticmethod
     def words(run: Run) -> pd.DataFrame:
-        """A run's heard words: onset in seconds into the run, the word as spoken, and its sentence in the run."""
+        """A run's heard words: onset in seconds into the run, the word as spoken, its sentence in the run, and the
+        `end` its window stops at — `TAIL` after its sentence's last word ends, as a holdout sentence epoch does."""
         events = pd.read_csv(
             run.events,
             sep="\t",
-            usecols=["kind", "segment", "sentenceidx", "timemeg"],
+            usecols=["kind", "segment", "sentenceidx", "timemeg", "duration"],
             keep_default_na=False,
             na_values=MISSING,
         )
         heard = events[(events["kind"] == "word") & events["segment"].notna()]
+        sentence = heard["sentenceidx"].fillna(NO_SENTENCE).to_numpy(dtype=np.int64)
+        finish = (heard["timemeg"] + heard["duration"].fillna(0.0)).groupby(sentence).transform("max")
         return pd.DataFrame(
             {
                 "run": run.name,
                 "onset": heard["timemeg"].to_numpy(dtype=np.float64),
                 "word": heard["segment"].to_numpy(),
-                "sentence": heard["sentenceidx"].fillna(NO_SENTENCE).to_numpy(dtype=np.int64),
+                "sentence": sentence,
+                "end": finish.to_numpy(dtype=np.float64) + TAIL,
             }
         )
 
@@ -125,7 +134,8 @@ class Decimator:
 class Continuous:
     """Cached runs end to end in one device tensor: run `i` is `meg[:, offsets[i]:offsets[i + 1]]`.
 
-    `words` is the word table restricted to the loaded runs, with `at` the word's onset sample in `meg`.
+    `words` is the word table restricted to the loaded runs, with `start` its run's first sample in `meg` and
+    `at` the word's onset sample there.
     """
 
     meg: Float[Tensor, "c t"]
@@ -143,13 +153,15 @@ class Continuous:
         for begin, signal in zip(offsets, stored, strict=False):
             meg[:, begin : begin + signal.shape[1]] = torch.from_numpy(np.array(signal))
         words = cls.table(cache, chosen)
-        words["at"] = words["run"].map(dict(zip(chosen, offsets[:-1].tolist(), strict=True))) + words["sample"]
+        words["start"] = words["run"].map(dict(zip(chosen, offsets[:-1].tolist(), strict=True)))
+        words["at"] = words["start"] + words["sample"]
         return cls(meg, offsets, chosen, words)
 
     @staticmethod
     def table(cache: Path, names: Sequence[str]) -> pd.DataFrame:
-        """The named runs' words, run by run in `names` order, with each word's onset `sample` in its run and the
-        run's length in `samples` — read from the cache's headers, so no signal is loaded."""
+        """The named runs' words, run by run in `names` order, with each word's onset `sample` in its run, the
+        run's length in `samples` — read from the cache's headers, so no signal is loaded — and the exclusive
+        `stop` sample of its `end`, never before its 1 s window nor past its run."""
         samples = {name: np.load(cache / f"{name}.npy", mmap_mode="r").shape[1] for name in names}
         table = pd.read_csv(cache / WORDS, sep="	", keep_default_na=False, na_values=MISSING)
         table = table[table["run"].isin(samples)]
@@ -157,6 +169,8 @@ class Continuous:
         table = table.iloc[np.argsort(order, kind="stable")].reset_index(drop=True)
         table["sample"] = np.round(table["onset"] * RATE).astype(np.int64)
         table["samples"] = table["run"].map(samples).astype(np.int64)
+        stop = np.round(table["end"].to_numpy() * RATE).astype(np.int64)
+        table["stop"] = np.minimum(np.maximum(stop, table["sample"] + RATE), table["samples"])
         return table
 
     @staticmethod
@@ -165,11 +179,15 @@ class Continuous:
         begin = table["sample"].to_numpy() + offset
         return (begin >= 0) & (begin + length <= table["samples"].to_numpy())
 
-    def windows(self) -> Windows:
-        """Every word of `words`, in its order, as a window gathered from `meg`."""
+    def windows(self, length: int = RATE) -> Windows:
+        """Every word of `words`, in its order, as a `length`-sample window gathered from `meg`, ending at `stop`."""
         return Windows(
-            self.meg, torch.from_numpy(self.words["at"].to_numpy(dtype=np.int64, copy=True)).to(self.meg.device)
+            self.meg, self.samples(self.words["at"]), self.samples(self.words["start"] + self.words["stop"]), length
         )
+
+    def samples(self, column: pd.Series) -> Int[Tensor, " n"]:
+        """A word-table column of sample indices into `meg`, on its device."""
+        return torch.from_numpy(column.to_numpy(dtype=np.int64, copy=True)).to(self.meg.device)
 
     @property
     def gigabytes(self) -> float:

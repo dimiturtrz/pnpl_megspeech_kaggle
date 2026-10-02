@@ -12,6 +12,8 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
+from megspeech.data.corpus import METRICS
+from megspeech.data.epochs import RATE
 from megspeech.data.runs import CHANNELS, Run
 from megspeech.data.spans import Spans
 from megspeech.data.split import DENSE, Split
@@ -40,7 +42,7 @@ def validation() -> dict[str, Split]:
 
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    written: list[Path] = []
+    written: list[tuple[int, Path]] = []
     train = Run(tmp_path / "sub-0_ses-1_task-Sherlock1_run-1_meg.h5")
     devices = SimpleNamespace(device=lambda _: CPU, tensor=torch.tensor, ones=torch.ones)
     monkeypatch.setattr(module, "torch", devices)
@@ -53,11 +55,16 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module.Corpus, "words", staticmethod(lambda table, _: table))
     monkeypatch.setattr(module.Corpus, "domains", classmethod(lambda *_: validation()))
     monkeypatch.setattr(module.Ensemble, "load", classmethod(lambda *_: Constant()))
-    monkeypatch.setattr(module.Submitter, "submit", lambda _self, *args: written.append(args[-1]))
+    monkeypatch.setattr(module.Submitter, "submit", lambda self, *args: written.append((self.length, args[-1])))
+    for name in ("a", "b"):
+        member = DataRoot(tmp_path).models() / name
+        member.mkdir(parents=True)
+        (member / METRICS).write_text(json.dumps({"config": {"data": {"window": 2.0}}}))
     monkeypatch.setattr(sys, "argv", ["ensemble", "--out", "both", "a", "b"])
     main()
     out = DataRoot(tmp_path).models() / "both"
-    metrics = json.loads((out / "metrics.json").read_text())
+    metrics = json.loads((out / METRICS).read_text())
     assert metrics["members"] == ["a", "b"]
+    assert metrics["config"]["data"]["window"] == 2.0
     assert set(metrics["best"]["domains"]) == {"Sherlock1"}
-    assert written == [out / "submission.csv"]
+    assert written == [(2 * RATE, out / "submission.csv")]

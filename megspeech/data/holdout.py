@@ -104,7 +104,8 @@ class Archive:
         return path
 
     def words(self, decimator: Decimator) -> pd.DataFrame:
-        """The archive's words in canonical order as a `continuous` word table, each onset in seconds into the run.
+        """The archive's words in canonical order as a `continuous` word table, each onset in seconds into the run
+        and its `end` at its epoch's.
 
         A word's sample is its onset rounded within its own epoch, as a training word's is within its run; the
         onset is then stored on that sample, so offsetting by the epoch's start cannot tip a half-sample tie."""
@@ -117,7 +118,8 @@ class Archive:
         if ((begin < 0) | (begin + RATE > kept[epoch])).any():
             raise ValueError(f"{self.name}: a word's window runs past its epoch")
         at = (start[epoch] + begin) / RATE
-        return pd.DataFrame({"run": self.name, "onset": at, "word": "", "sentence": epoch})
+        end = (start + kept)[epoch] / RATE
+        return pd.DataFrame({"run": self.name, "onset": at, "word": "", "sentence": epoch, "end": end})
 
 
 @dataclass(frozen=True)
@@ -145,25 +147,32 @@ class HoldoutCache:
         table.to_csv(cache / WORDS, sep="\t", index=False)
         return table
 
-    def windows(self, device: torch.device | str) -> Windows:
-        """Every holdout row's window, in canonical order, from the built cache."""
-        return Continuous.load(self.decimator.cache, device, [archive.name for archive in self.archives()]).windows()
+    def windows(self, device: torch.device | str, length: int = RATE) -> Windows:
+        """Every holdout row's `length`-sample window, in canonical order, from the built cache."""
+        names = [archive.name for archive in self.archives()]
+        return Continuous.load(self.decimator.cache, device, names).windows(length)
 
 
 def main() -> None:
-    """Cache the Deep holdout, then report its windows' shape, count against the holdout's rows, and finite share."""
+    """Cache the Deep holdout, then report its windows' shape, count against the holdout's rows, finite share, and
+    the share of samples zeroed past their epoch's end."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--window", type=float, default=1.0, help="window length in seconds")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
     cache = HoldoutCache.of(root)
     cache.build()
     rows = len(LibriBrainCompetitionHoldout(TRACK, data_path=root.raw(), download=False))
-    windows = cache.windows(args.device)
+    windows = cache.windows(args.device, round(args.window * RATE))
     x = windows(torch.arange(len(windows), device=windows.device))
     finite = float(torch.isfinite(x).float().mean())
-    LOG.info("%d windows of %s for %d holdout rows, finite %.6f", len(windows), tuple(x.shape[1:]), rows, finite)
+    zeroed = float((x == 0).all(dim=1).float().mean())
+    shape = tuple(x.shape[1:])
+    LOG.info(
+        "%d windows of %s for %d holdout rows, finite %.6f, zeroed %.6f", len(windows), shape, rows, finite, zeroed
+    )
 
 
 if __name__ == "__main__":

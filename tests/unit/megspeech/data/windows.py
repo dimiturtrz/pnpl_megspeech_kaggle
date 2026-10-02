@@ -10,7 +10,7 @@ from scipy.signal import resample_poly
 
 from megspeech.data import continuous
 from megspeech.data.continuous import RATE, Continuous, Decimator
-from megspeech.data.corpus import Corpus
+from megspeech.data.corpus import Corpus, DataConfig
 from megspeech.data.epochs import DECIMATE, PICO, SFREQ, WINDOW
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import Run
@@ -27,7 +27,8 @@ HALF_ULP = 2.0**-11
 
 def signal(length: int = 8) -> Windows:
     meg = torch.arange(2 * length, dtype=torch.float32).reshape(2, length)
-    return Windows(meg, torch.tensor([0, 2, 4]), length=3, offset=1)
+    at = torch.tensor([0, 2, 4])
+    return Windows(meg, at, at + 4, length=3, offset=1)
 
 
 def test_stacked() -> None:
@@ -47,6 +48,19 @@ def test_call() -> None:
     assert cut.shape == (2, 2, 3)
     assert cut[0, 1].tolist() == [-1.0, 0.0, 1.0]
     assert cut[1].tolist() == [[-1.0, 0.0, 1.0]] * 2
+    bounded = Windows(windows.meg, windows.at, torch.tensor([3, 8, 8]), length=3, offset=1)
+    assert bounded(torch.tensor([0]))[0, 0].tolist() == [-0.5, 0.5, 0.0]
+
+
+def test_call_bounded_past_the_window_is_the_plain_centred_cut() -> None:
+    """Every bound at or past its window's end: bit for bit the cut centred by its plain mean, in float16 too."""
+    meg = torch.randn(5, 400, generator=torch.Generator().manual_seed(0)).half()
+    at = torch.tensor([0, 37, 150, 349])
+    words = torch.tensor([3, 0, 2, 1])
+    cut = meg[:, at[words, None] + torch.arange(RATE)].transpose(0, 1).float()
+    plain = (cut - cut.mean(dim=-1, keepdim=True)).half()
+    assert torch.equal(Windows(meg, at, at + RATE)(words), plain)
+    assert torch.equal(Windows(meg, at, torch.full_like(at, 400))(words), plain)
 
 
 def recording(root: Path) -> tuple[Run, list[tuple[str, float]]]:
@@ -69,9 +83,9 @@ def recording(root: Path) -> tuple[Run, list[tuple[str, float]]]:
         ("i", 4.013),
     ]
     heard += [("to", SECONDS - 1.0), ("was", SECONDS - 0.5)]
-    rows = [("word", word, 0, onset) for word, onset in heard]
+    rows = [("word", word, 0, onset, 0.2) for word, onset in heard]
     run.events.parent.mkdir(parents=True)
-    columns = ["kind", "segment", "sentenceidx", "timemeg"]
+    columns = ["kind", "segment", "sentenceidx", "timemeg", "duration"]
     pd.DataFrame(rows, columns=columns).to_csv(run.events, sep="\t", index=False)
     return run, heard
 
@@ -89,7 +103,9 @@ def test_call_reproduces_the_epoch_window(tmp_path: Path, monkeypatch: pytest.Mo
     Decimator(tmp_path / "cache").build([run])
     source = Continuous.load(tmp_path / "cache", "cpu")
     words = Corpus.words(source.words, Grouping.GAP)
-    gathered = Corpus.split(source, words, Grouping.GAP, np.ones(len(words))).windows(torch.arange(len(words)))
+    gathered = Corpus.split(source, words, DataConfig(grouping=Grouping.GAP), np.ones(len(words))).windows(
+        torch.arange(len(words))
+    )
 
     with h5py.File(run.meg) as stored:
         raw = stored["data"][:]
