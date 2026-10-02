@@ -28,6 +28,11 @@ class OptimConfig:
     """Weight of the semantic auxiliary (`megspeech.training.auxiliary`): every heard word's window, the ~60% outside
     the 50 included, SigLIP-aligned to the word's t5-large layer-12 embedding, d'Ascoli et al.'s objective. It
     supervises ~2.5x the windows the heads see; 0 trains the heads alone and never reads the lexicon."""
+    balance: float = 0.0
+    """Class-weight exponent of the cross-entropies: each class weighs `count ** -balance` over the training labels,
+    mean 1, so 0.5 is 1/sqrt(count) (the PNPL 2025 phoneme winner's). The metric is balanced accuracy, and the
+    ruler's `tau` already corrects the class prior after training (Menon et al. 2021 logit adjustment); balancing
+    during training overlaps it, so an arm asks whether it adds beyond `tau`. SigLIP's context loss is unweighted."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
 

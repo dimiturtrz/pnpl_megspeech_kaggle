@@ -28,3 +28,5 @@ def test_loss(objective: Objective) -> None:
     assert objective.loss(right, y, 0.0) < objective.loss(-right, y, 0.0)
     padded = torch.cat([right, torch.randn(1, WORDS)])
     assert torch.allclose(objective.loss(padded, torch.tensor([3, 7, IGNORE]), 0.1), objective.loss(right, y, 0.1))
+    ones = torch.ones(WORDS)
+    assert torch.allclose(objective.loss(right, y, 0.1, ones), objective.loss(right, y, 0.1))

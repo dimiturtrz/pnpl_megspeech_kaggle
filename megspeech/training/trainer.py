@@ -15,7 +15,7 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.data.corpus import Corpus
 from megspeech.data.split import Split
-from megspeech.data.vocabulary import IGNORE
+from megspeech.data.vocabulary import IGNORE, WORDS
 from megspeech.evaluation.report import Epoch, Evaluator
 from megspeech.model.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.sentence import SentenceNet
@@ -37,6 +37,7 @@ class Step:
     schedule: torch.optim.lr_scheduler.LRScheduler
     rows: int
     ema: Ema
+    weight: Float[Tensor, " v"] | None = None
 
 
 @dataclass
@@ -73,6 +74,14 @@ class Trainer:
         fused = self.evaluator.device.type == "cuda"
         return torch.optim.AdamW(model.parameters(), lr=optim.lr, weight_decay=optim.weight_decay, fused=fused)
 
+    def balanced(self, y: Int[Tensor, " n"]) -> Float[Tensor, " v"] | None:
+        """Each class's cross-entropy weight, `count ** -balance` over the labelled `y`, mean 1 over the classes
+        present and 0 for the absent; None at balance 0, the unweighted loss itself."""
+        counts = torch.bincount(y[y != IGNORE], minlength=WORDS).float()
+        present = counts > 0
+        weight = torch.where(present, counts.clamp(min=1).pow(-self.config.optim.balance), 0.0)
+        return weight / weight[present].mean() if self.config.optim.balance else None
+
     def step(self, state: Step, train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, ""]:
         """One optimiser step on the words of `spans`; returns the loss without syncing it to the host."""
         batch = train.batch(spans, state.rows, self.config.augment.jitter)
@@ -83,8 +92,10 @@ class Trainer:
                 self.config.context.objective,
                 batch.target(train.y),
             )
-            value = objective.loss(context.flatten(0, 1), y.flatten(), smoothing) + nn.functional.cross_entropy(
-                word.flatten(0, 1), y.flatten(), ignore_index=IGNORE, label_smoothing=smoothing
+            value = objective.loss(
+                context.flatten(0, 1), y.flatten(), smoothing, state.weight
+            ) + nn.functional.cross_entropy(
+                word.flatten(0, 1), y.flatten(), weight=state.weight, ignore_index=IGNORE, label_smoothing=smoothing
             )
             value = value + self.auxiliary.loss(state.model, extra, batch.target(train.token))
         state.optimizer.zero_grad(set_to_none=True)
@@ -105,7 +116,9 @@ class Trainer:
         optimizer = self.optimizer(model)
         per_epoch = math.ceil(len(train.index) / optim.batch)
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, optim.lr, total_steps=optim.epochs * per_epoch)
-        state = Step(model, optimizer, schedule, train.capacity(optim.batch), Ema.of(model, optim.ema))
+        state = Step(
+            model, optimizer, schedule, train.capacity(optim.batch), Ema.of(model, optim.ema), self.balanced(train.y)
+        )
         history: list[Epoch] = []
         best_state = net.state_dict()
         for epoch in range(optim.epochs):

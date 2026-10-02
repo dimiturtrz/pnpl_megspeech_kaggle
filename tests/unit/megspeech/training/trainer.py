@@ -12,7 +12,7 @@ from megspeech.data.corpus import Corpus
 from megspeech.data.runs import CHANNELS
 from megspeech.data.spans import Spans
 from megspeech.data.split import DENSE, Split
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.vocabulary import IGNORE, WORDS
 from megspeech.evaluation.report import Evaluator
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.heads import DIM
@@ -74,6 +74,16 @@ def test_optimizer() -> None:
     assert not optimizer.defaults["fused"]
 
 
+def test_balanced() -> None:
+    y = torch.tensor([0, 0, 0, 0, 1, IGNORE])
+    assert trainer(RunConfig()).balanced(y) is None
+    weight = trainer(RunConfig(optim=OptimConfig(balance=0.5))).balanced(y)
+    assert weight is not None
+    assert weight.shape == (WORDS,)
+    assert torch.allclose(weight[:2], torch.tensor([2 / 3, 4 / 3]))
+    assert weight[2:].eq(0).all()
+
+
 def test_step() -> None:
     made = trainer(RunConfig())
     model = made.model(split())
@@ -107,6 +117,8 @@ def test_fit() -> None:
     )
     net, _ = made.fit(train, {"a": split(seed=1)}, torch.zeros(WORDS))
     assert isinstance(net, SentenceNet)
+    balanced = trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, balance=0.5)))
+    assert isinstance(balanced.fit(split(), {"a": split(seed=1)}, torch.zeros(WORDS))[0], SentenceNet)
     with pytest.raises(FloatingPointError):
         trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, lr=math.inf))).fit(
             split(), {"a": split(seed=1)}, torch.zeros(WORDS)

@@ -47,13 +47,22 @@ class Objective(StrEnum):
         anchors = torch.zeros(WORDS, DIM) if prototypes is None else prototypes
         return nn.Linear(width, WORDS) if self is Objective.SOFTMAX else CosineHead(width, anchors)
 
-    def loss(self, logits: Float[Tensor, "n v"], y: Int[Tensor, " n"], smoothing: float) -> Float[Tensor, ""]:
+    def loss(
+        self,
+        logits: Float[Tensor, "n v"],
+        y: Int[Tensor, " n"],
+        smoothing: float,
+        weight: Float[Tensor, " v"] | None = None,
+    ) -> Float[Tensor, ""]:
         """Softmax cross-entropy, or SigLIP's per-pair sigmoid loss summed over the 50 candidates.
 
-        Rows labelled `IGNORE` are padding: they add nothing and do not count toward the mean.
+        Rows labelled `IGNORE` are padding: they add nothing and do not count toward the mean. `weight` scales each
+        class's rows in the cross-entropy; SigLIP scores every candidate per row and ignores it.
         """
         if self is Objective.SOFTMAX:
-            return functional.cross_entropy(logits.float(), y, ignore_index=IGNORE, label_smoothing=smoothing)
+            return functional.cross_entropy(
+                logits.float(), y, weight=weight, ignore_index=IGNORE, label_smoothing=smoothing
+            )
         keep = (y != IGNORE).float()
         target = functional.one_hot(y.clamp(min=0), logits.shape[-1]).float()
         pairs = functional.binary_cross_entropy_with_logits(logits.float(), target, reduction="none").sum(-1)
