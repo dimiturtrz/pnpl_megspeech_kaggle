@@ -80,10 +80,11 @@ def test_novel() -> None:
 
 
 def test_recurring() -> None:
-    epochs = Epochs(np.zeros((4, CHANNELS, SAMPLES), np.float32), np.array([0, 1, 0, 1]), np.array([0, 0.1, 9, 9.1]))
-    twice = Split.gather([(epochs, 1.0)], CPU)
-    assert twice.recurring(1.0).weight.tolist() == [0.5] * 4
-    assert twice.recurring(0.0).weight.tolist() == [1.0] * 4
+    onset = np.array([0, 0.1, 0.2, 9, 9.1, 9.2, 20, 20.1, 30, 30.1])
+    y = np.array([0, 1, 2, 0, 1, 2, 3, 4, 3, 4])
+    twice = Split.gather([(Epochs(np.zeros((10, CHANNELS, SAMPLES), np.float32), y, onset), 1.0)], CPU)
+    assert twice.recurring(1.0).weight.tolist() == [0.5] * 6 + [1.0] * 4
+    assert twice.recurring(0.0).weight.tolist() == [1.0] * 10
 
 
 def test_batch() -> None:

@@ -49,6 +49,9 @@ DENSE = 4
 """Validation spans this long or longer look like holdout sentences (94% of which carry 4-9 words)."""
 
 
+RECITED = 3
+"""Spans this long recur only when a sentence is replayed; 2-word pairs of 50 words (2500) recur by chance."""
+
 READ = frozenset({"TIMIT", "MOCHATIMIT"})
 """Tasks of read sentences, the holdout's domain; the rest is narrative (Sherlock, TheMoth)."""
 
@@ -220,7 +223,7 @@ class Split:
         return torch.from_numpy(np.concatenate([np.empty(0, np.int64), *keep])).to(self.y.device)
 
     def recurring(self, power: float) -> "Split":
-        """Each span's words reweighted by how often training repeats its label sequence, to the `-power`."""
+        """Each recited span's words reweighted by how often training repeats its label sequence, to the `-power`."""
         index = self.index.cpu().numpy()
         labels = self.y.cpu().numpy()
         rows = [row[row != PAD] for row in index]
@@ -228,7 +231,7 @@ class Split:
         counts = Counter(sequences)
         scale = np.ones(len(labels))
         for row, sequence in zip(rows, sequences, strict=True):
-            scale[row] = counts[sequence] ** -power
+            scale[row] = counts[sequence] ** -power if len(row) >= RECITED else 1.0
         return replace(self, weight=self.weight * torch.from_numpy(scale).float().to(self.weight.device))
 
     def dense(self) -> Int[Tensor, " d"]:
