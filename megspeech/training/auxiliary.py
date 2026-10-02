@@ -38,7 +38,8 @@ class Auxiliary(ABC):
         if optim.semantic:
             terms.append(Aligned(optim.semantic, Lexicon.load(Lexicon.path(root)).to(device)))
         if optim.phonetic:
-            terms.append(Pronounced(optim.phonetic, Pronunciation.load(Pronunciation.path(root)).to(device)))
+            pronunciation = Pronunciation.load(Pronunciation.path(root)).to(device)
+            terms.append(Pronounced(optim.phonetic, pronunciation, optim.positions))
         return Joint(tuple(terms)) if terms else Silent()
 
 

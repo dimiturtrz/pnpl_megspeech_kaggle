@@ -19,7 +19,7 @@ def aligned() -> Aligned:
 
 
 def pronounced() -> Pronounced:
-    return Pronounced(0.5, Pronunciation(torch.tensor([10, 20]), torch.tensor([3, 7])))
+    return Pronounced(0.5, Pronunciation(torch.tensor([10, 20]), torch.tensor([[3, 1], [7, -1]])))
 
 
 def test_aligned_head() -> None:
@@ -28,6 +28,8 @@ def test_aligned_head() -> None:
 
 def test_pronounced_head() -> None:
     assert pronounced().head(16)(torch.zeros(2, 16)).shape == (2, len(PHONEMES))
+    spelled = Pronounced(0.5, pronounced().pronunciation, 2)
+    assert spelled.head(16)(torch.zeros(2, 16)).shape == (2, 2 * len(PHONEMES))
 
 
 def test_aligned_loss() -> None:
@@ -48,3 +50,14 @@ def test_pronounced_loss() -> None:
     head = rule.head(16)
     assert rule.loss(head, logits, TOKENS).item() == pytest.approx(0.5 * math.log(len(PHONEMES)))
     assert rule.loss(head, logits, torch.full((2, 3), 99)).item() == 0.0
+
+
+def test_pronounced_loss_positions() -> None:
+    """Two positions: the second is known for token 10 only, so 3 known rows of 6 average to log(39)."""
+    rule = Pronounced(1.0, pronounced().pronunciation, 2)
+    logits = torch.zeros(2, 3, 2 * len(PHONEMES))
+    assert rule.loss(rule.head(16), logits, TOKENS).item() == pytest.approx(math.log(len(PHONEMES)))
+    sure = torch.full((1, 1, 2 * len(PHONEMES)), -50.0)
+    sure[0, 0, 3] = 50.0
+    sure[0, 0, len(PHONEMES) + 1] = 50.0
+    assert rule.loss(rule.head(16), sure, torch.tensor([[10]])).item() == pytest.approx(0.0, abs=1e-6)

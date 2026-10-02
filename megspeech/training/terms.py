@@ -8,7 +8,7 @@ from typing import cast, override
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 
-from megspeech.data.phonemes import Pronunciation
+from megspeech.data.phonemes import PHONEMES, Pronunciation
 from megspeech.objective.phonetic import Phonetic
 from megspeech.objective.prototypes import Lexicon
 from megspeech.objective.semantic import Semantic
@@ -45,15 +45,18 @@ class Aligned(Term):
 
 @dataclass(frozen=True)
 class Pronounced(Term):
-    """Every heard word's window, in or out of the 50, classified into its first phoneme (`Phonetic`)."""
+    """Every heard word's window, in or out of the 50, classified into its first `positions` phonemes
+    (`Phonetic`)."""
 
     weight: float
     pronunciation: Pronunciation
+    positions: int = 1
 
     @override
     def head(self, width: int) -> nn.Module:
-        return Phonetic(width).to(self.pronunciation.first.device)
+        return Phonetic(width, self.positions).to(self.pronunciation.spelled.device)
 
     @override
     def loss(self, head: nn.Module, output: Float[Tensor, "g w _"], tokens: Int[Tensor, "g w"]) -> Float[Tensor, ""]:
-        return self.weight * Phonetic.loss(output.flatten(0, 1), self.pronunciation.phonemes(tokens).flatten())
+        spelled = self.pronunciation.phonemes(tokens)[..., : self.positions]
+        return self.weight * Phonetic.loss(output.reshape(-1, len(PHONEMES)), spelled.flatten())

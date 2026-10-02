@@ -44,7 +44,8 @@ def joint(train: Split) -> Joint:
     """Every token of `train` in the lexicon and the pronunciations but its first."""
     keys = train.token.unique()[1:]
     lexicon = Lexicon(keys, torch.randn(len(keys), DIM, generator=torch.Generator().manual_seed(0)))
-    return Joint((Aligned(1.0, lexicon), Pronounced(1.0, Pronunciation(keys, torch.arange(len(keys)) % 3))))
+    spelled = (torch.arange(len(keys)) % 3).unsqueeze(-1)
+    return Joint((Aligned(1.0, lexicon), Pronounced(1.0, Pronunciation(keys, spelled))))
 
 
 def test_of(tmp_path: Path) -> None:

@@ -47,7 +47,7 @@ def aligned() -> Aligned:
 
 
 def pronounced() -> Pronounced:
-    return Pronounced(0.5, Pronunciation(torch.tensor([10, 20]), torch.tensor([3, 7])))
+    return Pronounced(0.5, Pronunciation(torch.tensor([10, 20]), torch.tensor([[3, 1], [7, -1]])))
 
 
 def identity(model: nn.Module) -> nn.Module:
@@ -104,3 +104,5 @@ def test_of(tmp_path: Path) -> None:
     assert isinstance(both, Joint)
     assert [type(t) for t in both.terms] == [Aligned, Pronounced]
     assert cast("Pronounced", both.terms[1]).weight == 1.0
+    spelled = Auxiliary.of(OptimConfig(phonetic=1.0, positions=2), root, CPU)
+    assert cast("Pronounced", cast("Joint", spelled).terms[0]).positions == 2

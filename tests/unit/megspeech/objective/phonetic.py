@@ -12,6 +12,7 @@ GENERATOR = torch.Generator().manual_seed(0)
 
 def test_forward() -> None:
     assert Phonetic(WIDTH).forward(torch.randn(2, 3, WIDTH, generator=GENERATOR)).shape == (2, 3, len(PHONEMES))
+    assert Phonetic(WIDTH, 4).forward(torch.randn(2, WIDTH, generator=GENERATOR)).shape == (2, 4 * len(PHONEMES))
 
 
 def test_loss() -> None:
