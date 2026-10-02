@@ -38,6 +38,14 @@ def test_embed_kernels_and_segments() -> None:
     assert net.forward(x).shape == (3, WORDS)
 
 
+def test_embed_ssm_appends_one_layer() -> None:
+    net = WordNet(ConvConfig(hidden=8, dilations=(1, 2), ssm=4))
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    assert len(net.blocks) == 3
+    assert net.embed(x).shape == (3, 2 * 8)
+    assert len(WordNet(SMALL).blocks) == 2
+
+
 def test_conv_config_rejects_even_kernel() -> None:
     with pytest.raises(ValueError, match="odd"):
         ConvConfig(kernels=(3, 4))

@@ -10,6 +10,7 @@ from torch import Tensor, nn
 from megspeech.data.runs import CHANNELS
 from megspeech.data.vocabulary import WORDS
 from megspeech.model.block import Block
+from megspeech.model.ssm import Ssm
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,8 @@ class ConvConfig:
     BrainWatson's MEGState 5.3 BAcc points (LibriBrain 2025 phoneme track). Odd, so each keeps the time axis."""
     segments: int = 1
     """Equal time chunks the readout pools mean and max over; more keep when in the window the response came."""
+    ssm: int = 0
+    """Modes per direction of a bidirectional state-space layer after the convolutions; 0 adds none."""
 
     def __post_init__(self) -> None:
         if any(kernel % 2 == 0 for kernel in self.kernels):
@@ -38,6 +41,8 @@ class WordNet(nn.Module):
         self.width = 2 * config.hidden * config.segments
         self.spatial = nn.Conv1d(CHANNELS, config.hidden, 1)
         self.blocks = nn.ModuleList(Block(config.hidden, d, config.dropout, config.kernels) for d in config.dilations)
+        if config.ssm:
+            self.blocks.append(Ssm(config.hidden, config.ssm, config.dropout))
         self.head = nn.Sequential(nn.Dropout(config.dropout), nn.Linear(self.width, WORDS))
 
     def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:
