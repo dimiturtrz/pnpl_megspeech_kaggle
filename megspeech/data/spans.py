@@ -1,8 +1,10 @@
 """Spans of words heard together: the unit the context model reads.
 
 A holdout sentence is a run of vocabulary words only — onset gaps p50 0.21 s, max 0.92 s, at most nine
-words. Training spans are cut to match: consecutive vocabulary words of one run whose onset gaps stay within
-the holdout's widest gap, chunked to nine.
+words (`word_onsets_s` is `(N_sent, 9)` in `pnpl.competition.holdout`). Training spans are cut one of two ways:
+by gap, consecutive vocabulary words of one run whose onset gaps stay within the holdout's widest gap, chunked
+to nine; or by sentence, every word of one PNPL sentence (`sentenceidx`, as pnpl's `LibriBrainSentence`
+groups them), a sentence longer than nine split into the fewest near-equal pieces.
 """
 
 from dataclasses import dataclass
@@ -47,6 +49,24 @@ class Spans:
         position = np.arange(len(onset)) - np.flatnonzero(new)[segment]
         span = np.cumsum(position % MAX_WORDS == 0) - 1
         return cls.assemble(span, position % MAX_WORDS, onset)
+
+    @classmethod
+    def by_sentence(cls, group: Int[np.ndarray, " n"], onset: Float[np.ndarray, " n"]) -> "Spans":
+        """One span per run of equal consecutive `group` codes, cut into `ceil(n / MAX_WORDS)` near-equal pieces.
+
+        Equal pieces rather than nines-then-a-remainder: a 10-word sentence is 5 + 5, not 9 + 1, so no span
+        loses its context to a cut.
+        """
+        new = np.r_[True, group[1:] != group[:-1]][: len(group)]
+        sentence = np.cumsum(new) - 1
+        first = np.flatnonzero(new)
+        sizes = np.diff(np.r_[first, len(group)])
+        cuts = -(-sizes // MAX_WORDS)
+        size, pieces = sizes[sentence], cuts[sentence]
+        position = np.arange(len(group)) - first[sentence]
+        piece = position * pieces // size
+        start = -(-piece * size // pieces)
+        return cls.assemble(np.r_[0, np.cumsum(cuts)][sentence] + piece, position - start, onset)
 
     @classmethod
     def by_key(cls, keys: pd.DataFrame, onset: Float[np.ndarray, " n"]) -> "Spans":

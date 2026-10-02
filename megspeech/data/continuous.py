@@ -1,10 +1,9 @@
 """Every subject-0 run as one continuous 50 Hz recording, cached in float16 and loaded whole onto the GPU.
 
-The epoch cache fixes each window at a word onset; a continuous copy lets windows be cut on the fly at any
-offset and length. The recordings are 250 Hz and already low-passed at 125 Hz; d'Ascoli 2025 decode at 50 Hz,
-and 250 / 50 = 5 is an integer, so `resample_poly(x, 1, 5)` is a pure polyphase decimation whose FIR filter
-removes everything above the new 25 Hz Nyquist before keeping every fifth sample — the same `DECIMATE` the
-epoch windows use.
+A continuous copy lets word windows be gathered on the device at any offset and length (`windows.Windows`).
+The recordings are 250 Hz and already low-passed at 125 Hz; d'Ascoli 2025 decode at 50 Hz, and 250 / 50 = 5
+is an integer, so `resample_poly(x, 1, 5)` is a pure polyphase decimation whose FIR filter removes everything
+above the new 25 Hz Nyquist before keeping every fifth sample — the same `DECIMATE` the holdout windows use.
 
     uv run python -m megspeech.data.continuous     # cache every downloaded run under processed/continuous50
 """
@@ -21,7 +20,7 @@ import h5py
 import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Bool, Float, Int
 from scipy.signal import resample_poly
 from torch import Tensor
 
@@ -125,11 +124,28 @@ class Continuous:
         meg = torch.empty((stored[0].shape[0], int(offsets[-1])), dtype=torch.float16, device=device)
         for begin, signal in zip(offsets, stored, strict=False):
             meg[:, begin : begin + signal.shape[1]] = torch.from_numpy(np.array(signal))
-        start = dict(zip(chosen, offsets[:-1].tolist(), strict=True))
-        table = pd.read_csv(cache / WORDS, sep="\t", keep_default_na=False, na_values=MISSING)
-        words = table[table["run"].isin(start)].reset_index(drop=True)
-        words["at"] = words["run"].map(start) + np.round(words["onset"] * RATE).astype(np.int64)
+        words = cls.table(cache, chosen)
+        words["at"] = words["run"].map(dict(zip(chosen, offsets[:-1].tolist(), strict=True))) + words["sample"]
         return cls(meg, offsets, chosen, words)
+
+    @staticmethod
+    def table(cache: Path, names: Sequence[str]) -> pd.DataFrame:
+        """The named runs' words, run by run in `names` order, with each word's onset `sample` in its run and the
+        run's length in `samples` — read from the cache's headers, so no signal is loaded."""
+        samples = {name: np.load(cache / f"{name}.npy", mmap_mode="r").shape[1] for name in names}
+        table = pd.read_csv(cache / WORDS, sep="	", keep_default_na=False, na_values=MISSING)
+        table = table[table["run"].isin(samples)]
+        order = table["run"].map({name: position for position, name in enumerate(names)}).to_numpy()
+        table = table.iloc[np.argsort(order, kind="stable")].reset_index(drop=True)
+        table["sample"] = np.round(table["onset"] * RATE).astype(np.int64)
+        table["samples"] = table["run"].map(samples).astype(np.int64)
+        return table
+
+    @staticmethod
+    def inside(table: pd.DataFrame, length: int = RATE, offset: int = 0) -> Bool[np.ndarray, " n"]:
+        """Words whose window of `length` samples, `offset` after the onset, lies wholly within their run."""
+        begin = table["sample"].to_numpy() + offset
+        return (begin >= 0) & (begin + length <= table["samples"].to_numpy())
 
     @property
     def gigabytes(self) -> float:

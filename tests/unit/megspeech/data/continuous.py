@@ -106,6 +106,25 @@ def test_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert only.words["at"].tolist() == [25, 100, 150]
 
 
+def test_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(module, "ProcessPoolExecutor", FakePool)
+    runs = [recording(tmp_path, session) for session in (1, 2)]
+    decimator = Decimator(tmp_path / "cache")
+    decimator.build(runs)
+    table = Continuous.table(decimator.cache, [runs[1].name, runs[0].name])
+    assert table["run"].tolist() == [runs[1].name] * 3 + [runs[0].name] * 3
+    assert table["sample"].tolist() == [25, 100, 150] * 2
+    assert set(table["samples"]) == {SAMPLES}
+    assert table.index.tolist() == list(range(6))
+    assert Continuous.table(decimator.cache, [runs[0].name])["word"].tolist() == ["The", "null", "end"]
+
+
+def test_inside() -> None:
+    table = pd.DataFrame({"sample": [-1, 0, 150, 151], "samples": SAMPLES})
+    assert Continuous.inside(table).tolist() == [False, True, True, False]
+    assert Continuous.inside(table, length=10, offset=-5).tolist() == [False, False, True, True]
+
+
 def test_gigabytes() -> None:
     meg = torch.zeros((CHANNELS, 1000), dtype=torch.float16)
     loaded = Continuous(meg, np.array([0, 1000]), ("r",), pd.DataFrame())

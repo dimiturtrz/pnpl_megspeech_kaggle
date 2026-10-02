@@ -17,6 +17,16 @@ def test_by_gap_chunks_long_runs() -> None:
     assert np.allclose(spans.onset[1, :2], [0.0, 0.1])
 
 
+def test_by_sentence() -> None:
+    group = np.r_[[0] * 3, [1] * 10, [2] * 19, [5]]
+    spans = Spans.by_sentence(group, np.arange(len(group)) * 0.5)
+    assert spans.lengths.tolist() == [3, 5, 5, 7, 6, 6, 1]
+    assert spans.index[spans.index != PAD].tolist() == list(range(len(group)))
+    assert spans.index[1, :5].tolist() == [3, 4, 5, 6, 7]
+    assert np.allclose(spans.onset[2, :5], [0.0, 0.5, 1.0, 1.5, 2.0])
+    assert Spans.by_sentence(np.array([], np.int64), np.array([])).index.shape == (0, MAX_WORDS)
+
+
 def test_by_key() -> None:
     keys = pd.DataFrame({"source": ["sentence"] * 3 + ["word"], "group": [0, 0, 1, -4]})
     spans = Spans.by_key(keys, np.array([0.0, 0.2, 0.0, 0.0]))
