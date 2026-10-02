@@ -7,10 +7,10 @@ import pandas as pd
 import pytest
 import torch
 
-from megspeech import continuous as module
-from megspeech.continuous import DIRECTORY, NO_SENTENCE, RATE, WORDS, Continuous, Decimator, main
-from megspeech.epochs import DECIMATE, HALF, SFREQ
-from megspeech.runs import Run
+from megspeech.data import continuous as module
+from megspeech.data.continuous import DIRECTORY, NO_SENTENCE, RATE, WORDS, Continuous, Decimator, main
+from megspeech.data.epochs import DECIMATE, HALF, SFREQ
+from megspeech.data.runs import Run
 
 CHANNELS = 3
 SECONDS = 4

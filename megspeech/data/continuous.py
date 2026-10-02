@@ -6,7 +6,7 @@ and 250 / 50 = 5 is an integer, so `resample_poly(x, 1, 5)` is a pure polyphase 
 removes everything above the new 25 Hz Nyquist before keeping every fifth sample — the same `DECIMATE` the
 epoch windows use.
 
-    uv run python -m megspeech.continuous     # cache every downloaded run under processed/continuous50
+    uv run python -m megspeech.data.continuous     # cache every downloaded run under processed/continuous50
 """
 
 import argparse
@@ -26,8 +26,8 @@ from scipy.signal import resample_poly
 from torch import Tensor
 
 from core.paths import DataRoot
-from megspeech.epochs import DECIMATE, HALF, PICO, SFREQ, WORKERS
-from megspeech.runs import Run
+from megspeech.data.epochs import DECIMATE, HALF, PICO, SFREQ, WORKERS
+from megspeech.data.runs import Run
 
 LOG = logging.getLogger(__name__)
 
