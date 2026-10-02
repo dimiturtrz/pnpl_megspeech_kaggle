@@ -12,10 +12,10 @@ import torch
 from jaxtyping import Float, Int
 from torch import Tensor
 
-from megspeech.data.epochs import Epocher, Epochs, Window
-from megspeech.data.runs import Partition, Run
+from megspeech.data.epochs import Window
 from megspeech.data.spans import PAD, Spans
 from megspeech.data.vocabulary import IGNORE, WORDS
+from megspeech.data.windows import Windows
 
 EVAL_SPANS = 256
 
@@ -33,7 +33,7 @@ ROW_ALIGN = 8
 """Row counts rounded up to a multiple of this, the tensor-core tile."""
 
 
-class Windows(Protocol):
+class Holdout(Protocol):
     """What a split needs of the holdout: its row metadata and its MEG windows in that order."""
 
     def metadata_frame(self) -> pd.DataFrame: ...
@@ -60,9 +60,12 @@ class Batch:
 
 @dataclass(frozen=True)
 class Split:
-    """Word windows on the device, with the spans that group them and each word's sampling weight."""
+    """Word windows on the device, with the spans that group them and each word's sampling weight.
 
-    x: Float[Tensor, "n c t"]
+    A word labelled `IGNORE` is outside the vocabulary: its window feeds its span's context, but nothing scores it.
+    """
+
+    windows: Windows
     y: Int[Tensor, " n"]
     index: Int[Tensor, "g w"]
     onset: Float[Tensor, "g w"]
@@ -72,54 +75,21 @@ class Split:
     def from_arrays(
         cls, x: Float[np.ndarray, "n c t"], y: Int[np.ndarray, " n"], spans: Spans, device: torch.device
     ) -> "Split":
-        return cls.on_device(torch.from_numpy(x).to(device), y, spans, np.ones(len(y)))
+        return cls.of(Windows.stacked(torch.from_numpy(x).to(device)), y, spans, np.ones(len(y)))
 
     @classmethod
-    def on_device(
-        cls, x: Float[Tensor, "n c t"], y: Int[np.ndarray, " n"], spans: Spans, weight: Float[np.ndarray, " n"]
-    ) -> "Split":
-        device = x.device
+    def of(cls, windows: Windows, y: Int[np.ndarray, " n"], spans: Spans, weight: Float[np.ndarray, " n"]) -> "Split":
+        device = windows.device
         return cls(
-            x,
-            torch.from_numpy(y).to(device),
+            windows,
+            torch.tensor(y, device=device),
             torch.from_numpy(spans.index).to(device),
             torch.from_numpy(spans.onset).float().to(device),
-            torch.from_numpy(weight).float().to(device),
+            torch.tensor(weight, dtype=torch.float32, device=device),
         )
 
     @classmethod
-    def gather(cls, runs: Iterable[tuple[Epochs, float]], device: torch.device) -> "Split":
-        """Runs, each with its sampling weight, streamed to the device one at a time.
-
-        Host memory never holds the whole split. Onsets restart with every run, so no span crosses two.
-        """
-        xs: list[Tensor] = []
-        ys: list[np.ndarray] = []
-        onsets: list[np.ndarray] = []
-        weights: list[np.ndarray] = []
-        for run, weight in runs:
-            xs.append(torch.from_numpy(run.x).to(device))
-            ys.append(run.y)
-            onsets.append(run.onset)
-            weights.append(np.full(len(run.y), weight))
-        spans = Spans.by_gap(np.concatenate(onsets))
-        x = torch.cat(xs)
-        xs.clear()
-        if device.type == "cuda":
-            torch.cuda.empty_cache()
-        return cls.on_device(x, np.concatenate(ys), spans, np.concatenate(weights))
-
-    @classmethod
-    def validation(cls, epocher: Epocher, runs: list[Run], device: torch.device) -> dict[str, "Split"]:
-        """The official validation runs, one split per task so each domain is scored alone."""
-        held = [r for r in runs if r.partition is Partition.VALIDATION]
-        return {
-            task: cls.gather(((epocher.cached(r), 1.0) for r in held if r.key[0] == task), device)
-            for task in sorted({r.key[0] for r in held})
-        }
-
-    @classmethod
-    def from_holdout(cls, holdout: Windows, device: torch.device) -> "Split":
+    def from_holdout(cls, holdout: Holdout, device: torch.device) -> "Split":
         """Every holdout window, grouped by sentence; isolated word rows are spans of one."""
         frame = holdout.metadata_frame()
         sentence = frame["source"] == "sentence"
@@ -130,13 +100,22 @@ class Split:
         spans = Spans.by_key(keys, frame["onset_s"].to_numpy())
         return cls.from_arrays(x, np.zeros(len(x), dtype=np.int64), spans, device)
 
+    def sample(self, count: int) -> Float[Tensor, "k c t"]:
+        """Up to `count` windows drawn without replacement."""
+        return self.windows(torch.randperm(len(self.y), device=self.y.device)[:count])
+
+    def labelled(self) -> Int[Tensor, " k"]:
+        """Words with a vocabulary label — the ones a score counts."""
+        return torch.nonzero(self.y != IGNORE).flatten()
+
     def log_prior(self) -> Float[Tensor, " v"]:
         """Label prior as training samples it, so logit adjustment undoes the same distribution."""
         return self.prior(self.y, self.weight)
 
     @staticmethod
     def prior(y: Int[Tensor, " n"], weight: Float[Tensor, " n"]) -> Float[Tensor, " v"]:
-        counts = torch.bincount(y, weight, minlength=WORDS).float() + 1
+        known = y != IGNORE
+        counts = torch.bincount(y[known], weight[known], minlength=WORDS).float() + 1
         return (counts / counts.sum()).log()
 
     def batch(self, spans: Int[Tensor, " b"], rows: int) -> Batch:
@@ -146,7 +125,7 @@ class Split:
         slot = torch.where((index != PAD) & (order < rows), order, rows)
         index = torch.where(slot < rows, index, PAD)
         words = index.new_zeros(rows + 1).scatter_(0, slot.flatten(), index.clamp(min=0).flatten())[:rows]
-        return Batch(self.x[words], self.onset[spans], slot, index)
+        return Batch(self.windows(words), self.onset[spans], slot, index)
 
     def capacity(self, batch: int) -> int:
         """Word rows for `batch` spans drawn as training draws them: the expected count plus `SIGMAS` deviations."""
@@ -159,16 +138,15 @@ class Split:
         return min(rows, batch * self.index.shape[1])
 
     @staticmethod
-    def seen(labelled: Iterable[tuple[Int[np.ndarray, " n"], Float[np.ndarray, " n"]]]) -> frozenset[tuple[int, ...]]:
-        """Every span's label sequence across runs of (labels, onsets) — the word orders training has heard."""
+    def seen(runs: Iterable[tuple[Int[np.ndarray, " n"], Spans]]) -> frozenset[tuple[int, ...]]:
+        """Every span's label sequence across runs of (labels, spans) — the word orders training has heard."""
         sequences: set[tuple[int, ...]] = set()
-        for y, onset in labelled:
-            index = Spans.by_gap(onset).index
-            sequences.update(tuple(y[row[row != PAD]].tolist()) for row in index)
+        for y, spans in runs:
+            sequences.update(tuple(y[row[row != PAD]].tolist()) for row in spans.index)
         return frozenset(sequences)
 
     def novel(self, seen: frozenset[tuple[int, ...]]) -> Int[Tensor, " k"]:
-        """Words in multi-word spans whose label sequence training never heard.
+        """Labelled words in multi-word spans whose label sequence training never heard.
 
         The holdout's sentences are new stimuli, so a span recited from training measures memorised word order.
         """
@@ -176,7 +154,8 @@ class Split:
         labels = self.y.cpu().numpy()
         rows = [row[row != PAD] for row in index]
         keep = [row for row in rows if len(row) > 1 and tuple(labels[row].tolist()) not in seen]
-        return torch.from_numpy(np.concatenate([np.empty(0, np.int64), *keep])).to(self.y.device)
+        novel = np.concatenate([np.empty(0, np.int64), *keep])
+        return torch.from_numpy(novel[labels[novel] != IGNORE]).to(self.y.device)
 
     def recurring(self, power: float) -> "Split":
         """Each recited span's words reweighted by how often training repeats its label sequence, to the `-power`."""
@@ -191,6 +170,7 @@ class Split:
         return replace(self, weight=self.weight * torch.from_numpy(scale).float().to(self.weight.device))
 
     def dense(self) -> Int[Tensor, " d"]:
-        """Words in spans at least `DENSE` long — the holdout-like subset."""
+        """Labelled words in spans at least `DENSE` long — the holdout-like subset."""
         long = self.index[(self.index != PAD).sum(dim=1) >= DENSE]
-        return long[long != PAD]
+        words = long[long != PAD]
+        return words[self.y[words] != IGNORE]

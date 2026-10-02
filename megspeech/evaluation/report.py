@@ -81,7 +81,7 @@ class Evaluator:
         Every batch reserves room for full spans, so a compiled model sees one shape (and the last batch's).
         """
         model.eval()
-        words, rows = len(split.x), EVAL_SPANS * split.index.shape[1]
+        words, rows = len(split.y), EVAL_SPANS * split.index.shape[1]
         out = {head: torch.zeros(words + 1, WORDS, device=self.device) for head in Head}
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
             for spans in torch.arange(len(split.index), device=self.device).split(EVAL_SPANS):
@@ -104,16 +104,17 @@ class Evaluator:
         return self.scored(self.logits(model, split), split, log_prior)
 
     def scored(self, logits: dict[Head, Float[Tensor, "n v"]], split: Split, log_prior: Float[Tensor, " v"]) -> Report:
-        """One domain's report from its already computed logits."""
-        dense = split.dense()
-        novel = split.novel(self.seen)
+        """One domain's report from its already computed logits: every labelled word scored, out-of-vocabulary
+        words only lending their spans context."""
+        labelled, dense, novel = split.labelled(), split.dense(), split.novel(self.seen)
+        context, word, y = logits[Head.CONTEXT][labelled], logits[Head.WORD][labelled], split.y[labelled]
         top1 = Ruler(k=1)
         return Report(
-            self.evaluate(logits[Head.CONTEXT], split.y, log_prior),
-            self.evaluate(logits[Head.WORD], split.y, log_prior),
+            self.evaluate(context, y, log_prior),
+            self.evaluate(word, y, log_prior),
             self.evaluate(logits[Head.CONTEXT][dense], split.y[dense], log_prior),
             self.evaluate(logits[Head.CONTEXT][novel], split.y[novel], log_prior),
-            top1.balanced(top1.hits(logits[Head.CONTEXT], split.y), split.y),
+            top1.balanced(top1.hits(context, y), y),
             Coverage.of(split.y[novel]),
         )
 

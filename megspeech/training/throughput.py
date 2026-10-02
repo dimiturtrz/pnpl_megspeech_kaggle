@@ -85,7 +85,7 @@ class Throughput:
         total = self.warmup + 2 * self.steps
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, trainer.config.optim.lr, total_steps=total)
         state = Step(model, optimizer, schedule, train.capacity(trainer.config.optim.batch))
-        draws = torch.randint(len(train.index), (total, trainer.config.optim.batch), device=train.x.device)
+        draws = torch.randint(len(train.index), (total, trainer.config.optim.batch), device=train.y.device)
         for spans in draws[: self.warmup]:
             trainer.step(state, train, spans)
 
@@ -97,8 +97,8 @@ class Throughput:
 
         log_prior = train.log_prior()
         evaluator = trainer.evaluator
-        stepped = self.phase(steps, train.x.device)
-        reported = self.phase(lambda: evaluator.report(model, corpus.validation, log_prior, 0, 0.0), train.x.device)
+        stepped = self.phase(steps, train.y.device)
+        reported = self.phase(lambda: evaluator.report(model, corpus.validation, log_prior, 0, 0.0), train.y.device)
         per_epoch = math.ceil(full_spans / trainer.config.optim.batch)
         return Projection(stepped, reported, stepped.seconds / self.steps, per_epoch)
 

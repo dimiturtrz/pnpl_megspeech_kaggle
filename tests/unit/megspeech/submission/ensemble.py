@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import override
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 from torch import nn
@@ -41,13 +42,16 @@ def validation() -> dict[str, Split]:
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     written: list[Path] = []
     train = Run(tmp_path / "sub-0_ses-1_task-Sherlock1_run-1_meg.h5")
-    devices = SimpleNamespace(device=lambda _: CPU, from_numpy=torch.from_numpy, ones=torch.ones)
+    devices = SimpleNamespace(device=lambda _: CPU, tensor=torch.tensor, ones=torch.ones)
     monkeypatch.setattr(module, "torch", devices)
     monkeypatch.setattr(module, "Evaluator", functools.partial(Evaluator, min_novel=1))
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))
     monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: [train]))
-    monkeypatch.setattr(module.Epocher, "labelled", lambda _self, _run: (np.array([0, 1]), np.array([0.0, 0.1])))
-    monkeypatch.setattr(module.Split, "validation", classmethod(lambda *_: validation()))
+    heard = pd.DataFrame({"run": "r", "sentence": 0, "onset": [0.0, 0.1], "target": [0, 1]})
+    monkeypatch.setattr(module.Corpus, "heard", classmethod(lambda *_: heard))
+    monkeypatch.setattr(module.Continuous, "load", classmethod(lambda *_: SimpleNamespace(words=heard)))
+    monkeypatch.setattr(module.Corpus, "words", staticmethod(lambda table, _: table))
+    monkeypatch.setattr(module.Corpus, "domains", classmethod(lambda *_: validation()))
     monkeypatch.setattr(module.Ensemble, "load", classmethod(lambda *_: Constant()))
     monkeypatch.setattr(module.Submitter, "submit", lambda _self, *args: written.append(args[-1]))
     monkeypatch.setattr(sys, "argv", ["ensemble", "--out", "both", "a", "b"])

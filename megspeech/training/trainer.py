@@ -17,7 +17,7 @@ from megspeech.data.corpus import Corpus
 from megspeech.data.split import Split
 from megspeech.data.vocabulary import IGNORE
 from megspeech.evaluation.report import Epoch, Evaluator
-from megspeech.model.scaler import Scaler
+from megspeech.model.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.heads import Objective
 from megspeech.objective.prototypes import Prototypes
@@ -47,12 +47,14 @@ class Trainer:
         """A trainer on `corpus`'s device, selecting on its unseen spans; SigLIP reads the text prototypes."""
         siglip = config.context.objective is Objective.SIGLIP
         prototypes = Prototypes.load(Prototypes.path(root)).vectors if siglip else None
-        evaluator = Evaluator(corpus.train.x.device, corpus.seen, config.selection.min_novel)
+        evaluator = Evaluator(corpus.train.y.device, corpus.seen, config.selection.min_novel)
         return cls(config, evaluator, prototypes)
 
     def model(self, train: Split) -> nn.Module:
         device = self.evaluator.device
-        model = SentenceNet(Scaler(train.x), context=self.config.context, prototypes=self.prototypes).to(device)
+        model = SentenceNet(
+            Scaler(train.sample(SCALER_SAMPLE)), context=self.config.context, prototypes=self.prototypes
+        ).to(device)
         if self.config.optim.compiled and device.type == "cuda":
             model.compile(mode="reduce-overhead")
         return model
