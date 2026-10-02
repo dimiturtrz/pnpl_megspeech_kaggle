@@ -46,6 +46,13 @@ def test_embed_ssm_appends_one_layer() -> None:
     assert len(WordNet(SMALL).blocks) == 2
 
 
+def test_embed_conformer_replaces_the_convolutions() -> None:
+    net = WordNet(ConvConfig(hidden=8, dilations=(), conformer=2))
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    assert len(net.blocks) == 2
+    assert net.embed(x).shape == (3, 2 * 8)
+
+
 def test_normalise() -> None:
     x = 3.0 + 2.0 * torch.randn(4, 5, SAMPLES, generator=GENERATOR)
     present = torch.ones(4, 1, SAMPLES, dtype=torch.bool)

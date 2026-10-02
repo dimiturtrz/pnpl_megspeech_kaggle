@@ -10,6 +10,7 @@ from torch import Tensor, nn
 from megspeech.data.runs import CHANNELS
 from megspeech.data.vocabulary import WORDS
 from megspeech.model.block import Block
+from megspeech.model.conformer import Conformer
 from megspeech.model.ssm import Ssm
 
 EPSILON = 1e-6
@@ -27,6 +28,9 @@ class ConvConfig:
     """Equal time chunks the readout pools mean and max over; more keep when in the window the response came."""
     ssm: int = 0
     """Modes per direction of a bidirectional state-space layer after the convolutions; 0 adds none."""
+    conformer: int = 0
+    """Conformer blocks after the convolutions: self-attention and a 0.5 s depthwise convolution, MEGConformer's
+    encoder; with no `dilations` they replace the convolutions."""
     instance: bool = False
     """Z-score each sensor within each window over its recorded samples: MEGConformer (LibriBrain 2025 phoneme
     winner) found per-window normalisation critical for the shift to the holdout."""
@@ -49,6 +53,7 @@ class WordNet(nn.Module):
         self.blocks = nn.ModuleList(Block(config.hidden, d, config.dropout, config.kernels) for d in config.dilations)
         if config.ssm:
             self.blocks.append(Ssm(config.hidden, config.ssm, config.dropout))
+        self.blocks.extend(Conformer(config.hidden, config.dropout) for _ in range(config.conformer))
         self.head = nn.Sequential(nn.Dropout(config.dropout), nn.Linear(self.width, WORDS))
 
     def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:
