@@ -64,6 +64,10 @@ class DataConfig:
     reference pipeline baselines on 0-0.5 s, the pre-response stretch, so the word's evoked field is kept whole."""
     decimate: int = DECIMATE
     """The 250 Hz recordings' decimation factor: which continuous cache training reads (`Decimator.under`)."""
+    folds: int = 1
+    """Bagging: training runs, in key order, dealt round-robin into `folds` folds; 1 trains on them all."""
+    fold: int = 0
+    """The fold left out of training when `folds` > 1, so each bagged member sees `1 - 1/folds` of the runs."""
 
     @classmethod
     def saved(cls, directory: Path) -> "DataConfig":
@@ -140,7 +144,10 @@ class DataConfig:
     def trained(self, runs: Sequence[Run]) -> list[Run]:
         """The runs training reads: `trains_on`, less the extra validation runs unless refitting on validation."""
         withheld = set() if self.refit else {r.name for r in self.extras(runs)}
-        return [r for r in runs if self.trains_on(r) and r.name not in withheld]
+        kept = [r for r in runs if self.trains_on(r) and r.name not in withheld]
+        ordered = sorted(kept, key=lambda r: r.key)
+        bagged = {r.name for at, r in enumerate(ordered) if self.folds == 1 or at % self.folds != self.fold}
+        return [r for r in kept if r.name in bagged]
 
     def held(self, runs: Sequence[Run]) -> dict[str, list[Run]]:
         """The validation domains' runs: each official validation run under its task, the extras under `<stratum>+`."""

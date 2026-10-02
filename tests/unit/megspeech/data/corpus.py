@@ -103,6 +103,16 @@ def test_trained(tmp_path: Path) -> None:
     assert len(DataConfig(extra=1, refit=True).trained(every)) == len(every)
 
 
+def test_trained_folds(tmp_path: Path) -> None:
+    """Folds partition the training runs: each member drops one fold, and the dropped folds tile the whole."""
+    every = {r.name for r in DataConfig().trained(runs(tmp_path))}
+    kept = [{r.name for r in DataConfig(folds=3, fold=f).trained(runs(tmp_path))} for f in range(3)]
+    dropped = [every - k for k in kept]
+    assert all(k < every for k in kept)
+    assert set().union(*dropped) == every
+    assert sum(map(len, dropped)) == len(every)
+
+
 def test_held(tmp_path: Path) -> None:
     assert {k: [r.key for r in v] for k, v in DataConfig().held(runs(tmp_path)).items()} == {
         "Sherlock1": [("Sherlock1", 11, 2)],
