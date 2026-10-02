@@ -25,6 +25,7 @@ from torch import Tensor, nn
 
 from core.paths import DataRoot
 from megspeech.data.continuous import MISSING
+from megspeech.data.corpus import DataConfig
 from megspeech.data.holdout import TRACK, HoldoutCache
 from megspeech.data.split import Split
 from megspeech.data.vocabulary import SECONDARY, Vocabulary
@@ -86,15 +87,16 @@ class Submitter:
     """A model's holdout predictions, read through the same evaluator that scored it on validation."""
 
     evaluator: Evaluator
-    length: int
-    """The window in samples the model trained on."""
+    data: DataConfig
+    """How the model read MEG in training: its window and standardisation."""
 
     def submit(self, model: nn.Module, root: DataRoot, log_prior: Float[Tensor, " v"], tau: float, path: Path) -> Path:
         """Context-head probabilities for every holdout row, logit-adjusted by `tau`, written as a submission."""
         holdout = LibriBrainCompetitionHoldout(TRACK, data_path=root.raw(), download=False)
         cache = HoldoutCache.of(root)
         cache.build()
-        split = Split.from_holdout(holdout, cache.windows(self.evaluator.device, self.length))
+        windows = cache.windows(self.evaluator.device, self.data.samples, standardised=self.data.standardised)
+        split = Split.from_holdout(holdout, windows)
         logits = self.evaluator.logits(model, split)[Head.CONTEXT]
         primary = torch.softmax(logits - tau * log_prior, dim=-1).cpu().numpy()
         secondary = np.tile(FrequencyPrior(Counter()).probabilities(list(SECONDARY.words)), (len(primary), 1))

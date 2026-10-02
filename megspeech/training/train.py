@@ -48,7 +48,7 @@ def main() -> None:
     LOG.info("best %s", best)
     evaluator = trainer.evaluator
     evaluator.graded(model, validation, log_prior, best.macro.tau).save(out / "hits.pt")
-    Submitter(evaluator, config.data.samples).submit(model, root, log_prior, best.macro.tau, out / "submission.csv")
+    Submitter(evaluator, config.data).submit(model, root, log_prior, best.macro.tau, out / "submission.csv")
 
 
 if __name__ == "__main__":

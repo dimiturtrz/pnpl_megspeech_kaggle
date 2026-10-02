@@ -45,6 +45,10 @@ class DataConfig:
     words training heard, so it can no longer select."""
     window: float = 1.0
     """Seconds of MEG from each word's onset; a model is scored and submitted at the window it trained on."""
+    standardised: bool = False
+    """Each recording — training or validation run, holdout archive — robust-scaled per channel by its own median and
+    IQR before the model's scaler. Across the 162 runs a channel's IQR over its median run spans 0.78-1.28 (p5-p95);
+    the holdout sentence archive's sits at 0.90."""
 
     @classmethod
     def saved(cls, directory: Path) -> "DataConfig":
@@ -53,13 +57,14 @@ class DataConfig:
         return Tree(cls).load(config.get("data", {}))
 
     @classmethod
-    def window_of(cls, directories: Sequence[Path]) -> float:
-        """The one window the runs in `directories` trained on; members trained at different windows cannot share
-        one set of holdout windows."""
-        windows = {cls.saved(directory).window for directory in directories}
-        if len(windows) != 1:
-            raise ValueError(f"runs trained at windows {sorted(windows)}; an ensemble needs one")
-        return windows.pop()
+    def shared(cls, directories: Sequence[Path], grouping: Grouping) -> "DataConfig":
+        """The holdout reading — window and standardisation — every run in `directories` trained on, spans cut by
+        `grouping`; members that read MEG differently cannot share one set of holdout windows."""
+        readings = {(saved.window, saved.standardised) for saved in map(cls.saved, directories)}
+        if len(readings) != 1:
+            raise ValueError(f"runs trained at (window, standardised) {sorted(readings)}; an ensemble needs one")
+        window, standardised = readings.pop()
+        return cls(grouping=grouping, window=window, standardised=standardised)
 
     @property
     def samples(self) -> int:
@@ -85,7 +90,7 @@ class Corpus:
         runs = Run.discover(root.raw())
         trained = [r for r in runs if data.trains_on(r)]
         held = [r for r in runs if r.partition is Partition.VALIDATION]
-        source = Continuous.load(cache, device, [r.name for r in trained + held])
+        source = Continuous.load(cache, device, [r.name for r in trained + held], standardised=data.standardised)
         words = cls.words(source.words, data.grouping)
         weights = {r.name: data.read_weight if r.key[0] in READ else 1.0 for r in trained}
         chosen = words[words["run"].isin(weights)]

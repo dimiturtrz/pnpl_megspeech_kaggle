@@ -133,6 +133,19 @@ def test_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     only = Continuous.load(decimator.cache, "cpu", [runs[1].name])
     assert only.names == (runs[1].name,)
     assert only.words["at"].tolist() == [25, 100, 150]
+    scaled = Continuous.load(decimator.cache, "cpu", standardised=True).meg.float()
+    for begin in (0, SAMPLES):
+        run = scaled[:, begin : begin + SAMPLES]
+        assert run.median(dim=1).values.abs().max() < 0.05
+        assert torch.allclose(run.quantile(0.75, dim=1) - run.quantile(0.25, dim=1), torch.ones(CHANNELS), atol=0.05)
+
+
+def test_standardise() -> None:
+    offset, gain = torch.tensor([[5.0], [-3.0]]), torch.tensor([[2.0], [0.5]])
+    signal = torch.linspace(-1, 1, 101).repeat(2, 1)
+    run = signal * gain + offset
+    Continuous.standardise(run)
+    assert torch.allclose(run, signal, atol=1e-5)
 
 
 def test_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

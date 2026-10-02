@@ -40,10 +40,8 @@ def main() -> None:
     log_prior = Split.prior(torch.tensor(labels), torch.ones(len(labels))).to(device)
     evaluator = Evaluator(device, Corpus.sequences(heard, args.grouping))
     held = [r for r in runs if r.partition is Partition.VALIDATION]
-    data = DataConfig(
-        grouping=args.grouping, window=DataConfig.window_of([root.models() / name for name in args.names])
-    )
-    source = Continuous.load(cache, device, [r.name for r in held])
+    data = DataConfig.shared([root.models() / name for name in args.names], args.grouping)
+    source = Continuous.load(cache, device, [r.name for r in held], standardised=data.standardised)
     validation = Corpus.domains(source, Corpus.words(source.words, args.grouping), held, data)
     report = evaluator.report(model, validation, log_prior, 0, 0.0)
     LOG.info("%s", {task: (round(r.context.bacc10, 4), round(r.novel.bacc10, 4)) for task, r in report.domains.items()})
@@ -52,7 +50,7 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     record = {"members": args.names, "config": {"data": asdict(data)}, "best": asdict(report)}
     (out / METRICS).write_text(json.dumps(record, indent=1))
-    Submitter(evaluator, data.samples).submit(model, root, log_prior, report.macro.tau, out / "submission.csv")
+    Submitter(evaluator, data).submit(model, root, log_prior, report.macro.tau, out / "submission.csv")
 
 
 if __name__ == "__main__":

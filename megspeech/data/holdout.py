@@ -147,10 +147,11 @@ class HoldoutCache:
         table.to_csv(cache / WORDS, sep="\t", index=False)
         return table
 
-    def windows(self, device: torch.device | str, length: int = RATE) -> Windows:
-        """Every holdout row's `length`-sample window, in canonical order, from the built cache."""
+    def windows(self, device: torch.device | str, length: int = RATE, *, standardised: bool = False) -> Windows:
+        """Every holdout row's `length`-sample window, in canonical order, from the built cache, each archive
+        `standardised` on its own if asked."""
         names = [archive.name for archive in self.archives()]
-        return Continuous.load(self.decimator.cache, device, names).windows(length)
+        return Continuous.load(self.decimator.cache, device, names, standardised=standardised).windows(length)
 
 
 def main() -> None:

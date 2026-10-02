@@ -9,7 +9,7 @@ import torch
 from torch import nn
 
 from core.paths import ENV_OVERRIDE, DataRoot
-from megspeech.data.epochs import RATE
+from megspeech.data.corpus import DataConfig
 from megspeech.data.runs import CHANNELS
 from megspeech.data.vocabulary import WORDS
 from megspeech.data.windows import Windows
@@ -99,6 +99,7 @@ class Holdout:
 
 class Cache:
     built: ClassVar[list[bool]] = []
+    standardised: ClassVar[list[bool]] = []
 
     @classmethod
     def of(cls, _: object) -> "Cache":
@@ -107,7 +108,8 @@ class Cache:
     def build(self) -> None:
         self.built.append(True)
 
-    def windows(self, device: torch.device, length: int) -> Windows:
+    def windows(self, device: torch.device, length: int, *, standardised: bool) -> Windows:
+        self.standardised.append(standardised)
         return Windows.stacked(torch.zeros(3, CHANNELS, length, device=device))
 
 
@@ -141,9 +143,10 @@ def test_submit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "Submission", Written)
     monkeypatch.setattr(module, "HoldoutCache", Cache)
     root = cast("DataRoot", Root(tmp_path))
-    submitter = Submitter(Evaluator(torch.device("cpu")), 2 * RATE)
+    submitter = Submitter(Evaluator(torch.device("cpu")), DataConfig(window=2.0, standardised=True))
     path = submitter.submit(Constant(), root, torch.zeros(WORDS), 0.5, tmp_path / "s.npz")
     stored = np.load(path)
     assert stored["primary"].shape == (3, WORDS)
     assert np.allclose(stored["primary"].sum(axis=1), 1, atol=1e-5)
     assert Cache.built == [True]
+    assert Cache.standardised == [True]

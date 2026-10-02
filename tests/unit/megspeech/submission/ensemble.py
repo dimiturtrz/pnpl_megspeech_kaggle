@@ -12,8 +12,7 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
-from megspeech.data.corpus import METRICS
-from megspeech.data.epochs import RATE
+from megspeech.data.corpus import METRICS, DataConfig
 from megspeech.data.runs import CHANNELS, Run
 from megspeech.data.spans import Spans
 from megspeech.data.split import DENSE, Split
@@ -51,15 +50,15 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: [train]))
     heard = pd.DataFrame({"run": "r", "sentence": 0, "onset": [0.0, 0.1], "target": [0, 1], "token": [7, 8]})
     monkeypatch.setattr(module.Corpus, "heard", classmethod(lambda *_: heard))
-    monkeypatch.setattr(module.Continuous, "load", classmethod(lambda *_: SimpleNamespace(words=heard)))
+    monkeypatch.setattr(module.Continuous, "load", classmethod(lambda *_, **__: SimpleNamespace(words=heard)))
     monkeypatch.setattr(module.Corpus, "words", staticmethod(lambda table, _: table))
     monkeypatch.setattr(module.Corpus, "domains", classmethod(lambda *_: validation()))
     monkeypatch.setattr(module.Ensemble, "load", classmethod(lambda *_: Constant()))
-    monkeypatch.setattr(module.Submitter, "submit", lambda self, *args: written.append((self.length, args[-1])))
+    monkeypatch.setattr(module.Submitter, "submit", lambda self, *args: written.append((self.data, args[-1])))
     for name in ("a", "b"):
         member = DataRoot(tmp_path).models() / name
         member.mkdir(parents=True)
-        (member / METRICS).write_text(json.dumps({"config": {"data": {"window": 2.0}}}))
+        (member / METRICS).write_text(json.dumps({"config": {"data": {"window": 2.0, "standardised": True}}}))
     monkeypatch.setattr(sys, "argv", ["ensemble", "--out", "both", "a", "b"])
     main()
     out = DataRoot(tmp_path).models() / "both"
@@ -67,4 +66,4 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert metrics["members"] == ["a", "b"]
     assert metrics["config"]["data"]["window"] == 2.0
     assert set(metrics["best"]["domains"]) == {"Sherlock1"}
-    assert written == [(2 * RATE, out / "submission.csv")]
+    assert written == [(DataConfig(window=2.0, standardised=True), out / "submission.csv")]

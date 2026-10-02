@@ -91,11 +91,16 @@ def test_saved(tmp_path: Path) -> None:
     assert DataConfig.saved(record(tmp_path / "flat", {"epochs": 3})) == DataConfig()
 
 
-def test_window_of(tmp_path: Path) -> None:
-    one, two = record(tmp_path / "one", {}), record(tmp_path / "two", {"data": {"window": 2.0}})
-    assert DataConfig.window_of([one, one]) == 1.0
-    with pytest.raises(ValueError, match=r"windows \[1.0, 2.0\]"):
-        DataConfig.window_of([one, two])
+def test_shared(tmp_path: Path) -> None:
+    one = record(tmp_path / "one", {})
+    two = record(tmp_path / "two", {"data": {"window": 2.0}})
+    scaled = record(tmp_path / "scaled", {"data": {"standardised": True}})
+    assert DataConfig.shared([one, one], Grouping.GAP) == DataConfig(grouping=Grouping.GAP)
+    assert DataConfig.shared([scaled], Grouping.SENTENCE).standardised
+    with pytest.raises(ValueError, match=r"\[\(1.0, False\), \(2.0, False\)\]"):
+        DataConfig.shared([one, two], Grouping.SENTENCE)
+    with pytest.raises(ValueError, match="an ensemble needs one"):
+        DataConfig.shared([one, scaled], Grouping.SENTENCE)
 
 
 def test_words(tmp_path: Path) -> None:

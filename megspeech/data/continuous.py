@@ -37,6 +37,9 @@ WORDS = "words.tsv"
 NO_SENTENCE = -1
 GB = 1e9
 
+STANDARDISE_SAMPLE = 20_000
+"""Samples per channel a recording's quantiles are read from, strided across it."""
+
 TAIL = 1.0
 """Seconds a holdout sentence epoch runs past its sentence's last word (`sentence_extra_end_s`), measured from the
 word's end: the epochs' tails after their last onset are never under 1.022 s, though one in nine training sentences
@@ -144,18 +147,39 @@ class Continuous:
     words: pd.DataFrame
 
     @classmethod
-    def load(cls, cache: Path, device: torch.device | str, names: Sequence[str] | None = None) -> "Continuous":
-        """Load the named runs (default: every cached run) into one preallocated tensor, one run at a time."""
+    def load(
+        cls,
+        cache: Path,
+        device: torch.device | str,
+        names: Sequence[str] | None = None,
+        *,
+        standardised: bool = False,
+    ) -> "Continuous":
+        """Load the named runs (default: every cached run) into one preallocated tensor, one run at a time, each
+        `standardised` on its own if asked."""
         chosen = tuple(names) if names is not None else tuple(sorted(path.stem for path in cache.glob("*.npy")))
         stored = [np.load(cache / f"{name}.npy", mmap_mode="r") for name in chosen]
         offsets = np.r_[0, np.cumsum([signal.shape[1] for signal in stored])].astype(np.int64)
         meg = torch.empty((stored[0].shape[0], int(offsets[-1])), dtype=torch.float16, device=device)
         for begin, signal in zip(offsets, stored, strict=False):
-            meg[:, begin : begin + signal.shape[1]] = torch.from_numpy(np.array(signal))
+            run = meg[:, begin : begin + signal.shape[1]]
+            run.copy_(torch.from_numpy(np.array(signal)))
+            if standardised:
+                cls.standardise(run)
         words = cls.table(cache, chosen)
         words["start"] = words["run"].map(dict(zip(chosen, offsets[:-1].tolist(), strict=True)))
         words["at"] = words["start"] + words["sample"]
         return cls(meg, offsets, chosen, words)
+
+    @staticmethod
+    @torch.no_grad()
+    def standardise(run: Float[Tensor, "c s"]) -> None:
+        """`run` in place as each channel's distance from its median in interquartile ranges: one recording's
+        sensor gain and offset, which drift between sessions, taken out before the model's own scaler."""
+        sample = run[:, :: max(1, run.shape[1] // STANDARDISE_SAMPLE)].float()
+        levels = torch.tensor([0.25, 0.5, 0.75], device=run.device)
+        low, median, high = torch.quantile(sample, levels, dim=1, keepdim=True)
+        run.copy_((run.float() - median) / (high - low))
 
     @staticmethod
     def table(cache: Path, names: Sequence[str]) -> pd.DataFrame:
