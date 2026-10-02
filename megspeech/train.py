@@ -29,6 +29,7 @@ from pnpl.competition.holdout import LibriBrainCompetitionHoldout
 from torch import Tensor, nn
 
 from core.paths import DataRoot
+from megspeech.augment import Augment
 from megspeech.epochs import Epocher, Epochs, Window
 from megspeech.heads import Objective
 from megspeech.model import SentenceNet
@@ -72,6 +73,7 @@ class TrainConfig:
     weight_decay: float = 0.05
     label_smoothing: float = 0.1
     clip: float = math.inf
+    augment: Augment = Augment()
     seed: int = 0
     read_weight: float = 1.0
     """Sampling weight of read-sentence runs (TIMIT, MOCHA-TIMIT) — the holdout's domain — against narrative ones."""
@@ -315,6 +317,7 @@ class Trainer:
             draws = torch.multinomial(train.weight[train.index[:, 0]], len(train.index), replacement=True)
             for spans in draws.split(self.config.batch):
                 x, onset, mask, words = train.batch(spans)
+                x = self.config.augment(x)
                 with torch.autocast("cuda", dtype=torch.bfloat16):
                     context, word = model(x, onset, mask)
                     value = objective.loss(context[mask], train.y[words], self.config.label_smoothing) + loss(
@@ -352,6 +355,8 @@ def main() -> None:
     parser.add_argument("--repeat-power", type=float, default=TrainConfig.repeat_power)
     parser.add_argument("--seed", type=int, default=TrainConfig.seed)
     parser.add_argument("--lr", type=float, default=TrainConfig.lr)
+    parser.add_argument("--dropout", type=float, default=Augment.dropout, help="sensor dropout p")
+    parser.add_argument("--gain", type=float, default=Augment.gain, help="log-normal sensor gain sigma")
     parser.add_argument("--clip", type=float, default=TrainConfig.clip, help="max grad norm")
     parser.add_argument("--width", type=int, default=CONTEXT.width)
     parser.add_argument("--heads", type=int, default=CONTEXT.heads)
@@ -368,6 +373,7 @@ def main() -> None:
         epochs=args.epochs,
         lr=args.lr,
         clip=args.clip,
+        augment=Augment(args.dropout, args.gain),
         read_weight=args.read_weight,
         repeat_power=args.repeat_power,
         seed=args.seed,
