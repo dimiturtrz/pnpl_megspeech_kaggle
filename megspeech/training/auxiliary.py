@@ -1,4 +1,5 @@
-"""What trains beside the 50-way heads: nothing, or every heard word's embedding aligned to its t5 embedding."""
+"""What trains beside the 50-way heads: nothing, or terms read off every heard word's embedding — its t5
+embedding aligned, its first phoneme classified."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
@@ -10,10 +11,12 @@ from jaxtyping import Float, Int
 from torch import Tensor, nn
 
 from core.paths import DataRoot
+from megspeech.data.phonemes import Pronunciation
 from megspeech.model.pretraining import Pretraining
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.prototypes import Lexicon
-from megspeech.objective.semantic import Semantic
+from megspeech.training.config import OptimConfig
+from megspeech.training.terms import Aligned, Pronounced, Term
 
 
 class Auxiliary(ABC):
@@ -29,9 +32,14 @@ class Auxiliary(ABC):
         """`outputs` past the two heads', at span positions whose words are `tokens` (`Split.token`)."""
 
     @staticmethod
-    def of(weight: float, root: DataRoot, device: torch.device) -> "Auxiliary":
-        """Nothing at weight 0, so the lexicon is never read; the semantic alignment at `weight` otherwise."""
-        return Aligned(weight, Lexicon.load(Lexicon.path(root)).to(device)) if weight else Silent()
+    def of(optim: OptimConfig, root: DataRoot, device: torch.device) -> "Auxiliary":
+        """Nothing when every weight is 0, so no table is read; otherwise the terms of the nonzero weights."""
+        terms: list[Term] = []
+        if optim.semantic:
+            terms.append(Aligned(optim.semantic, Lexicon.load(Lexicon.path(root)).to(device)))
+        if optim.phonetic:
+            terms.append(Pronounced(optim.phonetic, Pronunciation.load(Pronunciation.path(root)).to(device)))
+        return Joint(tuple(terms)) if terms else Silent()
 
 
 class Silent(Auxiliary):
@@ -45,19 +53,17 @@ class Silent(Auxiliary):
 
 
 @dataclass(frozen=True)
-class Aligned(Auxiliary):
-    """Every heard word's window, in or out of the 50, trained toward its t5-large embedding (`Semantic`)."""
+class Joint(Auxiliary):
+    """The sentence model wrapped with one head per term (`Pretraining`), their losses summed."""
 
-    weight: float
-    lexicon: Lexicon
+    terms: tuple[Term, ...]
 
     @override
     def trained(self, net: SentenceNet, compiled: Callable[[nn.Module], nn.Module]) -> nn.Module:
-        return compiled(Pretraining(net, Semantic(net.words.width).to(self.lexicon.vectors.device)))
+        return compiled(Pretraining(net, nn.ModuleList(term.head(net.words.width) for term in self.terms)))
 
     @override
     def loss(self, model: nn.Module, outputs: Sequence[Tensor], tokens: Int[Tensor, "g w"]) -> Float[Tensor, ""]:
-        (projected,) = outputs
-        kinds = self.lexicon.rows(tokens).flatten()
-        semantic = cast("Pretraining", model).semantic
-        return self.weight * semantic.loss(projected.flatten(0, 1), self.lexicon.vectors[kinds.clamp(min=0)], kinds)
+        heads = cast("Pretraining", model).heads
+        parts = zip(self.terms, heads, outputs, strict=True)
+        return torch.stack([term.loss(head, output, tokens) for term, head, output in parts]).sum()

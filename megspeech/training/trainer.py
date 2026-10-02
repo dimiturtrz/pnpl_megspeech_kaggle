@@ -54,7 +54,7 @@ class Trainer:
         prototypes = Prototypes.load(Prototypes.path(root)).vectors if siglip else None
         device = corpus.train.y.device
         evaluator = Evaluator(device, corpus.seen, config.selection.min_novel)
-        return cls(config, evaluator, prototypes, Auxiliary.of(config.optim.semantic, root, device))
+        return cls(config, evaluator, prototypes, Auxiliary.of(config.optim, root, device))
 
     def model(self, train: Split) -> SentenceNet:
         model = SentenceNet(

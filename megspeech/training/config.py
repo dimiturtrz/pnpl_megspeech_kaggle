@@ -28,6 +28,10 @@ class OptimConfig:
     """Weight of the semantic auxiliary (`megspeech.training.auxiliary`): every heard word's window, the ~60% outside
     the 50 included, SigLIP-aligned to the word's t5-large layer-12 embedding, d'Ascoli et al.'s objective. It
     supervises ~2.5x the windows the heads see; 0 trains the heads alone and never reads the lexicon."""
+    phonetic: float = 0.0
+    """Weight of the phonetic auxiliary: every heard word's window, in or out of the 50, classified into the first of
+    its 39 ARPAbet phonemes (`megspeech.data.phonemes`). Speech MEG decodes phonetic features (Gwilliams et al.
+    2022), and the onset phoneme is what the window's first ~100 ms hear; 0 never reads the table."""
     balance: float = 0.0
     """Class-weight exponent of the cross-entropies: each class weighs `count ** -balance` over the training labels,
     mean 1, so 0.5 is 1/sqrt(count) (the PNPL 2025 phoneme winner's). The metric is balanced accuracy, and the

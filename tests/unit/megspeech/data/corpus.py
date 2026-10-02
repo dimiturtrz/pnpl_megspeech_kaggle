@@ -159,6 +159,10 @@ def test_words(tmp_path: Path) -> None:
     assert Corpus.words(table, Grouping.GAP)["word"].tolist() == ["the", "a", "the", "a"]
 
 
+def test_token() -> None:
+    assert Corpus.token(pd.Series(["The", "the", "a"])).tolist() == list(tokens("the", "the", "a"))
+
+
 def test_split(tmp_path: Path) -> None:
     loaded = source(tmp_path)
     words = Corpus.words(loaded.words, Grouping.SENTENCE)

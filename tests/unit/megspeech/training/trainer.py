@@ -9,6 +9,7 @@ from torch import nn
 
 from core.paths import DataRoot
 from megspeech.data.corpus import Corpus
+from megspeech.data.phonemes import Pronunciation
 from megspeech.data.runs import CHANNELS
 from megspeech.data.spans import Spans
 from megspeech.data.split import DENSE, Split
@@ -18,7 +19,7 @@ from megspeech.model.sentence import SentenceNet
 from megspeech.objective.heads import DIM
 from megspeech.objective.prototypes import Lexicon
 from megspeech.training.augment import Augment
-from megspeech.training.auxiliary import Aligned, Silent
+from megspeech.training.auxiliary import Aligned, Joint, Pronounced, Silent
 from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig
 from megspeech.training.ema import Ema
 from megspeech.training.trainer import Step, Trainer
@@ -39,10 +40,11 @@ def trainer(config: RunConfig) -> Trainer:
     return Trainer(config, Evaluator(CPU, min_novel=1))
 
 
-def aligned(train: Split) -> Aligned:
-    """Every token of `train` in the lexicon but its first."""
+def joint(train: Split) -> Joint:
+    """Every token of `train` in the lexicon and the pronunciations but its first."""
     keys = train.token.unique()[1:]
-    return Aligned(1.0, Lexicon(keys, torch.randn(len(keys), DIM, generator=torch.Generator().manual_seed(0))))
+    lexicon = Lexicon(keys, torch.randn(len(keys), DIM, generator=torch.Generator().manual_seed(0)))
+    return Joint((Aligned(1.0, lexicon), Pronounced(1.0, Pronunciation(keys, torch.arange(len(keys)) % 3))))
 
 
 def test_of(tmp_path: Path) -> None:
@@ -112,9 +114,7 @@ def test_fit() -> None:
     assert len(history) == 1
     assert isinstance(model, SentenceNet)
     train = split()
-    made = Trainer(
-        RunConfig(optim=OptimConfig(epochs=1, batch=4)), Evaluator(CPU, min_novel=1), auxiliary=aligned(train)
-    )
+    made = Trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4)), Evaluator(CPU, min_novel=1), auxiliary=joint(train))
     net, _ = made.fit(train, {"a": split(seed=1)}, torch.zeros(WORDS))
     assert isinstance(net, SentenceNet)
     balanced = trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, balance=0.5)))

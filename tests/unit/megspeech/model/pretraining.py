@@ -27,8 +27,10 @@ def x() -> torch.Tensor:
 
 def test_forward() -> None:
     model = net().eval()
-    pretraining = Pretraining(model, Semantic(model.words.width)).eval()
+    pretraining = Pretraining(model, nn.ModuleList([Semantic(model.words.width), nn.Linear(16, 5)])).eval()
     inputs = (x(), ONSET, SLOT)
-    context, word, projected = pretraining.forward(*inputs)
+    context, word, projected, phonetic = pretraining.forward(*inputs)
     assert all(torch.equal(a, b) for a, b in zip((context, word), model(*inputs), strict=True))
     assert projected.shape == (2, 3, DIM)
+    assert phonetic.shape == (2, 3, 5)
+    assert len(Pretraining(model, nn.ModuleList()).forward(*inputs)) == 2

@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Float
+from jaxtyping import Float, Int
 
 from core.paths import DataRoot
 from core.tree import Tree
@@ -163,8 +163,14 @@ class Corpus:
         and `token` (the lower-cased word, hashed)."""
         labels = PRIMARY.labels(table["word"])
         target = np.where(labels == ABSENT, IGNORE, labels)
-        token = pd.util.hash_array(table["word"].astype(str).str.lower().to_numpy()).view(np.int64)
-        return table.assign(target=target, token=token)[grouping.keep(target) & Continuous.inside(table)]
+        return table.assign(target=target, token=Corpus.token(table["word"]))[
+            grouping.keep(target) & Continuous.inside(table)
+        ]
+
+    @staticmethod
+    def token(words: pd.Series) -> Int[np.ndarray, " n"]:
+        """Each word lower-cased and hashed: the key every per-word table shares with a split's `token`."""
+        return pd.util.hash_array(words.astype(str).str.lower().to_numpy()).view(np.int64)
 
     @staticmethod
     def split(source: Continuous, words: pd.DataFrame, data: DataConfig, weight: Float[np.ndarray, " n"]) -> Split:
