@@ -71,6 +71,7 @@ class TrainConfig:
     lr: float = 1e-3
     weight_decay: float = 0.05
     label_smoothing: float = 0.1
+    clip: float = math.inf
     seed: int = 0
     read_weight: float = 1.0
     """Sampling weight of read-sentence runs (TIMIT, MOCHA-TIMIT) — the holdout's domain — against narrative ones."""
@@ -321,6 +322,7 @@ class Trainer:
                     )
                 optimizer.zero_grad(set_to_none=True)
                 value.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), self.config.clip)
                 optimizer.step()
                 schedule.step()
             row = self.report(model, validation, log_prior, epoch, value.item())
@@ -350,6 +352,7 @@ def main() -> None:
     parser.add_argument("--repeat-power", type=float, default=TrainConfig.repeat_power)
     parser.add_argument("--seed", type=int, default=TrainConfig.seed)
     parser.add_argument("--lr", type=float, default=TrainConfig.lr)
+    parser.add_argument("--clip", type=float, default=TrainConfig.clip, help="max grad norm")
     parser.add_argument("--width", type=int, default=CONTEXT.width)
     parser.add_argument("--heads", type=int, default=CONTEXT.heads)
     parser.add_argument("--layers", type=int, default=CONTEXT.layers)
@@ -364,6 +367,7 @@ def main() -> None:
     config = TrainConfig(
         epochs=args.epochs,
         lr=args.lr,
+        clip=args.clip,
         read_weight=args.read_weight,
         repeat_power=args.repeat_power,
         seed=args.seed,

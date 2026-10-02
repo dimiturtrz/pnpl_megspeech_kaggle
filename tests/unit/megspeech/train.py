@@ -145,7 +145,7 @@ def test_report() -> None:
 
 
 def test_fit() -> None:
-    model, history = Trainer(TrainConfig(epochs=1, batch=4, min_novel=1), CPU).fit(
+    model, history = Trainer(TrainConfig(epochs=1, batch=4, min_novel=1, clip=1.0), CPU).fit(
         split(), {"a": split(seed=1)}, torch.zeros(WORDS)
     )
     assert len(history) == 1
