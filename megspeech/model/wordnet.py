@@ -34,6 +34,9 @@ class ConvConfig:
     instance: bool = False
     """Z-score each sensor within each window over its recorded samples: MEGConformer (LibriBrain 2025 phoneme
     winner) found per-window normalisation critical for the shift to the holdout."""
+    lora: int = 0
+    """Rank of low-rank adapters on MEG-XL's attention projections, the only trunk weights then trained; 0 adds
+    none, so `optim.pretrained` trains or freezes the whole trunk."""
 
     def __post_init__(self) -> None:
         if any(kernel % 2 == 0 for kernel in self.kernels):

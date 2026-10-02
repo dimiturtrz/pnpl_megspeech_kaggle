@@ -9,6 +9,7 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.data.runs import CHANNELS
 from megspeech.data.vocabulary import WORDS
+from megspeech.model.lora import Lora
 from megspeech.model.megxl import LATENT, Trunk
 from megspeech.model.wordnet import ConvConfig, WordNet
 
@@ -27,6 +28,7 @@ class Words(nn.Module):
 
     def __init__(self, trunk: Trunk, config: ConvConfig) -> None:
         super().__init__()
+        Lora.inject(trunk, config.lora)
         self.trunk = trunk
         self.instance = config.instance
         self.width = POOLED

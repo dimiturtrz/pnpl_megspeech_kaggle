@@ -8,6 +8,7 @@ import torch
 from torch import Tensor, nn
 
 from core.paths import DataRoot
+from megspeech.model.lora import Lora
 from megspeech.model.megxl import CHECKPOINT, LATENT, MAGNETOMETER, ROTATIONS, Checkpoint, Geometry, Trunk
 
 GRADIOMETER = 3012
@@ -135,3 +136,6 @@ def test_groups():
     assert all(p.requires_grad for p in trunk.parameters())
     Trunk.groups(model, [{"params": list(model.parameters())}], lr=0.0)
     assert not any(p.requires_grad for p in trunk.parameters())
+    trunk.module.proj = Lora(nn.Linear(2, 2), 1)
+    Trunk.groups(model, [{"params": list(model.parameters())}], lr=1e-4)
+    assert {id(p) for p in trunk.parameters() if p.requires_grad} == {id(p) for p in trunk.module.proj.adapter()}

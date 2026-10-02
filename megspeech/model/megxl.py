@@ -21,6 +21,7 @@ from torch import Tensor, nn
 
 from core.paths import DataRoot
 from megspeech.data.fetch import MEGXL, NEUROMAG
+from megspeech.model.lora import Lora
 
 CHECKPOINT = "meg-xl-med-v2.ckpt"
 """The released medium model, the one whose word-decoding numbers the paper reports."""
@@ -142,8 +143,14 @@ class Trunk(nn.Module):
     @staticmethod
     def groups(model: nn.Module, groups: list[dict[str, object]], lr: float) -> list[dict[str, object]]:
         """`groups` with every trunk's parameters in `model` moved to a group of their own at `lr`; at 0 they are
-        frozen, so no backward pass runs through the trunk."""
-        pretrained = [p.requires_grad_(lr > 0) for m in model.modules() if isinstance(m, Trunk) for p in m.parameters()]
+        frozen, so no backward pass runs through the trunk. With adapters only theirs train."""
+        adapters = {id(p) for m in model.modules() if isinstance(m, Lora) for p in m.adapter()}
+        pretrained = [
+            p.requires_grad_(lr > 0 and (not adapters or id(p) in adapters))
+            for m in model.modules()
+            if isinstance(m, Trunk)
+            for p in m.parameters()
+        ]
         ids = {id(p) for p in pretrained}
         rest = [{**g, "params": [p for p in cast("list[Tensor]", g["params"]) if id(p) not in ids]} for g in groups]
         return [*rest, {"params": pretrained, "lr": lr}]
