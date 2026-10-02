@@ -25,6 +25,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov"]
+# What MEG-XL's checked-out code (`megspeech.data.fetch.MEGXL`) imports beyond torch: its trunk is a LightningModule.
+megxl = ["pytorch-lightning>=2", "einops>=0.6", "mne>=1.10"]
 # The guardrail ANALYZERS are an installed package pinned by scaffold tag (not vendored source) — an engine
 # update is a one-line `devtools_ref` bump on `copier update`, no source diff in your PRs. Imports as
 # `devtools` (`python -m devtools.graph.fitness …`); grimp/networkx arrive transitively. ast-grep/jscpd configs are
@@ -78,7 +80,7 @@ extend_exclude = ["noxfile.py"]
 # (numpy/jaxtyping/beartype/pydantic) — they read as unused until you import them.
 [tool.deptry.per_rule_ignores]
 # >>> LOCAL-SLOT: deptry-unused — PRUNE a starter once you wire it (keep pytest/pytest-cov/sdlc-devtools)
-DEP002 = ["pytest", "pytest-cov", "sdlc-devtools", "numpy", "jaxtyping", "beartype", "pydantic", "torch", "pnpl", "triton-windows"]
+DEP002 = ["pytest", "pytest-cov", "sdlc-devtools", "numpy", "jaxtyping", "beartype", "pydantic", "torch", "pnpl", "triton-windows", "pytorch-lightning", "einops", "mne"]
 # <<< LOCAL-SLOT: deptry-unused
 
 [tool.ruff]
