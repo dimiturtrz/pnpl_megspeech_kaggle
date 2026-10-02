@@ -16,6 +16,7 @@ from megspeech.data.vocabulary import WORDS
 from megspeech.evaluation.report import Evaluator
 from megspeech.training.augment import Augment
 from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig
+from megspeech.training.ema import Ema
 from megspeech.training.trainer import Step, Trainer
 
 SAMPLES = 50
@@ -62,7 +63,13 @@ def test_step() -> None:
     optimizer = torch.optim.AdamW(model.parameters())
     before = [p.clone() for p in model.parameters()]
     value = made.step(
-        Step(model, optimizer, torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0), split().capacity(2)),
+        Step(
+            model,
+            optimizer,
+            torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0),
+            split().capacity(2),
+            Ema.of(model, 0.0),
+        ),
         split(),
         torch.tensor([0, 1]),
     )

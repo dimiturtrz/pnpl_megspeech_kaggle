@@ -22,6 +22,7 @@ from megspeech.model.sentence import SentenceNet
 from megspeech.objective.heads import Objective
 from megspeech.objective.prototypes import Prototypes
 from megspeech.training.config import RunConfig
+from megspeech.training.ema import Ema
 
 LOG = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class Step:
     optimizer: torch.optim.Optimizer
     schedule: torch.optim.lr_scheduler.LRScheduler
     rows: int
+    ema: Ema
 
 
 @dataclass
@@ -83,6 +85,7 @@ class Trainer:
         nn.utils.clip_grad_norm_(state.model.parameters(), self.config.optim.clip)
         state.optimizer.step()
         state.schedule.step()
+        state.ema.update(state.model)
         return value.detach()
 
     def fit(
@@ -94,7 +97,7 @@ class Trainer:
         optimizer = self.optimizer(model)
         per_epoch = math.ceil(len(train.index) / optim.batch)
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, optim.lr, total_steps=optim.epochs * per_epoch)
-        state = Step(model, optimizer, schedule, train.capacity(optim.batch))
+        state = Step(model, optimizer, schedule, train.capacity(optim.batch), Ema.of(model, optim.ema))
         history: list[Epoch] = []
         best_state = model.state_dict()
         for epoch in range(optim.epochs):
@@ -103,10 +106,11 @@ class Trainer:
             value = torch.stack([self.step(state, train, spans) for spans in draws.split(optim.batch)]).mean().item()
             if not math.isfinite(value):
                 raise FloatingPointError(f"non-finite loss at epoch {epoch}")
-            row = self.evaluator.report(model, validation, log_prior, epoch, value)
-            history.append(row)
-            LOG.info("%s", asdict(row))
-            if self.config.selected(history) is row:
-                best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            with state.ema.applied(model):
+                row = self.evaluator.report(model, validation, log_prior, epoch, value)
+                history.append(row)
+                LOG.info("%s", asdict(row))
+                if self.config.selected(history) is row:
+                    best_state = {k: v.clone() for k, v in model.state_dict().items()}
         model.load_state_dict(best_state)
         return model, history

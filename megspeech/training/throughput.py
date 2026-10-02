@@ -18,6 +18,7 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.corpus import Corpus, DataConfig
 from megspeech.training.config import RunConfig
+from megspeech.training.ema import Ema
 from megspeech.training.trainer import Step, Trainer
 
 LOG = logging.getLogger(__name__)
@@ -84,7 +85,13 @@ class Throughput:
         optimizer = trainer.optimizer(model)
         total = self.warmup + 2 * self.steps
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, trainer.config.optim.lr, total_steps=total)
-        state = Step(model, optimizer, schedule, train.capacity(trainer.config.optim.batch))
+        state = Step(
+            model,
+            optimizer,
+            schedule,
+            train.capacity(trainer.config.optim.batch),
+            Ema.of(model, trainer.config.optim.ema),
+        )
         draws = torch.randint(len(train.index), (total, trainer.config.optim.batch), device=train.y.device)
         for spans in draws[: self.warmup]:
             trainer.step(state, train, spans)

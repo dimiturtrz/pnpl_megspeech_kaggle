@@ -21,6 +21,9 @@ class OptimConfig:
     label_smoothing: float = 0.1
     clip: float = math.inf
     seed: int = 0
+    ema: float = 0.0
+    """Decay of the weight average scored and kept; 0 keeps the raw weights. At 0.999 the average spans ~1000
+    steps, about half an epoch of the ~1750 a sentence-path epoch takes."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
 
