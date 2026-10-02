@@ -33,7 +33,13 @@
     {
       "kind": "import",
       "source": "megspeech.data.corpus",
-      "target": "megspeech.data.epochs",
+      "target": "megspeech.data.continuous",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.corpus",
+      "target": "megspeech.data.grouping",
       "weight": 1
     },
     {
@@ -50,20 +56,14 @@
     },
     {
       "kind": "import",
-      "source": "megspeech.data.epochs",
-      "target": "core.paths",
-      "weight": 1
-    },
-    {
-      "kind": "import",
-      "source": "megspeech.data.epochs",
-      "target": "megspeech.data.runs",
-      "weight": 1
-    },
-    {
-      "kind": "import",
-      "source": "megspeech.data.epochs",
+      "source": "megspeech.data.corpus",
       "target": "megspeech.data.vocabulary",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.corpus",
+      "target": "megspeech.data.windows",
       "weight": 1
     },
     {
@@ -74,14 +74,20 @@
     },
     {
       "kind": "import",
-      "source": "megspeech.data.split",
-      "target": "megspeech.data.epochs",
+      "source": "megspeech.data.grouping",
+      "target": "megspeech.data.spans",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.grouping",
+      "target": "megspeech.data.vocabulary",
       "weight": 1
     },
     {
       "kind": "import",
       "source": "megspeech.data.split",
-      "target": "megspeech.data.runs",
+      "target": "megspeech.data.epochs",
       "weight": 1
     },
     {
@@ -94,6 +100,18 @@
       "kind": "import",
       "source": "megspeech.data.split",
       "target": "megspeech.data.vocabulary",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.split",
+      "target": "megspeech.data.windows",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.windows",
+      "target": "megspeech.data.continuous",
       "weight": 1
     },
     {
@@ -219,7 +237,19 @@
     {
       "kind": "import",
       "source": "megspeech.submission.ensemble",
-      "target": "megspeech.data.epochs",
+      "target": "megspeech.data.continuous",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.submission.ensemble",
+      "target": "megspeech.data.corpus",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.submission.ensemble",
+      "target": "megspeech.data.grouping",
       "weight": 1
     },
     {
@@ -256,6 +286,12 @@
       "kind": "import",
       "source": "megspeech.submission.submission",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.submission.submission",
+      "target": "megspeech.data.continuous",
       "weight": 1
     },
     {
@@ -663,6 +699,12 @@
     {
       "kind": "references",
       "source": "megspeech.data.corpus.Corpus",
+      "target": "megspeech.data.continuous.Continuous",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.data.corpus.Corpus",
       "target": "megspeech.data.corpus.Corpus",
       "weight": 1
     },
@@ -673,9 +715,27 @@
       "weight": 1
     },
     {
+      "kind": "references",
+      "source": "megspeech.data.corpus.Corpus",
+      "target": "megspeech.data.grouping.Grouping",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.data.corpus.Corpus",
+      "target": "megspeech.data.runs.Run",
+      "weight": 1
+    },
+    {
       "kind": "holds",
       "source": "megspeech.data.corpus.Corpus",
       "target": "megspeech.data.split.Split",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.corpus.Corpus.heard",
+      "target": "megspeech.data.continuous.Continuous.table",
       "weight": 1
     },
     {
@@ -693,25 +753,13 @@
     {
       "kind": "calls",
       "source": "megspeech.data.corpus.Corpus.load",
+      "target": "megspeech.data.continuous.Continuous.load",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.corpus.Corpus.load",
       "target": "megspeech.data.corpus.DataConfig.trains_on",
-      "weight": 1
-    },
-    {
-      "kind": "construct",
-      "source": "megspeech.data.corpus.Corpus.load",
-      "target": "megspeech.data.epochs.Epocher",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.data.corpus.Corpus.load",
-      "target": "megspeech.data.epochs.Epocher.cached",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.data.corpus.Corpus.load",
-      "target": "megspeech.data.epochs.Epocher.labelled",
       "weight": 1
     },
     {
@@ -722,110 +770,56 @@
     },
     {
       "kind": "calls",
-      "source": "megspeech.data.corpus.Corpus.load",
-      "target": "megspeech.data.split.Split.gather",
+      "source": "megspeech.data.corpus.Corpus.sequences",
+      "target": "megspeech.data.grouping.Grouping.spans",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.data.corpus.Corpus.load",
+      "source": "megspeech.data.corpus.Corpus.sequences",
       "target": "megspeech.data.split.Split.seen",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.data.corpus.Corpus.load",
-      "target": "megspeech.data.split.Split.validation",
+      "source": "megspeech.data.corpus.Corpus.split",
+      "target": "megspeech.data.grouping.Grouping.spans",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.corpus.Corpus.split",
+      "target": "megspeech.data.split.Split.of",
+      "weight": 1
+    },
+    {
+      "kind": "construct",
+      "source": "megspeech.data.corpus.Corpus.split",
+      "target": "megspeech.data.windows.Windows",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.corpus.Corpus.words",
+      "target": "megspeech.data.continuous.Continuous.inside",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.corpus.Corpus.words",
+      "target": "megspeech.data.grouping.Grouping.keep",
+      "weight": 1
+    },
+    {
+      "kind": "holds",
+      "source": "megspeech.data.corpus.DataConfig",
+      "target": "megspeech.data.grouping.Grouping",
       "weight": 1
     },
     {
       "kind": "references",
       "source": "megspeech.data.corpus.DataConfig",
       "target": "megspeech.data.runs.Run",
-      "weight": 1
-    },
-    {
-      "kind": "references",
-      "source": "megspeech.data.epochs.Epocher",
-      "target": "megspeech.data.epochs.Epochs",
-      "weight": 1
-    },
-    {
-      "kind": "holds",
-      "source": "megspeech.data.epochs.Epocher",
-      "target": "megspeech.data.epochs.Window",
-      "weight": 1
-    },
-    {
-      "kind": "references",
-      "source": "megspeech.data.epochs.Epocher",
-      "target": "megspeech.data.runs.Run",
-      "weight": 1
-    },
-    {
-      "kind": "holds",
-      "source": "megspeech.data.epochs.Epocher",
-      "target": "megspeech.data.vocabulary.Vocabulary",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.data.epochs.Epocher.cached",
-      "target": "megspeech.data.epochs.Epocher.epoch",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.data.epochs.Epocher.cached",
-      "target": "megspeech.data.epochs.Epochs.load",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.data.epochs.Epocher.epoch",
-      "target": "megspeech.data.epochs.Epocher.cut",
-      "weight": 1
-    },
-    {
-      "kind": "construct",
-      "source": "megspeech.data.epochs.Epocher.epoch",
-      "target": "megspeech.data.epochs.Epochs",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.data.epochs.Epocher.epoch",
-      "target": "megspeech.data.vocabulary.Vocabulary.labels",
-      "weight": 1
-    },
-    {
-      "kind": "references",
-      "source": "megspeech.data.epochs.Epochs",
-      "target": "megspeech.data.epochs.Epochs",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.data.epochs.Epochs.save",
-      "target": "megspeech.data.epochs.Epochs._half",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.data.epochs.main",
-      "target": "core.paths.DataRoot.from_config",
-      "weight": 1
-    },
-    {
-      "kind": "construct",
-      "source": "megspeech.data.epochs.main",
-      "target": "megspeech.data.epochs.Epocher",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.data.epochs.main",
-      "target": "megspeech.data.runs.Run.discover",
       "weight": 1
     },
     {
@@ -872,6 +866,24 @@
     },
     {
       "kind": "references",
+      "source": "megspeech.data.grouping.Grouping",
+      "target": "megspeech.data.spans.Spans",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.grouping.Grouping.spans",
+      "target": "megspeech.data.spans.Spans.by_gap",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.grouping.Grouping.spans",
+      "target": "megspeech.data.spans.Spans.by_sentence",
+      "weight": 1
+    },
+    {
+      "kind": "references",
       "source": "megspeech.data.runs.Run",
       "target": "megspeech.data.runs.Partition",
       "weight": 1
@@ -891,24 +903,6 @@
     {
       "kind": "references",
       "source": "megspeech.data.split.Split",
-      "target": "megspeech.data.epochs.Epocher",
-      "weight": 1
-    },
-    {
-      "kind": "references",
-      "source": "megspeech.data.split.Split",
-      "target": "megspeech.data.epochs.Epochs",
-      "weight": 1
-    },
-    {
-      "kind": "references",
-      "source": "megspeech.data.split.Split",
-      "target": "megspeech.data.runs.Run",
-      "weight": 1
-    },
-    {
-      "kind": "references",
-      "source": "megspeech.data.split.Split",
       "target": "megspeech.data.spans.Spans",
       "weight": 1
     },
@@ -921,19 +915,31 @@
     {
       "kind": "references",
       "source": "megspeech.data.split.Split",
-      "target": "megspeech.data.split.Split",
+      "target": "megspeech.data.split.Holdout",
       "weight": 1
     },
     {
       "kind": "references",
       "source": "megspeech.data.split.Split",
-      "target": "megspeech.data.split.Windows",
+      "target": "megspeech.data.split.Split",
+      "weight": 1
+    },
+    {
+      "kind": "holds",
+      "source": "megspeech.data.split.Split",
+      "target": "megspeech.data.windows.Windows",
       "weight": 1
     },
     {
       "kind": "construct",
       "source": "megspeech.data.split.Split.batch",
       "target": "megspeech.data.split.Batch",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.split.Split.from_arrays",
+      "target": "megspeech.data.windows.Windows.stacked",
       "weight": 1
     },
     {
@@ -951,19 +957,13 @@
     {
       "kind": "calls",
       "source": "megspeech.data.split.Split.from_holdout",
-      "target": "megspeech.data.split.Windows.iter_windows",
+      "target": "megspeech.data.split.Holdout.iter_windows",
       "weight": 1
     },
     {
       "kind": "calls",
       "source": "megspeech.data.split.Split.from_holdout",
-      "target": "megspeech.data.split.Windows.metadata_frame",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.data.split.Split.gather",
-      "target": "megspeech.data.spans.Spans.by_gap",
+      "target": "megspeech.data.split.Holdout.metadata_frame",
       "weight": 1
     },
     {
@@ -974,20 +974,14 @@
     },
     {
       "kind": "calls",
-      "source": "megspeech.data.split.Split.seen",
-      "target": "megspeech.data.spans.Spans.by_gap",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.data.split.Split.validation",
-      "target": "megspeech.data.epochs.Epocher.cached",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
       "source": "megspeech.data.vocabulary.Vocabulary.labels",
       "target": "megspeech.data.vocabulary.Vocabulary.spell",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.data.windows.Windows",
+      "target": "megspeech.data.windows.Windows",
       "weight": 1
     },
     {
@@ -1053,55 +1047,13 @@
     {
       "kind": "calls",
       "source": "megspeech.evaluation.report.Evaluator.assess",
-      "target": "megspeech.data.split.Split.dense",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.evaluation.report.Evaluator.assess",
-      "target": "megspeech.data.split.Split.novel",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.evaluation.report.Evaluator.assess",
-      "target": "megspeech.evaluation.report.Evaluator.evaluate",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.evaluation.report.Evaluator.assess",
       "target": "megspeech.evaluation.report.Evaluator.logits",
       "weight": 1
     },
     {
-      "kind": "construct",
-      "source": "megspeech.evaluation.report.Evaluator.assess",
-      "target": "megspeech.evaluation.report.Report",
-      "weight": 1
-    },
-    {
       "kind": "calls",
       "source": "megspeech.evaluation.report.Evaluator.assess",
-      "target": "megspeech.evaluation.ruler.Coverage.of",
-      "weight": 1
-    },
-    {
-      "kind": "construct",
-      "source": "megspeech.evaluation.report.Evaluator.assess",
-      "target": "megspeech.evaluation.ruler.Ruler",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.evaluation.report.Evaluator.assess",
-      "target": "megspeech.evaluation.ruler.Ruler.balanced",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.evaluation.report.Evaluator.assess",
-      "target": "megspeech.evaluation.ruler.Ruler.hits",
+      "target": "megspeech.evaluation.report.Evaluator.scored",
       "weight": 1
     },
     {
@@ -1123,21 +1075,27 @@
       "weight": 1
     },
     {
-      "kind": "calls",
-      "source": "megspeech.evaluation.report.Evaluator.graded",
-      "target": "megspeech.evaluation.report.Evaluator.logits",
-      "weight": 1
-    },
-    {
       "kind": "construct",
-      "source": "megspeech.evaluation.report.Evaluator.graded",
+      "source": "megspeech.evaluation.report.Evaluator.grade",
       "target": "megspeech.evaluation.ruler.Graded",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.report.Evaluator.graded",
+      "source": "megspeech.evaluation.report.Evaluator.grade",
       "target": "megspeech.evaluation.ruler.Ruler.hits",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.report.Evaluator.graded",
+      "target": "megspeech.evaluation.report.Evaluator.grade",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.report.Evaluator.graded",
+      "target": "megspeech.evaluation.report.Evaluator.logits",
       "weight": 1
     },
     {
@@ -1155,13 +1113,19 @@
     {
       "kind": "calls",
       "source": "megspeech.evaluation.report.Evaluator.report",
-      "target": "megspeech.evaluation.report.Evaluator.assess",
+      "target": "megspeech.evaluation.report.Evaluator.grade",
       "weight": 1
     },
     {
       "kind": "calls",
       "source": "megspeech.evaluation.report.Evaluator.report",
-      "target": "megspeech.evaluation.report.Evaluator.graded",
+      "target": "megspeech.evaluation.report.Evaluator.logits",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.report.Evaluator.report",
+      "target": "megspeech.evaluation.report.Evaluator.scored",
       "weight": 1
     },
     {
@@ -1180,6 +1144,60 @@
       "kind": "calls",
       "source": "megspeech.evaluation.report.Evaluator.report",
       "target": "megspeech.evaluation.ruler.Ruler.macro",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.report.Evaluator.scored",
+      "target": "megspeech.data.split.Split.dense",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.report.Evaluator.scored",
+      "target": "megspeech.data.split.Split.labelled",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.report.Evaluator.scored",
+      "target": "megspeech.data.split.Split.novel",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.report.Evaluator.scored",
+      "target": "megspeech.evaluation.report.Evaluator.evaluate",
+      "weight": 1
+    },
+    {
+      "kind": "construct",
+      "source": "megspeech.evaluation.report.Evaluator.scored",
+      "target": "megspeech.evaluation.report.Report",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.report.Evaluator.scored",
+      "target": "megspeech.evaluation.ruler.Coverage.of",
+      "weight": 1
+    },
+    {
+      "kind": "construct",
+      "source": "megspeech.evaluation.report.Evaluator.scored",
+      "target": "megspeech.evaluation.ruler.Ruler",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.report.Evaluator.scored",
+      "target": "megspeech.evaluation.ruler.Ruler.balanced",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.report.Evaluator.scored",
+      "target": "megspeech.evaluation.ruler.Ruler.hits",
       "weight": 1
     },
     {
@@ -1471,15 +1489,39 @@
       "weight": 1
     },
     {
-      "kind": "construct",
+      "kind": "calls",
       "source": "megspeech.submission.ensemble.main",
-      "target": "megspeech.data.epochs.Epocher",
+      "target": "megspeech.data.continuous.Continuous.load",
       "weight": 1
     },
     {
       "kind": "calls",
       "source": "megspeech.submission.ensemble.main",
-      "target": "megspeech.data.epochs.Epocher.labelled",
+      "target": "megspeech.data.corpus.Corpus.domains",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.submission.ensemble.main",
+      "target": "megspeech.data.corpus.Corpus.heard",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.submission.ensemble.main",
+      "target": "megspeech.data.corpus.Corpus.sequences",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.submission.ensemble.main",
+      "target": "megspeech.data.corpus.Corpus.words",
+      "weight": 1
+    },
+    {
+      "kind": "construct",
+      "source": "megspeech.submission.ensemble.main",
+      "target": "megspeech.data.corpus.DataConfig",
       "weight": 1
     },
     {
@@ -1492,18 +1534,6 @@
       "kind": "calls",
       "source": "megspeech.submission.ensemble.main",
       "target": "megspeech.data.split.Split.prior",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.submission.ensemble.main",
-      "target": "megspeech.data.split.Split.seen",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.submission.ensemble.main",
-      "target": "megspeech.data.split.Split.validation",
       "weight": 1
     },
     {
@@ -1963,6 +1993,12 @@
       "weight": 1
     },
     {
+      "kind": "calls",
+      "source": "megspeech.training.trainer.Trainer.model",
+      "target": "megspeech.data.split.Split.sample",
+      "weight": 1
+    },
+    {
       "kind": "construct",
       "source": "megspeech.training.trainer.Trainer.model",
       "target": "megspeech.model.scaler.Scaler",
@@ -2033,7 +2069,7 @@
       "role": null
     },
     {
-      "descendants": 32,
+      "descendants": 34,
       "id": "megspeech",
       "label": "megspeech",
       "level": "module",
@@ -2041,7 +2077,7 @@
       "role": null
     },
     {
-      "descendants": 8,
+      "descendants": 10,
       "id": "megspeech.data",
       "label": "data",
       "level": "module",
@@ -2082,6 +2118,14 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.grouping",
+      "label": "grouping",
+      "level": "module",
+      "parent": "megspeech.data",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.data.runs",
       "label": "runs",
       "level": "module",
@@ -2108,6 +2152,14 @@
       "descendants": 0,
       "id": "megspeech.data.vocabulary",
       "label": "vocabulary",
+      "level": "module",
+      "parent": "megspeech.data",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.windows",
+      "label": "windows",
       "level": "module",
       "parent": "megspeech.data",
       "role": null
@@ -2354,22 +2406,6 @@
     },
     {
       "descendants": 0,
-      "id": "megspeech.data.epochs.Epocher",
-      "label": "Epocher",
-      "level": "class",
-      "parent": "megspeech.data.epochs",
-      "role": "satellite"
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.data.epochs.Epochs",
-      "label": "Epochs",
-      "level": "class",
-      "parent": "megspeech.data.epochs",
-      "role": "satellite"
-    },
-    {
-      "descendants": 0,
       "id": "megspeech.data.epochs.Window",
       "label": "Window",
       "level": "class",
@@ -2390,6 +2426,14 @@
       "label": "Weights",
       "level": "class",
       "parent": "megspeech.data.fetch",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.grouping.Grouping",
+      "label": "Grouping",
+      "level": "class",
+      "parent": "megspeech.data.grouping",
       "role": "satellite"
     },
     {
@@ -2426,6 +2470,14 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.split.Holdout",
+      "label": "Holdout",
+      "level": "class",
+      "parent": "megspeech.data.split",
+      "role": "primary"
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.data.split.Split",
       "label": "Split",
       "level": "class",
@@ -2434,18 +2486,18 @@
     },
     {
       "descendants": 0,
-      "id": "megspeech.data.split.Windows",
-      "label": "Windows",
-      "level": "class",
-      "parent": "megspeech.data.split",
-      "role": "primary"
-    },
-    {
-      "descendants": 0,
       "id": "megspeech.data.vocabulary.Vocabulary",
       "label": "Vocabulary",
       "level": "class",
       "parent": "megspeech.data.vocabulary",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.windows.Windows",
+      "label": "Windows",
+      "level": "class",
+      "parent": "megspeech.data.windows",
       "role": "satellite"
     },
     {
@@ -2930,8 +2982,24 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.continuous.Continuous.inside",
+      "label": "inside",
+      "level": "method",
+      "parent": "megspeech.data.continuous.Continuous",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.data.continuous.Continuous.load",
       "label": "load",
+      "level": "method",
+      "parent": "megspeech.data.continuous.Continuous",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.continuous.Continuous.table",
+      "label": "table",
       "level": "method",
       "parent": "megspeech.data.continuous.Continuous",
       "role": null
@@ -2986,8 +3054,48 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.corpus.Corpus.domains",
+      "label": "domains",
+      "level": "method",
+      "parent": "megspeech.data.corpus.Corpus",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.corpus.Corpus.heard",
+      "label": "heard",
+      "level": "method",
+      "parent": "megspeech.data.corpus.Corpus",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.data.corpus.Corpus.load",
       "label": "load",
+      "level": "method",
+      "parent": "megspeech.data.corpus.Corpus",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.corpus.Corpus.sequences",
+      "label": "sequences",
+      "level": "method",
+      "parent": "megspeech.data.corpus.Corpus",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.corpus.Corpus.split",
+      "label": "split",
+      "level": "method",
+      "parent": "megspeech.data.corpus.Corpus",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.corpus.Corpus.words",
+      "label": "words",
       "level": "method",
       "parent": "megspeech.data.corpus.Corpus",
       "role": null
@@ -3002,74 +3110,10 @@
     },
     {
       "descendants": 0,
-      "id": "megspeech.data.epochs.Epocher.cached",
-      "label": "cached",
-      "level": "method",
-      "parent": "megspeech.data.epochs.Epocher",
-      "role": null
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.data.epochs.Epocher.cut",
-      "label": "cut",
-      "level": "method",
-      "parent": "megspeech.data.epochs.Epocher",
-      "role": null
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.data.epochs.Epocher.epoch",
-      "label": "epoch",
-      "level": "method",
-      "parent": "megspeech.data.epochs.Epocher",
-      "role": null
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.data.epochs.Epocher.labelled",
-      "label": "labelled",
-      "level": "method",
-      "parent": "megspeech.data.epochs.Epocher",
-      "role": null
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.data.epochs.Epochs._half",
-      "label": "_half",
-      "level": "method",
-      "parent": "megspeech.data.epochs.Epochs",
-      "role": null
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.data.epochs.Epochs.load",
-      "label": "load",
-      "level": "method",
-      "parent": "megspeech.data.epochs.Epochs",
-      "role": null
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.data.epochs.Epochs.save",
-      "label": "save",
-      "level": "method",
-      "parent": "megspeech.data.epochs.Epochs",
-      "role": null
-    },
-    {
-      "descendants": 0,
       "id": "megspeech.data.epochs.Window.__call__",
       "label": "__call__",
       "level": "method",
       "parent": "megspeech.data.epochs.Window",
-      "role": null
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.data.epochs.main",
-      "label": "main",
-      "level": "method",
-      "parent": "megspeech.data.epochs",
       "role": null
     },
     {
@@ -3102,6 +3146,22 @@
       "label": "main",
       "level": "method",
       "parent": "megspeech.data.fetch",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.grouping.Grouping.keep",
+      "label": "keep",
+      "level": "method",
+      "parent": "megspeech.data.grouping.Grouping",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.grouping.Grouping.spans",
+      "label": "spans",
+      "level": "method",
+      "parent": "megspeech.data.grouping.Grouping",
       "role": null
     },
     {
@@ -3170,6 +3230,14 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.spans.Spans.by_sentence",
+      "label": "by_sentence",
+      "level": "method",
+      "parent": "megspeech.data.spans.Spans",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.data.spans.Spans.lengths",
       "label": "lengths",
       "level": "method",
@@ -3182,6 +3250,22 @@
       "label": "target",
       "level": "method",
       "parent": "megspeech.data.split.Batch",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.split.Holdout.iter_windows",
+      "label": "iter_windows",
+      "level": "method",
+      "parent": "megspeech.data.split.Holdout",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.split.Holdout.metadata_frame",
+      "label": "metadata_frame",
+      "level": "method",
+      "parent": "megspeech.data.split.Holdout",
       "role": null
     },
     {
@@ -3226,8 +3310,8 @@
     },
     {
       "descendants": 0,
-      "id": "megspeech.data.split.Split.gather",
-      "label": "gather",
+      "id": "megspeech.data.split.Split.labelled",
+      "label": "labelled",
       "level": "method",
       "parent": "megspeech.data.split.Split",
       "role": null
@@ -3250,8 +3334,8 @@
     },
     {
       "descendants": 0,
-      "id": "megspeech.data.split.Split.on_device",
-      "label": "on_device",
+      "id": "megspeech.data.split.Split.of",
+      "label": "of",
       "level": "method",
       "parent": "megspeech.data.split.Split",
       "role": null
@@ -3274,34 +3358,18 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.split.Split.sample",
+      "label": "sample",
+      "level": "method",
+      "parent": "megspeech.data.split.Split",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.data.split.Split.seen",
       "label": "seen",
       "level": "method",
       "parent": "megspeech.data.split.Split",
-      "role": null
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.data.split.Split.validation",
-      "label": "validation",
-      "level": "method",
-      "parent": "megspeech.data.split.Split",
-      "role": null
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.data.split.Windows.iter_windows",
-      "label": "iter_windows",
-      "level": "method",
-      "parent": "megspeech.data.split.Windows",
-      "role": null
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.data.split.Windows.metadata_frame",
-      "label": "metadata_frame",
-      "level": "method",
-      "parent": "megspeech.data.split.Windows",
       "role": null
     },
     {
@@ -3338,6 +3406,38 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.windows.Windows.__call__",
+      "label": "__call__",
+      "level": "method",
+      "parent": "megspeech.data.windows.Windows",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.windows.Windows.__len__",
+      "label": "__len__",
+      "level": "method",
+      "parent": "megspeech.data.windows.Windows",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.windows.Windows.device",
+      "label": "device",
+      "level": "method",
+      "parent": "megspeech.data.windows.Windows",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.windows.Windows.stacked",
+      "label": "stacked",
+      "level": "method",
+      "parent": "megspeech.data.windows.Windows",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.evaluation.report.Evaluator.assess",
       "label": "assess",
       "level": "method",
@@ -3348,6 +3448,14 @@
       "descendants": 0,
       "id": "megspeech.evaluation.report.Evaluator.evaluate",
       "label": "evaluate",
+      "level": "method",
+      "parent": "megspeech.evaluation.report.Evaluator",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.evaluation.report.Evaluator.grade",
+      "label": "grade",
       "level": "method",
       "parent": "megspeech.evaluation.report.Evaluator",
       "role": null
@@ -3372,6 +3480,14 @@
       "descendants": 0,
       "id": "megspeech.evaluation.report.Evaluator.report",
       "label": "report",
+      "level": "method",
+      "parent": "megspeech.evaluation.report.Evaluator",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.evaluation.report.Evaluator.scored",
+      "label": "scored",
       "level": "method",
       "parent": "megspeech.evaluation.report.Evaluator",
       "role": null
