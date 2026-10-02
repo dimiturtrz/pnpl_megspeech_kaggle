@@ -5,12 +5,17 @@ from typing import override
 
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from megspeech.model.mixing import Mixing
 
 
 class SpanConformer(nn.Module):
-    """`nn.TransformerEncoder`'s call over a span of words, a word-wise convolution module after every layer."""
+    """`nn.TransformerEncoder`'s call over a span of words, a word-wise convolution module after every layer.
+
+    Attention runs on the math kernel: under `torch.compile` the memory-efficient kernel's backward rejects the
+    padding mask's layout ("(*bias): last dimension must be contiguous"), and spans are too short for it to matter.
+    """
 
     def __init__(self, width: int, heads: int, layers: int, dropout: float, kernel: int) -> None:
         super().__init__()
@@ -22,6 +27,7 @@ class SpanConformer(nn.Module):
 
     @override
     def forward(self, h: Float[Tensor, "g w d"], src_key_padding_mask: Bool[Tensor, "g w"]) -> Float[Tensor, "g w d"]:
-        for attend, mix in zip(self.attend, self.mix, strict=True):
-            h = mix(attend(h, src_key_padding_mask=src_key_padding_mask), src_key_padding_mask)
+        with sdpa_kernel(SDPBackend.MATH):
+            for attend, mix in zip(self.attend, self.mix, strict=True):
+                h = mix(attend(h, src_key_padding_mask=src_key_padding_mask), src_key_padding_mask)
         return h
