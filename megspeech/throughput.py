@@ -1,6 +1,6 @@
 """Where a training epoch's wall-clock goes: optimiser steps vs the per-epoch report, and the top ops of each.
 
-`python -m megspeech.throughput --tasks Sherlock1` profiles a few steps on a small train set (the step cost
+`python -m megspeech.throughput --data.tasks Sherlock1` profiles a few steps on a small train set (the step cost
 depends on the batch, not the train-set size) and one full validation report, then projects a full epoch.
 """
 
@@ -15,7 +15,8 @@ import torch
 from torch.profiler import ProfilerActivity, profile
 
 from core.paths import DataRoot
-from megspeech.train import Corpus, Step, TrainConfig, Trainer
+from core.tree import Tree
+from megspeech.train import Corpus, DataConfig, RunConfig, Step, Trainer
 
 LOG = logging.getLogger(__name__)
 
@@ -80,9 +81,9 @@ class Throughput:
         model = trainer.model(train)
         optimizer = trainer.optimizer(model)
         total = self.warmup + 2 * self.steps
-        schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, trainer.config.lr, total_steps=total)
-        state = Step(model, optimizer, schedule, train.capacity(trainer.config.batch))
-        draws = torch.randint(len(train.index), (total, trainer.config.batch), device=train.x.device)
+        schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, trainer.config.optim.lr, total_steps=total)
+        state = Step(model, optimizer, schedule, train.capacity(trainer.config.optim.batch))
+        draws = torch.randint(len(train.index), (total, trainer.config.optim.batch), device=train.x.device)
         for spans in draws[: self.warmup]:
             trainer.step(state, train, spans)
 
@@ -95,21 +96,21 @@ class Throughput:
         log_prior = train.log_prior()
         stepped = self.phase(steps, train.x.device)
         reported = self.phase(lambda: trainer.report(model, corpus.validation, log_prior, 0, 0.0), train.x.device)
-        per_epoch = math.ceil(full_spans / trainer.config.batch)
+        per_epoch = math.ceil(full_spans / trainer.config.optim.batch)
         return Projection(stepped, reported, stepped.seconds / self.steps, per_epoch)
 
 
 def main() -> None:
     """Profile optimiser steps and one validation report; log top ops and the projected full-epoch split."""
     parser = argparse.ArgumentParser(description=main.__doc__)
-    parser.add_argument("--tasks", nargs="*", default=["Sherlock1"])
     parser.add_argument("--steps", type=int, default=STEPS)
     parser.add_argument("--full-spans", type=int, default=FULL_SPANS)
-    parser.add_argument("--compiled", action="store_true", help="compile the model")
     parser.add_argument("--host", action="store_true", help="rank ops by host time")
+    tree = Tree(RunConfig, RunConfig(data=DataConfig(tasks=("Sherlock1",))))
+    tree.arguments(parser)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    config = TrainConfig(tasks=tuple(args.tasks), compiled=args.compiled)
+    config = tree.parse(args)
     root = DataRoot.from_config()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     corpus = Corpus.load(config, root, device)

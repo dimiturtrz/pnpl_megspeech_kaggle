@@ -21,7 +21,7 @@ from megspeech.model import SentenceNet
 from megspeech.onsets import ContextConfig
 from megspeech.runs import Partition, Run
 from megspeech.scaler import Scaler
-from megspeech.train import Split, TrainConfig, Trainer
+from megspeech.train import RunConfig, Split, Trainer
 from megspeech.wordnet import CHANNELS
 
 LOG = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ def main() -> None:
     labelled = [epocher.labelled(r) for r in runs if r.partition is Partition.TRAIN]
     labels = np.concatenate([y for y, _ in labelled])
     log_prior = Split.prior(torch.from_numpy(labels), torch.ones(len(labels))).to(device)
-    trainer = Trainer(TrainConfig(), device, Split.seen(labelled))
+    trainer = Trainer(RunConfig(), device, Split.seen(labelled))
     report = trainer.report(model, Split.validation(epocher, runs, device), log_prior, 0, 0.0)
     LOG.info("%s", {task: (round(r.context.bacc10, 4), round(r.novel.bacc10, 4)) for task, r in report.domains.items()})
     LOG.info("macro %.4f tau %s over %d words", report.macro.bacc10, report.macro.tau, report.macro.n)

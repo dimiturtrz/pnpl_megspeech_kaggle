@@ -8,7 +8,7 @@ import torch
 from megspeech import throughput as module
 from megspeech.spans import Spans
 from megspeech.throughput import Phase, Projection, Throughput, main
-from megspeech.train import Corpus, Split, TrainConfig, Trainer
+from megspeech.train import Corpus, OptimConfig, RunConfig, SelectionConfig, Split, Trainer
 from megspeech.wordnet import CHANNELS
 
 CPU = torch.device("cpu")
@@ -42,14 +42,16 @@ def test_phase() -> None:
 
 
 def test_measure() -> None:
-    out = Throughput(steps=2, warmup=1).measure(Trainer(TrainConfig(batch=4, min_novel=1), CPU), corpus(), 40)
+    out = Throughput(steps=2, warmup=1).measure(
+        Trainer(RunConfig(optim=OptimConfig(batch=4), selection=SelectionConfig(1)), CPU), corpus(), 40
+    )
     assert out.steps == 10
     assert out.per_step == pytest.approx(out.train.seconds / 2)
     assert 0 < out.eval_share() < 1
 
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
-    monkeypatch.setattr(module.Corpus, "load", classmethod(lambda *_: corpus(TrainConfig.min_novel)))
+    monkeypatch.setattr(module.Corpus, "load", classmethod(lambda *_: corpus(SelectionConfig.min_novel)))
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: tmp_path))
     monkeypatch.setattr(module.torch.cuda, "is_available", lambda: False)
     monkeypatch.setattr(sys, "argv", ["throughput", "--steps", "1", "--full-spans", "8"])

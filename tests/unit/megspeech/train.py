@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import math
 from pathlib import Path
 from typing import cast, override
@@ -14,9 +15,23 @@ from megspeech import train as module
 from megspeech.augment import Augment
 from megspeech.epochs import Epocher, Epochs
 from megspeech.heads import IGNORE
+from megspeech.onsets import Clock
 from megspeech.runs import Run
 from megspeech.spans import PAD, Spans
-from megspeech.train import ADJUSTMENTS, DENSE, Corpus, Head, Score, Split, Step, TrainConfig, Trainer
+from megspeech.train import (
+    ADJUSTMENTS,
+    DENSE,
+    Corpus,
+    DataConfig,
+    Head,
+    OptimConfig,
+    RunConfig,
+    Score,
+    SelectionConfig,
+    Split,
+    Step,
+    Trainer,
+)
 from megspeech.wordnet import CHANNELS, WORDS
 
 SAMPLES = 50
@@ -43,9 +58,9 @@ def test_trains_on(tmp_path: Path) -> None:
     sherlock = Run(tmp_path / "sub-0_ses-1_task-Sherlock1_run-1_meg.h5")
     timit = Run(tmp_path / "sub-0_ses-1_task-TIMIT_run-1_meg.h5")
     held = Run(tmp_path / "sub-0_ses-11_task-Sherlock1_run-2_meg.h5")
-    only = TrainConfig(tasks=("Sherlock1",))
+    only = DataConfig(tasks=("Sherlock1",))
     assert [only.trains_on(r) for r in (sherlock, timit, held)] == [True, False, False]
-    assert TrainConfig().trains_on(timit)
+    assert DataConfig().trains_on(timit)
 
 
 def test_from_arrays() -> None:
@@ -124,7 +139,7 @@ def test_dense() -> None:
 
 
 def test_logits() -> None:
-    out = Trainer(TrainConfig(), CPU).logits(Constant(), split())
+    out = Trainer(RunConfig(), CPU).logits(Constant(), split())
     assert out[Head.CONTEXT].shape == (12, WORDS)
     assert torch.all(out[Head.WORD].argmax(dim=1) == 0)
 
@@ -132,7 +147,7 @@ def test_logits() -> None:
 def test_evaluate() -> None:
     logits = torch.zeros(3, WORDS)
     logits[:, 0] = 1
-    result = Trainer(TrainConfig(), CPU).evaluate(logits, torch.tensor([0, 0, 0]), torch.zeros(WORDS))
+    result = Trainer(RunConfig(), CPU).evaluate(logits, torch.tensor([0, 0, 0]), torch.zeros(WORDS))
     assert result.bacc10 == pytest.approx(1.0)
     assert result.n == 3
 
@@ -143,7 +158,7 @@ def test_best() -> None:
 
 
 def test_assess() -> None:
-    report = Trainer(TrainConfig(), CPU).assess(Constant(), split(), torch.zeros(WORDS))
+    report = Trainer(RunConfig(), CPU).assess(Constant(), split(), torch.zeros(WORDS))
     assert report.dense.n == DENSE
     assert report.novel.n == DENSE
     assert report.context.n == len(split().y)
@@ -153,7 +168,7 @@ def test_assess() -> None:
 def test_graded() -> None:
     domains = {"a": split(), "b": split(n=8, seed=1)}
     sizes = {name: len(s.novel(frozenset())) for name, s in domains.items()}
-    graded = Trainer(TrainConfig(min_novel=max(sizes.values())), CPU).graded(
+    graded = Trainer(RunConfig(selection=SelectionConfig(max(sizes.values()))), CPU).graded(
         Constant(), domains, torch.zeros(WORDS), 0.0
     )
     assert set(graded.domains) == {name for name, size in sizes.items() if size == max(sizes.values())}
@@ -164,7 +179,9 @@ def test_graded() -> None:
 
 def test_report() -> None:
     domains = {"a": split(), "b": split(n=8, seed=1)}
-    report = Trainer(TrainConfig(min_novel=1), CPU).report(Constant(), domains, torch.zeros(WORDS), 3, 0.5)
+    report = Trainer(RunConfig(selection=SelectionConfig(1)), CPU).report(
+        Constant(), domains, torch.zeros(WORDS), 3, 0.5
+    )
     assert report.epoch == 3
     assert set(report.domains) == {"a", "b"}
     counted = list(report.domains.values())
@@ -175,20 +192,20 @@ def test_report() -> None:
 
 
 def test_model() -> None:
-    model = Trainer(TrainConfig(compiled=True), CPU).model(split())
+    model = Trainer(RunConfig(optim=OptimConfig(compiled=True)), CPU).model(split())
     assert next(model.parameters()).device == CPU
     assert "_orig_mod" not in next(iter(model.state_dict()))
 
 
 def test_optimizer() -> None:
-    trainer = Trainer(TrainConfig(lr=0.01), CPU)
+    trainer = Trainer(RunConfig(optim=OptimConfig(lr=0.01)), CPU)
     optimizer = trainer.optimizer(trainer.model(split()))
     assert optimizer.defaults["lr"] == 0.01
     assert not optimizer.defaults["fused"]
 
 
 def test_step() -> None:
-    trainer = Trainer(TrainConfig(), CPU)
+    trainer = Trainer(RunConfig(), CPU)
     model = trainer.model(split())
     optimizer = torch.optim.AdamW(model.parameters())
     before = [p.clone() for p in model.parameters()]
@@ -203,13 +220,18 @@ def test_step() -> None:
 
 
 def test_fit() -> None:
-    model, history = Trainer(TrainConfig(epochs=1, batch=4, min_novel=1, clip=1.0, augment=Augment(0.5, 0.1)), CPU).fit(
-        split(), {"a": split(seed=1)}, torch.zeros(WORDS)
-    )
+    model, history = Trainer(
+        RunConfig(
+            augment=Augment(0.5, 0.1), optim=OptimConfig(epochs=1, batch=4, clip=1.0), selection=SelectionConfig(1)
+        ),
+        CPU,
+    ).fit(split(), {"a": split(seed=1)}, torch.zeros(WORDS))
     assert len(history) == 1
     assert isinstance(model, nn.Module)
     with pytest.raises(FloatingPointError):
-        Trainer(TrainConfig(epochs=1, batch=4, lr=math.inf), CPU).fit(split(), {"a": split(seed=1)}, torch.zeros(WORDS))
+        Trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, lr=math.inf)), CPU).fit(
+            split(), {"a": split(seed=1)}, torch.zeros(WORDS)
+        )
 
 
 class Holdout:
@@ -263,7 +285,7 @@ def corpus_root(tmp_path: Path) -> DataRoot:
 
 
 def test_load(tmp_path: Path) -> None:
-    corpus = Corpus.load(TrainConfig(), corpus_root(tmp_path), CPU)
+    corpus = Corpus.load(RunConfig(), corpus_root(tmp_path), CPU)
     assert len(corpus.train.y) == 2
     assert set(corpus.validation) == {"Sherlock1"}
     assert corpus.seen == {(0, 1)}
@@ -271,7 +293,7 @@ def test_load(tmp_path: Path) -> None:
 
 def test_trainer(tmp_path: Path) -> None:
     root = corpus_root(tmp_path)
-    trainer = Corpus.load(TrainConfig(), root, CPU).trainer(TrainConfig(), root)
+    trainer = Corpus.load(RunConfig(), root, CPU).trainer(RunConfig(), root)
     assert trainer.seen == {(0, 1)}
     assert trainer.prototypes is None
 
@@ -297,7 +319,20 @@ def test_submit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "LibriBrainCompetitionHoldout", Holdout)
     monkeypatch.setattr(module, "Submission", Written)
     root = cast("DataRoot", Root(tmp_path))
-    path = Trainer(TrainConfig(), CPU).submit(Constant(), root, torch.zeros(WORDS), 0.5, tmp_path / "s.npz")
+    path = Trainer(RunConfig(), CPU).submit(Constant(), root, torch.zeros(WORDS), 0.5, tmp_path / "s.npz")
     stored = np.load(path)
     assert stored["primary"].shape == (3, WORDS)
     assert np.allclose(stored["primary"].sum(axis=1), 1, atol=1e-5)
+
+
+def test_saved(tmp_path: Path) -> None:
+    flat = {"epochs": 3, "read_weight": 4.0, "min_novel": 7, "augment": {"dropout": 0.1, "gain": 0.0}}
+    (tmp_path / module.METRICS).write_text(json.dumps({"config": {**flat, "context": {"clock": "order"}}}))
+    config = RunConfig.saved(tmp_path)
+    assert config.optim.epochs == 3
+    assert config.data.read_weight == 4.0
+    assert config.selection.min_novel == 7
+    assert config.augment == Augment(0.1, 0.0)
+    assert config.context.clock is Clock.ORDER
+    (tmp_path / module.METRICS).write_text(json.dumps({"config": dataclasses.asdict(config)}))
+    assert RunConfig.saved(tmp_path) == config
