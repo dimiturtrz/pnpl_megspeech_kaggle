@@ -1,4 +1,5 @@
-"""Subject 0's recordings on disk and the official Deep-track partition each belongs to."""
+"""Every subject's recordings on disk and the partition each belongs to: the official Deep-track split for subject 0,
+the pooling split for subjects 1-32."""
 
 import re
 from dataclasses import dataclass
@@ -7,11 +8,17 @@ from pathlib import Path
 
 CHANNELS = 306
 
+DEEP = 0
+"""The Deep track's subject: the one the official split, the validation domains and the holdout belong to."""
+
 
 class Partition(StrEnum):
     TRAIN = "train"
     VALIDATION = "validation"
     TEST = "test"
+    POOL = "pool"
+    """Another subject hearing the Sherlock1 ruler's text: never trained on, never a validation domain — kept for
+    scoring cross-subject pooling on that text."""
 
 
 HELD_OUT = {
@@ -24,7 +31,14 @@ HELD_OUT = {
 }
 """`pnpl` 0.2.0 `libribrain100/manifest.py`; every other subject-0 run trains."""
 
-NAME = re.compile(r"sub-0_ses-(?P<session>\d+)_task-(?P<task>[A-Za-z0-9]+)_run-(?P<run>\d+)_")
+POOLED = {("Sherlock1", 11, 1): Partition.POOL}
+"""Subjects 1-32 hear Sherlock1 sessions 11 and 12 once each: 11 is the text of subject 0's validation run, 12 of its
+test run. Session 12 trains; session 11 is pooled."""
+
+SPLITS = {DEEP: HELD_OUT}
+"""Each subject's held-out runs; a subject absent here is split by `POOLED`."""
+
+NAME = re.compile(r"sub-(?P<subject>\d+)_ses-(?P<session>\d+)_task-(?P<task>[A-Za-z0-9]+)_run-(?P<run>\d+)_")
 
 
 @dataclass(frozen=True)
@@ -34,16 +48,25 @@ class Run:
     meg: Path
 
     @property
-    def key(self) -> tuple[str, int, int]:
+    def parsed(self) -> re.Match[str]:
         match = NAME.search(self.meg.name)
         if match is None:
             raise ValueError(self.meg.name)
+        return match
+
+    @property
+    def subject(self) -> int:
+        return int(self.parsed["subject"])
+
+    @property
+    def key(self) -> tuple[str, int, int]:
+        match = self.parsed
         return match["task"], int(match["session"]), int(match["run"])
 
     @property
     def name(self) -> str:
         task, session, run = self.key
-        return f"sub-0_ses-{session}_task-{task}_run-{run}"
+        return f"sub-{self.subject}_ses-{session}_task-{task}_run-{run}"
 
     @property
     def events(self) -> Path:
@@ -51,10 +74,10 @@ class Run:
 
     @property
     def partition(self) -> Partition:
-        return HELD_OUT.get(self.key, Partition.TRAIN)
+        return SPLITS.get(self.subject, POOLED).get(self.key, Partition.TRAIN)
 
     @classmethod
     def discover(cls, raw: Path) -> list["Run"]:
-        """Every subject-0 run under `raw` whose MEG and events have both finished downloading."""
-        runs = (cls(meg) for meg in sorted(raw.rglob("sub-0_*_meg.h5")))
+        """Every run of every subject under `raw` whose MEG and events have both finished downloading."""
+        runs = (cls(meg) for meg in sorted(raw.rglob("sub-*_meg.h5")))
         return [run for run in runs if run.events.exists() and run.events.stat().st_size]

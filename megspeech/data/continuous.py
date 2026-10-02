@@ -1,4 +1,4 @@
-"""Every subject-0 run as one continuous 50 Hz recording, cached in float16 and loaded whole onto the GPU.
+"""Every run of every subject as one continuous 50 Hz recording, cached in float16 and loaded whole onto the GPU.
 
 A continuous copy lets word windows be gathered on the device at any offset and length (`windows.Windows`).
 The recordings are 250 Hz and already low-passed at 125 Hz; d'Ascoli 2025 decode at 50 Hz, and 250 / 50 = 5
@@ -141,7 +141,9 @@ class Decimator:
             for path in pool.map(self.write, runs):
                 LOG.info("%s", path.name)
         table = pd.concat([self.words(run) for run in runs], ignore_index=True)
-        table.to_csv(self.cache / WORDS, sep="\t", index=False)
+        partial = self.cache / f"{WORDS}.partial"
+        table.to_csv(partial, sep="\t", index=False)
+        partial.replace(self.cache / WORDS)
         return table
 
 
