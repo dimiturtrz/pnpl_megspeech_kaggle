@@ -9,7 +9,7 @@ from torch import Tensor, nn
 from megspeech.data.runs import CHANNELS
 from megspeech.model.onsets import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.span import SpanConformer
-from megspeech.model.subjects import SubjectLayer
+from megspeech.model.subjects import SubjectLayer, Unseen
 from megspeech.model.wordnet import WordNet
 
 
@@ -25,10 +25,12 @@ class SentenceNet(nn.Module):
         scale: nn.Module,
         context: ContextConfig = CONTEXT,
         prototypes: Float[Tensor, "v d"] | None = None,
+        unseen: Unseen = Unseen.IDENTITY,
     ) -> None:
+        """`unseen` reads a subject the subject layer has no matrix for (`SubjectLayer`)."""
         super().__init__()
         self.scale = scale
-        self.subjects = SubjectLayer.of(context.subjects, CHANNELS)
+        self.subjects = SubjectLayer.of(context.subjects, CHANNELS, unseen)
         self.words = WordNet(context.conv)
         self.project = nn.Linear(self.words.width, context.width)
         self.clock = context.clock

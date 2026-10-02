@@ -10,6 +10,7 @@ from megspeech.model.ensemble import Ensemble
 from megspeech.model.onsets import ContextConfig
 from megspeech.model.scaler import Scaler
 from megspeech.model.sentence import SentenceNet
+from megspeech.model.subjects import SubjectLayer, Unseen
 
 SAMPLES = 50
 
@@ -54,3 +55,13 @@ def test_load_shaped(tmp_path: Path) -> None:
     torch.save(model.state_dict(), tmp_path / "model.pt")
     context.save(tmp_path)
     assert Ensemble.load([tmp_path / "model.pt"]).members[0].state_dict()["head.weight"].shape[1] == context.width
+
+
+def test_load_unseen(tmp_path: Path) -> None:
+    context = ContextConfig(width=32, heads=2, layers=1, subjects=3)
+    model = SentenceNet(Scaler(torch.zeros(1, CHANNELS, 1)), context=context)
+    torch.save(model.state_dict(), tmp_path / "model.pt")
+    context.save(tmp_path)
+    layer = Ensemble.load([tmp_path / "model.pt"], Unseen.MEAN).members[0].subjects
+    assert isinstance(layer, SubjectLayer)
+    assert layer.unseen is Unseen.MEAN

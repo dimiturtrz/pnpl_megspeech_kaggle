@@ -15,7 +15,7 @@ from pnpl.competition.holdout import HOLDOUT_SUBDIR, LibriBrainCompetitionHoldou
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.continuous import DIRECTORY, TAIL, WORDS, Continuous, Decimator
 from megspeech.data.epochs import RATE, SFREQ, WINDOW
-from megspeech.data.holdout import HOLDOUT, Archive, Epochs, HoldoutCache, Source, main
+from megspeech.data.holdout import HOLDOUT, Archive, Epochs, HoldoutCache, Source, Track, main
 from megspeech.data.runs import Run
 
 CHANNELS = 3
@@ -183,6 +183,17 @@ def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert cache.decimator.cache.parts[-2:] == (DIRECTORY.format(rate=RATE), HOLDOUT)
     fast = HoldoutCache.of(DataRoot.from_config(), 2).decimator
     assert (fast.cache.parts[-2:], fast.rate) == (("continuous125", HOLDOUT), SFREQ / 2)
+    assert HoldoutCache.of(DataRoot.from_config(), track=Track.BROAD).subjects == tuple(range(1, 40))
+
+
+def test_track_subjects() -> None:
+    assert Track.DEEP.subjects == (0,)
+    assert Track.BROAD.subjects == tuple(range(1, 40))
+
+
+def test_track_holdout(tmp_path: Path) -> None:
+    holdout(tmp_path)
+    assert len(Track.DEEP.holdout(tmp_path)) == 1 + len(ONSETS) + WORD_EPOCHS
 
 
 def test_archives(tmp_path: Path) -> None:

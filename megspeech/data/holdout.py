@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 import torch
 from jaxtyping import Bool, Float, Int
-from pnpl.competition.holdout import DEEP_SUBJECTS, HOLDOUT_SUBDIR, LibriBrainCompetitionHoldout
+from pnpl.competition.holdout import DEEP_SUBJECTS, HOLDOUT_SUBDIR, TRACKS, LibriBrainCompetitionHoldout
 
 from core.paths import DataRoot
 from megspeech.data.continuous import WORDS, Continuous, Decimator
@@ -36,7 +36,21 @@ LOG = logging.getLogger(__name__)
 HOLDOUT = "holdout"
 """The holdout's cache, a directory inside the training cache that `Continuous.load` never globs into."""
 
-TRACK = "deep"
+
+class Track(StrEnum):
+    """A competition track: the holdout subjects it scores, in canonical order."""
+
+    DEEP = "deep"
+    BROAD = "broad"
+    """Subjects 1-39; 33-39 have no training data, so a model meets them zero-shot."""
+
+    @property
+    def subjects(self) -> tuple[int, ...]:
+        return TRACKS[self.value]
+
+    def holdout(self, raw: Path) -> LibriBrainCompetitionHoldout:
+        """The track's rows as the competition indexes them, from the archives under `raw`."""
+        return LibriBrainCompetitionHoldout(self.value, data_path=raw, download=False)
 
 
 class Source(StrEnum):
@@ -132,10 +146,10 @@ class HoldoutCache:
     subjects: tuple[int, ...] = DEEP_SUBJECTS
 
     @classmethod
-    def of(cls, root: DataRoot, decimate: int = DECIMATE) -> "HoldoutCache":
-        """The holdout cached inside the training cache at `decimate`."""
+    def of(cls, root: DataRoot, decimate: int = DECIMATE, track: Track = Track.DEEP) -> "HoldoutCache":
+        """`track`'s holdout cached inside the training cache at `decimate`."""
         trained = Decimator.under(root.processed(), decimate)
-        return cls(root.raw() / HOLDOUT_SUBDIR, Decimator(trained.cache / HOLDOUT, decimate))
+        return cls(root.raw() / HOLDOUT_SUBDIR, Decimator(trained.cache / HOLDOUT, decimate), track.subjects)
 
     def archives(self) -> list[Archive]:
         return [Archive(self.raw / f"subj{subject:02d}_{source}.npz") for subject in self.subjects for source in Source]
@@ -159,18 +173,19 @@ class HoldoutCache:
 
 
 def main() -> None:
-    """Cache the Deep holdout, then report its windows' shape, count against the holdout's rows, finite share, and
+    """Cache a track's holdout, then report its windows' shape, count against the holdout's rows, finite share, and
     the share of samples zeroed past their epoch's end."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--window", type=float, default=1.0, help="window length in seconds")
     parser.add_argument("--decimate", type=int, default=DECIMATE)
+    parser.add_argument("--track", type=Track, choices=list(Track), default=Track.DEEP)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    cache = HoldoutCache.of(root, args.decimate)
+    cache = HoldoutCache.of(root, args.decimate, args.track)
     cache.build()
-    rows = len(LibriBrainCompetitionHoldout(TRACK, data_path=root.raw(), download=False))
+    rows = len(args.track.holdout(root.raw()))
     windows = cache.windows(args.device, round(args.window * cache.decimator.rate))
     x = windows(torch.arange(len(windows), device=windows.device))
     finite = float(torch.isfinite(x).float().mean())

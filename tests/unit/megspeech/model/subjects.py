@@ -1,7 +1,8 @@
 import torch
 
+from megspeech.data.runs import DEEP
 from megspeech.model.shared import Shared
-from megspeech.model.subjects import SubjectLayer
+from megspeech.model.subjects import SubjectLayer, Unseen
 
 GENERATOR = torch.Generator().manual_seed(0)
 
@@ -23,3 +24,19 @@ def test_of() -> None:
     assert isinstance(SubjectLayer.of(0, 4), Shared)
     assert not list(SubjectLayer.of(0, 4).parameters())
     assert SubjectLayer.of(2, 4).weight.shape == (2, 4, 4)
+
+
+def test_subject_layer_forward_unseen() -> None:
+    """A subject past every trained one is read through the layer's `unseen` matrix."""
+    layer = SubjectLayer(3, 4, Unseen.MEAN)
+    with torch.no_grad():
+        layer.weight.mul_(torch.tensor([1.0, 2.0, 3.0])[:, None, None])
+    x = torch.randn(2, 4, 6, generator=GENERATOR)
+    assert torch.allclose(layer.forward(x, torch.tensor([3, 39])), 2 * x)
+
+
+def test_unseen_matrix() -> None:
+    weight = torch.randn(3, 4, 4, generator=GENERATOR)
+    assert torch.equal(Unseen.IDENTITY.matrix(weight), torch.eye(4))
+    assert torch.equal(Unseen.DEEP.matrix(weight), weight[DEEP])
+    assert torch.allclose(Unseen.MEAN.matrix(weight), weight.mean(dim=0))

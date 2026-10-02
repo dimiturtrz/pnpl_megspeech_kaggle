@@ -1,10 +1,10 @@
-"""Turn per-window vocabulary probabilities into a Deep-track Kaggle submission.
+"""Turn per-window vocabulary probabilities into a Kaggle submission for a track (Deep or Broad).
 
 The first predictor is the training-set word-frequency prior: one constant row for every holdout window. Under
 BAcc@10 a constant row ranks the same ten words first for every class, so it must score exactly chance (20%) —
 the floor that proves the CSV, the vocabulary order and the scorer agree before any model is spent.
 
-    uv run python -m megspeech.submission.submission --out prior.csv [--submit "message"]
+    uv run python -m megspeech.submission.submission --out prior.csv [--track broad] [--submit "message"]
 """
 
 import argparse
@@ -20,20 +20,20 @@ import pandas as pd
 import torch
 from jaxtyping import Float
 from pnpl.competition import PRIMARY_VOCAB, SECONDARY_VOCAB, submit_to_kaggle, write_submission
-from pnpl.competition.holdout import LibriBrainCompetitionHoldout
 from torch import Tensor, nn
 
 from core.paths import DataRoot
 from megspeech.data.continuous import MISSING
 from megspeech.data.corpus import DataConfig
-from megspeech.data.holdout import TRACK, HoldoutCache
+from megspeech.data.holdout import HoldoutCache, Track
 from megspeech.data.split import Split
 from megspeech.data.vocabulary import SECONDARY, Vocabulary
+from megspeech.evaluation.broad import Reading
 from megspeech.evaluation.report import Evaluator, Head
 
 LOG = logging.getLogger(__name__)
 
-COMPETITION = "pnpl-competition-2026-deep"
+COMPETITION = "pnpl-competition-2026-{track}"
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,7 @@ class Rows(Protocol):
 
 @dataclass(frozen=True)
 class Submission:
-    """The Deep holdout's canonical rows and how to fill them."""
+    """A track's holdout rows, canonical, and how to fill them."""
 
     holdout: Rows
 
@@ -89,15 +89,20 @@ class Submitter:
     evaluator: Evaluator
     data: DataConfig
     """How the model read MEG in training: its window and standardisation."""
+    track: Track = Track.DEEP
+    reading: Reading = Reading.OWN
+    """Which subject each row is presented to the model as; every row is still read from its own subject's MEG."""
 
     def submit(self, model: nn.Module, root: DataRoot, log_prior: Float[Tensor, " v"], tau: float, path: Path) -> Path:
-        """Context-head probabilities for every holdout row, logit-adjusted by `tau`, written as a submission."""
-        holdout = LibriBrainCompetitionHoldout(TRACK, data_path=root.raw(), download=False)
-        cache = HoldoutCache.of(root, self.data.decimate)
+        """Context-head probabilities for every row of the track's holdout, each read from its own subject's MEG and
+        logit-adjusted by `tau`, written as a submission."""
+        holdout = self.track.holdout(root.raw())
+        cache = HoldoutCache.of(root, self.data.decimate, self.track)
         cache.build()
         windows = cache.windows(self.evaluator.device, self.data.samples, standardised=self.data.standardised)
         windows = replace(windows, baseline=self.data.centring)
         split = Split.from_holdout(holdout, windows)
+        split = replace(split, subject=self.reading.subjects(split.subject))
         logits = self.evaluator.logits(model, split)[Head.CONTEXT]
         primary = torch.softmax(logits - tau * log_prior, dim=-1).cpu().numpy()
         secondary = np.tile(FrequencyPrior(Counter()).probabilities(list(SECONDARY.words)), (len(primary), 1))
@@ -108,6 +113,7 @@ def main() -> None:
     """Write the frequency-prior submission and optionally upload it."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--track", type=Track, choices=list(Track), default=Track.DEEP)
     parser.add_argument("--submit", metavar="MESSAGE")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -115,12 +121,12 @@ def main() -> None:
     events = [path for path in sorted(raw.rglob("*sub-0_*_events.tsv")) if path.stat().st_size]
     prior = FrequencyPrior.from_events(events)
     LOG.info("prior from %d heard words", sum(prior.counts.values()))
-    holdout = LibriBrainCompetitionHoldout(TRACK, data_path=raw, download=False)
+    holdout = args.track.holdout(raw)
     csv = Submission(holdout).write_constant(
         args.out, prior.probabilities(PRIMARY_VOCAB), prior.probabilities(SECONDARY_VOCAB)
     )
     if args.submit:
-        submit_to_kaggle(csv, competition=COMPETITION, message=args.submit)
+        submit_to_kaggle(csv, competition=COMPETITION.format(track=args.track), message=args.submit)
 
 
 if __name__ == "__main__":

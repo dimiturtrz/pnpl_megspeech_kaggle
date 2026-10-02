@@ -11,6 +11,7 @@ from megspeech.data.runs import CHANNELS
 from megspeech.model.onsets import ContextConfig
 from megspeech.model.scaler import Scaler
 from megspeech.model.sentence import SentenceNet
+from megspeech.model.subjects import Unseen
 
 
 class Ensemble(nn.Module):
@@ -21,11 +22,13 @@ class Ensemble(nn.Module):
         self.members = nn.ModuleList(members)
 
     @classmethod
-    def load(cls, paths: list[Path]) -> "Ensemble":
-        """SentenceNet checkpoints; each state dict overwrites the placeholder scaler's statistics."""
+    def load(cls, paths: list[Path], unseen: Unseen = Unseen.IDENTITY) -> "Ensemble":
+        """SentenceNet checkpoints, each reading a subject it has no matrix for through `unseen`; each state dict
+        overwrites the placeholder scaler's statistics."""
         members: list[nn.Module] = []
         for path in paths:
-            model = SentenceNet(Scaler(torch.zeros(1, CHANNELS, 1)), context=ContextConfig.load(path.parent))
+            context = ContextConfig.load(path.parent)
+            model = SentenceNet(Scaler(torch.zeros(1, CHANNELS, 1)), context=context, unseen=unseen)
             model.load_state_dict(torch.load(path, map_location="cpu"))
             members.append(model)
         return cls(members)

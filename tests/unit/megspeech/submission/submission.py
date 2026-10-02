@@ -6,13 +6,16 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
+from pnpl.competition.holdout import N_SUBJECTS
 from torch import nn
 
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.corpus import DataConfig
+from megspeech.data.holdout import Track
 from megspeech.data.runs import CHANNELS
 from megspeech.data.vocabulary import WORDS
 from megspeech.data.windows import Windows
+from megspeech.evaluation.broad import Reading
 from megspeech.evaluation.report import Evaluator
 from megspeech.submission import submission as module
 from megspeech.submission.submission import COMPETITION, FrequencyPrior, Submission, Submitter, main
@@ -71,13 +74,16 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     events(raw / "sub-0_ses-1_events.tsv", ["the"])
     (raw / "sub-0_ses-2_events.tsv").touch()
     uploads: list[tuple[Path, str]] = []
-    monkeypatch.setattr(module, "LibriBrainCompetitionHoldout", FakeHoldout)
+    monkeypatch.setattr(module.Track, "holdout", lambda *_: FakeHoldout())
     monkeypatch.setattr(module, "submit_to_kaggle", lambda csv, competition, **_: uploads.append((csv, competition)))
     monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
     out = tmp_path / "prior.csv"
     monkeypatch.setattr(sys, "argv", ["submission", "--out", str(out), "--submit", "smoke"])
     main()
-    assert uploads == [(out, COMPETITION)]
+    assert uploads == [(out, COMPETITION.format(track=Track.DEEP))]
+    monkeypatch.setattr(sys, "argv", ["submission", "--out", str(out), "--track", "broad", "--submit", "smoke"])
+    main()
+    assert uploads[-1] == (out, "pnpl-competition-2026-broad")
     assert pd.read_csv(out)["the"].iloc[0] == pytest.approx(2 / 51, abs=1e-6)
 
 
@@ -131,24 +137,32 @@ class Root:
 
 
 class Constant(nn.Module):
+    subjects: ClassVar[list[torch.Tensor]] = []
+
     @override
     def forward(
         self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        self.subjects.append(subject)
         logits = torch.zeros(*slot.shape, WORDS)
         logits[..., 0] = 1
         return logits, logits
 
 
 def test_submit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(module, "LibriBrainCompetitionHoldout", Holdout)
+    tracks: list[Track] = []
+    monkeypatch.setattr(module.Track, "holdout", lambda track, _: tracks.append(track) or Holdout())
     monkeypatch.setattr(module, "Submission", Written)
     monkeypatch.setattr(module, "HoldoutCache", Cache)
     root = cast("DataRoot", Root(tmp_path))
-    submitter = Submitter(Evaluator(torch.device("cpu")), DataConfig(window=2.0, standardised=True))
+    submitter = Submitter(
+        Evaluator(torch.device("cpu")), DataConfig(window=2.0, standardised=True), Track.BROAD, Reading.UNSEEN
+    )
     path = submitter.submit(Constant(), root, torch.zeros(WORDS), 0.5, tmp_path / "s.npz")
     stored = np.load(path)
     assert stored["primary"].shape == (3, WORDS)
     assert np.allclose(stored["primary"].sum(axis=1), 1, atol=1e-5)
     assert Cache.built == [True]
     assert Cache.standardised == [True]
+    assert tracks == [Track.BROAD]
+    assert Constant.subjects[-1].eq(N_SUBJECTS).all()

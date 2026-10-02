@@ -29,9 +29,10 @@ from megspeech.data.runs import Partition, Run
 from megspeech.data.split import Split
 from megspeech.data.vocabulary import WORDS
 from megspeech.evaluation.overlap import RULER, Text
-from megspeech.evaluation.report import ADJUSTMENTS, Evaluator, Head, Score
+from megspeech.evaluation.report import Evaluator, Head, Score
 from megspeech.evaluation.ruler import TOP
 from megspeech.model.ensemble import Ensemble
+from megspeech.model.subjects import Unseen
 
 LOG = logging.getLogger(__name__)
 
@@ -111,9 +112,12 @@ class Pooling:
     log_prior: Float[Tensor, " v"]
 
     @classmethod
-    def of(cls, root: DataRoot, name: str, grouping: Grouping, device: torch.device) -> "Pooling":
+    def of(
+        cls, root: DataRoot, name: str, grouping: Grouping, device: torch.device, unseen: Unseen = Unseen.IDENTITY
+    ) -> "Pooling":
+        """The model `name`, reading a subject its subject layer has no matrix for through `unseen`."""
         directory = root.models() / name
-        model = Ensemble.load([directory / "model.pt"]).to(device)
+        model = Ensemble.load([directory / "model.pt"], unseen).to(device)
         data = DataConfig.shared([directory], grouping)
         heard = Corpus.heard(data.decimator(root).cache, Run.discover(root.raw()), data)
         labels = heard["target"].to_numpy()
@@ -170,12 +174,10 @@ class Pooling:
         """The selection macro over domains' unseen spans, from each domain's context logits."""
         novel = {name: split.novel(self.evaluator.seen) for name, split in domains.items()}
         counted = {name: words for name, words in novel.items() if len(words) >= self.evaluator.min_novel}
-        scores = {
-            name: self.evaluator.evaluate(context[name][words], domains[name].y[words], self.log_prior)
+        return Score.mean(
+            self.evaluator.evaluate(context[name][words], domains[name].y[words], self.log_prior)
             for name, words in counted.items()
-        }
-        by_tau = {tau: float(np.mean([s.by_tau[tau] for s in scores.values()])) for tau in ADJUSTMENTS}
-        return Score.best(by_tau, sum(s.n for s in scores.values()))
+        )
 
     def matched(self, split: Split, context: Float[Tensor, "n v"], present: Bool[Tensor, " n"]) -> Score:
         """The ruler domain's unseen-span words that some other subject heard, scored alone."""

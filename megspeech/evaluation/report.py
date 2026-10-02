@@ -5,6 +5,7 @@ Balanced accuracy rewards rare words as much as frequent ones, so scores are rea
 p(MEG | word), the Bayes rule for a balanced metric.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -41,6 +42,13 @@ class Score:
     def best(cls, by_tau: dict[float, float], n: int) -> "Score":
         tau = max(by_tau, key=by_tau.__getitem__)
         return cls(tau, by_tau[tau], by_tau, n)
+
+    @classmethod
+    def mean(cls, scores: Iterable["Score"]) -> "Score":
+        """The macro of `scores`: their unweighted mean at each adjustment, the best adjustment chosen once for all."""
+        chosen = list(scores)
+        by_tau = {tau: float(np.mean([score.by_tau[tau] for score in chosen])) for tau in ADJUSTMENTS}
+        return cls.best(by_tau, sum(score.n for score in chosen))
 
 
 @dataclass(frozen=True)
@@ -161,8 +169,7 @@ class Evaluator:
         logits = {name: self.logits(model, split) for name, split in domains.items()}
         reports = {name: self.scored(logits[name], split, log_prior) for name, split in domains.items()}
         counted = {name: r.novel for name, r in reports.items() if r.novel.n >= self.min_novel}
-        by_tau = {tau: float(np.mean([score.by_tau[tau] for score in counted.values()])) for tau in ADJUSTMENTS}
-        macro = Score.best(by_tau, sum(score.n for score in counted.values()))
+        macro = Score.mean(counted.values())
         context = {name: logits[name][Head.CONTEXT] for name in counted}
         interval = self.ruler.interval(self.ruler.macro(self.grade(context, domains, log_prior, macro.tau)))
         chosen = [reports[name] for name in counted]

@@ -52,6 +52,15 @@ def test_best() -> None:
     assert (score.tau, score.bacc10, score.n) == (0.5, 0.4, 7)
 
 
+def test_mean() -> None:
+    """One adjustment is chosen for the unweighted mean, not each score's own best."""
+    scores = [Score.best({0.0: 0.2, 0.5: 0.4, 1.0: 0.3}, 7), Score.best({0.0: 0.6, 0.5: 0.4, 1.0: 0.1}, 3)]
+    macro = Score.mean(iter(scores))
+    assert (macro.tau, macro.n) == (0.0, 10)
+    assert macro.bacc10 == pytest.approx(0.4)
+    assert macro.by_tau == pytest.approx({0.0: 0.4, 0.5: 0.4, 1.0: 0.2})
+
+
 def test_assess() -> None:
     report = Evaluator(CPU).assess(Constant(), split(), torch.zeros(WORDS))
     assert report.dense.n == DENSE
