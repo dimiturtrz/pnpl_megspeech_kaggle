@@ -2,13 +2,28 @@
 
 import json
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
+from enum import StrEnum
 from pathlib import Path
 from typing import override
 
 import torch
-from jaxtyping import Float
+from jaxtyping import Bool, Float
 from torch import Tensor, nn
+
+HOLDOUT_GAP = 0.21
+"""Median seconds between consecutive vocabulary words in a holdout sentence."""
+
+
+class Clock(StrEnum):
+    """What the transformer is told of each word's position: its onset, or only its rank in the span."""
+
+    ONSET = "onset"
+    ORDER = "order"
+
+    def times(self, onset: Float[Tensor, "g w"], mask: Bool[Tensor, "g w"]) -> Float[Tensor, "g w"]:
+        """Seconds to encode; word order is laid out at the holdout's typical spacing so the periods still fit."""
+        return onset if self is Clock.ONSET else (mask.cumsum(-1) - 1).to(onset.dtype) * HOLDOUT_GAP
 
 
 @dataclass(frozen=True)
@@ -21,6 +36,7 @@ class ContextConfig:
     longest: float = 8.0
     """Onset periods span two 50 Hz samples up to a nine-word span at the holdout's widest gap."""
     timescales: int = 16
+    clock: Clock = Clock.ONSET
 
     def save(self, directory: Path) -> Path:
         path = directory / FILE
@@ -31,7 +47,10 @@ class ContextConfig:
     def load(cls, directory: Path) -> "ContextConfig":
         """The shape a model in `directory` was trained with; models saved before it was recorded used the default."""
         path = directory / FILE
-        return cls(**json.loads(path.read_text())) if path.exists() else CONTEXT
+        if not path.exists():
+            return CONTEXT
+        config = cls(**json.loads(path.read_text()))
+        return replace(config, clock=Clock(config.clock))
 
 
 FILE = "context.json"

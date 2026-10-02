@@ -31,7 +31,7 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.epochs import Epocher, Epochs, Window
 from megspeech.model import SentenceNet
-from megspeech.onsets import CONTEXT, ContextConfig
+from megspeech.onsets import CONTEXT, Clock, ContextConfig
 from megspeech.runs import Partition, Run
 from megspeech.scaler import Scaler
 from megspeech.score import BalancedTopK
@@ -347,10 +347,11 @@ def main() -> None:
     parser.add_argument("--width", type=int, default=CONTEXT.width)
     parser.add_argument("--heads", type=int, default=CONTEXT.heads)
     parser.add_argument("--layers", type=int, default=CONTEXT.layers)
+    parser.add_argument("--clock", type=Clock, default=CONTEXT.clock, choices=list(Clock))
     parser.add_argument("--tasks", nargs="*", default=list(TrainConfig.tasks))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    context = replace(CONTEXT, width=args.width, heads=args.heads, layers=args.layers)
+    context = replace(CONTEXT, width=args.width, heads=args.heads, layers=args.layers, clock=args.clock)
     config = TrainConfig(
         epochs=args.epochs,
         lr=args.lr,

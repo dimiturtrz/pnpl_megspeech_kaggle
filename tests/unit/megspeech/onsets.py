@@ -3,7 +3,7 @@ from pathlib import Path
 import torch
 
 from megspeech.onsets import CONTEXT as DEFAULT
-from megspeech.onsets import ContextConfig, OnsetEncoding
+from megspeech.onsets import HOLDOUT_GAP, Clock, ContextConfig, OnsetEncoding
 
 CONTEXT = ContextConfig(width=16, timescales=4)
 
@@ -22,3 +22,13 @@ def test_load(tmp_path: Path) -> None:
     assert ContextConfig.load(tmp_path) == DEFAULT
     CONTEXT.save(tmp_path)
     assert ContextConfig.load(tmp_path) == CONTEXT
+    ordered = ContextConfig(clock=Clock.ORDER)
+    ordered.save(tmp_path)
+    assert ContextConfig.load(tmp_path).clock is Clock.ORDER
+
+
+def test_times() -> None:
+    onset = torch.tensor([[0.0, 0.5, 0.0]])
+    mask = torch.tensor([[True, True, False]])
+    assert torch.equal(Clock.ONSET.times(onset, mask), onset)
+    assert torch.allclose(Clock.ORDER.times(onset, mask)[0, :2], torch.tensor([0.0, HOLDOUT_GAP]))

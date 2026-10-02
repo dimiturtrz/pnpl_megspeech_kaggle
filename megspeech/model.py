@@ -21,6 +21,7 @@ class SentenceNet(nn.Module):
         self.scale = scale
         self.words = WordNet(conv)
         self.project = nn.Linear(self.words.width, context.width)
+        self.clock = context.clock
         self.onsets = OnsetEncoding(context)
         layer = nn.TransformerEncoderLayer(
             context.width, context.heads, 4 * context.width, context.dropout, batch_first=True, norm_first=True
@@ -35,5 +36,5 @@ class SentenceNet(nn.Module):
         embedded = self.words.embed(self.scale(x))
         slots = embedded.new_zeros(*mask.shape, embedded.shape[-1])
         slots[mask] = embedded
-        h = self.project(slots) + self.onsets(onset)
+        h = self.project(slots) + self.onsets(self.clock.times(onset, mask))
         return self.head(self.context(h, src_key_padding_mask=~mask)), self.words.head(slots)
