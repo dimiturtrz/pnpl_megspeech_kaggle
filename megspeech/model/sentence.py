@@ -7,6 +7,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from megspeech.model.onsets import CONTEXT, ContextConfig, OnsetEncoding
+from megspeech.model.span import SpanConformer
 from megspeech.model.wordnet import WordNet
 
 
@@ -29,11 +30,18 @@ class SentenceNet(nn.Module):
         self.project = nn.Linear(self.words.width, context.width)
         self.clock = context.clock
         self.onsets = OnsetEncoding(context)
+        self.context = self.mixer(context)
+        self.head = context.objective.head(context.width, prototypes)
+
+    @staticmethod
+    def mixer(context: ContextConfig) -> nn.Module:
+        """The layers that refine word embeddings across the span: a transformer, conformer when `mixing`."""
+        if context.mixing:
+            return SpanConformer(context.width, context.heads, context.layers, context.dropout, context.mixing)
         layer = nn.TransformerEncoderLayer(
             context.width, context.heads, 4 * context.width, context.dropout, batch_first=True, norm_first=True
         )
-        self.context = nn.TransformerEncoder(layer, context.layers, enable_nested_tensor=False)
-        self.head = context.objective.head(context.width, prototypes)
+        return nn.TransformerEncoder(layer, context.layers, enable_nested_tensor=False)
 
     @override
     def forward(

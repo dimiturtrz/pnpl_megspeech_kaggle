@@ -7,6 +7,7 @@ from megspeech.data.runs import CHANNELS
 from megspeech.data.vocabulary import WORDS
 from megspeech.model.onsets import ContextConfig
 from megspeech.model.sentence import SentenceNet
+from megspeech.model.span import SpanConformer
 from megspeech.model.wordnet import ConvConfig
 
 CONTEXT = ContextConfig(width=16, heads=2, layers=1, conv=ConvConfig(hidden=8, dilations=(1, 2)))
@@ -65,3 +66,23 @@ def test_classify() -> None:
     whole = model(x, onset, slot)
     split = model.classify(*model.features(x, onset, slot), slot < len(x))
     assert all(torch.equal(a, b) for a, b in zip(whole, split, strict=True))
+
+
+def test_mixer() -> None:
+    assert isinstance(SentenceNet.mixer(CONTEXT), nn.TransformerEncoder)
+    assert isinstance(SentenceNet.mixer(replace(CONTEXT, mixing=3)), SpanConformer)
+
+
+def test_padding_rows_change_nothing_mixing() -> None:
+    mixing = replace(CONTEXT, dropout=0.0, mixing=3, conv=replace(CONTEXT.conv, dropout=0.0))
+    model = SentenceNet(nn.Identity(), mixing).train()
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
+    exact = model.forward(x, onset, torch.tensor([[0, 1, 3], [2, 3, 3]]))
+    padded = model.forward(
+        torch.cat([x, torch.randn(2, CHANNELS, SAMPLES, generator=GENERATOR)]),
+        onset,
+        torch.tensor([[0, 1, 5], [2, 5, 5]]),
+    )
+    mask = torch.tensor([[True, True, False], [True, False, False]])
+    assert torch.allclose(exact[0][mask], padded[0][mask], atol=1e-5)
