@@ -6,12 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.tree import Tree
-from megspeech.data.corpus import DataConfig
+from megspeech.data.corpus import METRICS, DataConfig
 from megspeech.evaluation.report import MIN_NOVEL
 from megspeech.model.onsets import CONTEXT, ContextConfig
 from megspeech.training.augment import Augment
-
-METRICS = "metrics.json"
 
 
 @dataclass(frozen=True)

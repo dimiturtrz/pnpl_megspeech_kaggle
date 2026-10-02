@@ -13,7 +13,7 @@ import torch
 from pnpl.competition.holdout import HOLDOUT_SUBDIR, LibriBrainCompetitionHoldout
 
 from core.paths import ENV_OVERRIDE, DataRoot
-from megspeech.data.continuous import DIRECTORY, WORDS, Continuous, Decimator
+from megspeech.data.continuous import DIRECTORY, TAIL, WORDS, Continuous, Decimator
 from megspeech.data.epochs import RATE, SFREQ, WINDOW
 from megspeech.data.holdout import HOLDOUT, Archive, Epochs, HoldoutCache, Source, main
 from megspeech.data.runs import Run
@@ -69,14 +69,16 @@ def holdout(raw: Path) -> HoldoutCache:
 
 
 def training(root: Path) -> Run:
-    """The stretch as a training run whose events put a word at each of `ONSETS`."""
+    """The stretch as a training run whose events put a word at each of `ONSETS`, the last ending `TAIL` before the
+    stretch does, as the holdout's sentence epoch ends `TAIL` after its sentence's last word."""
     run = Run(root / "derivatives" / "serialised" / "sub-0_ses-1_task-Sherlock1_run-1_meg.h5")
     run.meg.parent.mkdir(parents=True, exist_ok=True)
     with h5py.File(run.meg, "w") as stored:
         stored["data"] = stretch()
         stored.attrs["sample_frequency"] = float(SFREQ)
     run.events.parent.mkdir(parents=True, exist_ok=True)
-    rows = {"kind": "word", "segment": "word", "sentenceidx": 0, "timemeg": ONSETS}
+    duration = SAMPLES / SFREQ - TAIL - ONSETS[-1]
+    rows = {"kind": "word", "segment": "word", "sentenceidx": 0, "timemeg": ONSETS, "duration": duration}
     pd.DataFrame(rows).to_csv(run.events, sep="\t", index=False)
     return run
 
@@ -87,14 +89,19 @@ def test_train_and_holdout_windows_match(tmp_path: Path) -> None:
     run = training(tmp_path)
     trained.write(run)
     Decimator.words(run).to_csv(trained.cache / WORDS, sep="	", index=False)
-    train = Continuous.load(trained.cache, "cpu").windows()
+    source = Continuous.load(trained.cache, "cpu")
     cache = holdout(tmp_path / "raw")
     cache.build()
-    held = cache.windows("cpu")
     every = torch.arange(len(ONSETS))
     stretch_rows = 1 + every
-    assert torch.equal(held(stretch_rows), train(every))
-    assert held(stretch_rows).shape == (len(ONSETS), CHANNELS, RATE)
+    for length in (RATE, 2 * RATE):
+        held = cache.windows("cpu", length)(stretch_rows)
+        assert torch.equal(held, source.windows(length)(every))
+        assert held.shape == (len(ONSETS), CHANNELS, length)
+    past = SAMPLES // (SFREQ // RATE) - round(ONSETS[-1] * RATE)
+    tail = cache.windows("cpu", 2 * RATE)(stretch_rows[-1:])
+    assert tail[..., past:].eq(0).all()
+    assert tail[..., :past].ne(0).any(dim=-1).all()
 
 
 def test_rows_follow_competition_order(tmp_path: Path) -> None:
@@ -159,6 +166,7 @@ def test_archive_words(tmp_path: Path) -> None:
     assert table["sentence"].tolist() == [0] + [1] * len(ONSETS)
     assert table["onset"].iloc[1:].to_numpy() == pytest.approx(LEAD / SFREQ + np.array(ONSETS))
     assert set(table["word"]) == {""}
+    assert table["end"].to_numpy() == pytest.approx((LEAD + np.r_[0, [SAMPLES] * len(ONSETS)]) / SFREQ)
     ties = np.array([0.31, 0.33, 0.35], dtype=np.float32)
     tied = Archive(sentence_archive(tmp_path, onsets=ties.tolist())).words(Decimator(tmp_path))
     lead = Decimator(Path()).length(np.array([LEAD]))[0]
@@ -199,6 +207,10 @@ def test_windows(tmp_path: Path) -> None:
     windows = cache.windows("cpu")
     assert len(windows) == 1 + len(ONSETS) + WORD_EPOCHS
     assert torch.isfinite(windows(torch.arange(len(windows)))).all()
+    lead = Decimator(Path()).length(np.array([LEAD]))[0] - round(0.1 * RATE)
+    long = cache.windows("cpu", 2 * RATE)(torch.tensor([0, len(windows) - 1]))
+    assert long[0, :, lead:].eq(0).all()
+    assert long[1, :, RATE:].eq(0).all()
 
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
@@ -209,4 +221,11 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.Lo
     with caplog.at_level(logging.INFO):
         main()
     rows = 1 + len(ONSETS) + WORD_EPOCHS
-    assert f"{rows} windows of ({CHANNELS}, {RATE}) for {rows} holdout rows, finite 1.000000" in caplog.text
+    assert (
+        f"{rows} windows of ({CHANNELS}, {RATE}) for {rows} holdout rows, finite 1.000000, zeroed 0.000000"
+        in caplog.text
+    )
+    monkeypatch.setattr(sys, "argv", ["holdout", "--window", "2"])
+    with caplog.at_level(logging.INFO):
+        main()
+    assert f"{rows} windows of ({CHANNELS}, {2 * RATE}) for {rows} holdout rows" in caplog.text

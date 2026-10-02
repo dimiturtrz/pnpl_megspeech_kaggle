@@ -31,3 +31,12 @@ class Grouping(StrEnum):
             return Spans.by_gap(onset)
         sentence = words.groupby(["run", "sentence"], sort=False).ngroup().to_numpy()
         return Spans.by_sentence(sentence, onset)
+
+    def bound(self, words: pd.DataFrame) -> pd.Series:
+        """Each of `words`' exclusive end sample in the loaded signal (`continuous.Continuous.load`'s columns): its
+        sentence epoch's end under `SENTENCE`, as the holdout cuts it; its run's end under `GAP`."""
+        return words["start"] + words[BOUND[self]]
+
+
+BOUND = {Grouping.GAP: "samples", Grouping.SENTENCE: "stop"}
+"""The word-table column, in samples into the run, at which each grouping stops a word's window."""

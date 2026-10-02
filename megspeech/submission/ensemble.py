@@ -12,7 +12,7 @@ import torch
 
 from core.paths import DataRoot
 from megspeech.data.continuous import DIRECTORY, Continuous
-from megspeech.data.corpus import Corpus, DataConfig
+from megspeech.data.corpus import METRICS, Corpus, DataConfig
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import Partition, Run
 from megspeech.data.split import Split
@@ -40,15 +40,19 @@ def main() -> None:
     log_prior = Split.prior(torch.tensor(labels), torch.ones(len(labels))).to(device)
     evaluator = Evaluator(device, Corpus.sequences(heard, args.grouping))
     held = [r for r in runs if r.partition is Partition.VALIDATION]
+    data = DataConfig(
+        grouping=args.grouping, window=DataConfig.window_of([root.models() / name for name in args.names])
+    )
     source = Continuous.load(cache, device, [r.name for r in held])
-    validation = Corpus.domains(source, Corpus.words(source.words, args.grouping), held, args.grouping)
+    validation = Corpus.domains(source, Corpus.words(source.words, args.grouping), held, data)
     report = evaluator.report(model, validation, log_prior, 0, 0.0)
     LOG.info("%s", {task: (round(r.context.bacc10, 4), round(r.novel.bacc10, 4)) for task, r in report.domains.items()})
     LOG.info("macro %.4f tau %s over %d words", report.macro.bacc10, report.macro.tau, report.macro.n)
     out = root.models() / args.out
     out.mkdir(parents=True, exist_ok=True)
-    (out / "metrics.json").write_text(json.dumps({"members": args.names, "best": asdict(report)}, indent=1))
-    Submitter(evaluator).submit(model, root, log_prior, report.macro.tau, out / "submission.csv")
+    record = {"members": args.names, "config": {"data": asdict(data)}, "best": asdict(report)}
+    (out / METRICS).write_text(json.dumps(record, indent=1))
+    Submitter(evaluator, data.samples).submit(model, root, log_prior, report.macro.tau, out / "submission.csv")
 
 
 if __name__ == "__main__":

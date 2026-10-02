@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from megspeech.data import continuous as module
-from megspeech.data.continuous import DIRECTORY, NO_SENTENCE, RATE, WORDS, Continuous, Decimator, main
+from megspeech.data.continuous import DIRECTORY, NO_SENTENCE, RATE, TAIL, WORDS, Continuous, Decimator, main
 from megspeech.data.epochs import DECIMATE, HALF, SFREQ
 from megspeech.data.runs import Run
 
@@ -26,13 +26,13 @@ def recording(root: Path, session: int = 1, rate: float = SFREQ) -> Run:
         stored.attrs["sample_frequency"] = rate
     run.events.parent.mkdir(parents=True, exist_ok=True)
     rows = [
-        ("word", "The", 0.0, 0.5),
-        ("phoneme", "dh_B", 0.0, 0.5),
-        ("word", None, 0.0, 1.0),
-        ("word", "null", 1.0, 2.0),
-        ("word", "end", None, 3.0),
+        ("word", "The", 0.0, 0.5, 0.3),
+        ("phoneme", "dh_B", 0.0, 0.5, 2.0),
+        ("word", None, 0.0, 1.0, 2.0),
+        ("word", "null", 1.0, 2.0, 0.4),
+        ("word", "end", None, 3.0, None),
     ]
-    columns = ["kind", "segment", "sentenceidx", "timemeg"]
+    columns = ["kind", "segment", "sentenceidx", "timemeg", "duration"]
     pd.DataFrame(rows, columns=columns).to_csv(run.events, sep="\t", index=False)
     return run
 
@@ -103,6 +103,7 @@ def test_words(tmp_path: Path) -> None:
     assert words["word"].tolist() == ["The", "null", "end"]
     assert words["onset"].tolist() == [0.5, 2.0, 3.0]
     assert words["sentence"].tolist() == [0, 1, NO_SENTENCE]
+    assert words["end"].tolist() == pytest.approx([0.8 + TAIL, 2.4 + TAIL, 3.0 + TAIL])
 
 
 def test_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -128,6 +129,7 @@ def test_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert torch.equal(loaded.meg[:, SAMPLES:], second)
     assert loaded.words["word"].tolist().count("null") == len(runs)
     assert loaded.words["at"].tolist() == [25, 100, 150, SAMPLES + 25, SAMPLES + 100, SAMPLES + 150]
+    assert loaded.words["start"].tolist() == [0] * 3 + [SAMPLES] * 3
     only = Continuous.load(decimator.cache, "cpu", [runs[1].name])
     assert only.names == (runs[1].name,)
     assert only.words["at"].tolist() == [25, 100, 150]
@@ -142,6 +144,7 @@ def test_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert table["run"].tolist() == [runs[1].name] * 3 + [runs[0].name] * 3
     assert table["sample"].tolist() == [25, 100, 150] * 2
     assert set(table["samples"]) == {SAMPLES}
+    assert table["stop"].tolist() == [90, 170, SAMPLES] * 2
     assert table.index.tolist() == list(range(6))
     assert Continuous.table(decimator.cache, [runs[0].name])["word"].tolist() == ["The", "null", "end"]
 
@@ -154,11 +157,21 @@ def test_inside() -> None:
 
 def test_windows() -> None:
     meg = torch.arange(2 * 100, dtype=torch.float32).reshape(2, 100)
-    loaded = Continuous(meg, np.array([0, 100]), ("r",), pd.DataFrame({"at": [40, 0]}))
+    words = pd.DataFrame({"at": [40, 0], "start": [0, 0], "stop": [90, 50]})
+    loaded = Continuous(meg, np.array([0, 100]), ("r",), words)
     windows = loaded.windows()
     assert len(windows) == len(loaded.words)
     assert windows(torch.tensor([0])).shape == (1, 2, RATE)
     assert windows.at.tolist() == [40, 0]
+    assert windows.end.tolist() == [90, 50]
+    assert loaded.windows(2 * RATE)(torch.tensor([0]))[0, :, RATE:].eq(0).all()
+
+
+def test_samples() -> None:
+    loaded = Continuous(torch.zeros(2, 10), np.array([0, 10]), ("r",), pd.DataFrame({"at": [4, 0]}))
+    samples = loaded.samples(loaded.words["at"] + 1)
+    assert samples.dtype == torch.int64
+    assert samples.tolist() == [5, 1]
 
 
 def test_gigabytes() -> None:
