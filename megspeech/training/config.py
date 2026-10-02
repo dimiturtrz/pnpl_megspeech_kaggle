@@ -24,6 +24,10 @@ class OptimConfig:
     ema: float = 0.0
     """Decay of the weight average scored and kept; 0 keeps the raw weights. At 0.999 the average spans ~1000
     steps, about half an epoch of the ~1750 a sentence-path epoch takes."""
+    semantic: float = 0.0
+    """Weight of the semantic auxiliary (`megspeech.training.auxiliary`): every heard word's window, the ~60% outside
+    the 50 included, SigLIP-aligned to the word's t5-large layer-12 embedding, d'Ascoli et al.'s objective. It
+    supervises ~2.5x the windows the heads see; 0 trains the heads alone and never reads the lexicon."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
 

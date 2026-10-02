@@ -6,7 +6,7 @@ the embeddings across the span, and both the isolated-word head and the context 
 
 import logging
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 import torch
 from jaxtyping import Float, Int
@@ -21,6 +21,7 @@ from megspeech.model.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.heads import Objective
 from megspeech.objective.prototypes import Prototypes
+from megspeech.training.auxiliary import Auxiliary, Silent
 from megspeech.training.config import RunConfig
 from megspeech.training.ema import Ema
 
@@ -43,21 +44,26 @@ class Trainer:
     config: RunConfig
     evaluator: Evaluator
     prototypes: Float[Tensor, "v d"] | None = None
+    auxiliary: Auxiliary = field(default_factory=Silent)
 
     @classmethod
     def of(cls, corpus: Corpus, config: RunConfig, root: DataRoot) -> "Trainer":
         """A trainer on `corpus`'s device, selecting on its unseen spans; SigLIP reads the text prototypes."""
         siglip = config.context.objective is Objective.SIGLIP
         prototypes = Prototypes.load(Prototypes.path(root)).vectors if siglip else None
-        evaluator = Evaluator(corpus.train.y.device, corpus.seen, config.selection.min_novel)
-        return cls(config, evaluator, prototypes)
+        device = corpus.train.y.device
+        evaluator = Evaluator(device, corpus.seen, config.selection.min_novel)
+        return cls(config, evaluator, prototypes, Auxiliary.of(config.optim.semantic, root, device))
 
-    def model(self, train: Split) -> nn.Module:
-        device = self.evaluator.device
+    def model(self, train: Split) -> SentenceNet:
         model = SentenceNet(
             Scaler(train.sample(SCALER_SAMPLE)), context=self.config.context, prototypes=self.prototypes
-        ).to(device)
-        if self.config.optim.compiled and device.type == "cuda":
+        )
+        return self.compiled(model.to(self.evaluator.device))
+
+    def compiled[M: nn.Module](self, model: M) -> M:
+        """`model` compiled in place into CUDA graphs when the run compiles and is on the GPU."""
+        if self.config.optim.compiled and self.evaluator.device.type == "cuda":
             model.compile(mode="reduce-overhead")
         return model
 
@@ -71,7 +77,7 @@ class Trainer:
         """One optimiser step on the words of `spans`; returns the loss without syncing it to the host."""
         batch = train.batch(spans, state.rows, self.config.augment.jitter)
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            context, word = state.model(self.config.augment(batch.x), batch.onset, batch.slot)
+            context, word, *extra = state.model(self.config.augment(batch.x), batch.onset, batch.slot)
             smoothing, objective, y = (
                 self.config.optim.label_smoothing,
                 self.config.context.objective,
@@ -80,6 +86,7 @@ class Trainer:
             value = objective.loss(context.flatten(0, 1), y.flatten(), smoothing) + nn.functional.cross_entropy(
                 word.flatten(0, 1), y.flatten(), ignore_index=IGNORE, label_smoothing=smoothing
             )
+            value = value + self.auxiliary.loss(state.model, extra, batch.target(train.token))
         state.optimizer.zero_grad(set_to_none=True)
         value.backward()
         nn.utils.clip_grad_norm_(state.model.parameters(), self.config.optim.clip)
@@ -93,13 +100,14 @@ class Trainer:
     ) -> tuple[nn.Module, list[Epoch]]:
         optim = self.config.optim
         torch.manual_seed(optim.seed)
-        model = self.model(train)
+        net = self.model(train)
+        model = self.auxiliary.trained(net, self.compiled)
         optimizer = self.optimizer(model)
         per_epoch = math.ceil(len(train.index) / optim.batch)
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, optim.lr, total_steps=optim.epochs * per_epoch)
         state = Step(model, optimizer, schedule, train.capacity(optim.batch), Ema.of(model, optim.ema))
         history: list[Epoch] = []
-        best_state = model.state_dict()
+        best_state = net.state_dict()
         for epoch in range(optim.epochs):
             model.train()
             draws = torch.multinomial(train.weight[train.index[:, 0]], per_epoch * optim.batch, replacement=True)
@@ -107,10 +115,10 @@ class Trainer:
             if not math.isfinite(value):
                 raise FloatingPointError(f"non-finite loss at epoch {epoch}")
             with state.ema.applied(model):
-                row = self.evaluator.report(model, validation, log_prior, epoch, value)
+                row = self.evaluator.report(net, validation, log_prior, epoch, value)
                 history.append(row)
                 LOG.info("%s", asdict(row))
                 if self.config.selected(history) is row:
-                    best_state = {k: v.clone() for k, v in model.state_dict().items()}
-        model.load_state_dict(best_state)
-        return model, history
+                    best_state = {k: v.clone() for k, v in net.state_dict().items()}
+        net.load_state_dict(best_state)
+        return net, history

@@ -34,3 +34,23 @@ def test_padding_rows_change_nothing() -> None:
     mask = torch.tensor([[True, True, False], [True, False, False]])
     for a, b in zip(exact, padded, strict=True):
         assert torch.allclose(a[mask], b[mask], atol=1e-5)
+
+
+def test_features() -> None:
+    model = SentenceNet(nn.Identity(), SMALL, CONTEXT).eval()
+    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    h, slots = model.features(x, torch.zeros(2, 3), slot)
+    assert h.shape == (2, 3, CONTEXT.width)
+    assert slots.shape == (2, 3, model.words.width)
+    assert slots[slot == len(x)].eq(0).all()
+
+
+def test_classify() -> None:
+    model = SentenceNet(nn.Identity(), SMALL, CONTEXT).eval()
+    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
+    whole = model(x, onset, slot)
+    split = model.classify(*model.features(x, onset, slot), slot < len(x))
+    assert all(torch.equal(a, b) for a, b in zip(whole, split, strict=True))

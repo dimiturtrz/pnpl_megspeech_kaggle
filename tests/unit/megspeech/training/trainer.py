@@ -14,7 +14,11 @@ from megspeech.data.spans import Spans
 from megspeech.data.split import DENSE, Split
 from megspeech.data.vocabulary import WORDS
 from megspeech.evaluation.report import Evaluator
+from megspeech.model.sentence import SentenceNet
+from megspeech.objective.heads import DIM
+from megspeech.objective.prototypes import Lexicon
 from megspeech.training.augment import Augment
+from megspeech.training.auxiliary import Aligned, Silent
 from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig
 from megspeech.training.ema import Ema
 from megspeech.training.trainer import Step, Trainer
@@ -35,6 +39,12 @@ def trainer(config: RunConfig) -> Trainer:
     return Trainer(config, Evaluator(CPU, min_novel=1))
 
 
+def aligned(train: Split) -> Aligned:
+    """Every token of `train` in the lexicon but its first."""
+    keys = train.token.unique()[1:]
+    return Aligned(1.0, Lexicon(keys, torch.randn(len(keys), DIM, generator=torch.Generator().manual_seed(0))))
+
+
 def test_of(tmp_path: Path) -> None:
     corpus = Corpus(split(), {"a": split(seed=1)}, frozenset({(0, 1)}))
     made = Trainer.of(corpus, RunConfig(selection=SelectionConfig(7)), cast("DataRoot", tmp_path))
@@ -42,12 +52,19 @@ def test_of(tmp_path: Path) -> None:
     assert made.evaluator.min_novel == 7
     assert made.evaluator.device == CPU
     assert made.prototypes is None
+    assert isinstance(made.auxiliary, Silent)
 
 
 def test_model() -> None:
     model = trainer(RunConfig(optim=OptimConfig(compiled=True))).model(split())
+    assert isinstance(model, SentenceNet)
     assert next(model.parameters()).device == CPU
     assert "_orig_mod" not in next(iter(model.state_dict()))
+
+
+def test_compiled() -> None:
+    model = nn.Linear(2, 2)
+    assert trainer(RunConfig(optim=OptimConfig(compiled=True))).compiled(model) is model
 
 
 def test_optimizer() -> None:
@@ -83,7 +100,13 @@ def test_fit() -> None:
         split(), {"a": split(seed=1)}, torch.zeros(WORDS)
     )
     assert len(history) == 1
-    assert isinstance(model, nn.Module)
+    assert isinstance(model, SentenceNet)
+    train = split()
+    made = Trainer(
+        RunConfig(optim=OptimConfig(epochs=1, batch=4)), Evaluator(CPU, min_novel=1), auxiliary=aligned(train)
+    )
+    net, _ = made.fit(train, {"a": split(seed=1)}, torch.zeros(WORDS))
+    assert isinstance(net, SentenceNet)
     with pytest.raises(FloatingPointError):
         trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, lr=math.inf))).fit(
             split(), {"a": split(seed=1)}, torch.zeros(WORDS)
