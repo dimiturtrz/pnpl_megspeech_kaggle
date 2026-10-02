@@ -1,7 +1,9 @@
 """Word onsets within a span as sinusoids over geometric periods, and the context model's shape."""
 
+import json
 import math
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import override
 
 import torch
@@ -20,7 +22,19 @@ class ContextConfig:
     """Onset periods span two 50 Hz samples up to a nine-word span at the holdout's widest gap."""
     timescales: int = 16
 
+    def save(self, directory: Path) -> Path:
+        path = directory / FILE
+        path.write_text(json.dumps(asdict(self)))
+        return path
 
+    @classmethod
+    def load(cls, directory: Path) -> "ContextConfig":
+        """The shape a model in `directory` was trained with; models saved before it was recorded used the default."""
+        path = directory / FILE
+        return cls(**json.loads(path.read_text())) if path.exists() else CONTEXT
+
+
+FILE = "context.json"
 CONTEXT = ContextConfig()
 
 

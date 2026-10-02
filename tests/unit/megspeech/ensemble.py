@@ -6,6 +6,7 @@ from torch import nn
 
 from megspeech.ensemble import Ensemble
 from megspeech.model import SentenceNet
+from megspeech.onsets import ContextConfig
 from megspeech.scaler import Scaler
 from megspeech.wordnet import CHANNELS, WORDS
 
@@ -40,3 +41,11 @@ def test_load(tmp_path: Path) -> None:
     assert len(loaded.members) == 2
     restored = loaded.members[0].state_dict()
     assert all(torch.equal(restored[key], value) for key, value in model.state_dict().items())
+
+
+def test_load_shaped(tmp_path: Path) -> None:
+    context = ContextConfig(width=32, heads=2, layers=1)
+    model = SentenceNet(Scaler(torch.zeros(1, CHANNELS, 1)), context=context)
+    torch.save(model.state_dict(), tmp_path / "model.pt")
+    context.save(tmp_path)
+    assert Ensemble.load([tmp_path / "model.pt"]).members[0].state_dict()["head.weight"].shape[1] == context.width

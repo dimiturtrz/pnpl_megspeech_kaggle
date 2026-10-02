@@ -31,6 +31,7 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.epochs import Epocher, Epochs, Window
 from megspeech.model import SentenceNet
+from megspeech.onsets import CONTEXT, ContextConfig
 from megspeech.runs import Partition, Run
 from megspeech.scaler import Scaler
 from megspeech.score import BalancedTopK
@@ -75,6 +76,7 @@ class TrainConfig:
     """A span heard `k` times in training is drawn with weight `k ** -repeat_power`; 1 draws each sentence once."""
     min_novel: int = 100
     """Unseen-span words a domain needs to count toward selection: two per class of the 50 on average."""
+    context: ContextConfig = CONTEXT
 
 
 class Windows(Protocol):
@@ -291,7 +293,7 @@ class Trainer:
         self, train: Split, validation: dict[str, Split], log_prior: Float[Tensor, " v"]
     ) -> tuple[nn.Module, list[Epoch]]:
         torch.manual_seed(self.config.seed)
-        model = SentenceNet(Scaler(train.x)).to(self.device)
+        model = SentenceNet(Scaler(train.x), context=self.config.context).to(self.device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.config.lr, weight_decay=self.config.weight_decay)
         steps = self.config.epochs * math.ceil(len(train.index) / self.config.batch)
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, self.config.lr, total_steps=steps)
@@ -336,10 +338,20 @@ def main() -> None:
     parser.add_argument("--read-weight", type=float, default=TrainConfig.read_weight)
     parser.add_argument("--repeat-power", type=float, default=TrainConfig.repeat_power)
     parser.add_argument("--seed", type=int, default=TrainConfig.seed)
+    parser.add_argument("--lr", type=float, default=TrainConfig.lr)
+    parser.add_argument("--width", type=int, default=CONTEXT.width)
+    parser.add_argument("--heads", type=int, default=CONTEXT.heads)
+    parser.add_argument("--layers", type=int, default=CONTEXT.layers)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+    context = replace(CONTEXT, width=args.width, heads=args.heads, layers=args.layers)
     config = TrainConfig(
-        epochs=args.epochs, read_weight=args.read_weight, repeat_power=args.repeat_power, seed=args.seed
+        epochs=args.epochs,
+        lr=args.lr,
+        read_weight=args.read_weight,
+        repeat_power=args.repeat_power,
+        seed=args.seed,
+        context=context,
     )
     device = torch.device("cuda")
     root = DataRoot.from_config()
@@ -359,6 +371,7 @@ def main() -> None:
     out = root.models() / args.name
     out.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out / "model.pt")
+    context.save(out)
     best = max(history, key=lambda row: row.macro.bacc10)
     summary = {"config": asdict(config), "train": len(train.y), "best": asdict(best)}
     (out / "metrics.json").write_text(json.dumps({**summary, "history": [asdict(row) for row in history]}, indent=1))

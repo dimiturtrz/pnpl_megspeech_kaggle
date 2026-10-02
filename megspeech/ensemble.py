@@ -18,6 +18,7 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.epochs import Epocher
 from megspeech.model import SentenceNet
+from megspeech.onsets import ContextConfig
 from megspeech.runs import Partition, Run
 from megspeech.scaler import Scaler
 from megspeech.train import Split, TrainConfig, Trainer
@@ -38,7 +39,7 @@ class Ensemble(nn.Module):
         """SentenceNet checkpoints; each state dict overwrites the placeholder scaler's statistics."""
         members: list[nn.Module] = []
         for path in paths:
-            model = SentenceNet(Scaler(torch.zeros(1, CHANNELS, 1)))
+            model = SentenceNet(Scaler(torch.zeros(1, CHANNELS, 1)), context=ContextConfig.load(path.parent))
             model.load_state_dict(torch.load(path, map_location="cpu"))
             members.append(model)
         return cls(members)
