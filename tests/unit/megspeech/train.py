@@ -36,6 +36,15 @@ class Constant(nn.Module):
         return logits, logits
 
 
+def test_trains_on(tmp_path: Path) -> None:
+    sherlock = Run(tmp_path / "sub-0_ses-1_task-Sherlock1_run-1_meg.h5")
+    timit = Run(tmp_path / "sub-0_ses-1_task-TIMIT_run-1_meg.h5")
+    held = Run(tmp_path / "sub-0_ses-11_task-Sherlock1_run-2_meg.h5")
+    only = TrainConfig(tasks=("Sherlock1",))
+    assert [only.trains_on(r) for r in (sherlock, timit, held)] == [True, False, False]
+    assert TrainConfig().trains_on(timit)
+
+
 def test_from_arrays() -> None:
     assert split().x.shape == (12, CHANNELS, SAMPLES)
 

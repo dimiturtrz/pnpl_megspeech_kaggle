@@ -77,6 +77,11 @@ class TrainConfig:
     min_novel: int = 100
     """Unseen-span words a domain needs to count toward selection: two per class of the 50 on average."""
     context: ContextConfig = CONTEXT
+    tasks: tuple[str, ...] = ()
+    """Training restricted to these tasks' runs; empty trains on every task."""
+
+    def trains_on(self, run: Run) -> bool:
+        return run.partition is Partition.TRAIN and (not self.tasks or run.key[0] in self.tasks)
 
 
 class Windows(Protocol):
@@ -342,6 +347,7 @@ def main() -> None:
     parser.add_argument("--width", type=int, default=CONTEXT.width)
     parser.add_argument("--heads", type=int, default=CONTEXT.heads)
     parser.add_argument("--layers", type=int, default=CONTEXT.layers)
+    parser.add_argument("--tasks", nargs="*", default=list(TrainConfig.tasks))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     context = replace(CONTEXT, width=args.width, heads=args.heads, layers=args.layers)
@@ -352,17 +358,18 @@ def main() -> None:
         repeat_power=args.repeat_power,
         seed=args.seed,
         context=context,
+        tasks=tuple(args.tasks),
     )
     device = torch.device("cuda")
     root = DataRoot.from_config()
     epocher = Epocher(root.processed() / "epochs")
     runs = Run.discover(root.raw())
-    train_runs = [r for r in runs if r.partition is Partition.TRAIN]
+    train_runs = [r for r in runs if config.trains_on(r)]
     train = Split.gather(
         ((epocher.cached(r), config.read_weight if r.key[0] in READ else 1.0) for r in train_runs), device
     ).recurring(config.repeat_power)
     validation = Split.validation(epocher, runs, device)
-    seen = Split.seen(epocher.labelled(r) for r in train_runs)
+    seen = Split.seen(epocher.labelled(r) for r in runs if r.partition is Partition.TRAIN)
     LOG.info("train %d words / %d spans", len(train.y), len(train.index))
     LOG.info("validation %s", {task: len(split.y) for task, split in validation.items()})
     log_prior = train.log_prior()
