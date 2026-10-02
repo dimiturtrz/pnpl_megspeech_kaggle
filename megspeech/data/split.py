@@ -12,7 +12,6 @@ import torch
 from jaxtyping import Float, Int
 from torch import Tensor
 
-from megspeech.data.epochs import Window
 from megspeech.data.spans import PAD, Spans
 from megspeech.data.vocabulary import IGNORE, WORDS
 from megspeech.data.windows import Windows
@@ -34,11 +33,9 @@ ROW_ALIGN = 8
 
 
 class Holdout(Protocol):
-    """What a split needs of the holdout: its row metadata and its MEG windows in that order."""
+    """What a split needs of the holdout: its row metadata, in canonical row order."""
 
     def metadata_frame(self) -> pd.DataFrame: ...
-
-    def iter_windows(self, _batch_size: int, /) -> Iterable[tuple[np.ndarray, object]]: ...
 
 
 @dataclass(frozen=True)
@@ -100,16 +97,16 @@ class Split:
         )
 
     @classmethod
-    def from_holdout(cls, holdout: Holdout, device: torch.device) -> "Split":
-        """Every holdout window, grouped by sentence; isolated word rows are spans of one."""
+    def from_holdout(cls, holdout: Holdout, windows: Windows) -> "Split":
+        """Every holdout row, its window the same row of `windows`, grouped by sentence; a lone word is its own span."""
         frame = holdout.metadata_frame()
+        if len(frame) != len(windows):
+            raise ValueError(f"{len(windows)} holdout windows for {len(frame)} holdout rows")
         sentence = frame["source"] == "sentence"
         group = np.where(sentence, frame["epoch"], -1 - frame["index"])
         keys = frame.assign(group=group)[["subject", "source", "group"]]
-        window = Window()
-        x = np.concatenate([window(batch) for batch, _ in holdout.iter_windows(EVAL_SPANS)])
         spans = Spans.by_key(keys, frame["onset_s"].to_numpy())
-        return cls.from_arrays(x, np.zeros(len(x), dtype=np.int64), spans, device)
+        return cls.of(windows, (np.zeros(len(frame), dtype=np.int64),) * 2, spans, np.ones(len(frame)))
 
     def sample(self, count: int) -> Float[Tensor, "k c t"]:
         """Up to `count` windows drawn without replacement."""

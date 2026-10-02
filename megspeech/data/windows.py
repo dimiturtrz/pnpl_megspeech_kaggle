@@ -1,8 +1,8 @@
 """Word windows cut on demand from one continuous device signal: a single gather, no per-word loop.
 
 A word's window starts `offset` samples after its onset sample `at` and runs `length` samples, at the signal's
-50 Hz `RATE` (seconds x `RATE`). Each window then has every channel's mean over the window removed, as the
-holdout's windows do (`megspeech.data.epochs.Window`).
+50 Hz `RATE` (seconds x `RATE`). Each window then has every channel's mean over the window removed. Training,
+validation and holdout windows all come through here, from signals the same `continuous.Decimator` cached.
 """
 
 from dataclasses import dataclass
@@ -11,7 +11,7 @@ import torch
 from jaxtyping import Float, Int
 from torch import Tensor
 
-from megspeech.data.continuous import RATE
+from megspeech.data.epochs import RATE
 
 
 @dataclass(frozen=True)

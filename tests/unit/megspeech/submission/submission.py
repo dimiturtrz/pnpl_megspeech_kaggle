@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from typing import cast, override
+from typing import ClassVar, cast, override
 
 import numpy as np
 import pandas as pd
@@ -11,6 +11,7 @@ from torch import nn
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.runs import CHANNELS
 from megspeech.data.vocabulary import WORDS
+from megspeech.data.windows import Windows
 from megspeech.evaluation.report import Evaluator
 from megspeech.submission import submission as module
 from megspeech.submission.submission import COMPETITION, FrequencyPrior, Submission, Submitter, main
@@ -94,8 +95,19 @@ class Holdout:
             }
         )
 
-    def iter_windows(self, batch_size: int) -> list[tuple[np.ndarray, None]]:
-        return [(np.zeros((3, CHANNELS, 250)), None)]
+
+class Cache:
+    built: ClassVar[list[bool]] = []
+
+    @classmethod
+    def of(cls, _: object) -> "Cache":
+        return cls()
+
+    def build(self) -> None:
+        self.built.append(True)
+
+    def windows(self, device: torch.device) -> Windows:
+        return Windows.stacked(torch.zeros(3, CHANNELS, 50, device=device))
 
 
 class Written:
@@ -126,9 +138,11 @@ class Constant(nn.Module):
 def test_submit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "LibriBrainCompetitionHoldout", Holdout)
     monkeypatch.setattr(module, "Submission", Written)
+    monkeypatch.setattr(module, "HoldoutCache", Cache)
     root = cast("DataRoot", Root(tmp_path))
     submitter = Submitter(Evaluator(torch.device("cpu")))
     path = submitter.submit(Constant(), root, torch.zeros(WORDS), 0.5, tmp_path / "s.npz")
     stored = np.load(path)
     assert stored["primary"].shape == (3, WORDS)
     assert np.allclose(stored["primary"].sum(axis=1), 1, atol=1e-5)
+    assert Cache.built == [True]

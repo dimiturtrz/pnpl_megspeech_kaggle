@@ -2,6 +2,7 @@ import dataclasses
 
 import numpy as np
 import pandas as pd
+import pytest
 import torch
 
 from megspeech.data.runs import CHANNELS
@@ -33,9 +34,6 @@ class Holdout:
                 "onset_s": [0.0, 0.3, 0.0],
             }
         )
-
-    def iter_windows(self, batch_size: int) -> list[tuple[np.ndarray, None]]:
-        return [(np.zeros((3, CHANNELS, 250)), None)]
 
 
 def test_from_arrays() -> None:
@@ -126,6 +124,10 @@ def test_dense() -> None:
 
 
 def test_from_holdout() -> None:
-    held = Split.from_holdout(Holdout(), CPU)
-    assert held.windows(torch.arange(3)).shape == (3, CHANNELS, SAMPLES)
+    windows = Windows.stacked(torch.zeros(3, CHANNELS, SAMPLES))
+    held = Split.from_holdout(Holdout(), windows)
+    assert held.windows is windows
     assert held.index[:, :2].tolist() == [[0, 1], [2, -1]]
+    assert held.onset[0, :2].tolist() == pytest.approx([0.0, 0.3])
+    with pytest.raises(ValueError, match="2 holdout windows for 3"):
+        Split.from_holdout(Holdout(), Windows.stacked(torch.zeros(2, CHANNELS, SAMPLES)))
