@@ -15,7 +15,7 @@ from megspeech.augment import Augment
 from megspeech.epochs import Epocher, Epochs
 from megspeech.runs import Run
 from megspeech.spans import Spans
-from megspeech.train import ADJUSTMENTS, DENSE, Head, Score, Split, TrainConfig, Trainer
+from megspeech.train import ADJUSTMENTS, DENSE, Corpus, Head, Score, Split, Step, TrainConfig, Trainer
 from megspeech.wordnet import CHANNELS, WORDS
 
 SAMPLES = 50
@@ -160,6 +160,26 @@ def test_report() -> None:
     assert report.interval.low <= report.macro.by_tau[report.macro.tau] <= report.interval.high
 
 
+def test_model() -> None:
+    model = Trainer(TrainConfig(), CPU).model(split())
+    assert next(model.parameters()).device == CPU
+
+
+def test_step() -> None:
+    trainer = Trainer(TrainConfig(), CPU)
+    model = trainer.model(split())
+    optimizer = torch.optim.AdamW(model.parameters())
+    before = [p.clone() for p in model.parameters()]
+    value = trainer.step(
+        Step(model, optimizer, torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)),
+        split(),
+        torch.tensor([0, 1]),
+    )
+    assert value.ndim == 0
+    assert not value.requires_grad
+    assert any(not torch.equal(a, b) for a, b in zip(before, model.parameters(), strict=True))
+
+
 def test_fit() -> None:
     model, history = Trainer(TrainConfig(epochs=1, batch=4, min_novel=1, clip=1.0, augment=Augment(0.5, 0.1)), CPU).fit(
         split(), {"a": split(seed=1)}, torch.zeros(WORDS)
@@ -204,6 +224,34 @@ class Root:
 
     def raw(self) -> Path:
         return self.path
+
+    def processed(self) -> Path:
+        return self.path / "processed"
+
+
+def corpus_root(tmp_path: Path) -> DataRoot:
+    epochs = Epochs(np.zeros((2, CHANNELS, SAMPLES), np.float32), np.array([0, 1]), np.array([0.0, 0.1]))
+    names = ["sub-0_ses-1_task-Sherlock1_run-1_meg.h5", "sub-0_ses-11_task-Sherlock1_run-2_meg.h5"]
+    for run in (Run(tmp_path / name) for name in names):
+        run.meg.touch()
+        run.events.parent.mkdir(parents=True, exist_ok=True)
+        run.events.write_text("kind")
+        epochs.save(tmp_path / "processed" / "epochs" / f"{run.name}.npz")
+    return cast("DataRoot", Root(tmp_path))
+
+
+def test_load(tmp_path: Path) -> None:
+    corpus = Corpus.load(TrainConfig(), corpus_root(tmp_path), CPU)
+    assert len(corpus.train.y) == 2
+    assert set(corpus.validation) == {"Sherlock1"}
+    assert corpus.seen == {(0, 1)}
+
+
+def test_trainer(tmp_path: Path) -> None:
+    root = corpus_root(tmp_path)
+    trainer = Corpus.load(TrainConfig(), root, CPU).trainer(TrainConfig(), root)
+    assert trainer.seen == {(0, 1)}
+    assert trainer.prototypes is None
 
 
 def test_from_holdout() -> None:

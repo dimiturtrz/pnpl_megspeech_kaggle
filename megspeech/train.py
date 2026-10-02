@@ -255,6 +255,15 @@ class Split:
 
 
 @dataclass
+class Step:
+    """What one optimiser step mutates."""
+
+    model: nn.Module
+    optimizer: torch.optim.Optimizer
+    schedule: torch.optim.lr_scheduler.LRScheduler
+
+
+@dataclass
 class Trainer:
     config: TrainConfig
     device: torch.device
@@ -323,37 +332,46 @@ class Trainer:
         interval = self.ruler.interval(self.ruler.macro(self.graded(model, domains, log_prior, macro.tau)))
         return Epoch(epoch, loss, reports, macro, interval)
 
+    def model(self, train: Split) -> nn.Module:
+        return SentenceNet(Scaler(train.x), context=self.config.context, prototypes=self.prototypes).to(self.device)
+
+    def step(self, state: "Step", train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, ""]:
+        """One optimiser step on the words of `spans`; returns the loss without syncing it to the host."""
+        x, onset, mask, words = train.batch(spans)
+        x = self.config.augment(x)
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            context, word = state.model(x, onset, mask)
+            smoothing, objective, y = self.config.label_smoothing, self.config.context.objective, train.y[words]
+            value = objective.loss(context[mask], y, smoothing) + nn.functional.cross_entropy(
+                word[mask], y, label_smoothing=smoothing
+            )
+        state.optimizer.zero_grad(set_to_none=True)
+        value.backward()
+        nn.utils.clip_grad_norm_(state.model.parameters(), self.config.clip)
+        state.optimizer.step()
+        state.schedule.step()
+        return value.detach()
+
     def fit(
         self, train: Split, validation: dict[str, Split], log_prior: Float[Tensor, " v"]
     ) -> tuple[nn.Module, list[Epoch]]:
         torch.manual_seed(self.config.seed)
-        model = SentenceNet(Scaler(train.x), context=self.config.context, prototypes=self.prototypes).to(self.device)
+        model = self.model(train)
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.config.lr, weight_decay=self.config.weight_decay)
         steps = self.config.epochs * math.ceil(len(train.index) / self.config.batch)
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, self.config.lr, total_steps=steps)
-        loss = nn.CrossEntropyLoss(label_smoothing=self.config.label_smoothing)
-        objective = self.config.context.objective
+        state = Step(model, optimizer, schedule)
         history: list[Epoch] = []
         best, best_state = -1.0, model.state_dict()
         for epoch in range(self.config.epochs):
             model.train()
             draws = torch.multinomial(train.weight[train.index[:, 0]], len(train.index), replacement=True)
-            for spans in draws.split(self.config.batch):
-                x, onset, mask, words = train.batch(spans)
-                x = self.config.augment(x)
-                with torch.autocast("cuda", dtype=torch.bfloat16):
-                    context, word = model(x, onset, mask)
-                    value = objective.loss(context[mask], train.y[words], self.config.label_smoothing) + loss(
-                        word[mask], train.y[words]
-                    )
-                optimizer.zero_grad(set_to_none=True)
-                value.backward()
-                nn.utils.clip_grad_norm_(model.parameters(), self.config.clip)
-                optimizer.step()
-                schedule.step()
-            if not math.isfinite(value.item()):
+            value = (
+                torch.stack([self.step(state, train, spans) for spans in draws.split(self.config.batch)]).mean().item()
+            )
+            if not math.isfinite(value):
                 raise FloatingPointError(f"non-finite loss at epoch {epoch}")
-            row = self.report(model, validation, log_prior, epoch, value.item())
+            row = self.report(model, validation, log_prior, epoch, value)
             history.append(row)
             LOG.info("%s", asdict(row))
             if row.macro.bacc10 > best:
@@ -369,6 +387,34 @@ class Trainer:
         primary = torch.softmax(logits - tau * log_prior, dim=-1).cpu().numpy()
         secondary = np.tile(FrequencyPrior(Counter()).probabilities(list(SECONDARY.words)), (len(primary), 1))
         return Submission(holdout).write(path, primary, secondary)
+
+
+@dataclass(frozen=True)
+class Corpus:
+    """The on-device train set, the validation domains, and every word sequence training has seen."""
+
+    train: Split
+    validation: dict[str, Split]
+    seen: frozenset[tuple[int, ...]]
+
+    @classmethod
+    def load(cls, config: TrainConfig, root: DataRoot, device: torch.device) -> "Corpus":
+        epocher = Epocher(root.processed() / "epochs")
+        runs = Run.discover(root.raw())
+        weighted = (
+            (epocher.cached(r), config.read_weight if r.key[0] in READ else 1.0) for r in runs if config.trains_on(r)
+        )
+        train = Split.gather(weighted, device).recurring(config.repeat_power)
+        validation = Split.validation(epocher, runs, device)
+        seen = Split.seen(epocher.labelled(r) for r in runs if r.partition is Partition.TRAIN)
+        LOG.info("train %d words / %d spans", len(train.y), len(train.index))
+        LOG.info("validation %s", {task: len(split.y) for task, split in validation.items()})
+        return cls(train, validation, seen)
+
+    def trainer(self, config: TrainConfig, root: DataRoot) -> "Trainer":
+        siglip = config.context.objective is Objective.SIGLIP
+        prototypes = Prototypes.load(Prototypes.path(root)).vectors if siglip else None
+        return Trainer(config, self.train.x.device, self.seen, prototypes)
 
 
 def main() -> None:
@@ -405,22 +451,10 @@ def main() -> None:
         context=context,
         tasks=tuple(args.tasks),
     )
-    device = torch.device("cuda")
     root = DataRoot.from_config()
-    epocher = Epocher(root.processed() / "epochs")
-    runs = Run.discover(root.raw())
-    train_runs = [r for r in runs if config.trains_on(r)]
-    train = Split.gather(
-        ((epocher.cached(r), config.read_weight if r.key[0] in READ else 1.0) for r in train_runs), device
-    ).recurring(config.repeat_power)
-    validation = Split.validation(epocher, runs, device)
-    seen = Split.seen(epocher.labelled(r) for r in runs if r.partition is Partition.TRAIN)
-    LOG.info("train %d words / %d spans", len(train.y), len(train.index))
-    LOG.info("validation %s", {task: len(split.y) for task, split in validation.items()})
-    log_prior = train.log_prior()
-    siglip = context.objective is Objective.SIGLIP
-    prototypes = Prototypes.load(Prototypes.path(root)).vectors if siglip else None
-    trainer = Trainer(config, device, seen, prototypes)
+    corpus = Corpus.load(config, root, torch.device("cuda"))
+    train, validation, log_prior = corpus.train, corpus.validation, corpus.train.log_prior()
+    trainer = corpus.trainer(config, root)
     model, history = trainer.fit(train, validation, log_prior)
     out = root.models() / args.name
     out.mkdir(parents=True, exist_ok=True)
