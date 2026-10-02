@@ -9,3 +9,4 @@ def test_call() -> None:
     labels = np.array([0, 2, 2])
     assert BalancedTopK(1)(scores, labels) == pytest.approx(0.5)
     assert BalancedTopK(3)(scores, labels) == pytest.approx(1.0)
+    assert BalancedTopK(3)(np.full_like(scores, np.nan), labels) == 0.0

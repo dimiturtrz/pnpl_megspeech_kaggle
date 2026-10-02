@@ -328,6 +328,8 @@ class Trainer:
                 nn.utils.clip_grad_norm_(model.parameters(), self.config.clip)
                 optimizer.step()
                 schedule.step()
+            if not math.isfinite(value.item()):
+                raise FloatingPointError(f"non-finite loss at epoch {epoch}")
             row = self.report(model, validation, log_prior, epoch, value.item())
             history.append(row)
             LOG.info("%s", asdict(row))

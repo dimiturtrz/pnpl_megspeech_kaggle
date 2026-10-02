@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from megspeech import epochs as module
-from megspeech.epochs import DECIMATE, SFREQ, WINDOW, Epocher, Epochs, Window, main
+from megspeech.epochs import DECIMATE, HALF, SFREQ, WINDOW, Epocher, Epochs, Window, main
 from megspeech.runs import Run
 from megspeech.vocabulary import Vocabulary
 
@@ -46,6 +46,9 @@ def test_save(tmp_path: Path) -> None:
     epochs = Epochs(np.ones((1, CHANNELS, 2), np.float32), np.array([1]), np.array([0.5]))
     path = epochs.save(tmp_path / "x" / "e.npz")
     assert path.exists()
+    overflow = Epochs(np.full((1, CHANNELS, 2), 1e6, np.float32), np.array([1]), np.array([0.5]))
+    with np.load(overflow.save(tmp_path / "o.npz")) as stored:
+        assert np.isfinite(stored["x"]).all()
 
 
 def test_load(tmp_path: Path) -> None:
@@ -53,6 +56,9 @@ def test_load(tmp_path: Path) -> None:
     loaded = Epochs.load(epochs.save(tmp_path / "e.npz"))
     assert loaded.x.dtype == np.float16
     assert loaded.y.tolist() == [1]
+    legacy = tmp_path / "legacy.npz"
+    np.savez(legacy, x=np.full((1, CHANNELS, 2), -np.inf, np.float16), y=np.array([1]), onset=np.array([0.5]))
+    assert Epochs.load(legacy).x.min() == -HALF
 
 
 def test_epoch(tmp_path: Path) -> None:

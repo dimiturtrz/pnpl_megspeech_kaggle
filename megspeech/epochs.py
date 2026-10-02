@@ -35,6 +35,7 @@ DECIMATE = 5
 PICO = 1e12
 """Tesla → picotesla, so a float16 cache keeps the ~1e-13 T magnetometer signal out of subnormals."""
 
+HALF = float(np.finfo(np.float16).max)
 CHUNK = 512
 WORKERS = 6
 
@@ -61,13 +62,18 @@ class Epochs:
 
     def save(self, path: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(path, x=self.x.astype(np.float16), y=self.y, onset=self.onset)
+        np.savez(path, x=self._half(self.x), y=self.y, onset=self.onset)
         return path
 
     @classmethod
     def load(cls, path: Path) -> "Epochs":
         with np.load(path) as stored:
-            return cls(stored["x"], stored["y"], stored["onset"])
+            return cls(cls._half(stored["x"]), stored["y"], stored["onset"])
+
+    @staticmethod
+    def _half(x: Float[np.ndarray, "n c s"]) -> Float[np.ndarray, "n c s"]:
+        """Saturate rather than overflow to inf: an artefact past the half range is clamped by the scaler anyway."""
+        return np.clip(x, -HALF, HALF).astype(np.float16)
 
 
 @dataclass(frozen=True)

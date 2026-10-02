@@ -16,6 +16,6 @@ class BalancedTopK:
 
     def __call__(self, scores: Float[np.ndarray, "n v"], labels: Int[np.ndarray, " n"]) -> float:
         true = np.take_along_axis(scores, labels[:, None], axis=1)
-        hit = (scores > true).sum(axis=1) < self.k
+        hit = ((scores > true).sum(axis=1) < self.k) & np.isfinite(scores).all(axis=1)
         classes = np.unique(labels)
         return float(np.mean([hit[labels == label].mean() for label in classes]))

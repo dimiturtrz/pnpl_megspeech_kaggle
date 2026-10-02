@@ -1,4 +1,5 @@
 import dataclasses
+import math
 from pathlib import Path
 from typing import cast, override
 
@@ -151,6 +152,8 @@ def test_fit() -> None:
     )
     assert len(history) == 1
     assert isinstance(model, nn.Module)
+    with pytest.raises(FloatingPointError):
+        Trainer(TrainConfig(epochs=1, batch=4, lr=math.inf), CPU).fit(split(), {"a": split(seed=1)}, torch.zeros(WORDS))
 
 
 class Holdout:
