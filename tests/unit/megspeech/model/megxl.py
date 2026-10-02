@@ -104,6 +104,18 @@ def test_forward():
     torch.testing.assert_close(features[0, :, 0, 0], expected)
 
 
+def test_chunk(monkeypatch: pytest.MonkeyPatch):
+    trunk = Trunk(Features(), Geometry.of(CHANNELS))
+    x = torch.arange(80.0).reshape(5, 2, 8)
+    whole = trunk.chunk(x)
+    calls: list[int] = []
+    chunk = trunk.chunk
+    monkeypatch.setattr("megspeech.model.megxl.ATTENTION_BATCH", 4)
+    monkeypatch.setattr(trunk, "chunk", lambda part: calls.append(len(part)) or chunk(part))
+    torch.testing.assert_close(trunk.forward(x), whole)
+    assert calls == [2, 2, 1]
+
+
 def test_pretrained(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     faked(monkeypatch)
     root = DataRoot(tmp_path)

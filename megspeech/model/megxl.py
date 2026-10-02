@@ -37,6 +37,10 @@ ROTATIONS = "rope_embedding_layer.rotate"
 LATENT = 512
 """The width of every token's features, the checkpoint's `latent_dim`."""
 
+ATTENTION_BATCH = 65535
+"""The most sequences CUDA's memory-efficient attention takes at once, its grid's y-dimension limit; the trunk's
+temporal attention runs one sequence per channel of every window."""
+
 
 @dataclass(frozen=True)
 class Geometry:
@@ -122,7 +126,10 @@ class Trunk(nn.Module):
 
     @override
     def forward(self, x: Float[Tensor, "b c t"]) -> Float[Tensor, "b c k d"]:
-        """Features of `x`'s `t // DOWNSAMPLING` tokens per channel."""
+        """Features of `x`'s `t // DOWNSAMPLING` tokens per channel, as many windows at a time as attention takes."""
+        return torch.cat([self.chunk(part) for part in x.split(ATTENTION_BATCH // x.shape[1])])
+
+    def chunk(self, x: Float[Tensor, "b c t"]) -> Float[Tensor, "b c k d"]:
         batch = len(x)
         return self.module(
             x,
