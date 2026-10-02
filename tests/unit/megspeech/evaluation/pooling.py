@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 import sys
@@ -94,6 +95,16 @@ def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     built = Pooling.of(DataRoot(tmp_path), "m", DataConfig().grouping, CPU)
     assert built.evaluator.seen == frozenset({(7, 8)})
     assert built.log_prior.shape == (WORDS,)
+
+
+def test_members(tmp_path: Path) -> None:
+    assert Pooling.members(tmp_path, "run") == [tmp_path / "run"]
+    (tmp_path / "trained").mkdir()
+    (tmp_path / "trained" / "metrics.json").write_text(json.dumps({"best": {}}))
+    assert Pooling.members(tmp_path, "trained") == [tmp_path / "trained"]
+    (tmp_path / "ens").mkdir()
+    (tmp_path / "ens" / "metrics.json").write_text(json.dumps({"members": ["a", "b"]}))
+    assert Pooling.members(tmp_path, "ens") == [tmp_path / "a", tmp_path / "b"]
 
 
 def test_load(tmp_path: Path) -> None:

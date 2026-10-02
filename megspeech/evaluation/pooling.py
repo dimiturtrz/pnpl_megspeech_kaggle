@@ -10,9 +10,11 @@ on other subjects' runs trained on it, so its reliabilities are optimistic).
 """
 
 import argparse
+import json
 import logging
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 import numpy as np
@@ -23,7 +25,7 @@ from torch import Tensor, nn
 
 from core.paths import DataRoot
 from megspeech.data.continuous import Continuous
-from megspeech.data.corpus import Corpus, DataConfig
+from megspeech.data.corpus import METRICS, Corpus, DataConfig
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import Partition, Run
 from megspeech.data.split import Split
@@ -116,15 +118,23 @@ class Pooling:
         cls, root: DataRoot, name: str, grouping: Grouping, device: torch.device, fallback: Fallback = AS_TRAINED
     ) -> "Pooling":
         """The model `name`, its subject layer reading subjects as `fallback` says."""
-        directory = root.models() / name
-        model = Ensemble.load([directory / "model.pt"], fallback.unseen).to(device)
+        directories = cls.members(root.models(), name)
+        model = Ensemble.load([directory / "model.pt" for directory in directories], fallback.unseen).to(device)
         for layer in (module for module in model.modules() if isinstance(module, SubjectLayer)):
             layer.shrink(fallback.keep, fallback.unseen)
-        data = DataConfig.shared([directory], grouping)
+        data = DataConfig.shared(directories, grouping)
         heard = Corpus.heard(data.decimator(root).cache, Run.discover(root.raw()), data)
         labels = heard["target"].to_numpy()
         log_prior = Split.prior(torch.tensor(labels), torch.ones(len(labels))).to(device)
         return cls(root, model, data, Evaluator(device, Corpus.sequences(heard, grouping)), log_prior)
+
+    @staticmethod
+    def members(models: Path, name: str) -> list[Path]:
+        """The trained runs behind `name`: those an ensemble's record lists (`megspeech.submission.ensemble`), else
+        the run itself."""
+        record = models / name / METRICS
+        saved: dict[str, list[str]] = json.loads(record.read_text()) if record.exists() else {}
+        return [models / member for member in saved.get("members", [name])]
 
     def load(self, runs: list[Run]) -> tuple[Continuous, pd.DataFrame]:
         """`runs` on the device, and their words keyed by `Text` and cut as the model's grouping cuts them."""
