@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from megspeech.heads import DIM, CosineHead, Objective
+from megspeech.heads import DIM, IGNORE, CosineHead, Objective
 from megspeech.wordnet import WORDS
 
 GENERATOR = torch.Generator().manual_seed(0)
@@ -26,3 +26,5 @@ def test_loss(objective: Objective) -> None:
     right = torch.full((2, WORDS), -10.0)
     right[torch.arange(2), y] = 10
     assert objective.loss(right, y, 0.0) < objective.loss(-right, y, 0.0)
+    padded = torch.cat([right, torch.randn(1, WORDS)])
+    assert torch.allclose(objective.loss(padded, torch.tensor([3, 7, IGNORE]), 0.1), objective.loss(right, y, 0.1))

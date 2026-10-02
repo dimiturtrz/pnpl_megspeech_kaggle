@@ -31,7 +31,7 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.augment import Augment
 from megspeech.epochs import Epocher, Epochs, Window
-from megspeech.heads import Objective
+from megspeech.heads import IGNORE, Objective
 from megspeech.model import SentenceNet
 from megspeech.onsets import CONTEXT, Clock, ContextConfig
 from megspeech.prototypes import Prototypes
@@ -55,6 +55,12 @@ DENSE = 4
 
 RECITED = 3
 """Spans this long recur only when a sentence is replayed; 2-word pairs of 50 words (2500) recur by chance."""
+
+SIGMAS = 6
+"""Word rows a training batch reserves above its expected word count, in standard deviations of that count: a
+normal tail of ~1e-9 per step, so a 40-epoch run overflows with odds ~1e-4 (and an overflow only drops words)."""
+ROW_ALIGN = 8
+"""Row counts rounded up to a multiple of this, the tensor-core tile."""
 
 READ = frozenset({"TIMIT", "MOCHATIMIT"})
 """Tasks of read sentences, the holdout's domain; the rest is narrative (Sherlock, TheMoth)."""
@@ -84,8 +90,8 @@ class TrainConfig:
     context: ContextConfig = CONTEXT
     tasks: tuple[str, ...] = ()
     """Training restricted to these tasks' runs; empty trains on every task."""
-    compiled: bool = False
-    """Compile the model's forward on the GPU (no gain measured yet: shapes change every batch)."""
+    compiled: bool = True
+    """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
 
     def trains_on(self, run: Run) -> bool:
         return run.partition is Partition.TRAIN and (not self.tasks or run.key[0] in self.tasks)
@@ -133,6 +139,23 @@ class Epoch:
     domains: dict[str, Report]
     macro: Score
     interval: Interval
+
+
+@dataclass(frozen=True)
+class Batch:
+    """Spans packed into a fixed number of word rows, so every training step has the same shapes.
+
+    `slot` is each span position's row of `x`, `len(x)` where the position is empty; `index` its split word.
+    """
+
+    x: Float[Tensor, "r c t"]
+    onset: Float[Tensor, "g w"]
+    slot: Int[Tensor, "g w"]
+    index: Int[Tensor, "g w"]
+
+    def target(self, labels: Int[Tensor, " n"]) -> Int[Tensor, "g w"]:
+        """Each position's label from the split's `labels`; `IGNORE` where the position is empty."""
+        return torch.where(self.slot < len(self.x), labels[self.index.clamp(min=0)], IGNORE)
 
 
 @dataclass(frozen=True)
@@ -216,11 +239,24 @@ class Split:
         counts = torch.bincount(y, weight, minlength=WORDS).float() + 1
         return (counts / counts.sum()).log()
 
-    def batch(self, spans: Int[Tensor, " b"]) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    def batch(self, spans: Int[Tensor, " b"], rows: int) -> Batch:
+        """The words of `spans` in `rows` rows, in span order, without a host sync; words past `rows` are dropped."""
         index = self.index[spans]
-        mask = index != PAD
-        words = index[mask]
-        return self.x[words], self.onset[spans], mask, words
+        order = (index != PAD).flatten().cumsum(0).view_as(index) - 1
+        slot = torch.where((index != PAD) & (order < rows), order, rows)
+        index = torch.where(slot < rows, index, PAD)
+        words = index.new_zeros(rows + 1).scatter_(0, slot.flatten(), index.clamp(min=0).flatten())[:rows]
+        return Batch(self.x[words], self.onset[spans], slot, index)
+
+    def capacity(self, batch: int) -> int:
+        """Word rows for `batch` spans drawn as training draws them: the expected count plus `SIGMAS` deviations."""
+        lengths = (self.index != PAD).sum(dim=1).double()
+        draw = self.weight[self.index[:, 0]].double()
+        draw = draw / draw.sum()
+        mean = float((draw * lengths).sum())
+        spread = math.sqrt(batch * float((draw * (lengths - mean).square()).sum()))
+        rows = ROW_ALIGN * math.ceil((batch * mean + SIGMAS * spread) / ROW_ALIGN)
+        return min(rows, batch * self.index.shape[1])
 
     @staticmethod
     def seen(labelled: Iterable[tuple[Int[np.ndarray, " n"], Float[np.ndarray, " n"]]]) -> frozenset[tuple[int, ...]]:
@@ -262,11 +298,12 @@ class Split:
 
 @dataclass
 class Step:
-    """What one optimiser step mutates."""
+    """What one optimiser step mutates, and the word rows of its fixed-shape batch."""
 
     model: nn.Module
     optimizer: torch.optim.Optimizer
     schedule: torch.optim.lr_scheduler.LRScheduler
+    rows: int
 
 
 @dataclass
@@ -278,16 +315,21 @@ class Trainer:
     ruler: Ruler = Ruler()
 
     def logits(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
-        """Both heads' logits for every word of `split`, in the split's word order."""
+        """Both heads' logits for every word of `split`, in the split's word order.
+
+        Every batch reserves room for full spans, so a compiled model sees one shape (and the last batch's).
+        """
         model.eval()
-        out = {head: torch.zeros(len(split.x), WORDS, device=self.device) for head in Head}
+        words, rows = len(split.x), EVAL_SPANS * split.index.shape[1]
+        out = {head: torch.zeros(words + 1, WORDS, device=self.device) for head in Head}
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
             for spans in torch.arange(len(split.index), device=self.device).split(EVAL_SPANS):
-                x, onset, mask, words = split.batch(spans)
-                context, word = model(x, onset, mask)
-                out[Head.CONTEXT][words] = context[mask].float()
-                out[Head.WORD][words] = word[mask].float()
-        return out
+                batch = split.batch(spans, rows)
+                context, word = model(batch.x, batch.onset, batch.slot)
+                at = torch.where(batch.index != PAD, batch.index, words)
+                out[Head.CONTEXT][at] = context.float()
+                out[Head.WORD][at] = word.float()
+        return {head: logits[:words] for head, logits in out.items()}
 
     def evaluate(
         self, logits: Float[Tensor, "n v"], labels: Int[Tensor, " n"], log_prior: Float[Tensor, " v"]
@@ -341,7 +383,7 @@ class Trainer:
     def model(self, train: Split) -> nn.Module:
         model = SentenceNet(Scaler(train.x), context=self.config.context, prototypes=self.prototypes).to(self.device)
         if self.config.compiled and self.device.type == "cuda":
-            model.compile(dynamic=True)
+            model.compile(mode="reduce-overhead")
         return model
 
     def optimizer(self, model: nn.Module) -> torch.optim.AdamW:
@@ -353,13 +395,12 @@ class Trainer:
 
     def step(self, state: "Step", train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, ""]:
         """One optimiser step on the words of `spans`; returns the loss without syncing it to the host."""
-        x, onset, mask, words = train.batch(spans)
-        x = self.config.augment(x)
+        batch = train.batch(spans, state.rows)
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            context, word = state.model(x, onset, mask)
-            smoothing, objective, y = self.config.label_smoothing, self.config.context.objective, train.y[words]
-            value = objective.loss(context[mask], y, smoothing) + nn.functional.cross_entropy(
-                word[mask], y, label_smoothing=smoothing
+            context, word = state.model(self.config.augment(batch.x), batch.onset, batch.slot)
+            smoothing, objective, y = self.config.label_smoothing, self.config.context.objective, batch.target(train.y)
+            value = objective.loss(context.flatten(0, 1), y.flatten(), smoothing) + nn.functional.cross_entropy(
+                word.flatten(0, 1), y.flatten(), ignore_index=IGNORE, label_smoothing=smoothing
             )
         state.optimizer.zero_grad(set_to_none=True)
         value.backward()
@@ -374,14 +415,16 @@ class Trainer:
         torch.manual_seed(self.config.seed)
         model = self.model(train)
         optimizer = self.optimizer(model)
-        steps = self.config.epochs * math.ceil(len(train.index) / self.config.batch)
-        schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, self.config.lr, total_steps=steps)
-        state = Step(model, optimizer, schedule)
+        per_epoch = math.ceil(len(train.index) / self.config.batch)
+        schedule = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer, self.config.lr, total_steps=self.config.epochs * per_epoch
+        )
+        state = Step(model, optimizer, schedule, train.capacity(self.config.batch))
         history: list[Epoch] = []
         best, best_state = -1.0, model.state_dict()
         for epoch in range(self.config.epochs):
             model.train()
-            draws = torch.multinomial(train.weight[train.index[:, 0]], len(train.index), replacement=True)
+            draws = torch.multinomial(train.weight[train.index[:, 0]], per_epoch * self.config.batch, replacement=True)
             value = (
                 torch.stack([self.step(state, train, spans) for spans in draws.split(self.config.batch)]).mean().item()
             )
@@ -451,6 +494,7 @@ def main() -> None:
     parser.add_argument("--clock", type=Clock, default=CONTEXT.clock, choices=list(Clock))
     parser.add_argument("--objective", type=Objective, default=CONTEXT.objective, choices=list(Objective))
     parser.add_argument("--tasks", nargs="*", default=list(TrainConfig.tasks))
+    parser.add_argument("--eager", action="store_true", help="run without compiling into CUDA graphs")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     context = replace(
@@ -466,6 +510,7 @@ def main() -> None:
         seed=args.seed,
         context=context,
         tasks=tuple(args.tasks),
+        compiled=not args.eager,
     )
     root = DataRoot.from_config()
     corpus = Corpus.load(config, root, torch.device("cuda"))

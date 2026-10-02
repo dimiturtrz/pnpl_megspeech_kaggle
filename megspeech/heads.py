@@ -16,6 +16,8 @@ DIM = 1024
 TEMPERATURE = math.log(10)
 BIAS = -10.0
 """SigLIP's initial log-temperature and bias (Zhai et al. 2023), as d'Ascoli et al. use them."""
+IGNORE = -100
+"""The label of a padding row; `cross_entropy`'s default `ignore_index`."""
 
 
 class CosineHead(nn.Module):
@@ -48,8 +50,13 @@ class Objective(StrEnum):
         return nn.Linear(width, WORDS) if self is Objective.SOFTMAX else CosineHead(width, anchors)
 
     def loss(self, logits: Float[Tensor, "n v"], y: Int[Tensor, " n"], smoothing: float) -> Float[Tensor, ""]:
-        """Softmax cross-entropy, or SigLIP's per-pair sigmoid loss summed over the 50 candidates."""
+        """Softmax cross-entropy, or SigLIP's per-pair sigmoid loss summed over the 50 candidates.
+
+        Rows labelled `IGNORE` are padding: they add nothing and do not count toward the mean.
+        """
         if self is Objective.SOFTMAX:
-            return functional.cross_entropy(logits.float(), y, label_smoothing=smoothing)
-        target = functional.one_hot(y, logits.shape[-1]).float()
-        return functional.binary_cross_entropy_with_logits(logits.float(), target, reduction="sum") / len(y)
+            return functional.cross_entropy(logits.float(), y, ignore_index=IGNORE, label_smoothing=smoothing)
+        keep = (y != IGNORE).float()
+        target = functional.one_hot(y.clamp(min=0), logits.shape[-1]).float()
+        pairs = functional.binary_cross_entropy_with_logits(logits.float(), target, reduction="none").sum(-1)
+        return (pairs * keep).sum() / keep.sum()

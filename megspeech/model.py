@@ -2,7 +2,8 @@
 
 from typing import override
 
-from jaxtyping import Bool, Float
+import torch
+from jaxtyping import Float, Int
 from torch import Tensor, nn
 
 from megspeech.onsets import CONTEXT, ContextConfig, OnsetEncoding
@@ -37,10 +38,14 @@ class SentenceNet(nn.Module):
 
     @override
     def forward(
-        self, x: Float[Tensor, "n c t"], onset: Float[Tensor, "g w"], mask: Bool[Tensor, "g w"]
+        self, x: Float[Tensor, "r c t"], onset: Float[Tensor, "g w"], slot: Int[Tensor, "g w"]
     ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
-        embedded = self.words.embed(self.scale(x))
-        slots = embedded.new_zeros(*mask.shape, embedded.shape[-1])
-        slots[mask] = embedded
+        """`slot` is each span position's row of `x`; `len(x)` marks an empty position, and rows no slot names are
+        padding that neither normalises nor reaches the transformer."""
+        rows = len(x)
+        mask = slot < rows
+        valid = torch.zeros(rows + 1, dtype=torch.bool, device=x.device).index_fill_(0, slot.flatten(), value=True)
+        embedded = self.words.embed(self.scale(x), valid[:rows])
+        slots = nn.functional.pad(embedded, (0, 0, 0, 1))[slot]
         h = self.project(slots) + self.onsets(self.clock.times(onset, mask))
         return self.head(self.context(h, src_key_padding_mask=~mask)), self.words.head(slots)

@@ -80,9 +80,8 @@ class Throughput:
         model = trainer.model(train)
         optimizer = trainer.optimizer(model)
         total = self.warmup + 2 * self.steps
-        state = Step(
-            model, optimizer, torch.optim.lr_scheduler.OneCycleLR(optimizer, trainer.config.lr, total_steps=total)
-        )
+        schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, trainer.config.lr, total_steps=total)
+        state = Step(model, optimizer, schedule, train.capacity(trainer.config.batch))
         draws = torch.randint(len(train.index), (total, trainer.config.batch), device=train.x.device)
         for spans in draws[: self.warmup]:
             trainer.step(state, train, spans)

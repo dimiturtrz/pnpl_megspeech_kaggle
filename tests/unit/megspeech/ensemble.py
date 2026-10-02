@@ -19,16 +19,16 @@ class Peaked(nn.Module):
         self.word = word
 
     @override
-    def forward(self, x: torch.Tensor, onset: torch.Tensor, mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        logits = torch.zeros(*mask.shape, WORDS)
+    def forward(self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        logits = torch.zeros(*slot.shape, WORDS)
         logits[..., self.word] = 10
         return logits, logits
 
 
 def test_forward() -> None:
-    mask = torch.ones(1, 2, dtype=torch.bool)
+    slot = torch.tensor([[0, 1]])
     members: list[nn.Module] = [Peaked(3), Peaked(3), Peaked(7)]
-    context, word = Ensemble(members).forward(torch.zeros(2, 1, 1), torch.zeros(1, 2), mask)
+    context, word = Ensemble(members).forward(torch.zeros(2, 1, 1), torch.zeros(1, 2), slot)
     assert torch.all(context.argmax(-1) == 3)
     assert torch.allclose(context, word)
 

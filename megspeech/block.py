@@ -2,8 +2,10 @@
 
 from typing import override
 
-from jaxtyping import Float
+from jaxtyping import Bool, Float
 from torch import Tensor, nn
+
+from megspeech.norm import MaskedBatchNorm1d
 
 
 class Block(nn.Module):
@@ -13,11 +15,13 @@ class Block(nn.Module):
         super().__init__()
         self.body = nn.Sequential(
             nn.Conv1d(width, width, 3, padding=dilation, dilation=dilation),
-            nn.BatchNorm1d(width),
+            MaskedBatchNorm1d(width),
             nn.GELU(),
             nn.Dropout(dropout),
         )
 
     @override
-    def forward(self, x: Float[Tensor, "b h t"]) -> Float[Tensor, "b h t"]:
-        return x + self.body(x)
+    def forward(self, x: Float[Tensor, "b h t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b h t"]:
+        """`valid` rows alone set the batch statistics; the rest are padding."""
+        conv, norm, act, drop = self.body
+        return x + drop(act(norm(conv(x), valid)))

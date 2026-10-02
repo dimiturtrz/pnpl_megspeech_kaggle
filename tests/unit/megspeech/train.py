@@ -13,8 +13,9 @@ from core.paths import DataRoot
 from megspeech import train as module
 from megspeech.augment import Augment
 from megspeech.epochs import Epocher, Epochs
+from megspeech.heads import IGNORE
 from megspeech.runs import Run
-from megspeech.spans import Spans
+from megspeech.spans import PAD, Spans
 from megspeech.train import ADJUSTMENTS, DENSE, Corpus, Head, Score, Split, Step, TrainConfig, Trainer
 from megspeech.wordnet import CHANNELS, WORDS
 
@@ -32,8 +33,8 @@ def split(n: int = 12, seed: int = 0) -> Split:
 
 class Constant(nn.Module):
     @override
-    def forward(self, x: torch.Tensor, onset: torch.Tensor, mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        logits = torch.zeros(*mask.shape, WORDS)
+    def forward(self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        logits = torch.zeros(*slot.shape, WORDS)
         logits[..., 0] = 1
         return logits, logits
 
@@ -99,10 +100,23 @@ def test_recurring() -> None:
 
 
 def test_batch() -> None:
-    x, onset, mask, words = split().batch(torch.tensor([0]))
-    assert len(x) == mask.sum() == DENSE
-    assert words.tolist() == list(range(DENSE))
-    assert onset.shape == mask.shape
+    batch = split().batch(torch.tensor([1, 0]), rows=6)
+    assert batch.slot[:, :DENSE].tolist() == [[0, 6, 6, 6], [1, 2, 3, 4]]
+    assert torch.equal(batch.x[:5], split().x[[DENSE, 0, 1, 2, 3]])
+    assert batch.onset.shape == batch.slot.shape
+    overflow = split().batch(torch.tensor([0]), rows=2)
+    assert overflow.slot[:, :DENSE].tolist() == [[0, 1, 2, 2]]
+    assert overflow.index[:, :DENSE].tolist() == [[0, 1, PAD, PAD]]
+
+
+def test_target() -> None:
+    data = split()
+    assert data.batch(torch.tensor([0]), rows=2).target(data.y)[:, :DENSE].tolist() == [[0, 1, IGNORE, IGNORE]]
+
+
+def test_capacity() -> None:
+    assert split().capacity(1) == 8
+    assert split().capacity(100) == 192
 
 
 def test_dense() -> None:
@@ -179,7 +193,7 @@ def test_step() -> None:
     optimizer = torch.optim.AdamW(model.parameters())
     before = [p.clone() for p in model.parameters()]
     value = trainer.step(
-        Step(model, optimizer, torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)),
+        Step(model, optimizer, torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0), split().capacity(2)),
         split(),
         torch.tensor([0, 1]),
     )
