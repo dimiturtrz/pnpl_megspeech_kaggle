@@ -132,3 +132,6 @@ def test_groups():
     ids = [{id(p) for p in group.pop("params")} for group in groups]
     assert ids == [{id(p) for p in model[0].parameters()}, {id(p) for p in trunk.parameters()}]
     assert groups == [{"weight_decay": 0.0}, {"lr": 1e-4}]
+    assert all(p.requires_grad for p in trunk.parameters())
+    Trunk.groups(model, [{"params": list(model.parameters())}], lr=0.0)
+    assert not any(p.requires_grad for p in trunk.parameters())

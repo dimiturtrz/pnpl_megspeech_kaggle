@@ -56,7 +56,7 @@ class OptimConfig:
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
     pretrained: float = 0.1
     """Peak learning rate of a pretrained trunk's weights relative to `lr`: fine-tuning moves them less than the
-    freshly initialised layers above them, which start from noise."""
+    freshly initialised layers above them, which start from noise. 0 freezes them."""
 
 
 @dataclass(frozen=True)
