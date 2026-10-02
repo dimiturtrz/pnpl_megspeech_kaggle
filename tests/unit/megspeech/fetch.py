@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from core.paths import ENV_OVERRIDE
+from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech import fetch as module
-from megspeech.fetch import HOLDOUT, OTHERS, SOURCES, Source, main
+from megspeech.fetch import HOLDOUT, OTHERS, SOURCES, WEIGHTS, Source, Weights, main
 
 Calls = list[dict[str, object]]
 
@@ -23,10 +23,16 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> Calls:
     return recorded
 
 
-def test_fetch(calls: Calls, tmp_path: Path):
+@pytest.fixture
+def root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DataRoot:
+    monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
+    return DataRoot.from_config()
+
+
+def test_fetch(calls: Calls, root: DataRoot):
     """The repo-relative tree lands under the destination, anonymously — the pnpl repos are public."""
     source = Source("org/repo", ("*.npz",))
-    assert source.fetch(tmp_path) == tmp_path
+    assert source.fetch(root) == root.raw()
     assert calls[0]["repo_id"] == "org/repo"
     assert calls[0]["repo_type"] == "dataset"
     assert calls[0]["allow_patterns"] == ["*.npz"]
@@ -67,3 +73,19 @@ def test_others_exclude_subject0():
         "x/sub-3_ses-2_events.tsv",
     ]
     assert [any(fnmatch(n, p) for p in OTHERS.patterns) for n in names] == [False, True, True]
+
+
+def test_source_home(root: DataRoot):
+    assert Source("org/data", ("*",)).home(root) == root.raw()
+
+
+def test_weights_home(root: DataRoot):
+    assert Weights("org/net", ("*",)).home(root) == root.foreign("net")
+
+
+def test_main_weights(calls: Calls, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
+    monkeypatch.setattr(sys, "argv", ["fetch", "--weights"])
+    main()
+    assert [call["repo_id"] for call in calls] == [source.repo for source in WEIGHTS]
+    assert {call["repo_type"] for call in calls} == {"model"}

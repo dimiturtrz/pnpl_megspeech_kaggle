@@ -6,12 +6,14 @@ events `.tsv` are pulled; the raw `.fif` (hundreds of GB) is never needed.
 
     uv run python -m megspeech.fetch            # holdout, then LibriBrain, then LibriBrain2
     uv run python -m megspeech.fetch --others   # subjects 1-32 (~44 min each), for cross-subject training
+    uv run python -m megspeech.fetch --weights  # pretrained MEG-XL and a GPT-2-class LM, into models/foreign
 """
 
 import argparse
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import override
 
 from huggingface_hub import snapshot_download
 
@@ -31,24 +33,40 @@ PARALLEL_FILES = 8
 
 @dataclass(frozen=True)
 class Source:
-    """One HuggingFace dataset repo and the files of it the Deep track needs."""
+    """One HuggingFace dataset repo and the files of it the Deep track needs, mirrored into the raw directory."""
 
     repo: str
     patterns: tuple[str, ...]
+    kind: str = "dataset"
 
-    def fetch(self, destination: Path) -> Path:
-        """Mirror this repo's matching files into `destination`; files already present are skipped."""
+    def home(self, root: DataRoot) -> Path:
+        return root.raw()
+
+    def fetch(self, root: DataRoot) -> Path:
+        """Mirror this repo's matching files into its home; files already present are skipped."""
+        destination = self.home(root)
         LOG.info("fetching %s %s -> %s", self.repo, self.patterns, destination)
         return Path(
             snapshot_download(
                 repo_id=self.repo,
-                repo_type="dataset",
+                repo_type=self.kind,
                 allow_patterns=list(self.patterns),
                 local_dir=destination,
                 max_workers=PARALLEL_FILES,
                 token=False,
             )
         )
+
+
+@dataclass(frozen=True)
+class Weights(Source):
+    """A third-party model repo, kept in its own folder under the foreign models."""
+
+    kind: str = "model"
+
+    @override
+    def home(self, root: DataRoot) -> Path:
+        return root.foreign(self.repo.split("/")[-1])
 
 
 HOLDOUT = Source("pnpl/LibriBrain-Competition-2026", ("*.npz",))
@@ -61,18 +79,25 @@ SOURCES = (
 
 OTHERS = Source("pnpl/LibriBrain2", OTHER_SUBJECTS)
 
+WEIGHTS = (
+    Weights("pnpl/MEG-XL", ("*",)),
+    Weights("openai-community/gpt2-large", ("*.json", "*.safetensors", "*.txt")),
+)
+"""MEG-XL as a pretrained init or ensemble seat (7gf.5); a GPT-2-class LM for the prior fusion (7gf.6)."""
+
 
 def main() -> None:
-    """Fetch every source (or only the holdout, or only the other subjects) into the competition's raw directory."""
+    """Fetch every source, or only the holdout, the other subjects, or the pretrained weights."""
     parser = argparse.ArgumentParser(description=__doc__)
     choice = parser.add_mutually_exclusive_group()
     choice.add_argument("--holdout-only", dest="sources", action="store_const", const=(HOLDOUT,), default=SOURCES)
     choice.add_argument("--others", dest="sources", action="store_const", const=(OTHERS,))
+    choice.add_argument("--weights", dest="sources", action="store_const", const=WEIGHTS)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    destination = DataRoot.from_config().raw()
+    root = DataRoot.from_config()
     for source in args.sources:
-        source.fetch(destination)
+        source.fetch(root)
 
 
 if __name__ == "__main__":
