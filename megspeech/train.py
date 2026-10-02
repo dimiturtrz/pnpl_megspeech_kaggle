@@ -35,9 +35,9 @@ from megspeech.heads import Objective
 from megspeech.model import SentenceNet
 from megspeech.onsets import CONTEXT, Clock, ContextConfig
 from megspeech.prototypes import Prototypes
+from megspeech.ruler import Coverage, Graded, Interval, Ruler
 from megspeech.runs import Partition, Run
 from megspeech.scaler import Scaler
-from megspeech.score import BalancedTopK
 from megspeech.spans import PAD, Spans
 from megspeech.submission import FrequencyPrior, Submission
 from megspeech.vocabulary import SECONDARY
@@ -119,16 +119,18 @@ class Report:
     dense: Score
     novel: Score
     bacc1: float
+    coverage: Coverage
 
 
 @dataclass(frozen=True)
 class Epoch:
-    """One validation pass over every domain, and the macro over domains' unseen spans that selects."""
+    """One validation pass over every domain, the macro over domains' unseen spans that selects, and its interval."""
 
     epoch: int
     loss: float
     domains: dict[str, Report]
     macro: Score
+    interval: Interval
 
 
 @dataclass(frozen=True)
@@ -258,6 +260,7 @@ class Trainer:
     device: torch.device
     seen: frozenset[tuple[int, ...]] = frozenset()
     prototypes: Float[Tensor, "v d"] | None = None
+    ruler: Ruler = Ruler()
 
     def logits(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
         """Both heads' logits for every word of `split`, in the split's word order."""
@@ -274,21 +277,39 @@ class Trainer:
     def evaluate(
         self, logits: Float[Tensor, "n v"], labels: Int[Tensor, " n"], log_prior: Float[Tensor, " v"]
     ) -> Score:
-        metric = BalancedTopK()
-        truth = labels.cpu().numpy()
-        by_tau = {tau: metric((logits - tau * log_prior).cpu().numpy(), truth) for tau in ADJUSTMENTS}
-        return Score.best(by_tau, len(truth))
+        by_tau = {
+            tau: self.ruler.balanced(self.ruler.hits(logits - tau * log_prior, labels), labels) for tau in ADJUSTMENTS
+        }
+        return Score.best(by_tau, len(labels))
 
     def assess(self, model: nn.Module, split: Split, log_prior: Float[Tensor, " v"]) -> Report:
         logits = self.logits(model, split)
         dense = split.dense()
         novel = split.novel(self.seen)
+        top1 = Ruler(k=1)
         return Report(
             self.evaluate(logits[Head.CONTEXT], split.y, log_prior),
             self.evaluate(logits[Head.WORD], split.y, log_prior),
             self.evaluate(logits[Head.CONTEXT][dense], split.y[dense], log_prior),
             self.evaluate(logits[Head.CONTEXT][novel], split.y[novel], log_prior),
-            BalancedTopK(1)(logits[Head.CONTEXT].cpu().numpy(), split.y.cpu().numpy()),
+            top1.balanced(top1.hits(logits[Head.CONTEXT], split.y), split.y),
+            Coverage.of(split.y[novel]),
+        )
+
+    def graded(self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], tau: float) -> Graded:
+        """The context head's per-word hits on the unseen spans of every domain that counts toward selection."""
+        novel = {name: split.novel(self.seen) for name, split in domains.items()}
+        counted = {name: split for name, split in domains.items() if len(novel[name]) >= self.config.min_novel}
+        return Graded(
+            {
+                name: (
+                    self.ruler.hits(
+                        self.logits(model, split)[Head.CONTEXT][novel[name]] - tau * log_prior, split.y[novel[name]]
+                    ),
+                    split.y[novel[name]],
+                )
+                for name, split in counted.items()
+            }
         )
 
     def report(
@@ -298,7 +319,9 @@ class Trainer:
         reports = {name: self.assess(model, split, log_prior) for name, split in domains.items()}
         counted = [r.novel for r in reports.values() if r.novel.n >= self.config.min_novel]
         by_tau = {tau: float(np.mean([score.by_tau[tau] for score in counted])) for tau in ADJUSTMENTS}
-        return Epoch(epoch, loss, reports, Score.best(by_tau, sum(score.n for score in counted)))
+        macro = Score.best(by_tau, sum(score.n for score in counted))
+        interval = self.ruler.interval(self.ruler.macro(self.graded(model, domains, log_prior, macro.tau)))
+        return Epoch(epoch, loss, reports, macro, interval)
 
     def fit(
         self, train: Split, validation: dict[str, Split], log_prior: Float[Tensor, " v"]
@@ -407,6 +430,7 @@ def main() -> None:
     summary = {"config": asdict(config), "train": len(train.y), "best": asdict(best)}
     (out / "metrics.json").write_text(json.dumps({**summary, "history": [asdict(row) for row in history]}, indent=1))
     LOG.info("best %s", best)
+    trainer.graded(model, validation, log_prior, best.macro.tau).save(out / "hits.pt")
     trainer.submit(model, root, log_prior, best.macro.tau, out / "submission.csv")
 
 

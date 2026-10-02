@@ -133,6 +133,19 @@ def test_assess() -> None:
     assert report.dense.n == DENSE
     assert report.novel.n == DENSE
     assert report.context.n == len(split().y)
+    assert report.coverage.present == len(set(split().y[split().novel(frozenset())].tolist()))
+
+
+def test_graded() -> None:
+    domains = {"a": split(), "b": split(n=8, seed=1)}
+    sizes = {name: len(s.novel(frozenset())) for name, s in domains.items()}
+    graded = Trainer(TrainConfig(min_novel=max(sizes.values())), CPU).graded(
+        Constant(), domains, torch.zeros(WORDS), 0.0
+    )
+    assert set(graded.domains) == {name for name, size in sizes.items() if size == max(sizes.values())}
+    hits, labels = next(iter(graded.domains.values()))
+    assert hits.shape == labels.shape == (max(sizes.values()),)
+    assert hits.all()
 
 
 def test_report() -> None:
@@ -144,6 +157,7 @@ def test_report() -> None:
     assert report.macro.n == sum(r.novel.n for r in counted)
     mean = np.mean([r.novel.by_tau[0.0] for r in counted])
     assert report.macro.by_tau[ADJUSTMENTS[0]] == pytest.approx(mean)
+    assert report.interval.low <= report.macro.by_tau[report.macro.tau] <= report.interval.high
 
 
 def test_fit() -> None:

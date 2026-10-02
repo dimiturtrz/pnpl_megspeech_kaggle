@@ -1,15 +1,28 @@
+import sys
+from pathlib import Path
+
 import numpy as np
 import pytest
 import torch
 
-from megspeech.ruler import Coverage, Interval, Ruler
-from megspeech.score import BalancedTopK
+from megspeech.ruler import Coverage, Graded, Interval, Ruler, main
 from megspeech.wordnet import WORDS
+
+CPU = torch.device("cpu")
 
 
 def scored(n: int = 200, seed: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
     generator = torch.Generator().manual_seed(seed)
     return torch.randn(n, WORDS, generator=generator), torch.randint(WORDS, (n,), generator=generator)
+
+
+def graded(seed: int = 0) -> Graded:
+    ruler = Ruler()
+    domains = {}
+    for name, n in (("a", 120), ("b", 80)):
+        scores, labels = scored(n, seed=n)
+        domains[name] = (ruler.hits(scores + seed * torch.nn.functional.one_hot(labels, WORDS), labels), labels)
+    return Graded(domains)
 
 
 def test_hits() -> None:
@@ -24,7 +37,8 @@ def test_hits() -> None:
 def test_balanced() -> None:
     scores, labels = scored()
     ruler = Ruler()
-    expected = BalancedTopK()(scores.numpy(), labels.numpy())
+    rank = (scores.numpy() > np.take_along_axis(scores.numpy(), labels.numpy()[:, None], 1)).sum(1)
+    expected = np.mean([(rank[labels.numpy() == c] < ruler.k).mean() for c in np.unique(labels.numpy())])
     assert ruler.balanced(ruler.hits(scores, labels), labels) == pytest.approx(expected)
 
 
@@ -36,6 +50,28 @@ def test_draws() -> None:
     assert draws.shape == (300,)
     assert torch.equal(draws, ruler.draws(hits, labels))
     assert abs(float(draws.mean()) - ruler.balanced(hits, labels)) < 0.03
+
+
+def test_point() -> None:
+    ruler = Ruler()
+    runs = graded()
+    expected = np.mean([ruler.balanced(hits, labels) for hits, labels in runs.domains.values()])
+    assert ruler.point(runs) == pytest.approx(expected)
+
+
+def test_macro() -> None:
+    ruler = Ruler(resamples=200)
+    draws = ruler.macro(graded())
+    assert draws.shape == (200,)
+    assert abs(float(draws.mean()) - ruler.point(graded())) < 0.03
+
+
+def test_delta() -> None:
+    ruler = Ruler(resamples=200)
+    assert torch.equal(ruler.delta(graded(), graded()), torch.zeros(200))
+    assert float(ruler.delta(graded(seed=1), graded()).mean()) > 0
+    with pytest.raises(ValueError, match="different words"):
+        ruler.delta(graded(), Graded({"a": graded().domains["a"]}))
 
 
 def test_interval() -> None:
@@ -54,3 +90,23 @@ def test_of() -> None:
     coverage = Coverage.of(torch.tensor(np.r_[[0] * 10, [1] * 2, [2] * 6]))
     assert coverage == Coverage(3, 6.0, 1)
     assert Coverage.of(torch.tensor([], dtype=torch.long)) == Coverage(0, 0.0, 0)
+
+
+def test_save(tmp_path: Path) -> None:
+    path = graded().save(tmp_path / "hits.pt")
+    assert set(torch.load(path, weights_only=True)) == {"a", "b"}
+
+
+def test_load(tmp_path: Path) -> None:
+    runs = graded()
+    loaded = Graded.load(runs.save(tmp_path / "hits.pt"), CPU)
+    assert loaded.domains.keys() == runs.domains.keys()
+    assert all(torch.equal(loaded.domains[n][0], runs.domains[n][0]) for n in runs.domains)
+
+
+def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    a, b = graded(seed=1).save(tmp_path / "a.pt"), graded().save(tmp_path / "b.pt")
+    monkeypatch.setattr(sys, "argv", ["ruler", str(a), str(b)])
+    with caplog.at_level("INFO"):
+        main()
+    assert "P(a>b)" in caplog.text
