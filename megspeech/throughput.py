@@ -77,7 +77,7 @@ class Throughput:
     def measure(self, trainer: Trainer, corpus: Corpus, full_spans: int) -> Projection:
         train = corpus.train
         model = trainer.model(train)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=trainer.config.lr)
+        optimizer = trainer.optimizer(model)
         total = self.warmup + 2 * self.steps
         state = Step(
             model, optimizer, torch.optim.lr_scheduler.OneCycleLR(optimizer, trainer.config.lr, total_steps=total)
@@ -116,6 +116,8 @@ def main() -> None:
         LOG.info(
             "%s: wall %.2fs host %.2fs device %.2fs\n%s", name, phase.seconds, phase.host, phase.device, phase.table
         )
+    if device.type == "cuda":
+        LOG.info("peak reserved %.1f GB", torch.cuda.max_memory_reserved() / 1e9)
     LOG.info(
         "per step %.1f ms x %d steps + report %.1fs = epoch %.1fs (%.2f epochs/min), eval share %.0f%%",
         1000 * out.per_step,

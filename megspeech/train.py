@@ -178,7 +178,11 @@ class Split:
             onsets.append(run.onset)
             weights.append(np.full(len(run.y), weight))
         spans = Spans.by_gap(np.concatenate(onsets))
-        return cls.on_device(torch.cat(xs), np.concatenate(ys), spans, np.concatenate(weights))
+        x = torch.cat(xs)
+        xs.clear()
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
+        return cls.on_device(x, np.concatenate(ys), spans, np.concatenate(weights))
 
     @classmethod
     def validation(cls, epocher: Epocher, runs: list[Run], device: torch.device) -> dict[str, "Split"]:
@@ -335,6 +339,13 @@ class Trainer:
     def model(self, train: Split) -> nn.Module:
         return SentenceNet(Scaler(train.x), context=self.config.context, prototypes=self.prototypes).to(self.device)
 
+    def optimizer(self, model: nn.Module) -> torch.optim.AdamW:
+        """AdamW as one fused kernel on the GPU; per-parameter launches were most of a step's device time."""
+        fused = self.device.type == "cuda"
+        return torch.optim.AdamW(
+            model.parameters(), lr=self.config.lr, weight_decay=self.config.weight_decay, fused=fused
+        )
+
     def step(self, state: "Step", train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, ""]:
         """One optimiser step on the words of `spans`; returns the loss without syncing it to the host."""
         x, onset, mask, words = train.batch(spans)
@@ -357,7 +368,7 @@ class Trainer:
     ) -> tuple[nn.Module, list[Epoch]]:
         torch.manual_seed(self.config.seed)
         model = self.model(train)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=self.config.lr, weight_decay=self.config.weight_decay)
+        optimizer = self.optimizer(model)
         steps = self.config.epochs * math.ceil(len(train.index) / self.config.batch)
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, self.config.lr, total_steps=steps)
         state = Step(model, optimizer, schedule)

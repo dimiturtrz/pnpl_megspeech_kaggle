@@ -165,6 +165,13 @@ def test_model() -> None:
     assert next(model.parameters()).device == CPU
 
 
+def test_optimizer() -> None:
+    trainer = Trainer(TrainConfig(lr=0.01), CPU)
+    optimizer = trainer.optimizer(trainer.model(split()))
+    assert optimizer.defaults["lr"] == 0.01
+    assert not optimizer.defaults["fused"]
+
+
 def test_step() -> None:
     trainer = Trainer(TrainConfig(), CPU)
     model = trainer.model(split())
