@@ -209,6 +209,18 @@ name = "core is an independent kernel (imports none of the other packages)"
 type = "forbidden"
 source_modules = ["core"]
 forbidden_modules = ["megspeech"]
+
+[[tool.importlinter.contracts]]
+name = "megspeech layers: each subpackage imports only those below it"
+type = "layers"
+layers = [
+    "megspeech.training",
+    "megspeech.submission",
+    "megspeech.evaluation",
+    "megspeech.model",
+    "megspeech.objective",
+    "megspeech.data",
+]
 # <<< LOCAL-SLOT: import-contracts
 
 
