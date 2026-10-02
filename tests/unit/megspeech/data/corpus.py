@@ -68,6 +68,7 @@ def test_trains_on(tmp_path: Path) -> None:
     only = DataConfig(tasks=("Sherlock1",))
     assert [only.trains_on(r) for r in (sherlock, timit, held)] == [True, False, False]
     assert DataConfig().trains_on(timit)
+    assert [DataConfig(refit=True).trains_on(r) for r in (sherlock, held)] == [True, True]
 
 
 def test_words(tmp_path: Path) -> None:

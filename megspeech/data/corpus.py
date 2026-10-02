@@ -34,9 +34,13 @@ class DataConfig:
     """A span heard `k` times in training is drawn with weight `k ** -repeat_power`; 1 draws each sentence once."""
     grouping: Grouping = Grouping.SENTENCE
     """`sentence`: every word of each PNPL sentence; `gap`: vocabulary words only, spans by onset gap."""
+    refit: bool = False
+    """Train on the validation runs too, for a final fit of an already selected recipe; validation then scores
+    words training heard, so it can no longer select."""
 
     def trains_on(self, run: Run) -> bool:
-        return run.partition is Partition.TRAIN and (not self.tasks or run.key[0] in self.tasks)
+        trained = (Partition.TRAIN, Partition.VALIDATION) if self.refit else (Partition.TRAIN,)
+        return run.partition in trained and (not self.tasks or run.key[0] in self.tasks)
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from core.tree import Tree
 from megspeech.data.corpus import DataConfig
-from megspeech.evaluation.report import MIN_NOVEL
+from megspeech.evaluation.report import MIN_NOVEL, Epoch
 from megspeech.model.onsets import CONTEXT, ContextConfig
 from megspeech.training.augment import Augment
 
@@ -42,6 +42,10 @@ class RunConfig:
     augment: Augment = Augment()
     optim: OptimConfig = OptimConfig()
     selection: SelectionConfig = SelectionConfig()
+
+    def selected(self, history: list[Epoch]) -> Epoch:
+        """The epoch whose weights the run keeps: the best on validation, or the last when validation was trained on."""
+        return history[-1] if self.data.refit else max(history, key=lambda row: row.macro.bacc10)
 
     @classmethod
     def saved(cls, directory: Path) -> "RunConfig":

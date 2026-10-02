@@ -96,7 +96,7 @@ class Trainer:
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, optim.lr, total_steps=optim.epochs * per_epoch)
         state = Step(model, optimizer, schedule, train.capacity(optim.batch))
         history: list[Epoch] = []
-        best, best_state = -1.0, model.state_dict()
+        best_state = model.state_dict()
         for epoch in range(optim.epochs):
             model.train()
             draws = torch.multinomial(train.weight[train.index[:, 0]], per_epoch * optim.batch, replacement=True)
@@ -106,8 +106,7 @@ class Trainer:
             row = self.evaluator.report(model, validation, log_prior, epoch, value)
             history.append(row)
             LOG.info("%s", asdict(row))
-            if row.macro.bacc10 > best:
-                best = row.macro.bacc10
+            if self.config.selected(history) is row:
                 best_state = {k: v.clone() for k, v in model.state_dict().items()}
         model.load_state_dict(best_state)
         return model, history

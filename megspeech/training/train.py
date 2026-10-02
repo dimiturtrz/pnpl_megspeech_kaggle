@@ -42,7 +42,7 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out / "model.pt")
     config.context.save(out)
-    best = max(history, key=lambda row: row.macro.bacc10)
+    best = config.selected(history)
     summary = {"config": asdict(config), "train": len(train.y), "best": asdict(best)}
     (out / METRICS).write_text(json.dumps({**summary, "history": [asdict(row) for row in history]}, indent=1))
     LOG.info("best %s", best)
