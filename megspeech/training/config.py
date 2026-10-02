@@ -48,6 +48,10 @@ class OptimConfig:
     """Share of each subject matrix's deviation from the Deep subject's that the run's decay leaves by its end, were
     its gradient never to restore it (`megspeech.training.anchor`); 1 decays the matrices toward 0 like every other
     weight. The Deep matrix is what a zero-shot subject is read through."""
+    warm: str = ""
+    """A trained run under models/ whose weights the model starts from instead of its initialisation, its context
+    config the same as this run's: a run trained on every subject fine-tuned on the Deep subject alone. Empty starts
+    from scratch."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
 

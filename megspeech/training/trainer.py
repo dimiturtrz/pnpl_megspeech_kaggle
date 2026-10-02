@@ -49,20 +49,27 @@ class Trainer:
     evaluator: Evaluator
     prototypes: Float[Tensor, "v d"] | None = None
     auxiliary: Auxiliary = field(default_factory=Silent)
+    initial: dict[str, Tensor] = field(default_factory=dict)
 
     @classmethod
     def of(cls, corpus: Corpus, config: RunConfig, root: DataRoot) -> "Trainer":
-        """A trainer on `corpus`'s device, selecting on its unseen spans; SigLIP reads the text prototypes."""
+        """A trainer on `corpus`'s device, selecting on its unseen spans; SigLIP reads the text prototypes, a warm
+        start its run's weights."""
         siglip = config.context.objective is Objective.SIGLIP
         prototypes = Prototypes.load(Prototypes.path(root)).vectors if siglip else None
         device = corpus.train.y.device
         evaluator = Evaluator(device, corpus.seen, config.selection.min_novel)
-        return cls(config, evaluator, prototypes, Auxiliary.of(config.optim, root, device))
+        warm = config.optim.warm
+        initial = torch.load(root.models() / warm / "model.pt", map_location=device, weights_only=True) if warm else {}
+        return cls(config, evaluator, prototypes, Auxiliary.of(config.optim, root, device), initial)
 
     def model(self, train: Split) -> SentenceNet:
+        """A fresh model, or the warm start's weights when there is one."""
         model = SentenceNet(
             Scaler(train.sample(SCALER_SAMPLE)), context=self.config.context, prototypes=self.prototypes
         )
+        if self.initial:
+            model.load_state_dict(self.initial)
         return self.compiled(model.to(self.evaluator.device))
 
     def compiled[M: nn.Module](self, model: M) -> M:

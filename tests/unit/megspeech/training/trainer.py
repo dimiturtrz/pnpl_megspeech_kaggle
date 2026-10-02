@@ -66,6 +66,21 @@ def test_model() -> None:
     assert "_orig_mod" not in next(iter(model.state_dict()))
 
 
+def test_model_warm(tmp_path: Path) -> None:
+    config = RunConfig(optim=OptimConfig(compiled=False, warm="pre"))
+    trained = trainer(config).model(split())
+    with torch.no_grad():
+        for parameter in trained.parameters():
+            parameter.add_(1.0)
+    root = DataRoot(tmp_path)
+    (root.models() / "pre").mkdir(parents=True)
+    torch.save(trained.state_dict(), root.models() / "pre" / "model.pt")
+    made = Trainer.of(Corpus(split(), {"a": split(seed=1)}, frozenset()), config, root)
+    warmed = made.model(split(seed=2))
+    for key, value in trained.state_dict().items():
+        assert torch.equal(warmed.state_dict()[key], value)
+
+
 def test_compiled() -> None:
     model = nn.Linear(2, 2)
     assert trainer(RunConfig(optim=OptimConfig(compiled=True))).compiled(model) is model
