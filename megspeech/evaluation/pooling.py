@@ -32,7 +32,7 @@ from megspeech.evaluation.overlap import RULER, Text
 from megspeech.evaluation.report import Evaluator, Head, Score
 from megspeech.evaluation.ruler import TOP
 from megspeech.model.ensemble import Ensemble
-from megspeech.model.subjects import Unseen
+from megspeech.model.subjects import AS_TRAINED, Fallback, SubjectLayer
 
 LOG = logging.getLogger(__name__)
 
@@ -113,11 +113,13 @@ class Pooling:
 
     @classmethod
     def of(
-        cls, root: DataRoot, name: str, grouping: Grouping, device: torch.device, unseen: Unseen = Unseen.IDENTITY
+        cls, root: DataRoot, name: str, grouping: Grouping, device: torch.device, fallback: Fallback = AS_TRAINED
     ) -> "Pooling":
-        """The model `name`, reading a subject its subject layer has no matrix for through `unseen`."""
+        """The model `name`, its subject layer reading subjects as `fallback` says."""
         directory = root.models() / name
-        model = Ensemble.load([directory / "model.pt"], unseen).to(device)
+        model = Ensemble.load([directory / "model.pt"], fallback.unseen).to(device)
+        for layer in (module for module in model.modules() if isinstance(module, SubjectLayer)):
+            layer.shrink(fallback.keep, fallback.unseen)
         data = DataConfig.shared([directory], grouping)
         heard = Corpus.heard(data.decimator(root).cache, Run.discover(root.raw()), data)
         labels = heard["target"].to_numpy()

@@ -10,7 +10,7 @@ from core.paths import DataRoot
 from megspeech.evaluation import broad as module
 from megspeech.evaluation.broad import BroadRuler, Options, Reading, main
 from megspeech.evaluation.report import Score
-from megspeech.model.subjects import Unseen
+from megspeech.model.subjects import Fallback, Unseen
 from tests.unit.megspeech.evaluation.pooling import CPU, SPOKEN, pooling, runs
 
 POOLED = 2
@@ -58,16 +58,20 @@ def test_options_parse(monkeypatch: pytest.MonkeyPatch) -> None:
     options = Options.parse(None)
     assert (options.name, options.reading, options.unseen) == ("m", Reading.UNSEEN, Unseen.MEAN)
     monkeypatch.setattr(sys, "argv", ["broad", "m"])
-    assert (Options.parse(None).reading, Options.parse(None).unseen) == (Reading.OWN, Unseen.DEEP)
+    assert (Options.parse(None).reading, Options.parse(None).unseen, Options.parse(None).keep) == (
+        Reading.OWN,
+        Unseen.DEEP,
+        1.0,
+    )
 
 
 def test_options_ruler(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[object, ...]] = []
     monkeypatch.setattr(module.Pooling, "of", classmethod(lambda _, *args: calls.append(args) or pooling(tmp_path)))
-    options = Options("m", module.DataConfig().grouping, Unseen.DEEP, Reading.UNSEEN)
+    options = Options("m", module.DataConfig().grouping, Unseen.DEEP, Reading.UNSEEN, 0.5)
     ruler = options.ruler(DataRoot(tmp_path), CPU)
     assert ruler.reading is Reading.UNSEEN
-    assert calls[0][-1] is Unseen.DEEP
+    assert calls[0][-1] == Fallback(Unseen.DEEP, 0.5)
 
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:

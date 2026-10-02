@@ -35,6 +35,20 @@ def test_subject_layer_forward_unseen() -> None:
     assert torch.allclose(layer.forward(x, torch.tensor([3, 39])), 2 * x)
 
 
+def test_shrink() -> None:
+    """`keep` 1 changes nothing, 0 collapses every matrix onto the fallback, between interpolates."""
+    weight = torch.randn(3, 4, 4, generator=GENERATOR)
+    layer = SubjectLayer(3, 4)
+    with torch.no_grad():
+        layer.weight.copy_(weight)
+    layer.shrink(1.0, Unseen.DEEP)
+    assert torch.equal(layer.weight, weight)
+    layer.shrink(0.5, Unseen.DEEP)
+    assert torch.allclose(layer.weight, 0.5 * weight + 0.5 * weight[DEEP])
+    layer.shrink(0.0, Unseen.DEEP)
+    assert torch.allclose(layer.weight, weight[DEEP].expand_as(weight))
+
+
 def test_unseen_matrix() -> None:
     weight = torch.randn(3, 4, 4, generator=GENERATOR)
     assert torch.equal(Unseen.IDENTITY.matrix(weight), torch.eye(4))

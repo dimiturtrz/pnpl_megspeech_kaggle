@@ -7,7 +7,9 @@ as the Deep ruler scores a domain; the ruler is the unweighted mean over subject
 `--reading unseen` reads every subject as the holdout's zero-shot subjects 33-39 are read — through the `--unseen`
 fallback instead of its own subject matrix — so the fallbacks can be compared where the answers are known.
 
-    uv run python -m megspeech.evaluation.broad sent40-s7 [--reading unseen --unseen mean]
+`--keep` shrinks every subject's matrix toward that fallback, keeping that share of its own deviation.
+
+    uv run python -m megspeech.evaluation.broad sent40-s7 [--reading unseen --unseen mean] [--keep 0.5]
 """
 
 import argparse
@@ -29,7 +31,7 @@ from megspeech.data.runs import Partition, Run
 from megspeech.data.split import Split
 from megspeech.evaluation.pooling import Pooling
 from megspeech.evaluation.report import Score
-from megspeech.model.subjects import Unseen
+from megspeech.model.subjects import Fallback, Unseen
 
 LOG = logging.getLogger(__name__)
 
@@ -100,6 +102,7 @@ class Options:
     grouping: Grouping
     unseen: Unseen
     reading: Reading
+    keep: float
 
     @classmethod
     def parse(cls, description: str | None) -> "Options":
@@ -108,11 +111,13 @@ class Options:
         parser.add_argument("--grouping", type=Grouping, choices=list(Grouping), default=DataConfig().grouping)
         parser.add_argument("--unseen", type=Unseen, choices=list(Unseen), default=Unseen.DEEP)
         parser.add_argument("--reading", type=Reading, choices=list(Reading), default=Reading.OWN)
+        parser.add_argument("--keep", type=float, default=1.0, help="share of each subject matrix's own deviation")
         args = parser.parse_args()
-        return cls(args.name, args.grouping, args.unseen, args.reading)
+        return cls(args.name, args.grouping, args.unseen, args.reading, args.keep)
 
     def ruler(self, root: DataRoot, device: torch.device) -> BroadRuler:
-        return BroadRuler(Pooling.of(root, self.name, self.grouping, device, self.unseen), self.reading)
+        pooling = Pooling.of(root, self.name, self.grouping, device, Fallback(self.unseen, self.keep))
+        return BroadRuler(pooling, self.reading)
 
 
 def main() -> None:

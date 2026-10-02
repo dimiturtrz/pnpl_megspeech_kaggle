@@ -1,6 +1,7 @@
 """A per-subject linear map of the sensors, so one shared encoder reads every subject's head in its own space."""
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import override
 
@@ -33,6 +34,19 @@ FALLBACKS: dict[Unseen, Callable[[Tensor], Tensor]] = {
 }
 
 
+@dataclass(frozen=True)
+class Fallback:
+    """How a loaded subject layer reads subjects: `unseen` for those it has no matrix for, and every matrix keeping
+    `keep` of its own deviation from that fallback."""
+
+    unseen: Unseen = Unseen.IDENTITY
+    keep: float = 1.0
+
+
+AS_TRAINED = Fallback()
+"""Unseen subjects read through the identity, every subject's matrix as trained."""
+
+
 class SubjectLayer(nn.Module):
     """Each subject's own `channels x channels` matrix over the sensors, identity at initialisation.
 
@@ -50,6 +64,12 @@ class SubjectLayer(nn.Module):
     def of(cls, subjects: int, channels: int, unseen: Unseen = Unseen.IDENTITY) -> nn.Module:
         """A layer for `subjects` subjects; none (`Shared`) at 0, which keeps single-subject checkpoints' keys."""
         return cls(subjects, channels, unseen) if subjects else Shared()
+
+    def shrink(self, keep: float, toward: Unseen) -> None:
+        """Pull every subject's matrix toward `toward`'s, keeping `keep` of its own deviation from it."""
+        with torch.no_grad():
+            target = toward.matrix(self.weight).clone()
+            self.weight.lerp_(target.expand_as(self.weight), 1 - keep)
 
     @override
     def forward(self, x: Float[Tensor, "r c t"], subject: Int[Tensor, " r"]) -> Float[Tensor, "r c t"]:
