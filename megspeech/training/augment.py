@@ -9,10 +9,13 @@ from torch import Tensor
 
 @dataclass(frozen=True)
 class Augment:
-    """Whole-sensor dropout and per-sensor log-normal gain; both off by default."""
+    """Whole-sensor dropout, per-sensor log-normal gain and onset jitter; all off by default."""
 
     dropout: float = 0.0
     gain: float = 0.0
+    jitter: int = 0
+    """Samples each training window's start moves, uniform in [-jitter, jitter]: forced-alignment onsets err by
+    tens of milliseconds, one or two samples at 50 Hz."""
 
     def __call__(self, x: Float[Tensor, "n c t"]) -> Float[Tensor, "n c t"]:
         shape = (*x.shape[:2], 1)

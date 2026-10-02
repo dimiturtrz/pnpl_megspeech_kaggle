@@ -106,6 +106,9 @@ def test_batch() -> None:
     overflow = split().batch(torch.tensor([0]), rows=2)
     assert overflow.slot[:, :DENSE].tolist() == [[0, 1, 2, 2]]
     assert overflow.index[:, :DENSE].tolist() == [[0, 1, PAD, PAD]]
+    jittered = split().batch(torch.tensor([1, 0]), rows=6, jitter=1)
+    assert jittered.x.shape == batch.x.shape
+    assert torch.equal(jittered.slot, batch.slot)
 
 
 def test_target() -> None:

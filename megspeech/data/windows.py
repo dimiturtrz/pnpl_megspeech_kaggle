@@ -42,11 +42,15 @@ class Windows:
     def device(self) -> torch.device:
         return self.meg.device
 
-    def __call__(self, words: Int[Tensor, " k"]) -> Float[Tensor, "k c s"]:
+    def __call__(self, words: Int[Tensor, " k"], jitter: int = 0) -> Float[Tensor, "k c s"]:
         """The windows of `words`, in the signal's dtype; centring runs in float32 so float16 only rounds once.
 
-        A window whose samples are all valid is centred by its plain mean (the rescale is then exactly 1)."""
-        position = self.at[words, None] + self.offset + torch.arange(self.length, device=self.meg.device)
+        A window whose samples are all valid is centred by its plain mean (the rescale is then exactly 1). `jitter`
+        moves each window's start by its own uniform draw in [-jitter, jitter] samples, still stopped at `end`."""
+        start = self.at[words, None] + self.offset
+        if jitter:
+            start = (start + torch.randint_like(start, -jitter, jitter + 1)).clamp(min=0)
+        position = start + torch.arange(self.length, device=self.meg.device)
         end = self.end[words, None]
         valid = (position < end)[:, None, :]
         cut = self.meg[:, torch.minimum(position, end - 1)].transpose(0, 1).float()

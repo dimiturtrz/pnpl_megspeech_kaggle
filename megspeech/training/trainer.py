@@ -67,7 +67,7 @@ class Trainer:
 
     def step(self, state: Step, train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, ""]:
         """One optimiser step on the words of `spans`; returns the loss without syncing it to the host."""
-        batch = train.batch(spans, state.rows)
+        batch = train.batch(spans, state.rows, self.config.augment.jitter)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             context, word = state.model(self.config.augment(batch.x), batch.onset, batch.slot)
             smoothing, objective, y = (

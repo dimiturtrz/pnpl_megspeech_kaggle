@@ -63,6 +63,20 @@ def test_call_bounded_past_the_window_is_the_plain_centred_cut() -> None:
     assert torch.equal(Windows(meg, at, torch.full_like(at, 400))(words), plain)
 
 
+def test_call_jitter_moves_each_start_within_its_bound() -> None:
+    """A jittered window is the plain window of a start moved by at most `jitter`; draws differ across words."""
+    meg = torch.randn(3, 200, generator=torch.Generator().manual_seed(0))
+    at = torch.full((64,), 50)
+    end = at + RATE
+    words = torch.arange(64)
+    torch.manual_seed(0)
+    cut = Windows(meg, at, end, length=10)(words, jitter=2)
+    shifted = torch.stack([Windows(meg, at + s, end, length=10)(words) for s in range(-2, 3)])
+    match = (shifted == cut).flatten(2).all(dim=-1)
+    assert torch.all(match.any(dim=0))
+    assert len(set(match.int().argmax(dim=0).tolist())) == len(range(-2, 3))
+
+
 def recording(root: Path) -> tuple[Run, list[tuple[str, float]]]:
     """A run with heard words on and off the 50 Hz grid, out of the vocabulary, and too close to either end."""
     run = Run(root / "derivatives" / "serialised" / "sub-0_ses-1_task-Sherlock1_run-1_meg.h5")

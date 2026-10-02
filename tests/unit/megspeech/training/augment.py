@@ -13,3 +13,4 @@ def test_call() -> None:
     scaled = Augment(gain=0.2)(x)[..., 0]
     assert torch.all(scaled > 0)
     assert 0.1 < scaled.log().std() < 0.3
+    assert Augment(jitter=2).jitter == 2

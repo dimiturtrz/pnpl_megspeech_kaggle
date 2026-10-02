@@ -126,14 +126,15 @@ class Split:
         counts = torch.bincount(y[known], weight[known], minlength=WORDS).float() + 1
         return (counts / counts.sum()).log()
 
-    def batch(self, spans: Int[Tensor, " b"], rows: int) -> Batch:
-        """The words of `spans` in `rows` rows, in span order, without a host sync; words past `rows` are dropped."""
+    def batch(self, spans: Int[Tensor, " b"], rows: int, jitter: int = 0) -> Batch:
+        """The words of `spans` in `rows` rows, in span order, without a host sync; words past `rows` are dropped.
+        Each window's start moves by up to `jitter` samples (`Windows.__call__`)."""
         index = self.index[spans]
         order = (index != PAD).flatten().cumsum(0).view_as(index) - 1
         slot = torch.where((index != PAD) & (order < rows), order, rows)
         index = torch.where(slot < rows, index, PAD)
         words = index.new_zeros(rows + 1).scatter_(0, slot.flatten(), index.clamp(min=0).flatten())[:rows]
-        return Batch(self.windows(words), self.onset[spans], slot, index)
+        return Batch(self.windows(words, jitter), self.onset[spans], slot, index)
 
     def capacity(self, batch: int) -> int:
         """Word rows for `batch` spans drawn as training draws them: the expected count plus `SIGMAS` deviations."""
