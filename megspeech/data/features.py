@@ -38,20 +38,21 @@ class Features:
             raise ValueError("no features named")
         return self.directory / f"{split}.pt"
 
-    def save(self, split: str, features: Float[Tensor, "n e"]) -> Path:
+    def save(self, split: str, features: Float[Tensor, "n c *k"]) -> Path:
         path = self.path(split)
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(features.cpu(), path)
         return path
 
     def read(self, split: str, windows: Windows) -> Windows:
-        """`windows` itself, or the saved features of `split` as its windows, one sample each, uncentred."""
+        """`windows` itself, or the saved features of `split` as its windows, uncentred: channels by
+        features each, one feature when saved flat."""
         if self.directory is None:
             return windows
         features = torch.load(self.path(split), map_location=windows.device, weights_only=True)
         if len(features) != len(windows):
             raise ValueError(f"{len(features)} {split} features for {len(windows)} windows")
-        return Windows.stacked(features[:, :, None], centred=False)
+        return Windows.stacked(features.reshape(len(features), features.shape[1], -1), centred=False)
 
     def split(self, name: str, split: Split) -> Split:
         """`split` reading `name`'s features as its windows."""

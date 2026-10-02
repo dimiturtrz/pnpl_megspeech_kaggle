@@ -7,12 +7,18 @@ from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
 from core.paths import DataRoot
+from megspeech.data.runs import CHANNELS
 from megspeech.data.vocabulary import WORDS
 from megspeech.model.megxl import LATENT, Trunk
 from megspeech.model.wordnet import ConvConfig, WordNet
 
 POOLED = 2 * LATENT
 """Features per window: the trunk's mean and its max over every channel's tokens."""
+COMPONENTS = 16
+"""Whitened principal components of each channel's time-averaged token kept per window: 306 x 16 features, ~7.5 GB
+bf16 over the training set's 765k windows, about the MEG cache's size."""
+RESOLVED = CHANNELS * COMPONENTS
+"""Features per window when every channel keeps its own."""
 
 
 class Words(nn.Module):

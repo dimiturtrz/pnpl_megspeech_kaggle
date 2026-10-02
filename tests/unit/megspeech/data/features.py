@@ -45,6 +45,9 @@ def test_read(tmp_path: Path):
     assert Features().read(TRAIN, raw) is raw
     read = saved(tmp_path).read(TRAIN, raw)
     assert torch.equal(read(torch.tensor([2, 0])), FEATURE[[2, 0], :, None])
+    resolved = Features(tmp_path / "r")
+    resolved.save(TRAIN, FEATURE.reshape(3, 1, 2))
+    assert torch.equal(resolved.read(TRAIN, raw)(torch.tensor([1])), FEATURE[[1], None])
     with pytest.raises(ValueError, match="2 windows"):
         saved(tmp_path).read(TRAIN, windows(2))
 
