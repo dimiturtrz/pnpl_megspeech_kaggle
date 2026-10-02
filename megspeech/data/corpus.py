@@ -17,6 +17,7 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.continuous import Continuous, Decimator
 from megspeech.data.epochs import DECIMATE, RATE, SFREQ
+from megspeech.data.features import TRAIN, Features
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import DEEP, Partition, Run
 from megspeech.data.split import Split
@@ -70,6 +71,9 @@ class DataConfig:
     """The fold left out of training when `folds` > 1, so each bagged member sees `1 - 1/folds` of the runs."""
     subjects: tuple[int, ...] = (DEEP,)
     """Subjects whose training runs train; validation is always subject 0's, and pooled runs never train."""
+    features: str = ""
+    """Features a frozen encoder saved under models/features/<name> (`megspeech.data.features`), read in place of
+    every split's MEG; empty reads the MEG."""
 
     @classmethod
     def saved(cls, directory: Path) -> "DataConfig":
@@ -184,6 +188,9 @@ class Corpus:
         weight = chosen["run"].map(weights).to_numpy(dtype=np.float64)
         train = cls.split(source, chosen, data, weight).recurring(data.repeat_power)
         validation = cls.domains(source, words, held, data)
+        features = Features.under(root, data.features)
+        train = features.split(TRAIN, train)
+        validation = {name: features.split(name, split) for name, split in validation.items()}
         heard = cls.heard(cache, runs, data)
         LOG.info("cache %.2f GB on %s", source.gigabytes, device)
         LOG.info("train %d words (%d labelled) / %d spans", len(train.y), len(train.labelled()), len(train.index))

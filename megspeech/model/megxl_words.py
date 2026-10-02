@@ -11,6 +11,9 @@ from megspeech.data.vocabulary import WORDS
 from megspeech.model.megxl import LATENT, Trunk
 from megspeech.model.wordnet import ConvConfig, WordNet
 
+POOLED = 2 * LATENT
+"""Features per window: the trunk's mean and its max over every channel's tokens."""
+
 
 class Words(nn.Module):
     """A word classifier over one window from MEG-XL's features, pooled mean and max over its sensors and tokens;
@@ -20,7 +23,7 @@ class Words(nn.Module):
         super().__init__()
         self.trunk = trunk
         self.instance = config.instance
-        self.width = 2 * LATENT
+        self.width = POOLED
         self.head = nn.Sequential(nn.Dropout(config.dropout), nn.Linear(self.width, WORDS))
 
     @classmethod

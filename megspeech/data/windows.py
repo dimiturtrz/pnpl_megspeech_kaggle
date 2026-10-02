@@ -27,14 +27,16 @@ class Windows:
     length: int = RATE
     offset: int = 0
     baseline: int = 0
+    centred: bool = True
+    """False reads windows as they are: features already computed from centred windows, not a signal."""
 
     @classmethod
-    def stacked(cls, x: Float[Tensor, "n c s"]) -> "Windows":
+    def stacked(cls, x: Float[Tensor, "n c s"], *, centred: bool = True) -> "Windows":
         """Windows already cut, laid end to end so each one is its own word's window."""
         count, channels, samples = x.shape
         meg = x.transpose(0, 1).reshape(channels, count * samples)
         at = torch.arange(count, device=x.device) * samples
-        return cls(meg, at, at + samples, samples)
+        return cls(meg, at, at + samples, samples, centred=centred)
 
     def __len__(self) -> int:
         return len(self.at)
@@ -60,6 +62,6 @@ class Windows:
         cut = torch.where(valid, cut, 0.0)
         counted = valid & (torch.arange(self.length, device=self.meg.device) < (self.baseline or self.length))
         mean = torch.where(counted, cut, 0.0).mean(dim=-1, keepdim=True)
-        mean = mean * (self.length / counted.sum(dim=-1, keepdim=True).clamp(min=1))
+        mean = mean * (self.length / counted.sum(dim=-1, keepdim=True).clamp(min=1)) * self.centred
         largest = torch.finfo(self.meg.dtype).max
         return torch.where(valid, cut - mean, 0.0).clamp(-largest, largest).to(self.meg.dtype)

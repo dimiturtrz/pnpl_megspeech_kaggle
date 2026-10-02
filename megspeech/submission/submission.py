@@ -25,6 +25,7 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.data.continuous import MISSING
 from megspeech.data.corpus import DataConfig
+from megspeech.data.features import HOLDOUT, Features
 from megspeech.data.holdout import HoldoutCache, Track
 from megspeech.data.split import Split
 from megspeech.data.vocabulary import SECONDARY, Vocabulary
@@ -100,7 +101,8 @@ class Submitter:
         cache = HoldoutCache.of(root, self.data.decimate, self.track)
         cache.build()
         windows = cache.windows(self.evaluator.device, self.data.samples, standardised=self.data.standardised)
-        windows = replace(windows, baseline=self.data.centring)
+        features = Features.under(root, self.data.features)
+        windows = features.read(f"{HOLDOUT}-{self.track}", replace(windows, baseline=self.data.centring))
         split = Split.from_holdout(holdout, windows)
         split = replace(split, subject=self.reading.subjects(split.subject))
         logits = self.evaluator.logits(model, split)[Head.CONTEXT]

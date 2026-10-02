@@ -36,6 +36,8 @@ def test_stacked() -> None:
     windows = Windows.stacked(x)
     assert len(windows) == 2
     assert torch.equal(windows(torch.tensor([1, 0])), x[[1, 0]] - x[[1, 0]].mean(dim=-1, keepdim=True))
+    features = x[:, :, :1]
+    assert torch.equal(Windows.stacked(features, centred=False)(torch.tensor([1, 0])), features[[1, 0]])
 
 
 def test_device() -> None:
