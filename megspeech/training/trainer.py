@@ -21,6 +21,7 @@ from megspeech.model.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.heads import Objective
 from megspeech.objective.prototypes import Prototypes
+from megspeech.training.anchor import Anchor
 from megspeech.training.auxiliary import Auxiliary, Silent
 from megspeech.training.config import RunConfig
 from megspeech.training.curriculum import Annealed
@@ -39,6 +40,7 @@ class Step:
     rows: int
     ema: Ema
     weight: Float[Tensor, " v"] | None = None
+    anchor: Anchor = field(default_factory=Anchor)
 
 
 @dataclass
@@ -69,11 +71,12 @@ class Trainer:
             model.compile(mode="reduce-overhead")
         return model
 
-    def optimizer(self, model: nn.Module) -> torch.optim.AdamW:
+    def optimizer(self, model: nn.Module, anchor: Anchor) -> torch.optim.AdamW:
         """AdamW as one fused kernel on the GPU; per-parameter launches were most of a step's device time."""
         optim = self.config.optim
         fused = self.evaluator.device.type == "cuda"
-        return torch.optim.AdamW(model.parameters(), lr=optim.lr, weight_decay=optim.weight_decay, fused=fused)
+        groups = anchor.groups(model, optim.weight_decay)
+        return torch.optim.AdamW(groups, lr=optim.lr, weight_decay=optim.weight_decay, fused=fused)
 
     def balanced(self, y: Int[Tensor, " n"]) -> Float[Tensor, " v"] | None:
         """Each class's cross-entropy weight, `count ** -balance` over the labelled `y`, mean 1 over the classes
@@ -103,6 +106,7 @@ class Trainer:
         value.backward()
         nn.utils.clip_grad_norm_(state.model.parameters(), self.config.optim.clip)
         state.optimizer.step()
+        state.anchor.pull(state.model, float(state.schedule.get_last_lr()[0]))
         state.schedule.step()
         state.ema.update(state.model)
         return value.detach()
@@ -114,11 +118,18 @@ class Trainer:
         torch.manual_seed(optim.seed)
         net = self.model(train)
         model = self.auxiliary.trained(net, self.compiled)
-        optimizer = self.optimizer(model)
         per_epoch = math.ceil(len(train.index) / optim.batch)
+        anchor = Anchor.of(optim.anchor, optim.lr, optim.epochs * per_epoch)
+        optimizer = self.optimizer(model, anchor)
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, optim.lr, total_steps=optim.epochs * per_epoch)
         state = Step(
-            model, optimizer, schedule, train.capacity(optim.batch), Ema.of(model, optim.ema), self.balanced(train.y)
+            model,
+            optimizer,
+            schedule,
+            train.capacity(optim.batch),
+            Ema.of(model, optim.ema),
+            self.balanced(train.y),
+            anchor,
         )
         history: list[Epoch] = []
         best_state = net.state_dict()

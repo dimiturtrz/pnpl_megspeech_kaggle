@@ -44,6 +44,10 @@ class OptimConfig:
     """The Deep subject's share of the spans drawn at the last epoch, annealed linearly from an equal share per
     subject at the first (`megspeech.training.curriculum.Annealed`); 0 draws every subject's spans at their own
     weight. Only meaningful when `DataConfig.subjects` trains on more than the Deep subject."""
+    anchor: float = 1.0
+    """Share of each subject matrix's deviation from the Deep subject's that the run's decay leaves by its end, were
+    its gradient never to restore it (`megspeech.training.anchor`); 1 decays the matrices toward 0 like every other
+    weight. The Deep matrix is what a zero-shot subject is read through."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
 

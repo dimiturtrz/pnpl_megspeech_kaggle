@@ -18,6 +18,7 @@ from megspeech.evaluation.report import Evaluator
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.heads import DIM
 from megspeech.objective.prototypes import Lexicon
+from megspeech.training.anchor import Anchor
 from megspeech.training.augment import Augment
 from megspeech.training.auxiliary import Aligned, Joint, Pronounced, Silent
 from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig
@@ -72,7 +73,7 @@ def test_compiled() -> None:
 
 def test_optimizer() -> None:
     made = trainer(RunConfig(optim=OptimConfig(lr=0.01)))
-    optimizer = made.optimizer(made.model(split()))
+    optimizer = made.optimizer(made.model(split()), Anchor())
     assert optimizer.defaults["lr"] == 0.01
     assert not optimizer.defaults["fused"]
 
@@ -118,6 +119,8 @@ def test_fit() -> None:
     made = Trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4)), Evaluator(CPU, min_novel=1), auxiliary=joint(train))
     net, _ = made.fit(train, {"a": split(seed=1)}, torch.zeros(WORDS))
     assert isinstance(net, SentenceNet)
+    anchored = trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, anchor=0.5)))
+    assert isinstance(anchored.fit(split(), {"a": split(seed=1)}, torch.zeros(WORDS))[0], SentenceNet)
     balanced = trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, balance=0.5)))
     assert isinstance(balanced.fit(split(), {"a": split(seed=1)}, torch.zeros(WORDS))[0], SentenceNet)
     with pytest.raises(FloatingPointError):
