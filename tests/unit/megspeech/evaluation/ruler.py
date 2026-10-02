@@ -80,6 +80,16 @@ def test_interval() -> None:
     assert (interval.low, interval.high) == pytest.approx((0.05, 0.95))
 
 
+def test_information() -> None:
+    labels, uniform = torch.arange(4).repeat(5), torch.ones(WORDS)
+    assert Ruler.information(labels, labels, uniform) == pytest.approx(2.0)
+    assert Ruler.information(torch.zeros_like(labels), labels, uniform) == pytest.approx(0.0)
+    skewed = torch.ones(WORDS)
+    skewed[0] = 3
+    pair = torch.tensor([0, 1, 1])
+    assert Ruler.information(pair, pair, skewed) == pytest.approx(-(0.75 * np.log2(0.75) + 0.25 * np.log2(0.25)))
+
+
 def test_score() -> None:
     hits = torch.tensor([[True, False, True, True], [False, False, False, False]])
     labels = torch.tensor([[0, 0, 1, 1], [2, 2, 2, 2]])

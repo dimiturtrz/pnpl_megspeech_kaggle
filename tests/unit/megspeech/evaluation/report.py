@@ -56,6 +56,9 @@ def test_assess() -> None:
     assert report.novel.n == DENSE
     assert report.context.n == len(split().y)
     assert report.coverage.present == len(set(split().y[split().novel(frozenset())].tolist()))
+    assert set(report.top1) == set(report.bits) == set(ADJUSTMENTS)
+    assert report.top1[0.0] == pytest.approx(1 / report.coverage.present)
+    assert report.bits[0.0] == pytest.approx(0.0)
 
 
 def test_graded() -> None:
@@ -110,3 +113,5 @@ def test_report() -> None:
     mean = np.mean([r.novel.by_tau[0.0] for r in counted])
     assert report.macro.by_tau[ADJUSTMENTS[0]] == pytest.approx(mean)
     assert report.interval.low <= report.macro.by_tau[report.macro.tau] <= report.interval.high
+    assert report.top1 == pytest.approx(np.mean([r.top1[report.macro.tau] for r in counted]))
+    assert report.bits == pytest.approx(0.0)

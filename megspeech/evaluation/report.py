@@ -45,25 +45,30 @@ class Score:
 
 @dataclass(frozen=True)
 class Report:
-    """One validation domain: both heads, the context head on holdout-like and on unseen spans, and its top-1."""
+    """One validation domain: both heads, the context head on holdout-like and on unseen spans, and — on the unseen
+    spans, by logit adjustment — its balanced top-1 (the competition's tiebreak) and the bits its top-1 carries."""
 
     context: Score
     word: Score
     dense: Score
     novel: Score
-    bacc1: float
+    top1: dict[float, float]
+    bits: dict[float, float]
     coverage: Coverage
 
 
 @dataclass(frozen=True)
 class Epoch:
-    """One validation pass over every domain, the macro over domains' unseen spans that selects, and its interval."""
+    """One validation pass over every domain, the macro over domains' unseen spans that selects, its interval, and
+    the macro top-1 and bits at the adjustment the macro selected — the one a submission is written at."""
 
     epoch: int
     loss: float
     domains: dict[str, Report]
     macro: Score
     interval: Interval
+    top1: float
+    bits: float
 
 
 @dataclass(frozen=True)
@@ -108,14 +113,17 @@ class Evaluator:
         words only lending their spans context."""
         labelled, dense, novel = split.labelled(), split.dense(), split.novel(self.seen)
         context, word, y = logits[Head.CONTEXT][labelled], logits[Head.WORD][labelled], split.y[labelled]
+        unseen, heard = logits[Head.CONTEXT][novel], split.y[novel]
+        adjusted = {tau: unseen - tau * log_prior for tau in ADJUSTMENTS}
         top1 = Ruler(k=1)
         return Report(
             self.evaluate(context, y, log_prior),
             self.evaluate(word, y, log_prior),
             self.evaluate(logits[Head.CONTEXT][dense], split.y[dense], log_prior),
-            self.evaluate(logits[Head.CONTEXT][novel], split.y[novel], log_prior),
-            top1.balanced(top1.hits(context, y), y),
-            Coverage.of(split.y[novel]),
+            self.evaluate(unseen, heard, log_prior),
+            {tau: top1.balanced(top1.hits(scores, heard), heard) for tau, scores in adjusted.items()},
+            {tau: Ruler.information(scores.argmax(dim=1), heard, log_prior.exp()) for tau, scores in adjusted.items()},
+            Coverage.of(heard),
         )
 
     def graded(self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], tau: float) -> Graded:
@@ -157,4 +165,7 @@ class Evaluator:
         macro = Score.best(by_tau, sum(score.n for score in counted.values()))
         context = {name: logits[name][Head.CONTEXT] for name in counted}
         interval = self.ruler.interval(self.ruler.macro(self.grade(context, domains, log_prior, macro.tau)))
-        return Epoch(epoch, loss, reports, macro, interval)
+        chosen = [reports[name] for name in counted]
+        top1 = float(np.mean([r.top1[macro.tau] for r in chosen]))
+        bits = float(np.mean([r.bits[macro.tau] for r in chosen]))
+        return Epoch(epoch, loss, reports, macro, interval, top1, bits)

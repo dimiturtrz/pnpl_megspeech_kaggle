@@ -111,6 +111,20 @@ class Ruler:
         return Interval(low, high)
 
     @staticmethod
+    def information(predicted: Int[Tensor, " n"], labels: Int[Tensor, " n"], prior: Float[Tensor, " v"]) -> float:
+        """Plug-in mutual information in bits between the word and the top-1 prediction, each present class's row
+        of the confusion matrix weighted by `prior` renormalised over the present classes — the competition's OVMI
+        reads it under SUBTLEX-UK frequencies, times a coverage every team shares. 0 when the prediction ignores
+        the word; biased upward at a few words per class, so runs compare only on the same words."""
+        joint = torch.zeros(WORDS, WORDS, device=labels.device)
+        joint.index_put_((labels, predicted), torch.ones_like(labels, dtype=joint.dtype), accumulate=True)
+        rows = joint.sum(dim=1, keepdim=True)
+        weight = torch.where(rows > 0, prior[:, None], 0.0)
+        joint = joint / rows.clamp(min=1) * weight / weight.sum()
+        expected = joint.sum(dim=1, keepdim=True) * joint.sum(dim=0, keepdim=True)
+        return float(torch.where(joint > 0, joint * (joint / expected).log2(), 0.0).sum())
+
+    @staticmethod
     def score(hits: Bool[Tensor, "b n"], labels: Int[Tensor, "b n"]) -> Float[Tensor, " b"]:
         """Balanced accuracy of every row, one bincount over rows offset into their own class block."""
         rows = len(labels)

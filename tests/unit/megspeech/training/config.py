@@ -24,7 +24,7 @@ def test_saved(tmp_path: Path) -> None:
 
 
 def epoch(at: int, bacc10: float) -> Epoch:
-    return Epoch(at, 0.0, {}, Score(0.5, bacc10, {0.5: bacc10}, 1), Interval(bacc10, bacc10))
+    return Epoch(at, 0.0, {}, Score(0.5, bacc10, {0.5: bacc10}, 1), Interval(bacc10, bacc10), 0.0, 0.0)
 
 
 def test_selected() -> None:
