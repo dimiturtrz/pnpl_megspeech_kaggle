@@ -63,6 +63,19 @@ def test_call_bounded_past_the_window_is_the_plain_centred_cut() -> None:
     assert torch.equal(Windows(meg, at, torch.full_like(at, 400))(words), plain)
 
 
+def test_call_baseline_centres_on_the_window_head() -> None:
+    """A `baseline` centres on the valid samples among the window's first `baseline`; a bound inside it narrows it."""
+    meg = torch.arange(20.0)[None].repeat(2, 1)
+    at = torch.tensor([0, 5])
+    both = torch.tensor([0, 1])
+    full = Windows(meg, at, at + 10, 10, baseline=4)(both)
+    assert full[0, 0].tolist() == [x - 1.5 for x in range(10)]
+    assert full[1, 1].tolist() == [x - 6.5 for x in range(5, 15)]
+    short = Windows(meg, at, at + 2, 10, baseline=4)(torch.tensor([0]))
+    assert short[0, 0].tolist() == [-0.5, 0.5] + [0.0] * 8
+    assert torch.equal(Windows(meg, at, at + 10, 10, baseline=10)(both), Windows(meg, at, at + 10, 10)(both))
+
+
 def test_call_jitter_moves_each_start_within_its_bound() -> None:
     """A jittered window is the plain window of a start moved by at most `jitter`; draws differ across words."""
     meg = torch.randn(3, 200, generator=torch.Generator().manual_seed(0))

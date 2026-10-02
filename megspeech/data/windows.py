@@ -3,8 +3,8 @@
 A word's window starts `offset` samples after its onset sample `at` and runs `length` samples, at the signal's
 50 Hz `RATE` (seconds x `RATE`). It stops at the word's exclusive bound `end`: samples from `end` on are zero, so
 a window longer than 1 s never reads past the stretch the holdout would hold for that word. Each window then has
-every channel's mean over its valid samples removed. Training, validation and holdout windows all come through
-here, from signals the same `continuous.Decimator` cached.
+every channel's mean over its valid samples removed, or over the valid ones among its first `baseline`.
+Training, validation and holdout windows all come through here, from signals the same `continuous.Decimator` cached.
 """
 
 from dataclasses import dataclass
@@ -19,13 +19,14 @@ from megspeech.data.epochs import RATE
 @dataclass(frozen=True)
 class Windows:
     """Word `i`'s window is `meg[:, at[i] + offset : at[i] + offset + length]`, zero from `end[i]` on, centred on
-    its valid samples."""
+    its valid samples (the first `baseline` of them when set)."""
 
     meg: Float[Tensor, "c t"]
     at: Int[Tensor, " n"]
     end: Int[Tensor, " n"]
     length: int = RATE
     offset: int = 0
+    baseline: int = 0
 
     @classmethod
     def stacked(cls, x: Float[Tensor, "n c s"]) -> "Windows":
@@ -55,5 +56,7 @@ class Windows:
         valid = (position < end)[:, None, :]
         cut = self.meg[:, torch.minimum(position, end - 1)].transpose(0, 1).float()
         cut = torch.where(valid, cut, 0.0)
-        mean = cut.mean(dim=-1, keepdim=True) * (self.length / valid.sum(dim=-1, keepdim=True))
+        counted = valid & (torch.arange(self.length, device=self.meg.device) < (self.baseline or self.length))
+        mean = torch.where(counted, cut, 0.0).mean(dim=-1, keepdim=True)
+        mean = mean * (self.length / counted.sum(dim=-1, keepdim=True).clamp(min=1))
         return torch.where(valid, cut - mean, 0.0).to(self.meg.dtype)

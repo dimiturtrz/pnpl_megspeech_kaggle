@@ -59,6 +59,9 @@ class DataConfig:
     the official run: each book's or story's last session first. One official run per stratum leaves the macro's
     interval near +-0.035; `k` more runs of similar size shrink it by about `sqrt(1 + k)`, for `k` runs of the
     ~150 trained."""
+    baseline: float = 0.0
+    """Seconds from each window's start its centring mean is taken over; 0 centres on the whole window. The
+    reference pipeline baselines on 0-0.5 s, the pre-response stretch, so the word's evoked field is kept whole."""
 
     @classmethod
     def saved(cls, directory: Path) -> "DataConfig":
@@ -70,16 +73,25 @@ class DataConfig:
     def shared(cls, directories: Sequence[Path], grouping: Grouping) -> "DataConfig":
         """The holdout reading — window and standardisation — every run in `directories` trained on, spans cut by
         `grouping`; members that read MEG differently cannot share one set of holdout windows."""
-        readings = {(saved.window, saved.standardised, saved.extra) for saved in map(cls.saved, directories)}
+        readings = {
+            (saved.window, saved.standardised, saved.extra, saved.baseline) for saved in map(cls.saved, directories)
+        }
         if len(readings) != 1:
-            raise ValueError(f"runs trained at (window, standardised, extra) {sorted(readings)}; an ensemble needs one")
-        window, standardised, extra = readings.pop()
-        return cls(grouping=grouping, window=window, standardised=standardised, extra=extra)
+            raise ValueError(
+                f"runs trained at (window, standardised, extra, baseline) {sorted(readings)}; an ensemble needs one"
+            )
+        window, standardised, extra, baseline = readings.pop()
+        return cls(grouping=grouping, window=window, standardised=standardised, extra=extra, baseline=baseline)
 
     @property
     def samples(self) -> int:
         """The window in samples at the cache's `RATE`."""
         return round(self.window * RATE)
+
+    @property
+    def centring(self) -> int:
+        """The centring baseline in samples; 0 centres on the whole window."""
+        return round(self.baseline * RATE)
 
     def trains_on(self, run: Run) -> bool:
         trained = (Partition.TRAIN, Partition.VALIDATION) if self.refit else (Partition.TRAIN,)
@@ -159,7 +171,11 @@ class Corpus:
         """`words` (rows of `source.words`) as a split whose `data.window`-long windows are gathered from `source`'s
         device signal, each stopped where `data.grouping` bounds it."""
         windows = Windows(
-            source.meg, source.samples(words["at"]), source.samples(data.grouping.bound(words)), data.samples
+            source.meg,
+            source.samples(words["at"]),
+            source.samples(data.grouping.bound(words)),
+            data.samples,
+            baseline=data.centring,
         )
         labels = (words["target"].to_numpy(), words["token"].to_numpy())
         return Split.of(windows, labels, data.grouping.spans(words), weight)

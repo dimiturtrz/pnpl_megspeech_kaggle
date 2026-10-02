@@ -118,6 +118,11 @@ def test_samples() -> None:
     assert DataConfig(window=2.5).samples == round(2.5 * RATE)
 
 
+def test_centring() -> None:
+    assert DataConfig().centring == 0
+    assert DataConfig(baseline=0.5).centring == round(0.5 * RATE)
+
+
 def record(directory: Path, config: dict[str, object]) -> Path:
     directory.mkdir()
     (directory / METRICS).write_text(json.dumps({"config": config}))
@@ -138,7 +143,9 @@ def test_shared(tmp_path: Path) -> None:
     assert DataConfig.shared([scaled], Grouping.SENTENCE).standardised
     widened = record(tmp_path / "widened", {"data": {"extra": 2}})
     assert DataConfig.shared([widened], Grouping.SENTENCE).extra == 2
-    with pytest.raises(ValueError, match=r"\[\(1.0, False, 0\), \(2.0, False, 0\)\]"):
+    based = record(tmp_path / "based", {"data": {"baseline": 0.5}})
+    assert DataConfig.shared([based], Grouping.SENTENCE).baseline == 0.5
+    with pytest.raises(ValueError, match=r"\[\(1.0, False, 0, 0.0\), \(2.0, False, 0, 0.0\)\]"):
         DataConfig.shared([one, two], Grouping.SENTENCE)
     with pytest.raises(ValueError, match="an ensemble needs one"):
         DataConfig.shared([one, scaled], Grouping.SENTENCE)
@@ -168,6 +175,8 @@ def test_split(tmp_path: Path) -> None:
     tail = round(2.2 * RATE) - round(0.5 * RATE)
     assert long[..., tail:].eq(0).all()
     assert long[..., :tail].ne(0).all()
+    headed = Corpus.split(loaded, words, DataConfig(baseline=0.02), np.ones(5)).windows(torch.tensor([4]))
+    assert headed[..., 0].float().eq(0).all()
     gap = DataConfig(grouping=Grouping.GAP, window=2.0)
     assert Corpus.split(loaded, Corpus.words(loaded.words, Grouping.GAP), gap, np.ones(4)).windows(first).ne(0).all()
 

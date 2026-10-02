@@ -11,7 +11,7 @@ import argparse
 import logging
 from collections import Counter
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Protocol
 
@@ -96,6 +96,7 @@ class Submitter:
         cache = HoldoutCache.of(root)
         cache.build()
         windows = cache.windows(self.evaluator.device, self.data.samples, standardised=self.data.standardised)
+        windows = replace(windows, baseline=self.data.centring)
         split = Split.from_holdout(holdout, windows)
         logits = self.evaluator.logits(model, split)[Head.CONTEXT]
         primary = torch.softmax(logits - tau * log_prior, dim=-1).cpu().numpy()
