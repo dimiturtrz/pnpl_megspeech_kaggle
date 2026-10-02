@@ -9,6 +9,7 @@ from megspeech.data.runs import CHANNELS
 from megspeech.data.spans import Spans
 from megspeech.data.split import DENSE, Split
 from megspeech.data.vocabulary import WORDS
+from megspeech.evaluation.balance import Sinkhorn
 from megspeech.evaluation.report import ADJUSTMENTS, Evaluator, Head, Score
 
 SAMPLES = 50
@@ -45,6 +46,15 @@ def test_evaluate() -> None:
     result = Evaluator(CPU).evaluate(logits, torch.tensor([0, 0, 0]), torch.zeros(WORDS))
     assert result.bacc10 == pytest.approx(1.0)
     assert result.n == 3
+
+
+def test_adjusted() -> None:
+    """Unbalanced, `tau` subtracts that share of the log prior; balanced, every class ends with equal mass."""
+    logits, log_prior = torch.zeros(4, WORDS), torch.linspace(-1, 0, WORDS)
+    logits[:, 0] = 3
+    assert torch.allclose(Evaluator(CPU).adjusted(logits, log_prior, 0.5), logits - 0.5 * log_prior)
+    mass = Evaluator(CPU, balance=Sinkhorn(50)).adjusted(logits, log_prior, 1.0).log_softmax(-1).logsumexp(0)
+    assert torch.allclose(mass, mass.mean().expand_as(mass), atol=1e-3)
 
 
 def test_best() -> None:

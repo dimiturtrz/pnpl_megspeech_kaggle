@@ -104,7 +104,7 @@ class Submitter:
         split = Split.from_holdout(holdout, windows)
         split = replace(split, subject=self.reading.subjects(split.subject))
         logits = self.evaluator.logits(model, split)[Head.CONTEXT]
-        primary = torch.softmax(logits - tau * log_prior, dim=-1).cpu().numpy()
+        primary = torch.softmax(self.evaluator.adjusted(logits, log_prior, tau), dim=-1).cpu().numpy()
         secondary = np.tile(FrequencyPrior(Counter()).probabilities(list(SECONDARY.words)), (len(primary), 1))
         return Submission(holdout).write(path, primary, secondary)
 

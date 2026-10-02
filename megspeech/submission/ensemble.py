@@ -16,6 +16,7 @@ from megspeech.data.corpus import METRICS, Corpus, DataConfig
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import Run
 from megspeech.data.split import Split
+from megspeech.evaluation.balance import BALANCES
 from megspeech.evaluation.report import Evaluator
 from megspeech.model.ensemble import Ensemble
 from megspeech.submission.submission import Submitter
@@ -29,6 +30,7 @@ def main() -> None:
     parser.add_argument("--out", required=True)
     parser.add_argument("names", nargs="+")
     parser.add_argument("--grouping", type=Grouping, choices=list(Grouping), default=DataConfig().grouping)
+    parser.add_argument("--balance", choices=list(BALANCES), default="none")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     device = torch.device("cuda")
@@ -40,7 +42,7 @@ def main() -> None:
     heard = Corpus.heard(cache, runs, data)
     labels = heard["target"].to_numpy()
     log_prior = Split.prior(torch.tensor(labels), torch.ones(len(labels))).to(device)
-    evaluator = Evaluator(device, Corpus.sequences(heard, args.grouping))
+    evaluator = Evaluator(device, Corpus.sequences(heard, args.grouping), balance=BALANCES[args.balance])
     held = data.held(runs)
     names = [r.name for group in held.values() for r in group]
     source = Continuous.load(cache, device, names, standardised=data.standardised, rate=data.rate)

@@ -17,6 +17,7 @@ from torch import Tensor, nn
 from megspeech.data.spans import PAD
 from megspeech.data.split import EVAL_SPANS, Split
 from megspeech.data.vocabulary import WORDS
+from megspeech.evaluation.balance import Sinkhorn
 from megspeech.evaluation.ruler import Coverage, Graded, Interval, Ruler
 
 ADJUSTMENTS = (0.0, 0.5, 1.0)
@@ -81,12 +82,14 @@ class Epoch:
 
 @dataclass(frozen=True)
 class Evaluator:
-    """Scores a model on validation domains; `seen` marks the word orders training heard, `min_novel` who counts."""
+    """Scores a model on validation domains; `seen` marks the word orders training heard, `min_novel` who counts,
+    `balance` reshapes each scored set's adjusted scores before their top-k is read."""
 
     device: torch.device
     seen: frozenset[tuple[int, ...]] = frozenset()
     min_novel: int = MIN_NOVEL
     ruler: Ruler = Ruler()
+    balance: Sinkhorn = Sinkhorn()
 
     def logits(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
         """Both heads' logits for every word of `split`, in the split's word order.
@@ -109,9 +112,16 @@ class Evaluator:
         self, logits: Float[Tensor, "n v"], labels: Int[Tensor, " n"], log_prior: Float[Tensor, " v"]
     ) -> Score:
         by_tau = {
-            tau: self.ruler.balanced(self.ruler.hits(logits - tau * log_prior, labels), labels) for tau in ADJUSTMENTS
+            tau: self.ruler.balanced(self.ruler.hits(self.adjusted(logits, log_prior, tau), labels), labels)
+            for tau in ADJUSTMENTS
         }
         return Score.best(by_tau, len(labels))
+
+    def adjusted(
+        self, logits: Float[Tensor, "n v"], log_prior: Float[Tensor, " v"], tau: float
+    ) -> Float[Tensor, "n v"]:
+        """`logits` logit-adjusted by `tau`, then balanced over the set."""
+        return self.balance(logits - tau * log_prior)
 
     def assess(self, model: nn.Module, split: Split, log_prior: Float[Tensor, " v"]) -> Report:
         return self.scored(self.logits(model, split), split, log_prior)
@@ -122,7 +132,7 @@ class Evaluator:
         labelled, dense, novel = split.labelled(), split.dense(), split.novel(self.seen)
         context, word, y = logits[Head.CONTEXT][labelled], logits[Head.WORD][labelled], split.y[labelled]
         unseen, heard = logits[Head.CONTEXT][novel], split.y[novel]
-        adjusted = {tau: unseen - tau * log_prior for tau in ADJUSTMENTS}
+        adjusted = {tau: self.adjusted(unseen, log_prior, tau) for tau in ADJUSTMENTS}
         top1 = Ruler(k=1)
         return Report(
             self.evaluate(context, y, log_prior),
@@ -152,7 +162,7 @@ class Evaluator:
         return Graded(
             {
                 name: (
-                    self.ruler.hits(logits[novel[name]] - tau * log_prior, domains[name].y[novel[name]]),
+                    self.ruler.hits(self.adjusted(logits[novel[name]], log_prior, tau), domains[name].y[novel[name]]),
                     domains[name].y[novel[name]],
                 )
                 for name, logits in context.items()
