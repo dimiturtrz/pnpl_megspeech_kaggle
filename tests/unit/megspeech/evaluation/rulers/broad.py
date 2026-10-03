@@ -19,3 +19,12 @@ def test_select(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     tool = loaded(tmp_path)
     strict = replace(tool, evaluator=replace(tool.evaluator, min_novel=len(SPOKEN) + 1))
     assert BroadRuler.select(strict, runs(tmp_path)).n == 0
+
+
+def test_graded(tmp_path: Path) -> None:
+    """Each counted pooled subject's unseen-span hits, keyed by subject; none below `min_novel`."""
+    graded = BroadRuler.graded(loaded(tmp_path), runs(tmp_path), 0.5)
+    assert {name: len(labels) for name, (_, labels) in graded.domains.items()} == {"1": len(SPOKEN)}
+    tool = loaded(tmp_path)
+    strict = replace(tool, evaluator=replace(tool.evaluator, min_novel=len(SPOKEN) + 1))
+    assert BroadRuler.graded(strict, runs(tmp_path), 0.5).domains == {}

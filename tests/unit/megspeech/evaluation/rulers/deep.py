@@ -14,3 +14,8 @@ def test_select(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         report = DeepRuler.select(loaded(tmp_path), runs(tmp_path))
     assert RULER in report.domains
     assert f"macro {report.macro.bacc10:.4f} tau {report.tau} over {report.macro.n} words" in caplog.text
+
+
+def test_graded(tmp_path: Path) -> None:
+    graded = DeepRuler.graded(loaded(tmp_path), runs(tmp_path), 0.5)
+    assert RULER in graded.domains

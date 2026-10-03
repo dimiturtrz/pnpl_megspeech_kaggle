@@ -27,6 +27,7 @@ LOG = logging.getLogger(__name__)
 
 RULERS: dict[Track, TrackRuler] = {Track.DEEP: DeepRuler(), Track.BROAD: BroadRuler()}
 SUBMISSIONS = {Track.DEEP: "submission.csv", Track.BROAD: "broad_submission.csv"}
+HITS = {Track.DEEP: "hits.pt", Track.BROAD: "broad_hits.pt"}
 
 
 def main() -> None:
@@ -40,9 +41,11 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
     loaded = LoadedModel.of(root, args.names, tree.parse(args), torch.device("cuda"))
-    selected = RULERS[args.track].select(loaded, Run.discover(root.raw()))
+    ruler, runs = RULERS[args.track], Run.discover(root.raw())
+    selected = ruler.select(loaded, runs)
     out = root.models() / args.out
     out.mkdir(parents=True, exist_ok=True)
+    ruler.graded(loaded, runs, selected.tau).save(out / HITS[args.track])
     record = {"members": list(loaded.names), "config": {"data": asdict(loaded.data)}, "best": asdict(selected)}
     (out / METRICS).write_text(json.dumps(record, indent=1))
     LOG.info("wrote %s", HoldoutWriter(args.track).write(loaded, selected.tau, out / SUBMISSIONS[args.track]))

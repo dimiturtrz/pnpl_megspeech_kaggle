@@ -9,3 +9,8 @@ def test_select() -> None:
     """Every track's ruler, called on an instance, takes the protocol's arguments."""
     expected = list(inspect.signature(TrackRuler.select).parameters)[1:]
     assert all(list(inspect.signature(r().select).parameters) == expected for r in (DeepRuler, BroadRuler))
+
+
+def test_graded() -> None:
+    expected = list(inspect.signature(TrackRuler.graded).parameters)[1:]
+    assert all(list(inspect.signature(r().graded).parameters) == expected for r in (DeepRuler, BroadRuler))

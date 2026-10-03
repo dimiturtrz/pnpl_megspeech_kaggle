@@ -20,6 +20,7 @@ from megspeech.data.raw.runs import Run
 from megspeech.evaluation import loaded as module
 from megspeech.evaluation.loaded import RULER, LoadedModel, Scoring, Text
 from megspeech.evaluation.metric.balance import Sinkhorn
+from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.model.input.subjects import Reading
 
@@ -190,6 +191,14 @@ def test_report(tmp_path: Path) -> None:
     report = loaded(tmp_path).report(runs(tmp_path))
     assert RULER in report.domains
     assert report.macro.n == sum(r.novel.n for r in report.domains.values())
+
+
+def test_graded(tmp_path: Path) -> None:
+    """The hits re-score to the report's own macro at its selected adjustment."""
+    report = loaded(tmp_path).report(runs(tmp_path))
+    graded = loaded(tmp_path).graded(runs(tmp_path), report.tau)
+    assert Ruler().point(graded) == pytest.approx(report.macro.bacc10)
+    assert sum(len(labels) for _, labels in graded.domains.values()) == report.macro.n
 
 
 def test_probabilities(tmp_path: Path) -> None:

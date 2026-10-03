@@ -4,6 +4,7 @@ import logging
 
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.scoring.score import Epoch
 
 LOG = logging.getLogger(__name__)
@@ -18,3 +19,7 @@ class DeepRuler:
         )
         LOG.info("macro %.4f tau %s over %d words", report.macro.bacc10, report.tau, report.macro.n)
         return report
+
+    @staticmethod
+    def graded(loaded: LoadedModel, runs: list[Run], tau: float) -> Graded:
+        return loaded.graded(runs, tau)

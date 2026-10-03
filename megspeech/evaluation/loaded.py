@@ -18,6 +18,7 @@ from megspeech.data.corpus import Corpus
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import Grouping
 from megspeech.evaluation.metric.balance import Sinkhorn
+from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Epoch, Head, Score, SelectionConfig
 from megspeech.model.ensemble import Ensemble
@@ -152,6 +153,11 @@ class LoadedModel:
         """Every validation domain of `runs` scored alone, and the macro that selects."""
         domains, _ = self.domains(self.data.held(runs))
         return self.evaluator.report(self.model, domains, self.log_prior, 0, 0.0)
+
+    def graded(self, runs: list[Run], tau: float) -> Graded:
+        """Every counted validation domain of `runs`: its unseen-span words' hits at `tau`."""
+        domains, _ = self.domains(self.data.held(runs))
+        return self.evaluator.graded(self.model, domains, self.log_prior, tau)
 
     def probabilities(self, split: Split, tau: float) -> Float[np.ndarray, "n v"]:
         """The context head's probabilities for every word of `split`, logit-adjusted by `tau`."""

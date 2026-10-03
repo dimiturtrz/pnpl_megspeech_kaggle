@@ -13,6 +13,7 @@ import logging
 
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.scoring.score import Score
 
 LOG = logging.getLogger(__name__)
@@ -34,3 +35,16 @@ class BroadRuler:
             {tau: round(value, 4) for tau, value in macro.by_tau.items()},
         )
         return macro
+
+    @staticmethod
+    def graded(loaded: LoadedModel, runs: list[Run], tau: float) -> Graded:
+        """Each counted subject a domain, its run loaded alone as `select` loads it."""
+        return Graded(
+            {
+                name: hits
+                for run in Run.pooled(runs)
+                for name, hits in loaded.evaluator.graded(
+                    loaded.model, {str(run.subject): loaded.splits([run])[run][1]}, loaded.log_prior, tau
+                ).domains.items()
+            }
+        )
