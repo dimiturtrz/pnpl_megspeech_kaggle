@@ -8,6 +8,7 @@ import pytest
 import torch
 
 from megspeech.data.cache import run_cache as module
+from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.run_cache import DIRECTORY, NO_SENTENCE, TAIL, WORD_TABLE, DeviceRecording, RunCache, main
 from megspeech.data.constants import DECIMATE, HALF, RATE, SFREQ
 from megspeech.data.raw.runs import Run
@@ -45,6 +46,14 @@ def test_path(tmp_path: Path) -> None:
 def test_under(tmp_path: Path) -> None:
     assert RunCache.under(tmp_path) == RunCache(tmp_path / "continuous50")
     assert RunCache.under(tmp_path, 4) == RunCache(tmp_path / "continuous62.5", 4)
+    assert RunCache.under(tmp_path, cleaning=Cleaning.ICA) == RunCache(
+        tmp_path / "continuous50-ica", DECIMATE, Cleaning.ICA
+    )
+
+
+def test_cleaner(tmp_path: Path) -> None:
+    meg = np.ones((CHANNELS, SAMPLES), dtype=np.float32)
+    assert RunCache(tmp_path).cleaner(lambda: tmp_path / "missing.h5")(meg) is meg
 
 
 def test_rate() -> None:
@@ -206,7 +215,7 @@ class FakeRoot:
 
 
 class FakePool:
-    def __init__(self, _: int) -> None:
+    def __init__(self, _: int, **__: object) -> None:
         pass
 
     def __enter__(self) -> "FakePool":

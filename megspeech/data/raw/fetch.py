@@ -8,6 +8,7 @@ events `.tsv` are pulled; the raw `.fif` (hundreds of GB) is never needed.
     uv run python -m megspeech.data.raw.fetch --others   # subjects 1-32 (~44 min each), for cross-subject training
     uv run python -m megspeech.data.raw.fetch --weights  # pretrained MEG-XL and a GPT-2-class LM, into models/foreign,
                                                      # and MEG-XL's code at its pin, into external/
+    uv run python -m megspeech.data.raw.fetch --stimuli  # Sherlock audiobook audio + wav2vec2 (speech targets)
 """
 
 import argparse
@@ -144,6 +145,16 @@ SOURCES = (
 
 OTHERS = HubRepo("pnpl/LibriBrain2", OTHER_SUBJECTS)
 
+SHERLOCK_AUDIO = ("Sherlock*/stimuli/audio/*.wav",)
+"""The audiobook chapters the Sherlock runs played; read speech (MOCHA) and the holdout ship none we use."""
+
+STIMULI = (
+    HubRepo("pnpl/LibriBrain", SHERLOCK_AUDIO),
+    HubRepo("pnpl/LibriBrain2", SHERLOCK_AUDIO),
+    Weights("facebook/wav2vec2-large-xlsr-53", ("*.json", "*.bin", "*.txt")),
+)
+"""The stimulus speech and the self-supervised speech model whose latents of it are per-word targets (7gf.54)."""
+
 WEIGHTS = (
     Weights("pnpl/MEG-XL", ("*",)),
     Weights("openai-community/gpt2-large", ("*.json", "*.safetensors", "*.txt")),
@@ -167,6 +178,7 @@ def main() -> None:
     choice.add_argument("--holdout-only", dest="sources", action="store_const", const=(HOLDOUT,), default=SOURCES)
     choice.add_argument("--others", dest="sources", action="store_const", const=(OTHERS,))
     choice.add_argument("--weights", dest="sources", action="store_const", const=(*WEIGHTS, MEGXL, NEUROMAG))
+    choice.add_argument("--stimuli", dest="sources", action="store_const", const=STIMULI)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()

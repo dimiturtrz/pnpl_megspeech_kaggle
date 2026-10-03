@@ -27,8 +27,10 @@ from pnpl.competition.holdout import DEEP_SUBJECTS, HOLDOUT_SUBDIR, TRACKS, Libr
 
 from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.cleaning import UNCHANGED, Cleaner, Cleaning
 from megspeech.data.cache.run_cache import DeviceRecording, RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
+from megspeech.data.raw.runs import Run
 
 LOG = logging.getLogger(__name__)
 
@@ -87,12 +89,15 @@ class Archive:
                 raise ValueError(f"{self.path.name} is {rate} Hz, not {SFREQ}")
             return READERS[ArchiveKind(self.name.split("_", 1)[1])](archive)
 
-    def signal(self, cache: RunCache) -> Float[np.ndarray, "c s"]:
-        """Every epoch decimated on its own, laid end to end."""
+    def signal(self, cache: RunCache, clean: Cleaner = UNCHANGED) -> Float[np.ndarray, "c s"]:
+        """Every epoch decimated on its own, laid end to end, after the archive's epochs are `clean`ed as one
+        recording at 250 Hz."""
         with np.load(self.path) as archive:
             meg = archive["meg"]
         length = self.epochs().length
-        return np.concatenate([cache.decimated(epoch[:, :n]) for epoch, n in zip(meg, length, strict=True)], axis=1)
+        joined = clean(np.concatenate([epoch[:, :n] for epoch, n in zip(meg, length, strict=True)], axis=1))
+        epochs = np.split(joined, np.cumsum(length)[:-1], axis=1)
+        return np.concatenate([cache.decimated(epoch) for epoch in epochs], axis=1)
 
     def words(self, cache: RunCache) -> pd.DataFrame:
         """The archive's words in canonical order as a run cache's word table, each onset in seconds into the run
@@ -139,22 +144,30 @@ class HoldoutCache:
     subjects: tuple[int, ...] = DEEP_SUBJECTS
 
     @classmethod
-    def of(cls, root: DataRoot, decimate: int = DECIMATE, track: Track = Track.DEEP) -> "HoldoutCache":
-        """`track`'s holdout cached inside the training cache at `decimate`."""
-        trained = RunCache.under(root.processed(), decimate)
-        return cls(root.raw() / HOLDOUT_SUBDIR, RunCache(trained.cache / HOLDOUT_DIR, decimate), track.subjects)
+    def of(
+        cls, root: DataRoot, decimate: int = DECIMATE, track: Track = Track.DEEP, cleaning: Cleaning = Cleaning.NONE
+    ) -> "HoldoutCache":
+        """`track`'s holdout cached inside the training cache at `decimate` after `cleaning`."""
+        trained = RunCache.under(root.processed(), decimate, cleaning)
+        holdout = RunCache(trained.cache / HOLDOUT_DIR, decimate, cleaning)
+        return cls(root.raw() / HOLDOUT_SUBDIR, holdout, track.subjects)
 
     def archives(self) -> list[Archive]:
         return [
             Archive(self.raw / f"subj{subject:02d}_{kind}.npz") for subject in self.subjects for kind in ArchiveKind
         ]
 
+    def layout(self) -> Path:
+        """A training run's h5, whose channel layout the archives share but do not record."""
+        return Run.discover(self.raw.parent)[0].meg
+
     def build(self) -> pd.DataFrame:
         """Cache every archive, then write the word table of all of them."""
         self.cache.ready()
         archives = self.archives()
+        clean = self.cache.cleaner(self.layout)
         for archive in archives:
-            LOG.info("%s", self.cache.write(archive.name, partial(archive.signal, self.cache)).name)
+            LOG.info("%s", self.cache.write(archive.name, partial(archive.signal, self.cache, clean)).name)
         return self.cache.publish(pd.concat([archive.words(self.cache) for archive in archives], ignore_index=True))
 
     def windows(self, device: torch.device | str, length: int, *, standardised: bool = False) -> Windows:
@@ -172,10 +185,11 @@ def main() -> None:
     parser.add_argument("--window", type=float, default=1.0, help="window length in seconds")
     parser.add_argument("--decimate", type=int, default=DECIMATE)
     parser.add_argument("--track", type=Track, choices=list(Track), default=Track.DEEP)
+    parser.add_argument("--cleaning", type=Cleaning, choices=list(Cleaning), default=Cleaning.NONE)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    cache = HoldoutCache.of(root, args.decimate, args.track)
+    cache = HoldoutCache.of(root, args.decimate, args.track, args.cleaning)
     cache.build()
     rows = len(args.track.holdout(root.raw()))
     windows = cache.windows(args.device, round(args.window * cache.cache.rate))

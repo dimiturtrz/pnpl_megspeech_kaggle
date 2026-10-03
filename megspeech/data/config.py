@@ -12,6 +12,7 @@ import torch
 from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.holdout import HoldoutCache, Track
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
@@ -75,6 +76,9 @@ class DataConfig:
     features: str = ""
     """Features a frozen encoder saved under models/features/<name> (`megspeech.data.batching.split`), read in
     place of every split's MEG; empty reads the MEG."""
+    cleaning: Cleaning = Cleaning.NONE
+    """Artifacts removed from every recording before it is cached (`megspeech.data.cache.cleaning`): which cache
+    training and the holdout read."""
 
     def __post_init__(self) -> None:
         if not 0 <= self.fold < self.folds:
@@ -121,11 +125,11 @@ class DataConfig:
 
     def run_cache(self, root: DataRoot) -> RunCache:
         """The run cache training reads, at `decimate`."""
-        return RunCache.under(root.processed(), self.decimate)
+        return RunCache.under(root.processed(), self.decimate, self.cleaning)
 
     def holdout(self, root: DataRoot, track: Track, device: torch.device | str) -> Windows:
         """`track`'s holdout windows as this config reads them, its cache built first if missing."""
-        cache = HoldoutCache.of(root, self.decimate, track)
+        cache = HoldoutCache.of(root, self.decimate, track, self.cleaning)
         cache.build()
         return self.reading(cache.windows(device, self.samples, standardised=self.standardised))
 

@@ -8,6 +8,7 @@ above the new 25 Hz Nyquist before keeping every fifth sample. The holdout is ca
 
     uv run python -m megspeech.data.cache.run_cache               # every downloaded run under processed/continuous50
     uv run python -m megspeech.data.cache.run_cache --decimate 2  # the same at 125 Hz, under processed/continuous125
+    uv run python -m megspeech.data.cache.run_cache --cleaning ica  # ICA-cleaned, under processed/continuous50-ica
 """
 
 import argparse
@@ -30,10 +31,12 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.cleaning import Cleaner, Cleaning
 from megspeech.data.constants import DECIMATE, HALF, MISSING, PICO, RATE, SFREQ, WORKERS
 from megspeech.data.raw.runs import Run
 
 LOG = logging.getLogger(__name__)
+FORMAT = "%(asctime)s %(message)s"
 
 DIRECTORY = "continuous{rate:g}"
 """A cache's directory under `processed/`, named by its rate; the default 50 Hz cache is `continuous50`."""
@@ -53,11 +56,14 @@ class RunCache:
 
     cache: Path
     decimate: int = DECIMATE
+    cleaning: Cleaning = Cleaning.NONE
 
     @classmethod
-    def under(cls, processed: Path, decimate: int = DECIMATE) -> "RunCache":
-        """The cache at `decimate` in its own directory of `processed`, so caches at different rates coexist."""
-        return cls(processed / DIRECTORY.format(rate=SFREQ / decimate), decimate)
+    def under(cls, processed: Path, decimate: int = DECIMATE, cleaning: Cleaning = Cleaning.NONE) -> "RunCache":
+        """The cache at `decimate` after `cleaning` in its own directory of `processed`, so caches at different rates
+        and cleanings coexist."""
+        name = "-".join(part for part in (DIRECTORY.format(rate=SFREQ / decimate), cleaning.value) if part)
+        return cls(processed / name, decimate, cleaning)
 
     @property
     def rate(self) -> float:
@@ -73,13 +79,18 @@ class RunCache:
         return self.cache
 
     def signal(self, run: Run) -> Float[np.ndarray, "c s"]:
-        """The whole run decimated, in picotesla, saturated to the float16 range rather than overflowing to inf."""
+        """The whole run cleaned and decimated, in picotesla, saturated to the float16 range rather than overflowing
+        to inf."""
         with h5py.File(run.meg) as stored:
             rate = float(stored.attrs["sample_frequency"])
             if rate != SFREQ:
                 raise ValueError(f"{run.meg.name} is {rate} Hz, not {SFREQ}")
             meg = stored["data"][:]
-        return self.decimated(meg)
+        return self.decimated(self.cleaner(lambda: run.meg)(meg))
+
+    def cleaner(self, layout: Callable[[], Path]) -> Cleaner:
+        """The cache's `cleaning` of a recording laid out as the serialised run `layout` names."""
+        return self.cleaning.cleaner(layout)
 
     def decimated(self, meg: Float[np.ndarray, "c t"]) -> Float[np.ndarray, "c s"]:
         """One continuous 250 Hz stretch in tesla as cached: decimated, in picotesla, saturated, float16."""
@@ -142,7 +153,8 @@ class RunCache:
     def build(self, runs: Sequence[Run], workers: int = WORKERS) -> pd.DataFrame:
         """Cache every run in parallel, then write the word table of all of them."""
         self.ready()
-        with ProcessPoolExecutor(workers) as pool:
+        logged = partial(logging.basicConfig, level=logging.INFO, format=FORMAT)
+        with ProcessPoolExecutor(workers, initializer=logged) as pool:
             for path in pool.map(self.cache_run, runs):
                 LOG.info("%s", path.name)
         return self.publish(pd.concat([self.words(run) for run in runs], ignore_index=True))
@@ -258,10 +270,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workers", type=int, default=WORKERS)
     parser.add_argument("--decimate", type=int, default=DECIMATE)
+    parser.add_argument("--cleaning", type=Cleaning, choices=list(Cleaning), default=Cleaning.NONE)
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+    logging.basicConfig(level=logging.INFO, format=FORMAT)
     root = DataRoot.from_config()
-    cache = RunCache.under(root.processed(), args.decimate)
+    cache = RunCache.under(root.processed(), args.decimate, args.cleaning)
     runs = Run.discover(root.raw())
     began = time.perf_counter()
     table = cache.build(runs, args.workers)

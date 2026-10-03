@@ -1454,6 +1454,7 @@ dependencies = [
     { name = "h5py" },
     { name = "huggingface-hub" },
     { name = "jaxtyping" },
+    { name = "mne" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pnpl" },
@@ -1475,7 +1476,6 @@ devtools = [
 ]
 megxl = [
     { name = "einops" },
-    { name = "mne" },
     { name = "pytorch-lightning" },
 ]
 
@@ -1486,7 +1486,7 @@ requires-dist = [
     { name = "h5py", specifier = ">=3.16.0" },
     { name = "huggingface-hub", specifier = ">=1.3" },
     { name = "jaxtyping" },
-    { name = "mne", marker = "extra == 'megxl'", specifier = ">=1.10" },
+    { name = "mne", specifier = ">=1.10" },
     { name = "numpy" },
     { name = "pandas", specifier = ">=3.0.6" },
     { name = "pnpl", specifier = ">=0.2.0" },

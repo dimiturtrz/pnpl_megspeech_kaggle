@@ -7,6 +7,7 @@ import torch
 
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.holdout import Track
 from megspeech.data.config import METRICS, READING, DataConfig
 from megspeech.data.constants import RATE
@@ -126,6 +127,10 @@ def test_run_cache(tmp_path: Path) -> None:
     assert DataConfig().run_cache(root).cache == root.processed() / "continuous50"
     fast = DataConfig(decimate=2).run_cache(root)
     assert (fast.cache.name, fast.rate) == ("continuous125", 125.0)
+    assert DataConfig().cleaning is Cleaning.NONE
+    assert "cleaning" in READING
+    cleaned = DataConfig(cleaning=Cleaning.ICA).run_cache(root)
+    assert (cleaned.cache.name, cleaned.cleaning) == ("continuous50-ica", Cleaning.ICA)
 
 
 def test_holdout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -13,10 +13,12 @@ import torch
 from pnpl.competition.holdout import HOLDOUT_SUBDIR, LibriBrainCompetitionHoldout
 
 from core.paths import ENV_OVERRIDE, DataRoot
+from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.holdout import HOLDOUT_DIR, Archive, ArchiveKind, Epochs, HoldoutCache, Track, main
 from megspeech.data.cache.run_cache import DIRECTORY, TAIL, WORD_TABLE, DeviceRecording, RunCache
 from megspeech.data.constants import RATE, SFREQ, WINDOW
 from megspeech.data.raw.runs import Run
+from tests.unit.megspeech.data.cache.run_cache import recording
 
 CHANNELS = 3
 SLOTS = 9
@@ -123,6 +125,13 @@ def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fast = HoldoutCache.of(DataRoot.from_config(), 2).cache
     assert (fast.cache.parts[-2:], fast.rate) == (("continuous125", HOLDOUT_DIR), SFREQ / 2)
     assert HoldoutCache.of(DataRoot.from_config(), track=Track.BROAD).subjects == tuple(range(1, 40))
+    cleaned = HoldoutCache.of(DataRoot.from_config(), cleaning=Cleaning.ICA).cache
+    assert (cleaned.cache.parts[-2:], cleaned.cleaning) == (("continuous50-ica", HOLDOUT_DIR), Cleaning.ICA)
+
+
+def test_layout(tmp_path: Path) -> None:
+    run = recording(tmp_path)
+    assert HoldoutCache(tmp_path / HOLDOUT_SUBDIR, RunCache(tmp_path)).layout() == run.meg
 
 
 def test_subjects() -> None:
@@ -234,3 +243,7 @@ def test_signal(tmp_path: Path) -> None:
     assert signal.shape == (CHANNELS, lead + SAMPLES // 5)
     assert np.array_equal(signal[:, :lead], cache.decimated(stretch(1, LEAD)))
     assert np.array_equal(signal[:, lead:], cache.decimated(stretch()))
+    joined: list[tuple[int, ...]] = []
+    doubled = Archive(sentence_archive(tmp_path)).signal(cache, lambda meg: joined.append(meg.shape) or 2 * meg)
+    assert joined == [(CHANNELS, LEAD + SAMPLES)]
+    assert np.array_equal(doubled[:, lead:], cache.decimated(2 * stretch()))

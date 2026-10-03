@@ -200,7 +200,7 @@ def test_call_reproduces_the_epoch_window(tmp_path: Path, monkeypatch: pytest.Mo
 
 
 class Pool:
-    def __init__(self, _: int) -> None:
+    def __init__(self, _: int, **__: object) -> None:
         pass
 
     def __enter__(self) -> "Pool":
