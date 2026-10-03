@@ -9,7 +9,7 @@ from megspeech.model.config import FILE, ContextConfig, Encoder, OnsetEncoding
 from megspeech.model.context.timing import Clock, Intervals
 from megspeech.model.words.conv import ConvConfig, ConvWords
 from megspeech.model.words.megxl import POOLED, RESOLVED
-from megspeech.objective.heads import Objective
+from megspeech.objective.context import Objective
 
 CONTEXT = ContextConfig(width=16, timescales=4)
 

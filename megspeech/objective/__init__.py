@@ -1,1 +1,1 @@
-"""The context head and its loss, and the text prototypes SigLIP retrieves against."""
+"""The context head and its loss, the auxiliary terms, and the text targets they retrieve against."""

@@ -30,6 +30,11 @@ def test_sentence_net_forward() -> None:
     assert torch.isfinite(context[slot < len(x)]).all()
 
 
+def test_readouts() -> None:
+    model = SentenceNet(nn.Identity(), CONTEXT)
+    assert model.readouts() == (model.head, model.words.head)
+
+
 def test_padding_rows_change_nothing() -> None:
     model = SentenceNet(nn.Identity(), replace(CONTEXT, dropout=0.0, conv=replace(CONTEXT.conv, dropout=0.0))).train()
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)

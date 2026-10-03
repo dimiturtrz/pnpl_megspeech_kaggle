@@ -95,3 +95,7 @@ class SentenceNet(nn.Module):
     ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
         """The context head's logits over `h` refined across its span's `mask`ed positions, and the word head's."""
         return self.head(self.context(h, src_key_padding_mask=~mask)), self.words.head(slots)
+
+    def readouts(self) -> tuple[nn.Module, ...]:
+        """The modules reading each of `forward`'s outputs, in order: the context head, then the word head."""
+        return self.head, self.words.head

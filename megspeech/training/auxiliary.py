@@ -1,72 +1,70 @@
 """What trains beside the 50-way heads: nothing, or terms read off every heard word's embedding — its t5
-embedding aligned, its first phoneme classified."""
+embedding aligned, its word classified, its leading phonemes classified."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import cast, override
+from typing import override
 
 import torch
-from jaxtyping import Float, Int
-from torch import Tensor, nn
+from torch import nn
 
 from core.paths import DataRoot
 from megspeech.data.labels.phonemes import Pronunciation
-from megspeech.model.pretraining import Pretraining
+from megspeech.model.auxiliary import WithAuxiliary
 from megspeech.model.sentence import SentenceNet
-from megspeech.objective.prototypes import Lexicon
+from megspeech.objective.auxiliary.lexical import LexicalTerm
+from megspeech.objective.auxiliary.phonetic import PhoneticTerm
+from megspeech.objective.auxiliary.semantic import SemanticTerm
+from megspeech.objective.targets.t5 import Lexicon
+from megspeech.objective.term import AuxiliaryTerm
 from megspeech.training.config import OptimConfig
-from megspeech.training.terms import Aligned, Lexical, Pronounced, Term
 
 
+@dataclass(frozen=True)
 class Auxiliary(ABC):
-    """The module a run's optimiser steps, and the loss it adds to the heads'."""
+    """The module a run's optimiser steps, and the terms its auxiliary heads add to the heads' loss."""
+
+    terms: tuple[AuxiliaryTerm, ...]
 
     @abstractmethod
-    def trained(self, net: SentenceNet, compiled: Callable[[nn.Module], nn.Module]) -> nn.Module: ...
-
-    @abstractmethod
-    def loss(
-        self, model: nn.Module, outputs: Sequence[Tensor], tokens: Int[Tensor, "g w"]
-    ) -> Float[Tensor, ""] | float:
-        """`outputs` past the two heads', at span positions whose words are `tokens` (`Split.token`)."""
+    def trained(
+        self, net: SentenceNet, compiled: Callable[[WithAuxiliary], WithAuxiliary]
+    ) -> SentenceNet | WithAuxiliary: ...
 
     @staticmethod
     def of(optim: OptimConfig, root: DataRoot, device: torch.device) -> "Auxiliary":
         """Nothing when every weight is 0, so no table is read; otherwise the terms of the nonzero weights."""
-        terms: list[Term] = []
-        if optim.semantic:
-            terms.append(Aligned(optim.semantic, Lexicon.load(Lexicon.path(root)).to(device)))
-        if optim.lexical:
-            terms.append(Lexical(optim.lexical, Lexicon.load(Lexicon.path(root)).to(device)))
-        if optim.phonetic:
-            pronunciation = Pronunciation.load(Pronunciation.path(root)).to(device)
-            terms.append(Pronounced(optim.phonetic, pronunciation, optim.positions))
-        return Joint(tuple(terms)) if terms else Silent()
+        builders: tuple[tuple[float, Callable[[], AuxiliaryTerm]], ...] = (
+            (optim.semantic, lambda: SemanticTerm(optim.semantic, Lexicon.load(Lexicon.path(root)).to(device))),
+            (optim.lexical, lambda: LexicalTerm(optim.lexical, Lexicon.load(Lexicon.path(root)).to(device))),
+            (
+                optim.phonetic,
+                lambda: PhoneticTerm(
+                    optim.phonetic, Pronunciation.load(Pronunciation.path(root)).to(device), optim.positions
+                ),
+            ),
+        )
+        terms = tuple(build() for weight, build in builders if weight)
+        return Joint(terms) if terms else NoAuxiliary()
 
 
-class Silent(Auxiliary):
+@dataclass(frozen=True)
+class NoAuxiliary(Auxiliary):
+    """The sentence model trained alone."""
+
+    terms: tuple[AuxiliaryTerm, ...] = ()
+
     @override
-    def trained(self, net: SentenceNet, compiled: Callable[[nn.Module], nn.Module]) -> nn.Module:
+    def trained(self, net: SentenceNet, compiled: Callable[[WithAuxiliary], WithAuxiliary]) -> SentenceNet:
         return net
-
-    @override
-    def loss(self, model: nn.Module, outputs: Sequence[Tensor], tokens: Int[Tensor, "g w"]) -> float:
-        return 0.0
 
 
 @dataclass(frozen=True)
 class Joint(Auxiliary):
-    """The sentence model wrapped with one head per term (`Pretraining`), their losses summed."""
-
-    terms: tuple[Term, ...]
+    """The sentence model wrapped with one head per term (`WithAuxiliary`)."""
 
     @override
-    def trained(self, net: SentenceNet, compiled: Callable[[nn.Module], nn.Module]) -> nn.Module:
-        return compiled(Pretraining(net, nn.ModuleList(term.head(net.words.width) for term in self.terms)))
-
-    @override
-    def loss(self, model: nn.Module, outputs: Sequence[Tensor], tokens: Int[Tensor, "g w"]) -> Float[Tensor, ""]:
-        heads = cast("Pretraining", model).heads
-        parts = zip(self.terms, heads, outputs, strict=True)
-        return torch.stack([term.loss(head, output, tokens) for term, head, output in parts]).sum()
+    def trained(self, net: SentenceNet, compiled: Callable[[WithAuxiliary], WithAuxiliary]) -> WithAuxiliary:
+        heads = nn.ModuleList(term.head(net.words.width) for term in self.terms)
+        return compiled(WithAuxiliary(net, heads))

@@ -9,7 +9,7 @@ from core.tree import Tree
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.evaluation.report import Epoch, SelectionConfig
 from megspeech.model.config import CONTEXT, ContextConfig
-from megspeech.training.augment import Augment
+from megspeech.training.regularise.augment import Augment
 
 
 @dataclass(frozen=True)
@@ -25,13 +25,13 @@ class OptimConfig:
     """Decay of the weight average scored and kept; 0 keeps the raw weights. At 0.999 the average spans ~1000
     steps, about half an epoch of the ~1750 a sentence-path epoch takes."""
     semantic: float = 0.0
-    """Weight of the semantic auxiliary (`megspeech.training.auxiliary`): every heard word's window, the ~60% outside
-    the 50 included, SigLIP-aligned to the word's t5-large layer-12 embedding, d'Ascoli et al.'s objective. It
-    supervises ~2.5x the windows the heads see; 0 trains the heads alone and never reads the lexicon."""
+    """Weight of the semantic auxiliary (`megspeech.objective.auxiliary.semantic`): every heard word's window, the
+    ~60% outside the 50 included, SigLIP-aligned to the word's t5-large layer-12 embedding, d'Ascoli et al.'s
+    objective. It supervises ~2.5x the windows the heads see; 0 trains the heads alone and never reads the lexicon."""
     lexical: float = 0.0
     """Weight of the lexical auxiliary: every heard word's window, in or out of the 50, classified into its word among
-    the ~25k distinct words of the lexicon (`megspeech.training.terms.Lexical`). Word identity, where the semantic
-    auxiliary aligns to a frozen embedding; 0 never reads the lexicon."""
+    the ~25k distinct words of the lexicon (`megspeech.objective.auxiliary.lexical`). Word identity, where the
+    semantic auxiliary aligns to a frozen embedding; 0 never reads the lexicon."""
     phonetic: float = 0.0
     """Weight of the phonetic auxiliary: every heard word's window, in or out of the 50, classified into the first of
     its 39 ARPAbet phonemes (`megspeech.data.labels.phonemes`). Speech MEG decodes phonetic features (Gwilliams et al.
@@ -46,12 +46,12 @@ class OptimConfig:
     during training overlaps it, so an arm asks whether it adds beyond `tau`. SigLIP's context loss is unweighted."""
     curriculum: float = 0.0
     """The Deep subject's share of the spans drawn at the last epoch, annealed linearly from an equal share per
-    subject at the first (`megspeech.training.curriculum.Annealed`); 0 draws every subject's spans at their own
+    subject at the first (`megspeech.training.sampling.curriculum`); 0 draws every subject's spans at their own
     weight. Only meaningful when `DataConfig.subjects` trains on more than the Deep subject."""
     anchor: float = 1.0
     """Share of each subject matrix's deviation from the Deep subject's that the run's decay leaves by its end, were
-    its gradient never to restore it (`megspeech.training.anchor`); 1 decays the matrices toward 0 like every other
-    weight. The Deep matrix is what a zero-shot subject is read through."""
+    its gradient never to restore it (`megspeech.training.regularise.anchor`); 1 decays the matrices toward 0 like
+    every other weight. The Deep matrix is what a zero-shot subject is read through."""
     warm: str = ""
     """A trained run under models/ whose weights the model starts from instead of its initialisation, its context
     config the same as this run's: a run trained on every subject fine-tuned on the Deep subject alone. Empty starts

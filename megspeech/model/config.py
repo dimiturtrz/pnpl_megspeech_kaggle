@@ -19,7 +19,7 @@ from megspeech.model.context.timing import Clock, Intervals
 from megspeech.model.words.base import WordEncoder
 from megspeech.model.words.conv import CONV, ConvConfig, ConvWords
 from megspeech.model.words.megxl import POOLED, RESOLVED, FeatureWords
-from megspeech.objective.heads import Objective
+from megspeech.objective.context import Objective
 
 
 class Encoder(StrEnum):

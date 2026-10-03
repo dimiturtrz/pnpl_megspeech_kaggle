@@ -1,6 +1,6 @@
 """Word windows on the device, grouped into spans, and the fixed-shape batches training and scoring draw from them.
 
-A frozen encoder's per-window features (`megspeech.training.features`) can stand in for a split's windows row for row:
+A frozen encoder's per-window features (`megspeech.features.extract`) can stand in for a split's windows row for row:
 each split's are saved in its own words' order.
 """
 

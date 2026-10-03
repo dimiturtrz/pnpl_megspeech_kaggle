@@ -1,0 +1,127 @@
+"""One weighted term of a training step's loss: a readout of the model and the per-word labels it is scored against.
+
+A step's loss is the sum of its terms: the context and word heads' (`LabelTerm`), then each auxiliary head's over
+every heard word's embedding (`AuxiliaryTerm`).
+"""
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import override
+
+import torch
+from jaxtyping import Float, Int
+from torch import Tensor, nn
+from torch.nn import functional
+
+from megspeech.data.batching.split import Split
+from megspeech.data.labels.phonemes import UNKNOWN
+from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
+from megspeech.objective.context import Objective
+
+
+@dataclass(frozen=True)
+class Term(ABC):
+    """A readout's `weight`ed loss against the label of each span position's word."""
+
+    weight: float = field(kw_only=True)
+
+    def loss(self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]) -> Float[Tensor, ""]:
+        """`output` of `head` at span positions whose words carry `target`, gathered from `labels`."""
+        return self.weight * self.unweighted(head, output, target)
+
+    @abstractmethod
+    def unweighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
+    ) -> Float[Tensor, ""]: ...
+
+    @abstractmethod
+    def labels(self, split: Split) -> Int[Tensor, " n"]:
+        """The per-word label of `split` this term scores against."""
+
+
+@dataclass(frozen=True)
+class LabelTerm(Term):
+    """A 50-way head trained on the vocabulary label, smoothed by `smoothing`, each class's rows scaled by
+    `classes`."""
+
+    smoothing: float
+    classes: Float[Tensor, " v"] | None
+    weight: float = field(default=1.0, kw_only=True)
+
+    @staticmethod
+    def balanced(y: Int[Tensor, " n"], balance: float) -> Float[Tensor, " v"] | None:
+        """Each class's cross-entropy weight, `count ** -balance` over the labelled `y`, mean 1 over the classes
+        present and 0 for the absent; None at balance 0, the unweighted loss itself."""
+        counts = torch.bincount(y[y != IGNORE], minlength=VOCAB_SIZE).float()
+        present = counts > 0
+        weight = torch.where(present, counts.clamp(min=1).pow(-balance), 0.0)
+        return weight / weight[present].mean() if balance else None
+
+    @override
+    def labels(self, split: Split) -> Int[Tensor, " n"]:
+        return split.y
+
+
+@dataclass(frozen=True)
+class ContextTerm(LabelTerm):
+    """The context head, trained by its `objective` in float32."""
+
+    objective: Objective = Objective.SOFTMAX
+
+    @override
+    def unweighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
+    ) -> Float[Tensor, ""]:
+        return self.objective.loss(output.flatten(0, 1), target.flatten(), self.smoothing, self.classes)
+
+
+@dataclass(frozen=True)
+class WordTerm(LabelTerm):
+    """The isolated-word head's softmax at the autocast's precision: the logits stay bfloat16 into the
+    cross-entropy, unlike the context head's float32, which every trained run's numbers were made with."""
+
+    @override
+    def unweighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
+    ) -> Float[Tensor, ""]:
+        return functional.cross_entropy(
+            output.flatten(0, 1),
+            target.flatten(),
+            weight=self.classes,
+            ignore_index=IGNORE,
+            label_smoothing=self.smoothing,
+        )
+
+
+class AuxiliaryTerm(Term):
+    """A head over every heard word's embedding, in or out of the 50, scored against the word itself."""
+
+    @abstractmethod
+    def head(self, width: int) -> nn.Module: ...
+
+    @override
+    def labels(self, split: Split) -> Int[Tensor, " n"]:
+        return split.token
+
+
+class Classified(AuxiliaryTerm):
+    """Each heard word classified into `count` classes, the words without a class (`UNKNOWN`) left out."""
+
+    @abstractmethod
+    def count(self) -> int: ...
+
+    @abstractmethod
+    def classify(self, token: Int[Tensor, "g w"]) -> Int[Tensor, "g w *p"]: ...
+
+    @staticmethod
+    def masked(logits: Float[Tensor, "n k"], classes: Int[Tensor, " n"]) -> Float[Tensor, ""]:
+        """Cross-entropy over the rows with a known class; 0 when there are none, without a host sync."""
+        known = classes != UNKNOWN
+        rows = functional.cross_entropy(logits.float(), classes.clamp(min=0), reduction="none") * known
+        return rows.sum() / known.sum().clamp(min=1)
+
+    @override
+    def unweighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
+    ) -> Float[Tensor, ""]:
+        return self.masked(output.reshape(-1, self.count()), self.classify(target).flatten())

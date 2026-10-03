@@ -216,6 +216,7 @@ forbidden_modules = ["megspeech"]
 name = "megspeech layers: each subpackage imports only those below it"
 type = "layers"
 layers = [
+    "megspeech.features",
     "megspeech.training",
     "megspeech.submission",
     "megspeech.evaluation",
@@ -242,12 +243,34 @@ layers = [
 name = "megspeech.model layers: inputs and word encoders -> span context -> config -> sentence model -> its users"
 type = "layers"
 layers = [
-    "megspeech.model.ensemble | megspeech.model.pretraining",
+    "megspeech.model.ensemble | megspeech.model.auxiliary",
     "megspeech.model.sentence",
     "megspeech.model.config",
     "megspeech.model.context",
     "megspeech.model.words",
     "megspeech.model.input",
+]
+
+[[tool.importlinter.contracts]]
+name = "megspeech.objective layers: scorer and targets -> context head -> loss terms -> auxiliary heads"
+type = "layers"
+layers = [
+    "megspeech.objective.auxiliary",
+    "megspeech.objective.term",
+    "megspeech.objective.context",
+    "megspeech.objective.scorer | megspeech.objective.targets",
+]
+
+[[tool.importlinter.contracts]]
+name = "megspeech.training layers: step hooks -> regularisers and sampling -> config -> auxiliary -> loop -> CLIs"
+type = "layers"
+layers = [
+    "megspeech.training.cli",
+    "megspeech.training.loop",
+    "megspeech.training.auxiliary",
+    "megspeech.training.config",
+    "megspeech.training.regularise | megspeech.training.sampling",
+    "megspeech.training.hook",
 ]
 # <<< LOCAL-SLOT: import-contracts
 

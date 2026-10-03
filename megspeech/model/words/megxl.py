@@ -1,5 +1,5 @@
 """MEG-XL's features as the sentence model's words: computed by its frozen trunk ahead of training
-(`megspeech.training.extract`), then read by a head alone."""
+(`megspeech.features.extract`), then read by a head alone."""
 
 from typing import override
 

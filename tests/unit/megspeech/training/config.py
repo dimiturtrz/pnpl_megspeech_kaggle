@@ -6,8 +6,8 @@ from megspeech.data.config import DataConfig
 from megspeech.evaluation.report import Epoch, Score
 from megspeech.evaluation.ruler import Interval
 from megspeech.model.context.timing import Clock
-from megspeech.training.augment import Augment
 from megspeech.training.config import METRICS, RunConfig
+from megspeech.training.regularise.augment import Augment
 
 
 def test_saved(tmp_path: Path) -> None:
