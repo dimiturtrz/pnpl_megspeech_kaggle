@@ -19,7 +19,8 @@ class SpatialAttention(nn.Module):
     """Each output channel a softmax-weighted sum of the sensors, its weights a learned function of their 2D position.
 
     The function is a Fourier series over the layout, so nearby sensors weigh alike. In training every sensor within
-    `RADIUS` of one random point per window is dropped and the weights renormalised over the rest."""
+    `RADIUS` of one random point per window is dropped and the weights renormalised over the rest; a channel whose
+    every weighted sensor is dropped reads 0."""
 
     def __init__(self, channels: int) -> None:
         super().__init__()
@@ -55,7 +56,8 @@ class SpatialAttention(nn.Module):
     @override
     def forward(self, x: Float[Tensor, "b c t"]) -> Float[Tensor, "b o t"]:
         logits = self.scores @ self.fourier.T
-        weights = (logits - logits.amax(1, keepdim=True)).exp().to(x.dtype)
+        weights = (logits - logits.amax(1, keepdim=True)).exp()
         kept = self.kept(x)
-        merged = torch.einsum("oc,bct->bot", weights, x * kept[..., None])
-        return merged / (kept @ weights.T)[..., None]
+        merged = torch.einsum("oc,bct->bot", weights.to(x.dtype), x * kept[..., None])
+        total = (kept.float() @ weights.T).clamp_min(torch.finfo(torch.float32).tiny)
+        return merged / total[..., None].to(merged.dtype)

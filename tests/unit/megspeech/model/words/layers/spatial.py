@@ -40,3 +40,12 @@ def test_forward() -> None:
     assert torch.allclose(merged, torch.einsum("oc,bct->bot", weights, x), atol=1e-5)
     constant = torch.full((2, CHANNELS, 5), 3.0)
     assert torch.allclose(layer.train().forward(constant), torch.full((2, 4, 5), 3.0), atol=1e-5)
+
+
+def test_forward_reads_zero_where_every_weighted_sensor_is_dropped() -> None:
+    layer = SpatialAttention(1).train()
+    with torch.no_grad():
+        layer.scores.copy_(1e4 * layer.fourier[:1])
+    merged = layer.forward(torch.ones(256, CHANNELS, 5))
+    assert torch.isfinite(merged).all()
+    assert merged.eq(0).any()
