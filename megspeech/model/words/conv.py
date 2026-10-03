@@ -43,6 +43,8 @@ class ConvConfig:
     merger: int = 0
     """Channels a `SpatialAttention` merges the sensors into before the 1x1 spatial convolution, with spatial
     dropout in training: Défossez et al. 2023's front end, 270 there; 0 mixes the sensors with the convolution alone."""
+    gated: bool = False
+    """GLU-gate every dilated block in place of its GELU (`DilatedBlock`), d'Ascoli et al.'s trunk activation."""
 
     def __post_init__(self) -> None:
         if any(kernel % 2 == 0 for kernel in self.kernels):
@@ -69,7 +71,7 @@ class ConvWords(WordEncoder):
             else nn.Conv1d(CHANNELS, config.hidden, 1)
         )
         self.blocks = nn.ModuleList(
-            DilatedBlock(config.hidden, d, config.dropout, config.kernels) for d in config.dilations
+            DilatedBlock(config.hidden, d, config.dropout, config.kernels, gated=config.gated) for d in config.dilations
         )
         if config.ssm:
             self.blocks.append(Ssm(config.hidden, config.ssm, config.dropout))

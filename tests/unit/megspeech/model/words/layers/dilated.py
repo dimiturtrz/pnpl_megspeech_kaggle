@@ -25,6 +25,21 @@ def test_conv() -> None:
     assert conv(x).shape == x.shape
 
 
+def test_conv_expand() -> None:
+    conv = DilatedBlock.conv(4, 2, 3, 2)
+    x = torch.randn(2, 4, 10, generator=GENERATOR)
+    assert conv(x).shape == (2, 8, 10)
+
+
+def test_forward_gated() -> None:
+    block = DilatedBlock(4, 2, 0.0, (3, 5), gated=True).eval()
+    x = torch.randn(2, 4, 10, generator=GENERATOR)
+    assert block.body[0].out_channels == 8
+    assert block.parallel[0].out_channels == 8
+    assert isinstance(block.body[2], torch.nn.GLU)
+    assert block.forward(x).shape == x.shape
+
+
 def test_block_default_keeps_checkpoint_keys() -> None:
     keys = set(DilatedBlock(4, 2, 0.0).state_dict())
     assert "body.0.weight" in keys
