@@ -17,6 +17,7 @@ from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.data.raw.runs import Run
+from megspeech.data.spans.spans import PAD
 from megspeech.evaluation import loaded as module
 from megspeech.evaluation.loaded import RULER, LoadedModel, Scoring, Text
 from megspeech.evaluation.metric.balance import Sinkhorn
@@ -207,3 +208,25 @@ def test_probabilities(tmp_path: Path) -> None:
     assert probabilities.shape == (len(SPOKEN), VOCAB_SIZE)
     assert np.allclose(probabilities.sum(axis=1), 1, atol=1e-5)
     assert (probabilities.argmax(axis=1) == 0).all()
+
+
+class Contrary(Favourite):
+    """`Favourite`'s context head, with a word head that ranks the vocabulary in reverse."""
+
+    @override
+    def forward(
+        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        context, _ = super().forward(x, onset, slot, subject)
+        return context, context.flip(-1)
+
+
+def test_probabilities_lone(tmp_path: Path) -> None:
+    """A word alone in its span reads the word head; a word with context reads the context head."""
+    domains, _ = loaded(tmp_path).domains({RULER: runs(tmp_path)[:1]})
+    split = domains[RULER]
+    lone = torch.full((3, split.index.shape[1]), PAD)
+    lone[:, 0] = split.index[1, :3]
+    split = replace(split, index=torch.cat([split.index[:1], lone]), onset=torch.zeros(4, split.index.shape[1]))
+    probabilities = replace(loaded(tmp_path), model=Contrary()).probabilities(split, 0.5)
+    assert probabilities.argmax(axis=1).tolist() == [0, 0, 0, VOCAB_SIZE - 1, VOCAB_SIZE - 1, VOCAB_SIZE - 1]

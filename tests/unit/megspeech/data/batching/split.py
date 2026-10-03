@@ -63,6 +63,11 @@ def test_labelled() -> None:
     assert held.labelled().tolist() == [0, 2]
 
 
+def test_lone() -> None:
+    """The dense words share a span; each word 2 s after its neighbour is a span of its own."""
+    assert split().lone().tolist() == [False] * DENSE + [True] * (12 - DENSE)
+
+
 def test_log_prior() -> None:
     assert torch.allclose(split().log_prior().exp().sum(), torch.tensor(1.0))
     heavy = dataclasses.replace(split(), weight=(torch.arange(12) % 3 == 0).float() * 100)

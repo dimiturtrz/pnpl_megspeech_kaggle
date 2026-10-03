@@ -12,7 +12,7 @@ from typing import Protocol
 import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 from core.paths import DataRoot
@@ -160,6 +160,13 @@ class Split:
     def labelled(self) -> Int[Tensor, " k"]:
         """Words with a vocabulary label — the ones a score counts."""
         return torch.nonzero(self.y != IGNORE).flatten()
+
+    def lone(self) -> Bool[Tensor, " n"]:
+        """Words alone in their span, as the holdout's isolated-word rows are: no context reaches them."""
+        alone = (self.index != PAD).sum(dim=1) == 1
+        mask = torch.zeros(len(self.y), dtype=torch.bool, device=self.y.device)
+        mask[self.index[alone, 0]] = True
+        return mask
 
     def log_prior(self) -> Float[Tensor, " v"]:
         """Label prior as training samples it, so logit adjustment undoes the same distribution."""

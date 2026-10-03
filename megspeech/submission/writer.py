@@ -17,7 +17,7 @@ class HoldoutWriter:
     track: Track
 
     def write(self, loaded: LoadedModel, tau: float, path: Path) -> Path:
-        """Context-head probabilities for every row of the track's holdout, each read from its own subject's MEG and
+        """`LoadedModel.probabilities` for every row of the track's holdout, each read from its own subject's MEG and
         logit-adjusted by `tau`; the secondary vocabulary uniform."""
         holdout = self.track.holdout(loaded.root.raw())
         windows = loaded.data.holdout(loaded.root, self.track, loaded.evaluator.device, loaded.alignment)

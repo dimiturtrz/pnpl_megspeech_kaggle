@@ -169,6 +169,10 @@ class LoadedModel:
         return self.evaluator.graded(self.model, domains, self.log_prior, tau)
 
     def probabilities(self, split: Split, tau: float) -> Float[np.ndarray, "n v"]:
-        """The context head's probabilities for every word of `split`, logit-adjusted by `tau`."""
-        adjusted = self.evaluator.adjusted(self.context(split), self.log_prior, tau)
+        """Every word of `split`'s probabilities, logit-adjusted by `tau`: the context head's, but the word head's for
+        a word alone in its span. The context head on a lone word scores near chance (bAcc@10 0.24 vs the word head's
+        0.39 on Sherlock1, 0.23 vs 0.29 on TheMoth, n=1296/1216), and 92 of the Deep holdout's 960 rows are lone."""
+        logits = self.evaluator.logits(self.model, split)
+        chosen = torch.where(split.lone()[:, None], logits[Head.WORD], logits[Head.CONTEXT])
+        adjusted = self.evaluator.adjusted(chosen, self.log_prior, tau)
         return torch.softmax(adjusted, dim=-1).cpu().numpy()
