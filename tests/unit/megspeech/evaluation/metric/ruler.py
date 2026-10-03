@@ -54,6 +54,8 @@ def test_draws() -> None:
     assert draws.shape == (300,)
     assert torch.equal(draws, ruler.draws(hits, labels))
     assert abs(float(draws.mean()) - ruler.balanced(hits, labels)) < 0.03
+    whole = Ruler(resamples=4, block=len(labels) + 1).draws(hits, labels)
+    assert torch.allclose(whole, torch.full((4,), ruler.balanced(hits, labels)))
 
 
 def test_point() -> None:

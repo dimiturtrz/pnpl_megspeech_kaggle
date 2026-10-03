@@ -73,6 +73,9 @@ class Ruler:
     resamples: int = RESAMPLES
     confidence: float = CONFIDENCE
     seed: int = 0
+    block: int = 1
+    """Consecutive words drawn together per resample. Words of one sentence share its context and its MEG
+    stretch, so single-word draws (1) understate the variance; a block near the sentence length keeps them."""
 
     def hits(self, scores: Float[Tensor, "n v"], labels: Int[Tensor, " n"]) -> Bool[Tensor, " n"]:
         """Whether the true word ranks in the top `k` with every tie ranked above it, the order no scorer's
@@ -85,9 +88,13 @@ class Ruler:
         return float(self.score(hits[None], labels[None])[0])
 
     def draws(self, hits: Bool[Tensor, " n"], labels: Int[Tensor, " n"]) -> Float[Tensor, " b"]:
-        """Balanced accuracy of each resample of the words, drawn with replacement."""
+        """Balanced accuracy of each resample of the words, drawn with replacement in runs of `block`."""
+        n, block = len(labels), min(self.block, len(labels))
         generator = torch.Generator(device=labels.device).manual_seed(self.seed)
-        pick = torch.randint(len(labels), (self.resamples, len(labels)), generator=generator, device=labels.device)
+        starts = torch.randint(
+            n - block + 1, (self.resamples, -(-n // block)), generator=generator, device=labels.device
+        )
+        pick = (starts[..., None] + torch.arange(block, device=labels.device)).flatten(1)[:, :n]
         return self.score(hits[pick], labels[pick])
 
     def point(self, graded: Graded) -> float:
@@ -145,10 +152,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=main.__doc__)
     parser.add_argument("a", type=Path, help="hits.pt of run A")
     parser.add_argument("b", type=Path, help="hits.pt of run B")
+    parser.add_argument("--block", type=int, default=1, help="consecutive words resampled together")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    ruler = Ruler()
+    ruler = Ruler(block=args.block)
     a, b = Graded.load(args.a, device), Graded.load(args.b, device)
     delta = ruler.delta(a, b)
     interval = ruler.interval(delta)
