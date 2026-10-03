@@ -75,9 +75,10 @@ class Ruler:
     seed: int = 0
 
     def hits(self, scores: Float[Tensor, "n v"], labels: Int[Tensor, " n"]) -> Bool[Tensor, " n"]:
-        """Whether the true word ranks in the top `k` (ties counted as hits, a non-finite row as a miss)."""
+        """Whether the true word ranks in the top `k` with every tie ranked above it, the order no scorer's
+        tie-break can beat; a non-finite row is a miss."""
         true = scores.gather(1, labels[:, None])
-        return ((scores > true).sum(dim=1) < self.k) & scores.isfinite().all(dim=1)
+        return ((scores >= true).sum(dim=1) <= self.k) & scores.isfinite().all(dim=1)
 
     def balanced(self, hits: Bool[Tensor, " n"], labels: Int[Tensor, " n"]) -> float:
         """Mean over present classes of the hit rate."""

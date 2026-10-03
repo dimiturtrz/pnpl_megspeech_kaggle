@@ -135,7 +135,7 @@ def test_graded() -> None:
     assert set(graded.domains) == {name for name, size in sizes.items() if size == max(sizes.values())}
     hits, labels = next(iter(graded.domains.values()))
     assert hits.shape == labels.shape == (max(sizes.values()),)
-    assert hits.all()
+    assert torch.equal(hits, labels.eq(0))
 
 
 def test_scored() -> None:

@@ -31,6 +31,10 @@ def test_hits() -> None:
     scores[1, :20] = 1
     hits = Ruler(k=10).hits(scores, torch.tensor([3, 40]))
     assert hits.tolist() == [True, False]
+    tied = torch.zeros(2, VOCAB_SIZE)
+    tied[1, :9] = 1
+    tied[1, 40] = 1
+    assert Ruler(k=10).hits(tied, torch.tensor([0, 40])).tolist() == [False, True]
     assert not Ruler().hits(torch.full((1, VOCAB_SIZE), torch.nan), torch.tensor([0])).any()
 
 
