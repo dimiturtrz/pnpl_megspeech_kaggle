@@ -34,9 +34,9 @@ HELD_OUT = {
 }
 """`pnpl` 0.2.0 `libribrain100/manifest.py`; every other subject-0 run trains."""
 
-POOLED = {("Sherlock1", 11, 1): Partition.POOL}
+POOLED = {("Sherlock1", 11, 1): Partition.POOL, ("Sherlock1", 12, 1): Partition.TEST}
 """Subjects 1-32 hear Sherlock1 sessions 11 and 12 once each: 11 is the text of subject 0's validation run, 12 of its
-test run. Session 12 trains; session 11 is pooled."""
+test run. Session 11 is pooled; session 12 is held out like subject 0's test run, its text never trained."""
 
 SPLITS = {DEEP: HELD_OUT}
 """Each subject's held-out runs; a subject absent here is split by `POOLED`."""

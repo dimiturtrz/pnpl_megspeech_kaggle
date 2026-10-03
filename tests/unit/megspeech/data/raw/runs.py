@@ -46,7 +46,8 @@ def test_partition(tmp_path: Path) -> None:
     assert Run(meg(tmp_path)).partition is Partition.VALIDATION
     assert Run(meg(tmp_path, "sub-0_ses-1_task-Sherlock1_run-1")).partition is Partition.TRAIN
     assert Run(meg(tmp_path, POOLED)).partition is Partition.POOL
-    assert Run(meg(tmp_path, OTHER)).partition is Partition.TRAIN
+    assert Run(meg(tmp_path, OTHER)).partition is Partition.TEST
+    assert Run(meg(tmp_path, "sub-12_ses-1_task-Sherlock1_run-1")).partition is Partition.TRAIN
 
 
 def test_discover(tmp_path: Path) -> None:

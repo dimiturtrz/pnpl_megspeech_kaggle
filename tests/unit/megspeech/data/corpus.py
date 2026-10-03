@@ -116,8 +116,8 @@ def test_heard(tmp_path: Path) -> None:
     assert heard["word"].tolist() == ["the", "zebra", "a"]
     assert Corpus.heard(DataConfig().run_cache(root), found, DataConfig(extra=1)).empty
     pooled = Corpus.heard(DataConfig().run_cache(root), found, DataConfig(subjects=(0, 3)))
-    assert pooled["word"].tolist() == ["the", "zebra", "a", "the"]
-    assert pooled["weight"].tolist() == [1.0] * 4
+    assert pooled["word"].tolist() == ["the", "zebra", "a"]
+    assert pooled["weight"].tolist() == [1.0] * 3
 
 
 @pytest.mark.parametrize(
@@ -164,5 +164,5 @@ def test_load(tmp_path: Path) -> None:
     assert set(widened.validation) == {"Sherlock1", "Sherlock+"}
     assert widened.seen == frozenset()
     pooled = Corpus.load(DataConfig(subjects=(0, 3)), corpus_root(tmp_path / "pooled"), CPU)
-    assert pooled.train.y.tolist() == [THE, IGNORE, A, THE]
+    assert pooled.train.y.tolist() == [THE, IGNORE, A]
     assert set(pooled.validation) == {"Sherlock1"}

@@ -31,8 +31,8 @@ def test_trains_on(tmp_path: Path) -> None:
     assert [DataConfig(refit=True).trains_on(r) for r in (sherlock, held)] == [True, True]
     other, pooled = Run(tmp_path / OTHER), Run(tmp_path / POOLED)
     assert [DataConfig().trains_on(r) for r in (other, pooled)] == [False, False]
-    assert [DataConfig(subjects=(0, 3)).trains_on(r) for r in (sherlock, other, pooled)] == [True, True, False]
-    assert not DataConfig(subjects=(0, 3), refit=True).trains_on(pooled)
+    assert [DataConfig(subjects=(0, 3)).trains_on(r) for r in (sherlock, other, pooled)] == [True, False, False]
+    assert not any(DataConfig(subjects=(0, 3), refit=True).trains_on(r) for r in (other, pooled))
 
 
 def runs(path: Path) -> list[Run]:
@@ -72,7 +72,7 @@ def test_trained(tmp_path: Path) -> None:
     assert len(DataConfig(extra=1, refit=True).trained(every)) == len(every)
     assert DataConfig(extra=1).trained(subjects(tmp_path)) == DataConfig(extra=1).trained(every)
     pooled = DataConfig(subjects=(0, 3)).trained(subjects(tmp_path))
-    assert [r.name for r in pooled if r.subject] == ["sub-3_ses-12_task-Sherlock1_run-1"]
+    assert not [r for r in pooled if r.subject]
 
 
 def test_trained_folds(tmp_path: Path) -> None:
