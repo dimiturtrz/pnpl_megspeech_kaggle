@@ -37,6 +37,7 @@ class Holdout:
 
 class Cache:
     standardised: list[bool]
+    alignment: list[object]
 
     @classmethod
     def of(cls, *_: object) -> "Cache":
@@ -45,8 +46,9 @@ class Cache:
     def build(self) -> None:
         pass
 
-    def windows(self, device: torch.device, length: int, *, standardised: bool) -> Windows:
+    def windows(self, device: torch.device, length: int, *, standardised: bool, alignment: object) -> Windows:
         Cache.standardised = [standardised]
+        Cache.alignment = [alignment]
         return Windows.stacked(torch.zeros(3, CHANNELS, length, device=device))
 
 
@@ -60,7 +62,7 @@ def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     data = DataConfig(window=2.0, standardised=True)
     loaded = LoadedModel(DataRoot(tmp_path), Favourite(), data, Evaluator(CPU), torch.zeros(VOCAB_SIZE), Reading.UNSEEN)
     assert HoldoutWriter(Track.BROAD).write(loaded, 0.5, tmp_path / "s.csv") == tmp_path / "s.csv"
-    assert (tracks, Cache.standardised) == ([Track.BROAD], [True])
+    assert (tracks, Cache.standardised, Cache.alignment) == ([Track.BROAD], [True], [None])
     assert written["p"].shape == (3, VOCAB_SIZE)
     assert (written["p"].argmax(axis=1) == VOCAB_SIZE - 1).all()
     assert np.allclose(written["s"], 1 / len(SECONDARY.words))

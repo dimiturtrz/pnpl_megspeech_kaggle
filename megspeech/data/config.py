@@ -7,11 +7,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
+import numpy as np
 import torch
 
 from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.alignment import EVERY, Alignment
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.holdout import HoldoutCache, Track
 from megspeech.data.cache.run_cache import RunCache
@@ -127,11 +129,21 @@ class DataConfig:
         """The run cache training reads, at `decimate`."""
         return RunCache.under(root.processed(), self.decimate, self.cleaning)
 
-    def holdout(self, root: DataRoot, track: Track, device: torch.device | str) -> Windows:
-        """`track`'s holdout windows as this config reads them, its cache built first if missing."""
+    def holdout(
+        self, root: DataRoot, track: Track, device: torch.device | str, alignment: Alignment | None = None
+    ) -> Windows:
+        """`track`'s holdout windows as this config reads them, its cache built first if missing, every other
+        subject's archive re-coloured by `alignment`."""
         cache = HoldoutCache.of(root, self.decimate, track, self.cleaning)
         cache.build()
-        return self.reading(cache.windows(device, self.samples, standardised=self.standardised))
+        windows = cache.windows(device, self.samples, standardised=self.standardised, alignment=alignment)
+        return self.reading(windows)
+
+    def alignment(self, root: DataRoot, device: torch.device | str) -> Alignment:
+        """Subject 0's sensor reference in this config's cache, from every `EVERY`th of its training runs."""
+        cache = self.run_cache(root)
+        reference = [run for run in self.trained(Run.discover(root.raw())) if run.subject == DEEP][::EVERY]
+        return Alignment.of([np.load(cache.path(run.name), mmap_mode="r") for run in reference], device)
 
     def weight(self, run: Run) -> float:
         """`run`'s sampling weight: `read_weight` for a read-sentence task, `narrator_weight` for `NARRATOR`'s

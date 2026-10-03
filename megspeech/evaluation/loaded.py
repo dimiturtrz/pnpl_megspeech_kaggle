@@ -12,6 +12,7 @@ from torch import Tensor, nn
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import Features, Split
+from megspeech.data.cache.alignment import Alignment
 from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.corpus import Corpus
@@ -60,6 +61,9 @@ class Scoring:
     reading: Reading = Reading.OWN
     balance: Sinkhorn = Sinkhorn()
     shifts: tuple[int, ...] = (0,)
+    aligned: bool = False
+    """Re-colour every other subject's recording to subject 0's sensor covariance (`Alignment`) before the model
+    reads it: +0.040 on the Broad ruler for a subject-0 model (0.499 -> 0.539, n=25322, megspeech-7gf.56)."""
 
 
 @dataclass(frozen=True)
@@ -73,6 +77,7 @@ class LoadedModel:
     log_prior: Float[Tensor, " v"]
     reading: Reading = Reading.OWN
     names: tuple[str, ...] = ()
+    alignment: Alignment | None = None
 
     @classmethod
     def of(cls, root: DataRoot, names: list[str], scoring: Scoring, device: torch.device) -> "LoadedModel":
@@ -93,7 +98,9 @@ class LoadedModel:
             shifts=scoring.shifts,
         )
         prior = Corpus.prior(heard, data).to(device)
-        return cls(root, model, data, evaluator, prior, scoring.reading, tuple(d.name for d in directories))
+        alignment = data.alignment(root, device) if scoring.aligned else None
+        named = tuple(d.name for d in directories)
+        return cls(root, model, data, evaluator, prior, scoring.reading, named, alignment)
 
     @staticmethod
     def members(models: Path, name: str) -> list[Path]:
@@ -106,7 +113,9 @@ class LoadedModel:
         """`runs` on the device, and their words keyed by `Text` and cut as the model's grouping cuts them."""
         cache = self.data.run_cache(self.root)
         names = [run.name for run in runs]
-        source = DeviceRecording.load(cache, self.evaluator.device, names, standardised=self.data.standardised)
+        source = DeviceRecording.load(
+            cache, self.evaluator.device, names, standardised=self.data.standardised, alignment=self.alignment
+        )
         return source, Corpus.words(Text.of(source.words).words, self.data.grouping, self.data.rate)
 
     @property

@@ -27,6 +27,7 @@ from pnpl.competition.holdout import DEEP_SUBJECTS, HOLDOUT_SUBDIR, TRACKS, Libr
 
 from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.alignment import Alignment
 from megspeech.data.cache.cleaning import UNCHANGED, Cleaner, Cleaning
 from megspeech.data.cache.run_cache import DeviceRecording, RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
@@ -170,11 +171,19 @@ class HoldoutCache:
             LOG.info("%s", self.cache.write(archive.name, partial(archive.signal, self.cache, clean)).name)
         return self.cache.publish(pd.concat([archive.words(self.cache) for archive in archives], ignore_index=True))
 
-    def windows(self, device: torch.device | str, length: int, *, standardised: bool = False) -> Windows:
+    def windows(
+        self,
+        device: torch.device | str,
+        length: int,
+        *,
+        standardised: bool = False,
+        alignment: Alignment | None = None,
+    ) -> Windows:
         """Every holdout row's `length`-sample window, in canonical order, from the built cache, each archive
-        `standardised` on its own if asked."""
+        re-coloured by `alignment` and `standardised` on its own if asked."""
         names = [archive.name for archive in self.archives()]
-        return DeviceRecording.load(self.cache, device, names, standardised=standardised).windows(length)
+        recording = DeviceRecording.load(self.cache, device, names, standardised=standardised, alignment=alignment)
+        return recording.windows(length)
 
 
 def main() -> None:

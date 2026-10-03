@@ -2,6 +2,7 @@ import dataclasses
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 
@@ -140,6 +141,20 @@ def test_holdout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     windows = DataConfig(lead=0.1, baseline=0.5).holdout(root, Track.DEEP, "cpu")
     assert len(windows) == 1 + len(ONSETS) + WORD_EPOCHS
     assert (windows.length, windows.offset, windows.baseline) == (RATE + 5, -5, round(0.5 * RATE))
+
+
+def test_alignment(tmp_path: Path) -> None:
+    root = DataRoot(tmp_path)
+    cache = DataConfig().run_cache(root).ready()
+    signal = np.random.default_rng(0).normal(5.0, 1.0, (3, 4000)).astype(np.float16)
+    for run in (*runs(root.raw() / "meg"), Run(root.raw() / "meg" / OTHER)):
+        for path in (run.events, run.meg):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("onset\n")
+        np.save(cache / f"{run.name}.npy", signal if run.subject == 0 else 100 * signal)
+    alignment = DataConfig().alignment(root, "cpu")
+    assert alignment.root.shape == (3, 3)
+    assert torch.allclose(alignment.median, torch.full((3, 1), 5.0), atol=0.1)
 
 
 def record(directory: Path, config: dict[str, object]) -> Path:

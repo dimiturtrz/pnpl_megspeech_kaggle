@@ -31,6 +31,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.alignment import Alignment
 from megspeech.data.cache.cleaning import Cleaner, Cleaning
 from megspeech.data.constants import DECIMATE, HALF, MISSING, PICO, RATE, SFREQ, WORKERS
 from megspeech.data.raw.runs import Run
@@ -217,16 +218,19 @@ class DeviceRecording:
         names: Sequence[str] | None = None,
         *,
         standardised: bool = False,
+        alignment: Alignment | None = None,
     ) -> "DeviceRecording":
         """Load the named runs (default: every cached run) into one preallocated tensor, one run at a time, each
-        `standardised` on its own if asked."""
+        another subject's re-coloured by `alignment` and `standardised` on its own if asked."""
         chosen = tuple(names) if names is not None else tuple(sorted(path.stem for path in cache.cache.glob("*.npy")))
         stored = [np.load(cache.path(name), mmap_mode="r") for name in chosen]
         offsets = np.r_[0, np.cumsum([signal.shape[1] for signal in stored])].astype(np.int64)
         meg = torch.empty((stored[0].shape[0], int(offsets[-1])), dtype=torch.float16, device=device)
-        for begin, signal in zip(offsets, stored, strict=False):
+        for begin, signal, name in zip(offsets, stored, chosen, strict=False):
             run = meg[:, begin : begin + signal.shape[1]]
             run.copy_(torch.from_numpy(np.array(signal)))
+            if alignment is not None and alignment.applies(name):
+                alignment.align(run)
             if standardised:
                 cls.standardise(run)
         words = cache.table(chosen)
