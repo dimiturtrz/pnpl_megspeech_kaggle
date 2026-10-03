@@ -36,9 +36,14 @@ class Alignment:
     median: Float[Tensor, "c 1"]
     spread: Float[Tensor, "c 1"]
     root: Float[Tensor, "c c"]
+    exempt: tuple[str, ...] = UNALIGNED
+    """Prefixes of the runs left as recorded: subject 0's for a model trained on them unaligned, none for one trained
+    on aligned runs."""
 
     @classmethod
-    def of(cls, runs: Sequence[Float[np.ndarray, "c s"]], device: torch.device | str) -> "Alignment":
+    def of(
+        cls, runs: Sequence[Float[np.ndarray, "c s"]], device: torch.device | str, exempt: tuple[str, ...] = UNALIGNED
+    ) -> "Alignment":
         """Subject 0's reference from its training `runs`: the median of their medians and ranges, the mean of their
         covariances."""
         signals = [torch.from_numpy(np.asarray(run[:, ::STRIDE], dtype=np.float32)).to(device) for run in runs]
@@ -46,7 +51,7 @@ class Alignment:
         median = torch.stack(medians).median(0).values
         spread = torch.stack(spreads).median(0).values
         covariance = torch.stack([cls.covariance((s - m) / spread) for s, m in zip(signals, medians, strict=True)])
-        return cls(median, spread, cls.power(covariance.mean(0), 0.5))
+        return cls(median, spread, cls.power(covariance.mean(0), 0.5), exempt)
 
     @staticmethod
     def robust(x: Float[Tensor, "c s"]) -> tuple[Float[Tensor, "c 1"], Float[Tensor, "c 1"]]:
@@ -71,10 +76,9 @@ class Alignment:
         scaled = torch.where(kept, values.clamp_min(values.max() * FLOOR) ** exponent, torch.zeros_like(values))
         return (vectors * scaled) @ vectors.T
 
-    @staticmethod
-    def applies(name: str) -> bool:
-        """Whether run `name` is another subject's: subject 0's own runs are the reference and stay as recorded."""
-        return not name.startswith(UNALIGNED)
+    def applies(self, name: str) -> bool:
+        """Whether run `name` is re-coloured: every run but the `exempt`."""
+        return not name.startswith(self.exempt)
 
     @torch.no_grad()
     def align(self, run: Float[Tensor, "c s"]) -> None:

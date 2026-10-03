@@ -41,7 +41,8 @@ class Corpus:
         trained, held = data.trained(runs), data.held(runs)
         reading = [r.name for r in trained] + [r.name for group in held.values() for r in group]
         names = list(dict.fromkeys(reading))
-        source = DeviceRecording.load(cache, device, names, standardised=data.standardised)
+        alignment = data.alignment(root, device) if data.aligned else None
+        source = DeviceRecording.load(cache, device, names, standardised=data.standardised, alignment=alignment)
         table = source.words.assign(position=source.words.groupby("run").cumcount())
         words = cls.words(table, data.grouping, data.rate)
         weights = {r.name: data.weight(r) for r in trained}

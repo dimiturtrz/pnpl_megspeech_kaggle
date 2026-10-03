@@ -1,3 +1,5 @@
+import dataclasses
+
 import numpy as np
 import torch
 
@@ -54,7 +56,9 @@ def test_power() -> None:
 
 def test_applies() -> None:
     names = ("sub-0_ses-1_task-Sherlock1_run-1", "subj00_holdout01_sentence", "sub-10_ses-1_task-Sherlock1_run-1")
-    assert [Alignment.applies(name) for name in (*names, "subj01_holdout2_word")] == [False, False, True, True]
+    alignment, _ = reference()
+    assert [alignment.applies(name) for name in (*names, "subj01_holdout2_word")] == [False, False, True, True]
+    assert all(dataclasses.replace(alignment, exempt=()).applies(name) for name in names)
 
 
 def test_align() -> None:

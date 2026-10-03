@@ -13,7 +13,7 @@ import torch
 from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.batching.windows import Windows
-from megspeech.data.cache.alignment import EVERY, Alignment
+from megspeech.data.cache.alignment import EVERY, UNALIGNED, Alignment
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.holdout import HoldoutCache, Track
 from megspeech.data.cache.run_cache import RunCache
@@ -81,6 +81,9 @@ class DataConfig:
     cleaning: Cleaning = Cleaning.NONE
     """Artifacts removed from every recording before it is cached (`megspeech.data.cache.cleaning`): which cache
     training and the holdout read."""
+    aligned: bool = False
+    """Every recording, subject 0's own included, re-coloured to subject 0's mean sensor covariance (`Alignment`) in
+    training, validation and holdout alike: one sensor geometry the model learns in and every subject meets it in."""
 
     def __post_init__(self) -> None:
         if not 0 <= self.fold < self.folds:
@@ -140,10 +143,12 @@ class DataConfig:
         return self.reading(windows)
 
     def alignment(self, root: DataRoot, device: torch.device | str) -> Alignment:
-        """Subject 0's sensor reference in this config's cache, from every `EVERY`th of its training runs."""
+        """Subject 0's sensor reference in this config's cache, from every `EVERY`th of its training runs: every
+        run re-coloured to it when `aligned`, else every other subject's."""
         cache = self.run_cache(root)
         reference = [run for run in self.trained(Run.discover(root.raw())) if run.subject == DEEP][::EVERY]
-        return Alignment.of([np.load(cache.path(run.name), mmap_mode="r") for run in reference], device)
+        signals = [np.load(cache.path(run.name), mmap_mode="r") for run in reference]
+        return Alignment.of(signals, device, () if self.aligned else UNALIGNED)
 
     def weight(self, run: Run) -> float:
         """`run`'s sampling weight: `read_weight` for a read-sentence task, `narrator_weight` for `NARRATOR`'s

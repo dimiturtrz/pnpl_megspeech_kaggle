@@ -155,6 +155,8 @@ def test_alignment(tmp_path: Path) -> None:
     alignment = DataConfig().alignment(root, "cpu")
     assert alignment.root.shape == (3, 3)
     assert torch.allclose(alignment.median, torch.full((3, 1), 5.0), atol=0.1)
+    assert not alignment.applies(runs(root.raw())[0].name)
+    assert DataConfig(aligned=True).alignment(root, "cpu").applies(runs(root.raw())[0].name)
 
 
 def record(directory: Path, config: dict[str, object]) -> Path:
