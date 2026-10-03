@@ -90,12 +90,9 @@ class Ica:
         kinds = np.array(self.types)
         return {kind: REJECT * float(np.median(swing[kinds == kind].max(axis=0))) for kind in set(self.types)}
 
-    def __call__(self, meg: Float[np.ndarray, "c t"]) -> Float[np.ndarray, "c t"]:
-        """`meg` without the components that track the synthetic ECG or the frontal magnetometers."""
-        info = mne.create_info(list(self.names), SFREQ, list(self.types), verbose="error")
-        signal = meg.astype(np.float64)
-        raw = mne.io.RawArray(signal, info, verbose="error")
-        highpassed = mne.filter.filter_data(signal, SFREQ, HIGHPASS, None, verbose="error")
+    def _fitted(self, raw: mne.io.RawArray) -> mne.preprocessing.ICA:
+        """The ICA of `raw`'s high-passed copy, its outlying stretches dropped."""
+        highpassed = mne.filter.filter_data(raw.get_data(), SFREQ, HIGHPASS, None, copy=False, verbose="error")
         ica = mne.preprocessing.ICA(
             n_components=VARIANCE,
             method="infomax",
@@ -104,19 +101,31 @@ class Ica:
             random_state=0,
             verbose="error",
         )
-        ica.fit(
-            mne.io.RawArray(highpassed, info, verbose="error"),
+        reject = self.rejection(highpassed)
+        return ica.fit(
+            mne.io.RawArray(highpassed, raw.info, verbose="error"),
             decim=DECIM,
-            reject=self.rejection(highpassed),
+            reject=reject,
             tstep=SPAN,
             verbose="error",
         )
+
+    @staticmethod
+    def _energy(meg: Float[np.ndarray, "c t"]) -> Float[np.ndarray, " n"]:
+        """Each `SPAN`-long stretch's first-difference energy."""
+        return np.square(Ica.stretches(np.diff(meg, axis=1))).sum(axis=(0, 2), dtype=np.float64)
+
+    def __call__(self, meg: Float[np.ndarray, "c t"]) -> Float[np.ndarray, "c t"]:
+        """`meg` without the components that track the synthetic ECG or the frontal magnetometers."""
+        info = mne.create_info(list(self.names), SFREQ, list(self.types), verbose="error")
+        raw = mne.io.RawArray(meg.astype(np.float64), info, verbose="error")
+        ica = self._fitted(raw)
         cardiac, _ = ica.find_bads_ecg(raw, method="correlation", threshold=ECG_Z, verbose="error")
         ocular, _ = ica.find_bads_eog(raw, ch_name=list(FRONTAL), verbose="error")
         ica.exclude = sorted(set(cardiac) | set(ocular))
         cleaned = ica.apply(raw, verbose="error").get_data().astype(meg.dtype)
-        change, before = (np.square(Ica.stretches(np.diff(x.astype(np.float64), axis=1))) for x in (meg - cleaned, meg))
-        removed = float(np.median(change.sum(axis=(0, 2)) / before.sum(axis=(0, 2))))
+        del raw
+        removed = float(np.median(Ica._energy(meg - cleaned) / Ica._energy(meg)))
         LOG.info(
             "ICA %d components, ECG %d, EOG %d excluded, median stretch lost %.3f of its first-difference energy",
             ica.n_components_,
