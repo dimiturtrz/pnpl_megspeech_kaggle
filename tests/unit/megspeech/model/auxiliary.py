@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from megspeech.data.constants import CHANNELS
-from megspeech.model.auxiliary import WithAuxiliary
+from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.config import ContextConfig
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig
@@ -34,6 +34,20 @@ def test_forward() -> None:
     assert projected.shape == (2, 3, DIM)
     assert phonetic.shape == (2, 3, 5)
     assert len(WithAuxiliary(model, nn.ModuleList()).forward(*inputs)) == 2
+    tapped = WithAuxiliary(model, nn.ModuleList([nn.Identity()]), Tap.CONTEXT).eval().forward(*inputs)
+    h, _ = model.features(*inputs)
+    assert torch.equal(tapped[2], model.refine(h, SLOT < 3))
+
+
+def test_width() -> None:
+    model = net()
+    assert [tap.width(model) for tap in Tap] == [model.words.width, 16]
+
+
+def test_pick() -> None:
+    slots, refined = torch.zeros(2, 3, 4), torch.ones(2, 3, 16)
+    assert Tap.WORD.pick(slots, refined) is slots
+    assert Tap.CONTEXT.pick(slots, refined) is refined
 
 
 def test_readouts() -> None:

@@ -102,7 +102,22 @@ class SentenceNet(nn.Module):
         self, h: Float[Tensor, "g w h"], slots: Float[Tensor, "g w e"], mask: Bool[Tensor, "g w"]
     ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
         """The context head's logits over `h` refined across its span's `mask`ed positions, and the word head's."""
-        return self.head(self.context(h, src_key_padding_mask=~mask)), self.words.head(slots)
+        return self.read(self.refine(h, mask), slots)
+
+    def refine(self, h: Float[Tensor, "g w h"], mask: Bool[Tensor, "g w"]) -> Float[Tensor, "g w h"]:
+        """`h` refined across its span's `mask`ed positions: what the context head reads."""
+        return self.context(h, src_key_padding_mask=~mask)
+
+    def read(
+        self, refined: Float[Tensor, "g w h"], slots: Float[Tensor, "g w e"]
+    ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
+        """The context head's logits over the `refined` positions, and the word head's over their `slots`."""
+        return self.head(refined), self.words.head(slots)
+
+    @property
+    def width(self) -> int:
+        """Width of the refined positions the context head reads."""
+        return self.project.out_features
 
     def readouts(self) -> tuple[nn.Module, ...]:
         """The modules reading each of `forward`'s outputs, in order: the context head, then the word head."""

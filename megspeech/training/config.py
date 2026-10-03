@@ -8,6 +8,7 @@ from pathlib import Path
 from core.tree import Tree
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.evaluation.scoring.score import Epoch, SelectionConfig
+from megspeech.model.auxiliary import Tap
 from megspeech.model.config import CONTEXT, ContextConfig
 from megspeech.training.regularise.augment import Augment
 
@@ -43,6 +44,9 @@ class OptimConfig:
     speech_centred: bool = False
     """Centre each run's speech targets on its own mean (`Targets.centred`), removing the direction every target
     shares: raw, two random targets' cosine is ~0.6, so the L2-normalised SigLIP target is mostly that one direction."""
+    tap: Tap = Tap.WORD
+    """What every auxiliary head reads: the encoder's word embedding, or the span transformer's output at the word
+    (d'Ascoli et al. train that output of every heard word toward t5; the context head alone sees only the 50's)."""
     positions: int = 1
     """Leading phonemes the phonetic auxiliary classifies, up to `megspeech.data.labels.phonemes.POSITIONS`: a 0.5 s
     window hears ~4 of ~0.1 s, and 1 is the onset phoneme alone."""

@@ -91,6 +91,28 @@ def test_classify() -> None:
     assert all(torch.equal(a, b) for a, b in zip(whole, split, strict=True))
 
 
+def test_refine() -> None:
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
+    h = torch.randn(2, 3, CONTEXT.width, generator=GENERATOR)
+    mask = torch.tensor([[True, True, False], [True, False, False]])
+    refined = model.refine(h, mask)
+    assert refined.shape == h.shape
+    assert torch.equal(model.refine(h.where(mask[..., None], 7.0), mask)[mask], refined[mask])
+
+
+def test_read() -> None:
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
+    refined = torch.randn(2, 3, CONTEXT.width, generator=GENERATOR)
+    slots = torch.randn(2, 3, model.words.width, generator=GENERATOR)
+    context, word = model.read(refined, slots)
+    assert torch.equal(context, model.head(refined))
+    assert torch.equal(word, model.words.head(slots))
+
+
+def test_width() -> None:
+    assert SentenceNet(nn.Identity(), CONTEXT).width == CONTEXT.width
+
+
 def test_features_read_each_subject_through_its_layer() -> None:
     model = SentenceNet(nn.Identity(), replace(CONTEXT, subjects=2)).eval()
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])

@@ -9,7 +9,7 @@ from torch import nn
 
 from core.paths import DataRoot
 from megspeech.data.labels.phonemes import Pronunciation
-from megspeech.model.auxiliary import WithAuxiliary
+from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.config import ContextConfig
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig
@@ -66,6 +66,9 @@ def test_joint_trained() -> None:
     assert isinstance(trained, WithAuxiliary)
     assert trained.net is model
     assert len(trained.heads) == 2
+    tapped = Joint((semantic(),), Tap.CONTEXT).trained(model, identity)
+    assert tapped.tap is Tap.CONTEXT
+    assert tapped.heads[0](torch.zeros(1, model.width)).shape == (1, DIM)
 
 
 def test_of(tmp_path: Path) -> None:
@@ -80,6 +83,8 @@ def test_of(tmp_path: Path) -> None:
     made = Auxiliary.of(OptimConfig(semantic=0.5), root, CPU, WORDS)
     assert isinstance(made, Joint)
     assert [type(t) for t in made.terms] == [SemanticTerm]
+    assert made.tap is Tap.WORD
+    assert cast("Joint", Auxiliary.of(OptimConfig(semantic=0.5, tap=Tap.CONTEXT), root, CPU, WORDS)).tap is Tap.CONTEXT
     both = Auxiliary.of(OptimConfig(semantic=0.5, phonetic=1.0), root, CPU, WORDS)
     assert [type(t) for t in both.terms] == [SemanticTerm, PhoneticTerm]
     assert both.terms[1].weight == 1.0

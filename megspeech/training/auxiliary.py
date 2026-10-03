@@ -12,7 +12,7 @@ from torch import nn
 
 from core.paths import DataRoot
 from megspeech.data.labels.phonemes import Pronunciation
-from megspeech.model.auxiliary import WithAuxiliary
+from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
@@ -57,7 +57,7 @@ class Auxiliary(ABC):
             ),
         )
         terms = tuple(build() for weight, build in builders if weight)
-        return Joint(terms) if terms else NoAuxiliary()
+        return Joint(terms, optim.tap) if terms else NoAuxiliary()
 
 
 @dataclass(frozen=True)
@@ -73,9 +73,11 @@ class NoAuxiliary(Auxiliary):
 
 @dataclass(frozen=True)
 class Joint(Auxiliary):
-    """The sentence model wrapped with one head per term (`WithAuxiliary`)."""
+    """The sentence model wrapped with one head per term (`WithAuxiliary`), each reading its `tap`."""
+
+    tap: Tap = Tap.WORD
 
     @override
     def trained(self, net: SentenceNet, compiled: Callable[[WithAuxiliary], WithAuxiliary]) -> WithAuxiliary:
-        heads = nn.ModuleList(term.head(net.words.width) for term in self.terms)
-        return compiled(WithAuxiliary(net, heads))
+        heads = nn.ModuleList(term.head(self.tap.width(net)) for term in self.terms)
+        return compiled(WithAuxiliary(net, heads, self.tap))
