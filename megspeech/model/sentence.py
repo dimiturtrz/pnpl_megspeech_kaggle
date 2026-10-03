@@ -34,6 +34,7 @@ class SentenceNet(nn.Module):
         self.project = nn.Linear(self.words.width, context.width)
         self.clock = context.clock
         self.onsets = OnsetEncoding(context)
+        self.intervals = context.intervals
         self.context = self.mixer(context)
         self.head = context.objective.head(context.width, prototypes)
 
@@ -72,7 +73,9 @@ class SentenceNet(nn.Module):
         scaled = self.words.normalise(self.subjects(self.scale(x), subject), x.ne(0).any(dim=1, keepdim=True))
         embedded = self.words.embed(scaled, valid[:rows])
         slots = nn.functional.pad(embedded, (0, 0, 0, 1))[slot]
-        return self.project(slots) + self.onsets(self.clock.times(onset, slot < rows)), slots
+        mask = slot < rows
+        timing = self.onsets(self.clock.times(onset, mask), self.intervals.features(onset, mask))
+        return self.project(slots) + timing, slots
 
     def classify(
         self, h: Float[Tensor, "g w h"], slots: Float[Tensor, "g w e"], mask: Bool[Tensor, "g w"]

@@ -3,8 +3,9 @@ from pathlib import Path
 
 import torch
 
+from megspeech.model.intervals import HOLDOUT_GAP, Intervals
 from megspeech.model.onsets import CONTEXT as DEFAULT
-from megspeech.model.onsets import FILE, HOLDOUT_GAP, Clock, ContextConfig, OnsetEncoding
+from megspeech.model.onsets import FILE, Clock, ContextConfig, OnsetEncoding
 from megspeech.model.wordnet import ConvConfig
 from megspeech.objective.heads import Objective
 
@@ -12,9 +13,13 @@ CONTEXT = ContextConfig(width=16, timescales=4)
 
 
 def test_onset_encoding_forward() -> None:
-    out = OnsetEncoding(CONTEXT).forward(torch.tensor([[0.0, 0.3], [0.0, 0.0]]))
+    onset = torch.tensor([[0.0, 0.3], [0.0, 0.0]])
+    out = OnsetEncoding(CONTEXT).forward(onset, Intervals.NONE.features(onset, onset.ge(0)))
     assert out.shape == (2, 2, CONTEXT.width)
     assert torch.equal(out[0, 0], out[1, 1])
+    timed = ContextConfig(width=16, timescales=4, intervals=Intervals.LOG)
+    mask = torch.ones(2, 2, dtype=torch.bool)
+    assert OnsetEncoding(timed).forward(onset, Intervals.LOG.features(onset, mask)).shape == (2, 2, 16)
 
 
 def test_save(tmp_path: Path) -> None:
@@ -31,6 +36,9 @@ def test_load(tmp_path: Path) -> None:
     retrieval = ContextConfig(objective=Objective.SIGLIP)
     retrieval.save(tmp_path)
     assert ContextConfig.load(tmp_path).objective is Objective.SIGLIP
+    timed = ContextConfig(intervals=Intervals.LOG)
+    timed.save(tmp_path)
+    assert ContextConfig.load(tmp_path).intervals is Intervals.LOG
 
 
 def test_times() -> None:

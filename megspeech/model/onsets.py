@@ -13,11 +13,9 @@ from torch import Tensor, nn
 
 from core.tree import Tree
 from megspeech.model.encoder import Encoder
+from megspeech.model.intervals import HOLDOUT_GAP, Intervals
 from megspeech.model.wordnet import CONV, ConvConfig
 from megspeech.objective.heads import Objective
-
-HOLDOUT_GAP = 0.21
-"""Median seconds between consecutive vocabulary words in a holdout sentence."""
 
 
 class Clock(StrEnum):
@@ -42,6 +40,8 @@ class ContextConfig:
     """Onset periods span two 50 Hz samples up to a nine-word span at the holdout's widest gap."""
     timescales: int = 16
     clock: Clock = Clock.ONSET
+    intervals: Intervals = Intervals.NONE
+    """Added beside the clock: `log` tells each word its gaps to its neighbours' onsets."""
     objective: Objective = Objective.SOFTMAX
     conv: ConvConfig = CONV
     """The per-word encoder the transformer reads."""
@@ -77,9 +77,10 @@ class OnsetEncoding(nn.Module):
         super().__init__()
         periods = torch.logspace(math.log10(config.shortest), math.log10(config.longest), config.timescales)
         self.register_buffer("frequency", 2 * math.pi / periods)
-        self.project = nn.Linear(2 * config.timescales, config.width)
+        self.project = nn.Linear(2 * config.timescales + config.intervals.width, config.width)
 
     @override
-    def forward(self, onset: Float[Tensor, "g w"]) -> Float[Tensor, "g w d"]:
+    def forward(self, onset: Float[Tensor, "g w"], intervals: Float[Tensor, "g w k"]) -> Float[Tensor, "g w d"]:
+        """`intervals` are read beside the onset's sinusoids (`Intervals.features`)."""
         phase = onset[..., None] * self.frequency
-        return self.project(torch.cat([phase.sin(), phase.cos()], dim=-1))
+        return self.project(torch.cat([phase.sin(), phase.cos(), intervals], dim=-1))
