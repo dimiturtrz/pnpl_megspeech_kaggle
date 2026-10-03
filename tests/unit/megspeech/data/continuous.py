@@ -156,6 +156,20 @@ def test_standardise() -> None:
     run = signal * gain + offset
     Continuous.standardise(run)
     assert torch.allclose(run, signal, atol=1e-5)
+    flat = torch.cat([signal[:1] * 2.0 + 1.0, torch.full((1, 101), 4.0)])
+    Continuous.standardise(flat)
+    assert torch.isfinite(flat).all()
+    assert torch.equal(flat[1], torch.zeros(101))
+    assert torch.allclose(flat[0], signal[0], atol=1e-5)
+
+
+def test_publish(tmp_path: Path) -> None:
+    decimator = Decimator(tmp_path / "cache")
+    decimator.ready()
+    table = pd.DataFrame({"run": ["a"], "onset": [0.5]})
+    assert decimator.publish(table) is table
+    assert pd.read_csv(decimator.cache / WORDS, sep="	").equals(table)
+    assert not list(decimator.cache.glob("*.partial"))
 
 
 def test_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

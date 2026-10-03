@@ -96,11 +96,21 @@ class Tree[T: DataclassInstance]:
             changes[name] = self.build(current, value) if nested else self.coerce(hints[name], value)
         return replace(node, **changes)
 
+    @staticmethod
+    def truth(text: str) -> bool:
+        """`true` or `false`, in any case; `bool` itself reads every non-empty text as true."""
+        truths = {"true": True, "false": False}
+        if text.lower() not in truths:
+            raise ValueError(f"{text!r} is neither true nor false")
+        return truths[text.lower()]
+
     @classmethod
     def coerce(cls, kind: object, value: object) -> object:
         """A JSON or command-line value as the leaf's declared type: text parsed, enums by value, lists as tuples."""
         if get_origin(kind) is tuple and isinstance(value, Iterable) and not isinstance(value, str):
             return tuple(cls.coerce(get_args(kind)[0], item) for item in value)
+        if kind is bool and isinstance(value, str):
+            return cls.truth(value)
         scalar = isinstance(kind, type) and issubclass(kind, StrEnum | int | float | str)
         if scalar and isinstance(value, str | int | float) and not isinstance(value, kind):
             return kind(value)

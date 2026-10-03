@@ -179,15 +179,20 @@ class Split:
 
     def recurring(self, power: float) -> "Split":
         """Each recited span's words reweighted by how often training repeats its text, to the `-power`."""
-        index = self.index.cpu().numpy()
-        token = self.token.cpu().numpy()
+        scale = self.repeats(self.index.cpu().numpy(), self.token.cpu().numpy(), power)
+        return replace(self, weight=self.weight * torch.from_numpy(scale).float().to(self.weight.device))
+
+    @staticmethod
+    def repeats(index: Int[np.ndarray, "g w"], token: Int[np.ndarray, " n"], power: float) -> Float[np.ndarray, " n"]:
+        """Each word's weight from how often its span's text recurs among `index`'s spans, to the `-power`; words of
+        spans shorter than `RECITED` keep 1."""
         rows = [row[row != PAD] for row in index]
         sequences = [tuple(token[row].tolist()) for row in rows]
         counts = Counter(sequences)
         scale = np.ones(len(token))
         for row, sequence in zip(rows, sequences, strict=True):
             scale[row] = counts[sequence] ** -power if len(row) >= RECITED else 1.0
-        return replace(self, weight=self.weight * torch.from_numpy(scale).float().to(self.weight.device))
+        return scale
 
     def dense(self) -> Int[Tensor, " d"]:
         """Labelled words in spans at least `DENSE` long — the holdout-like subset."""

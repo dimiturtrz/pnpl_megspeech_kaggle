@@ -2,6 +2,7 @@ import json
 import logging
 import math
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import override
 
@@ -13,12 +14,14 @@ from torch import nn
 
 from core.paths import DataRoot
 from megspeech.data.continuous import WORDS as TABLE
-from megspeech.data.corpus import DataConfig
+from megspeech.data.corpus import METRICS, DataConfig
+from megspeech.data.features import FEATURES
 from megspeech.data.runs import CHANNELS, Run
 from megspeech.data.vocabulary import PRIMARY, WORDS
 from megspeech.evaluation import pooling as module
+from megspeech.evaluation.balance import Sinkhorn
 from megspeech.evaluation.overlap import RULER
-from megspeech.evaluation.pooling import CHANCE, Equal, Pool, Pooling, Reliable, main
+from megspeech.evaluation.pooling import CHANCE, Equal, Pool, Pooling, Reliable, Scoring, main
 from megspeech.evaluation.report import Evaluator
 
 CPU = torch.device("cpu")
@@ -86,15 +89,57 @@ def test_combine() -> None:
     assert torch.allclose(pooled[2], logs[0][2])
 
 
-def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    heard = pd.DataFrame({"run": "r", "sentence": 0, "onset": [0.0, 0.1], "target": [0, 1], "token": [7, 8]})
+def members(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selections: dict[str, int]) -> list[Path]:
+    """Trained runs named by `selections`, each recording its `min_novel`, behind a stubbed word table and model."""
+    heard = pd.DataFrame(
+        {"run": "r", "sentence": 0, "onset": [0.0, 0.1], "target": [0, 1], "token": [7, 8], "weight": 1.0}
+    )
     monkeypatch.setattr(module.Corpus, "heard", classmethod(lambda *_: heard))
     monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: []))
     monkeypatch.setattr(module.Ensemble, "load", classmethod(lambda *_: Favourite()))
-    monkeypatch.setattr(module.DataConfig, "shared", classmethod(lambda *_: DataConfig()))
+    directories = [DataRoot(tmp_path).models() / name for name in selections]
+    for directory, min_novel in zip(directories, selections.values(), strict=True):
+        directory.mkdir(parents=True)
+        config: dict[str, dict[str, int]] = {"data": {}, "selection": {"min_novel": min_novel}}
+        (directory / METRICS).write_text(json.dumps({"config": config}))
+    return directories
+
+
+def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    members(tmp_path, monkeypatch, {"m": 3})
     built = Pooling.of(DataRoot(tmp_path), "m", DataConfig().grouping, CPU)
     assert built.evaluator.seen == frozenset({(7, 8)})
+    assert built.evaluator.min_novel == 3
     assert built.log_prior.shape == (WORDS,)
+
+
+def test_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Members are scored by the prior training drew and the selection that counted them, or not at all."""
+    directories = members(tmp_path, monkeypatch, {"a": 5, "b": 5, "c": 7})
+    scoring = Scoring(DataConfig().grouping, CPU, balance=Sinkhorn(2), shifts=(0, 1))
+    built = Pooling.loaded(DataRoot(tmp_path), directories[:2], scoring)
+    expected = torch.tensor([1.0, 1.0] + [0.0] * (WORDS - 2)) + 1
+    assert torch.allclose(built.log_prior, (expected / expected.sum()).log())
+    assert (built.evaluator.min_novel, built.evaluator.balance, built.evaluator.shifts) == (5, Sinkhorn(2), (0, 1))
+    with pytest.raises(ValueError, match="an ensemble needs one"):
+        Pooling.loaded(DataRoot(tmp_path), directories[1:], scoring)
+
+
+def test_features(tmp_path: Path) -> None:
+    assert pooling(tmp_path).features.directory is None
+    frozen = replace(pooling(tmp_path), data=DataConfig(features="frozen"))
+    assert frozen.features.directory == DataRoot(tmp_path).kind("models") / FEATURES / "frozen"
+
+
+def test_split(tmp_path: Path) -> None:
+    """A run reads its MEG windows, or fails loudly where a features model has no features saved for it."""
+    every = runs(tmp_path)
+    tool = pooling(tmp_path)
+    source, words = tool.load(every[2:3])
+    assert len(tool.split(source, words, every[2]).y) == len(SPOKEN)
+    frozen = replace(tool, data=DataConfig(features="frozen"))
+    with pytest.raises(FileNotFoundError):
+        frozen.split(source, words, every[2])
 
 
 def test_members(tmp_path: Path) -> None:
@@ -120,6 +165,12 @@ def test_domains(tmp_path: Path) -> None:
     assert set(domains) == {RULER, "TheMoth"}
     assert (reference["run"] == NAMES[0]).all()
     assert len(reference) == len(domains[RULER].y)
+    unruled, empty = pooling(tmp_path).domains({"TheMoth": every[1:2]})
+    assert set(unruled) == {"TheMoth"}
+    assert empty.empty
+    frozen = replace(pooling(tmp_path), data=DataConfig(features="frozen"))
+    with pytest.raises(FileNotFoundError):
+        frozen.domains({"TheMoth": every[1:2]})
 
 
 def test_context(tmp_path: Path) -> None:

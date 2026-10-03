@@ -20,3 +20,7 @@ def test_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     )
     Encoder.MEGXL.build(config)
     assert built == [(DataRoot(tmp_path).foreign("x"), config)]
+
+
+def test_cached() -> None:
+    assert [encoder for encoder in Encoder if encoder.cached] == [Encoder.CACHED, Encoder.RESOLVED]

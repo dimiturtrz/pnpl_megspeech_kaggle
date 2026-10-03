@@ -90,6 +90,14 @@ def test_novel() -> None:
     assert retold.novel(everything).tolist() == list(range(DENSE))
 
 
+def test_repeats() -> None:
+    """A recited text heard twice weighs each of its words half at power 1; a span too short to recite keeps 1."""
+    token = np.array([5, 6, 7, 5, 6, 7, 9, 9])
+    index = np.array([[0, 1, 2], [3, 4, 5], [6, 7, PAD]])
+    assert Split.repeats(index, token, 1.0).tolist() == [0.5] * 6 + [1.0, 1.0]
+    assert Split.repeats(index, token, 0.0).tolist() == [1.0] * 8
+
+
 def test_recurring() -> None:
     onset = np.array([0, 0.1, 0.2, 9, 9.1, 9.2, 20, 20.1, 30, 30.1])
     y = np.array([0, 1, 2, 0, 1, 2, 3, 4, 3, 4])

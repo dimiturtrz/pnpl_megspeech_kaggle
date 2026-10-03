@@ -28,3 +28,16 @@ def test_track() -> None:
     fresh.track(torch.ones(4), torch.ones(4), torch.tensor(2.0))
     assert torch.allclose(fresh.running_mean, torch.full((4,), 0.1))
     assert torch.allclose(fresh.running_var, torch.full((4,), 1.1))
+
+
+def test_track_skips_empty() -> None:
+    fresh = MaskedBatchNorm1d(4)
+    for count in (0.0, 1.0):
+        fresh.track(torch.full((4,), float("nan")), torch.full((4,), float("nan")), torch.tensor(count))
+    assert torch.equal(fresh.running_mean, torch.zeros(4))
+    assert torch.equal(fresh.running_var, torch.ones(4))
+    assert int(fresh.num_batches_tracked) == 0
+    padded = MaskedBatchNorm1d(4)
+    padded.forward(torch.randn(3, 4, 7, generator=GENERATOR), torch.zeros(3, dtype=torch.bool))
+    assert torch.isfinite(padded.running_mean).all()
+    assert torch.isfinite(padded.running_var).all()

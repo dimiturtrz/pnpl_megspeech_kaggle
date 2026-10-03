@@ -10,7 +10,7 @@ import torch
 
 from core.paths import DataRoot
 from megspeech.data.continuous import DIRECTORY, RATE, WORDS, Continuous
-from megspeech.data.corpus import METRICS, Corpus, DataConfig
+from megspeech.data.corpus import METRICS, READING, Corpus, DataConfig
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import CHANNELS, Run
 from megspeech.data.vocabulary import IGNORE, PRIMARY
@@ -206,10 +206,54 @@ def test_shared(tmp_path: Path) -> None:
     assert DataConfig.shared([record(tmp_path / "fast", {"data": {"decimate": 2}})], Grouping.SENTENCE).decimate == 2
     led = record(tmp_path / "led", {"data": {"lead": 0.1}})
     assert DataConfig.shared([led], Grouping.SENTENCE).lead == 0.1
-    with pytest.raises(ValueError, match=r"\[\(1.0, False, 0, 0.0, 0.0, 5\), \(2.0, False, 0, 0.0, 0.0, 5\)\]"):
+    with pytest.raises(ValueError, match=r"\(1.0, False, 0, 0.0, 0.0, 5, .*\(2.0, False, 0, 0.0, 0.0, 5, "):
         DataConfig.shared([one, two], Grouping.SENTENCE)
     with pytest.raises(ValueError, match="an ensemble needs one"):
         DataConfig.shared([one, scaled], Grouping.SENTENCE)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("subjects", [0, 3]),
+        ("refit", True),
+        ("features", "frozen"),
+        ("read_weight", 0.5),
+        ("repeat_power", 0.5),
+        ("tasks", ["Sherlock1"]),
+    ],
+)
+def test_shared_reading(tmp_path: Path, field: str, value: object) -> None:
+    """Every `READING` field is carried from the members, and members differing in one cannot share a config."""
+    assert field in READING
+    one = record(tmp_path / "one", {})
+    changed = record(tmp_path / "changed", {"data": {field: value}})
+    carried = getattr(DataConfig.shared([changed, changed], Grouping.SENTENCE), field)
+    assert carried == (tuple(value) if isinstance(value, list) else value)
+    with pytest.raises(ValueError, match="an ensemble needs one"):
+        DataConfig.shared([one, changed], Grouping.SENTENCE)
+
+
+def test_shared_folds(tmp_path: Path) -> None:
+    """Bagged members together trained on every run; a single member keeps the fold it left out."""
+    bagged = [record(tmp_path / f"f{f}", {"data": {"folds": 3, "fold": f}}) for f in range(3)]
+    shared = DataConfig.shared(bagged, Grouping.SENTENCE)
+    assert (shared.folds, shared.fold) == (1, 0)
+    alone = DataConfig.shared(bagged[1:2], Grouping.SENTENCE)
+    assert (alone.folds, alone.fold) == (3, 1)
+
+
+def test_fold_range() -> None:
+    assert DataConfig(folds=3, fold=2).fold == 2
+    for fold in (-1, 3):
+        with pytest.raises(ValueError, match="is not one of the 3 folds"):
+            DataConfig(folds=3, fold=fold)
+
+
+def test_weight(tmp_path: Path) -> None:
+    sherlock = Run(tmp_path / TRAIN)
+    timit = Run(tmp_path / "sub-0_ses-1_task-TIMIT_run-1_meg.h5")
+    assert [DataConfig(read_weight=0.25).weight(r) for r in (sherlock, timit)] == [1.0, 0.25]
 
 
 def test_words(tmp_path: Path) -> None:
@@ -267,6 +311,32 @@ def test_heard(tmp_path: Path) -> None:
     assert Corpus.heard(DataConfig().decimator(root).cache, found, DataConfig(extra=1)).empty
     pooled = Corpus.heard(DataConfig().decimator(root).cache, found, DataConfig(subjects=(0, 3)))
     assert pooled["word"].tolist() == ["the", "zebra", "a", "the"]
+    assert pooled["weight"].tolist() == [1.0] * 4
+
+
+@pytest.mark.parametrize(
+    ("data", "words"),
+    [
+        (DataConfig(refit=True), ["the", "a", "the", "zebra", "a"]),
+        (DataConfig(tasks=("Sherlock2",)), []),
+        (DataConfig(folds=2, fold=0), []),
+        (DataConfig(folds=2, fold=1), ["the", "zebra", "a"]),
+    ],
+)
+def test_heard_trained(tmp_path: Path, data: DataConfig, words: list[str]) -> None:
+    """`heard` is the text of exactly the runs training reads, whatever selects them."""
+    root = corpus_root(tmp_path)
+    found = Run.discover(root.raw())
+    assert Corpus.heard(data.decimator(root).cache, found, data)["word"].tolist() == words
+    assert {r.name for r in data.trained(found)} >= set(Corpus.heard(data.decimator(root).cache, found, data)["run"])
+
+
+@pytest.mark.parametrize("data", [DataConfig(), DataConfig(repeat_power=0.5), DataConfig(subjects=(0, 3))])
+def test_prior(tmp_path: Path, data: DataConfig) -> None:
+    """The prior read from the word table alone is the one training's split counts."""
+    root = corpus_root(tmp_path)
+    heard = Corpus.heard(data.decimator(root).cache, Run.discover(root.raw()), data)
+    assert torch.equal(Corpus.prior(heard, data), Corpus.load(data, root, CPU).train.log_prior())
 
 
 def test_sequences(tmp_path: Path) -> None:

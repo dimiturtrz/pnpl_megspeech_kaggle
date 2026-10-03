@@ -142,8 +142,9 @@ class Survey:
 
     def holdout(self) -> list[Echo]:
         cache = replace(HoldoutCache.of(self.root), subjects=tuple(range(N_SUBJECTS)))
-        onsets = [Onsets(a.epochs()) for a in cache.archives() if a.name.endswith(Source.SENTENCE)]
-        return [onsets[DEEP].echo(other, subject) for subject, other in enumerate(onsets)]
+        sentences = [Onsets(a.epochs()) for a in cache.archives() if a.name.endswith(Source.SENTENCE)]
+        onsets = dict(zip(cache.subjects, sentences, strict=True))
+        return [onsets[DEEP].echo(other, subject) for subject, other in onsets.items()]
 
 
 def main() -> None:
@@ -166,7 +167,7 @@ def main() -> None:
     echoes = survey.holdout()
     for echo in echoes:
         LOG.info("holdout %s", echo)
-    others = echoes[DEEP + 1 :]
+    others = [echo for echo in echoes if echo.subject != DEEP]
     LOG.info(
         "holdout: %d of %d subject-0 sentences matched one-to-one across %d other subjects",
         sum(e.unique for e in others),

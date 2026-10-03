@@ -103,6 +103,20 @@ def test_balanced() -> None:
     assert weight[2:].eq(0).all()
 
 
+def test_state() -> None:
+    """The state trains over `total` steps with the run's anchor and class weights, as `fit` builds it."""
+    optim = OptimConfig(lr=0.01, anchor=0.5, balance=0.5)
+    made = trainer(RunConfig(optim=optim))
+    net = made.model(split())
+    state = made.state(net, split(), 10)
+    assert state.model is net
+    assert state.schedule.state_dict()["total_steps"] == 10
+    assert state.anchor == Anchor.of(0.5, 0.01, 10)
+    assert state.weight is not None
+    assert torch.equal(state.weight, cast(torch.Tensor, made.balanced(split().y)))
+    assert state.rows == split().capacity(optim.batch)
+
+
 def test_step() -> None:
     made = trainer(RunConfig())
     model = made.model(split())

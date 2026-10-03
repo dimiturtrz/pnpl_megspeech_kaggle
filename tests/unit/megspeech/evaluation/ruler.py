@@ -64,6 +64,7 @@ def test_macro() -> None:
     draws = ruler.macro(graded())
     assert draws.shape == (200,)
     assert abs(float(draws.mean()) - ruler.point(graded())) < 0.03
+    assert ruler.macro(Graded({})).isnan().all()
 
 
 def test_delta() -> None:

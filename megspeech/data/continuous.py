@@ -140,7 +140,10 @@ class Decimator:
         with ProcessPoolExecutor(workers) as pool:
             for path in pool.map(self.write, runs):
                 LOG.info("%s", path.name)
-        table = pd.concat([self.words(run) for run in runs], ignore_index=True)
+        return self.publish(pd.concat([self.words(run) for run in runs], ignore_index=True))
+
+    def publish(self, table: pd.DataFrame) -> pd.DataFrame:
+        """Write the cache's word table so that a crash mid-write never leaves a final-named, truncated one."""
         partial = self.cache / f"{WORDS}.partial"
         table.to_csv(partial, sep="\t", index=False)
         partial.replace(self.cache / WORDS)
@@ -194,7 +197,8 @@ class Continuous:
         sample = run[:, :: max(1, run.shape[1] // STANDARDISE_SAMPLE)].float()
         levels = torch.tensor([0.25, 0.5, 0.75], device=run.device)
         low, median, high = torch.quantile(sample, levels, dim=1, keepdim=True)
-        run.copy_((run.float() - median) / (high - low))
+        spread = (high - low).clamp(min=torch.finfo(torch.float32).tiny)
+        run.copy_((run.float() - median) / spread)
 
     @staticmethod
     def table(cache: Path, names: Sequence[str], rate: float = RATE) -> pd.DataFrame:

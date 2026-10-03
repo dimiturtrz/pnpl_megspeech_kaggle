@@ -1,3 +1,6 @@
+import json
+import math
+from pathlib import Path
 from typing import override
 
 import numpy as np
@@ -5,12 +8,13 @@ import pytest
 import torch
 from torch import nn
 
+from megspeech.data.corpus import METRICS
 from megspeech.data.runs import CHANNELS
 from megspeech.data.spans import Spans
 from megspeech.data.split import DENSE, Split
 from megspeech.data.vocabulary import WORDS
 from megspeech.evaluation.balance import Sinkhorn
-from megspeech.evaluation.report import ADJUSTMENTS, Evaluator, Head, Score
+from megspeech.evaluation.report import ADJUSTMENTS, MIN_NOVEL, Evaluator, Head, Score, SelectionConfig
 
 SAMPLES = 50
 CPU = torch.device("cpu")
@@ -78,6 +82,39 @@ def test_mean() -> None:
     assert (macro.tau, macro.n) == (0.0, 10)
     assert macro.bacc10 == pytest.approx(0.4)
     assert macro.by_tau == pytest.approx({0.0: 0.4, 0.5: 0.4, 1.0: 0.2})
+
+
+def test_mean_empty() -> None:
+    """A macro over no counted domain scores nothing rather than a number."""
+    macro = Score.mean([])
+    assert macro.n == 0
+    assert all(math.isnan(value) for value in macro.by_tau.values())
+
+
+def test_average() -> None:
+    assert Score.average(iter([0.2, 0.4])) == pytest.approx(0.3)
+    assert math.isnan(Score.average([]))
+
+
+def selected(directory: Path, config: dict[str, object]) -> Path:
+    directory.mkdir()
+    (directory / METRICS).write_text(json.dumps({"config": config}))
+    return directory
+
+
+def test_saved(tmp_path: Path) -> None:
+    assert SelectionConfig.saved(selected(tmp_path / "old", {})) == SelectionConfig(MIN_NOVEL)
+    assert SelectionConfig.saved(selected(tmp_path / "new", {"selection": {"min_novel": 7}})).min_novel == 7
+
+
+def test_shared(tmp_path: Path) -> None:
+    """Members scored alike share their selection; members that counted domains differently cannot be pooled."""
+    one = selected(tmp_path / "one", {"selection": {"min_novel": 7}})
+    two = selected(tmp_path / "two", {"selection": {"min_novel": 7}})
+    other = selected(tmp_path / "other", {})
+    assert SelectionConfig.shared([one, two]) == SelectionConfig(7)
+    with pytest.raises(ValueError, match="an ensemble needs one"):
+        SelectionConfig.shared([one, other])
 
 
 def test_assess() -> None:

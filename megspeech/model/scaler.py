@@ -31,4 +31,7 @@ class Scaler(nn.Module):
 
     @override
     def forward(self, x: Float[Tensor, "b c t"]) -> Float[Tensor, "b c t"]:
-        return ((x.float() - self.median) / self.spread).clamp(-CLAMP, CLAMP)
+        """Each channel in interquartile ranges from its median; a flat channel's zero range divides as the smallest
+        normal float, so it saturates at the clamp instead of reading NaN."""
+        spread = self.spread.clamp(min=torch.finfo(self.spread.dtype).tiny)
+        return ((x.float() - self.median) / spread).clamp(-CLAMP, CLAMP)

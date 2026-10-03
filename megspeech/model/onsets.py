@@ -52,6 +52,13 @@ class ContextConfig:
     """Depthwise kernel, in words, of a convolution module after each transformer layer (`span.SpanConformer`); 0
     keeps the plain transformer. Holdout sentences run 1-9 words, so 3 mixes each word with its neighbours."""
 
+    def __post_init__(self) -> None:
+        if self.encoder.cached and self.subjects:
+            raise ValueError(
+                f"encoder {self.encoder} reads saved features, not sensors, so a per-subject sensor matrix "
+                f"(subjects={self.subjects}) has nothing to mix"
+            )
+
     def save(self, directory: Path) -> Path:
         path = directory / FILE
         path.write_text(json.dumps(asdict(self)))

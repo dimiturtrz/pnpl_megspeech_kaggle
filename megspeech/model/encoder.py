@@ -25,3 +25,8 @@ class Encoder(StrEnum):
             Encoder.RESOLVED: lambda: Cached(config, RESOLVED),
         }
         return builders[self]()
+
+    @property
+    def cached(self) -> bool:
+        """Whether the encoder reads features saved ahead of training rather than the MEG's sensors."""
+        return self in {Encoder.CACHED, Encoder.RESOLVED}

@@ -43,8 +43,13 @@ class MaskedBatchNorm1d(nn.Module):
         return (normed * self.weight[:, None] + self.bias[:, None]).to(x.dtype)
 
     def track(self, mean: Float[Tensor, " h"], var: Float[Tensor, " h"], count: Float[Tensor, ""]) -> None:
-        """Running statistics as `nn.BatchNorm1d` keeps them: unbiased variance, exponential average."""
+        """Running statistics as `nn.BatchNorm1d` keeps them: unbiased variance, exponential average. A batch of
+        fewer than two valid samples has no unbiased variance (an all-padding one no mean), so it leaves them as
+        they were, decided on the device without a host sync."""
         with torch.no_grad():
-            self.running_mean.lerp_(mean, MOMENTUM)
-            self.running_var.lerp_(var * count / (count - 1), MOMENTUM)
-            self.num_batches_tracked.add_(1)
+            kept = count > 1
+            mean_step = self.running_mean.lerp(mean, MOMENTUM)
+            var_step = self.running_var.lerp(var * count / (count - 1), MOMENTUM)
+            self.running_mean.copy_(torch.where(kept, mean_step, self.running_mean))
+            self.running_var.copy_(torch.where(kept, var_step, self.running_var))
+            self.num_batches_tracked.add_(kept.long())

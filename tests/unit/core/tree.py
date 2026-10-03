@@ -97,3 +97,12 @@ def test_coerce() -> None:
     assert Tree.coerce(tuple[int, ...], ["1", "2"]) == (1, 2)
     assert Tree.coerce(float, "inf") == math.inf
     assert Tree.coerce(bool, False) is False
+    assert Tree.coerce(bool, "false") is False
+    assert Tree.coerce(bool, "True") is True
+
+
+def test_truth() -> None:
+    assert Tree.truth("FALSE") is False
+    assert Tree.truth("true") is True
+    with pytest.raises(ValueError, match="neither"):
+        Tree.truth("no")

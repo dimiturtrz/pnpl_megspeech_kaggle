@@ -18,14 +18,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
-import numpy as np
 import torch
 from jaxtyping import Int
 from pnpl.competition.holdout import N_SUBJECTS
 from torch import Tensor
 
 from core.paths import DataRoot
-from megspeech.data.corpus import Corpus, DataConfig
+from megspeech.data.corpus import DataConfig
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import Partition, Run
 from megspeech.data.split import Split
@@ -61,9 +60,10 @@ class BroadRuler:
     reading: Reading = Reading.OWN
 
     def split(self, run: Run) -> Split:
-        """`run`'s words cut as the model's grouping cuts them, each presented as `reading`'s subject."""
+        """`run`'s words cut as the model's grouping cuts them and read as the model reads, each presented as
+        `reading`'s subject."""
         source, words = self.pooling.load([run])
-        split = Corpus.split(source, words, self.pooling.data, np.ones(len(words)))
+        split = self.pooling.split(source, words, run)
         return replace(split, subject=self.reading.subjects(split.subject))
 
     def score(self, run: Run) -> Score:
@@ -73,9 +73,11 @@ class BroadRuler:
         return self.pooling.matched(split, context, torch.ones(len(split.y), dtype=torch.bool, device=split.y.device))
 
     def scores(self, runs: list[Run]) -> dict[int, Score]:
-        """Every pooled run's score, by subject in ascending order."""
+        """Every pooled run's score, by subject in ascending order, of the subjects with the unseen-span words a
+        Deep domain needs to count (`Evaluator.min_novel`)."""
         pooled = sorted((r for r in runs if r.partition is Partition.POOL), key=lambda r: r.subject)
-        return {run.subject: self.score(run) for run in pooled}
+        scores = {run.subject: self.score(run) for run in pooled}
+        return {subject: score for subject, score in scores.items() if score.n >= self.pooling.evaluator.min_novel}
 
     @staticmethod
     def report(scores: dict[int, Score]) -> Score:

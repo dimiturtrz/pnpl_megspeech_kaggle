@@ -7,11 +7,13 @@ import torch
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 
-from megspeech.data.runs import CHANNELS
 from megspeech.model.onsets import ContextConfig
 from megspeech.model.scaler import Scaler
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.subjects import Unseen
+
+SCALE_MEDIAN = "scale.median"
+"""A SentenceNet state's per-channel scaler median: one entry per channel the model reads."""
 
 
 class Ensemble(nn.Module):
@@ -24,12 +26,15 @@ class Ensemble(nn.Module):
     @classmethod
     def load(cls, paths: list[Path], unseen: Unseen = Unseen.IDENTITY) -> "Ensemble":
         """SentenceNet checkpoints, each reading a subject it has no matrix for through `unseen`; each state dict
-        overwrites the placeholder scaler's statistics."""
+        overwrites the placeholder scaler's statistics, shaped as the state's own: MEG channels, or a cached
+        encoder's feature channels."""
         members: list[nn.Module] = []
         for path in paths:
             context = ContextConfig.load(path.parent)
-            model = SentenceNet(Scaler(torch.zeros(1, CHANNELS, 1)), context=context, unseen=unseen)
-            model.load_state_dict(torch.load(path, map_location="cpu"))
+            state = torch.load(path, map_location="cpu")
+            placeholder = Scaler(torch.zeros(1, state[SCALE_MEDIAN].shape[0], 1))
+            model = SentenceNet(placeholder, context=context, unseen=unseen)
+            model.load_state_dict(state)
             members.append(model)
         return cls(members)
 

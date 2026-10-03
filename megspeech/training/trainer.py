@@ -119,19 +119,16 @@ class Trainer:
         state.ema.update(state.model)
         return value.detach()
 
-    def fit(
-        self, train: Split, validation: dict[str, Split], log_prior: Float[Tensor, " v"]
-    ) -> tuple[nn.Module, list[Epoch]]:
+    def state(self, net: SentenceNet, train: Split, total: int) -> Step:
+        """Everything `step` advances to train `net` on `train` for `total` steps: `net` with its auxiliary heads, the
+        optimiser and its one-cycle schedule, the anchor, the weight average, and the class weights."""
         optim = self.config.optim
-        torch.manual_seed(optim.seed)
-        net = self.model(train)
         model = self.auxiliary.trained(net, self.compiled)
-        per_epoch = math.ceil(len(train.index) / optim.batch)
-        anchor = Anchor.of(optim.anchor, optim.lr, optim.epochs * per_epoch)
+        anchor = Anchor.of(optim.anchor, optim.lr, total)
         optimizer = self.optimizer(model, anchor)
         peaks = [group["lr"] for group in optimizer.param_groups]
-        schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, peaks, total_steps=optim.epochs * per_epoch)
-        state = Step(
+        schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, peaks, total_steps=total)
+        return Step(
             model,
             optimizer,
             schedule,
@@ -140,6 +137,16 @@ class Trainer:
             self.balanced(train.y),
             anchor,
         )
+
+    def fit(
+        self, train: Split, validation: dict[str, Split], log_prior: Float[Tensor, " v"]
+    ) -> tuple[nn.Module, list[Epoch]]:
+        optim = self.config.optim
+        torch.manual_seed(optim.seed)
+        net = self.model(train)
+        per_epoch = math.ceil(len(train.index) / optim.batch)
+        state = self.state(net, train, optim.epochs * per_epoch)
+        model = state.model
         history: list[Epoch] = []
         best_state = net.state_dict()
         for epoch in range(optim.epochs):

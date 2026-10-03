@@ -5,15 +5,20 @@ Balanced accuracy rewards rare words as much as frequent ones, so scores are rea
 p(MEG | word), the Bayes rule for a balanced metric.
 """
 
-from collections.abc import Iterable
+import json
+import math
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from pathlib import Path
 
 import numpy as np
 import torch
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 
+from core.tree import Tree
+from megspeech.data.corpus import METRICS
 from megspeech.data.spans import PAD
 from megspeech.data.split import EVAL_SPANS, Split
 from megspeech.data.vocabulary import WORDS
@@ -25,6 +30,26 @@ ADJUSTMENTS = (0.0, 0.5, 1.0)
 
 MIN_NOVEL = 100
 """Unseen-span words a domain needs to count toward selection: two per class of the 50 on average."""
+
+
+@dataclass(frozen=True)
+class SelectionConfig:
+    min_novel: int = MIN_NOVEL
+    """Unseen-span words a domain needs to count toward selection: two per class of the 50 on average."""
+
+    @classmethod
+    def saved(cls, directory: Path) -> "SelectionConfig":
+        """The selection config a run in `directory` recorded; a record without one falls to defaults."""
+        config = json.loads((directory / METRICS).read_text())["config"]
+        return Tree(cls).load(config.get("selection", {}))
+
+    @classmethod
+    def shared(cls, directories: Sequence[Path]) -> "SelectionConfig":
+        """The selection every run in `directories` was scored by: an ensemble counts a domain as its members did."""
+        chosen = {cls.saved(directory) for directory in directories}
+        if len(chosen) != 1:
+            raise ValueError(f"runs selected by {sorted(chosen, key=repr)}; an ensemble needs one")
+        return chosen.pop()
 
 
 class Head(StrEnum):
@@ -48,8 +73,14 @@ class Score:
     def mean(cls, scores: Iterable["Score"]) -> "Score":
         """The macro of `scores`: their unweighted mean at each adjustment, the best adjustment chosen once for all."""
         chosen = list(scores)
-        by_tau = {tau: float(np.mean([score.by_tau[tau] for score in chosen])) for tau in ADJUSTMENTS}
+        by_tau = {tau: cls.average(score.by_tau[tau] for score in chosen) for tau in ADJUSTMENTS}
         return cls.best(by_tau, sum(score.n for score in chosen))
+
+    @staticmethod
+    def average(values: Iterable[float]) -> float:
+        """The mean of `values`, NaN when there are none: a macro over no counted domain scores nothing."""
+        chosen = list(values)
+        return float(np.mean(chosen)) if chosen else math.nan
 
 
 @dataclass(frozen=True)
@@ -190,6 +221,6 @@ class Evaluator:
         context = {name: logits[name][Head.CONTEXT] for name in counted}
         interval = self.ruler.interval(self.ruler.macro(self.grade(context, domains, log_prior, macro.tau)))
         chosen = [reports[name] for name in counted]
-        top1 = float(np.mean([r.top1[macro.tau] for r in chosen]))
-        bits = float(np.mean([r.bits[macro.tau] for r in chosen]))
+        top1 = Score.average(r.top1[macro.tau] for r in chosen)
+        bits = Score.average(r.bits[macro.tau] for r in chosen)
         return Epoch(epoch, loss, reports, macro, interval, top1, bits)

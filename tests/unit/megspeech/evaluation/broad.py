@@ -1,5 +1,6 @@
 import logging
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,9 @@ def test_broad_ruler_scores(tmp_path: Path) -> None:
     scores = BroadRuler(pooling(tmp_path)).scores(runs(tmp_path))
     assert list(scores) == [1]
     assert scores[1].n == len(SPOKEN)
+    tool = pooling(tmp_path)
+    strict = replace(tool, evaluator=replace(tool.evaluator, min_novel=len(SPOKEN) + 1))
+    assert BroadRuler(strict).scores(runs(tmp_path)) == {}
 
 
 def test_broad_ruler_report(caplog: pytest.LogCaptureFixture) -> None:

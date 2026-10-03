@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
 import torch
 
+from megspeech.model.encoder import Encoder
 from megspeech.model.intervals import HOLDOUT_GAP, Intervals
 from megspeech.model.onsets import CONTEXT as DEFAULT
 from megspeech.model.onsets import FILE, Clock, ContextConfig, OnsetEncoding
@@ -54,3 +56,11 @@ def test_load_conv(tmp_path: Path) -> None:
     assert ContextConfig.load(tmp_path) == shaped
     (tmp_path / FILE).write_text(json.dumps({"width": 16, "clock": "order"}))
     assert ContextConfig.load(tmp_path) == ContextConfig(width=16, clock=Clock.ORDER)
+
+
+def test_combination() -> None:
+    assert ContextConfig(encoder=Encoder.CACHED).subjects == 0
+    assert ContextConfig(subjects=3).subjects == 3
+    for encoder in (Encoder.CACHED, Encoder.RESOLVED):
+        with pytest.raises(ValueError, match="subjects=3"):
+            ContextConfig(encoder=encoder, subjects=3)

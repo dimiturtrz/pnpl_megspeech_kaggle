@@ -211,6 +211,7 @@ def test_build(tmp_path: Path) -> None:
     table = cache.build()
     assert len(table) == 1 + len(ONSETS) + WORD_EPOCHS
     assert (cache.decimator.cache / WORDS).exists()
+    assert not list(cache.decimator.cache.glob("*.partial"))
     assert table["run"].tolist()[-WORD_EPOCHS:] == [f"subj00_{Source.WORD}"] * WORD_EPOCHS
 
 

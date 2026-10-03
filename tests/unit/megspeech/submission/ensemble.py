@@ -1,4 +1,3 @@
-import functools
 import json
 import sys
 from pathlib import Path
@@ -13,10 +12,11 @@ from torch import nn
 
 from core.paths import DataRoot
 from megspeech.data.corpus import METRICS, DataConfig
-from megspeech.data.runs import CHANNELS, Run
+from megspeech.data.runs import CHANNELS
 from megspeech.data.spans import Spans
 from megspeech.data.split import DENSE, Split
 from megspeech.data.vocabulary import WORDS
+from megspeech.evaluation.pooling import Pooling, Scoring
 from megspeech.evaluation.report import Evaluator
 from megspeech.submission import ensemble as module
 from megspeech.submission.ensemble import main
@@ -44,18 +44,18 @@ def validation() -> dict[str, Split]:
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     written: list[tuple[int, Path]] = []
-    train = Run(tmp_path / "sub-0_ses-1_task-Sherlock1_run-1_meg.h5")
-    devices = SimpleNamespace(device=lambda _: CPU, tensor=torch.tensor, ones=torch.ones)
-    monkeypatch.setattr(module, "torch", devices)
-    monkeypatch.setattr(module, "Evaluator", functools.partial(Evaluator, min_novel=1))
+    loaded: list[tuple[list[Path], Scoring]] = []
+    data = DataConfig(window=2.0, standardised=True)
+
+    def pooled(_: type[Pooling], root: DataRoot, directories: list[Path], scoring: Scoring) -> Pooling:
+        loaded.append((directories, scoring))
+        return Pooling(root, Constant(), data, Evaluator(CPU, min_novel=1), torch.zeros(WORDS))
+
+    monkeypatch.setattr(module, "torch", SimpleNamespace(device=lambda _: CPU))
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))
-    monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: [train]))
-    heard = pd.DataFrame({"run": "r", "sentence": 0, "onset": [0.0, 0.1], "target": [0, 1], "token": [7, 8]})
-    monkeypatch.setattr(module.Corpus, "heard", classmethod(lambda *_: heard))
-    monkeypatch.setattr(module.Continuous, "load", classmethod(lambda *_, **__: SimpleNamespace(words=heard)))
-    monkeypatch.setattr(module.Corpus, "words", staticmethod(lambda table, *_: table))
-    monkeypatch.setattr(module.Corpus, "domains", classmethod(lambda *_: validation()))
-    monkeypatch.setattr(module.Ensemble, "load", classmethod(lambda *_: Constant()))
+    monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: []))
+    monkeypatch.setattr(module.Pooling, "loaded", classmethod(pooled))
+    monkeypatch.setattr(module.Pooling, "domains", lambda *_: (validation(), pd.DataFrame()))
     monkeypatch.setattr(module.Submitter, "submit", lambda self, *args: written.append((self.data, args[-1])))
     for name in ("a", "b"):
         member = DataRoot(tmp_path).models() / name
@@ -68,4 +68,6 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert metrics["members"] == ["a", "b"]
     assert metrics["config"]["data"]["window"] == 2.0
     assert set(metrics["best"]["domains"]) == {"Sherlock1"}
-    assert written == [(DataConfig(window=2.0, standardised=True), out / "submission.csv")]
+    assert written == [(data, out / "submission.csv")]
+    assert loaded == [([DataRoot(tmp_path).models() / "a", DataRoot(tmp_path).models() / "b"], loaded[0][1])]
+    assert (loaded[0][1].device, loaded[0][1].shifts) == (CPU, (0,))

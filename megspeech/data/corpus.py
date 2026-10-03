@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 from jaxtyping import Float, Int
+from torch import Tensor
 
 from core.paths import DataRoot
 from core.tree import Tree
@@ -34,6 +35,24 @@ READ = frozenset({"TIMIT", "MOCHATIMIT"})
 
 NARRATIVE = ("Sherlock", "TheMoth")
 """The strata the ruler scores: Sherlock's nine books are one, TheMoth's stories another."""
+
+READING = (
+    "window",
+    "standardised",
+    "extra",
+    "baseline",
+    "lead",
+    "decimate",
+    "subjects",
+    "refit",
+    "features",
+    "read_weight",
+    "repeat_power",
+    "tasks",
+    "folds",
+)
+"""The `DataConfig` fields an ensemble's members must agree on: how each reads the MEG, which runs trained it and at
+what weight. The rest are `grouping`, the scorer's own, and `fold`, which bagged members differ in by design."""
 
 
 @dataclass(frozen=True)
@@ -78,6 +97,10 @@ class DataConfig:
     """Features a frozen encoder saved under models/features/<name> (`megspeech.data.features`), read in place of
     every split's MEG; empty reads the MEG."""
 
+    def __post_init__(self) -> None:
+        if not 0 <= self.fold < self.folds:
+            raise ValueError(f"fold {self.fold} is not one of the {self.folds} folds")
+
     @classmethod
     def saved(cls, directory: Path) -> "DataConfig":
         """The data config a run in `directory` recorded; a record without one, or a flat one, falls to defaults."""
@@ -86,27 +109,16 @@ class DataConfig:
 
     @classmethod
     def shared(cls, directories: Sequence[Path], grouping: Grouping) -> "DataConfig":
-        """The holdout reading — window and standardisation — every run in `directories` trained on, spans cut by
-        `grouping`; members that read MEG differently cannot share one set of holdout windows."""
-        readings = {
-            (saved.window, saved.standardised, saved.extra, saved.baseline, saved.lead, saved.decimate)
-            for saved in map(cls.saved, directories)
-        }
+        """The `READING` every run in `directories` trained at, spans cut by `grouping`: members that read MEG
+        differently cannot share one set of holdout windows, nor members trained on different runs one prior. Bagged
+        members leaving out different folds together trained on every run, so they share an unbagged config."""
+        saved = [cls.saved(directory) for directory in directories]
+        readings = {tuple(getattr(config, name) for name in READING) for config in saved}
         if len(readings) != 1:
-            raise ValueError(
-                f"runs trained at (window, standardised, extra, baseline, lead, decimate) {sorted(readings)}; an "
-                "ensemble needs one"
-            )
-        window, standardised, extra, baseline, lead, decimate = readings.pop()
-        return cls(
-            grouping=grouping,
-            window=window,
-            standardised=standardised,
-            extra=extra,
-            baseline=baseline,
-            lead=lead,
-            decimate=decimate,
-        )
+            raise ValueError(f"runs trained at {READING} {sorted(readings)}; an ensemble needs one")
+        folds = {config.fold for config in saved}
+        bagged = saved[0] if len(folds) == 1 else replace(saved[0], folds=1, fold=0)
+        return replace(bagged, grouping=grouping)
 
     @property
     def rate(self) -> float:
@@ -136,6 +148,10 @@ class DataConfig:
     def decimator(self, root: DataRoot) -> Decimator:
         """The continuous cache training reads, at `decimate`."""
         return Decimator.under(root.processed(), self.decimate)
+
+    def weight(self, run: Run) -> float:
+        """`run`'s sampling weight: `read_weight` for a read-sentence task, 1 for a narrative one."""
+        return self.read_weight if run.key[0] in READ else 1.0
 
     def trains_on(self, run: Run) -> bool:
         trained = (Partition.TRAIN, Partition.VALIDATION) if self.refit else (Partition.TRAIN,)
@@ -197,7 +213,7 @@ class Corpus:
         names = list(dict.fromkeys(reading))
         source = Continuous.load(cache, device, names, standardised=data.standardised, rate=data.rate)
         words = cls.words(source.words, data.grouping, data.rate)
-        weights = {r.name: data.read_weight if r.key[0] in READ else 1.0 for r in trained}
+        weights = {r.name: data.weight(r) for r in trained}
         chosen = words[words["run"].isin(weights)]
         weight = chosen["run"].map(weights).to_numpy(dtype=np.float64)
         train = cls.split(source, chosen, data, weight).recurring(data.repeat_power)
@@ -251,15 +267,21 @@ class Corpus:
 
     @classmethod
     def heard(cls, cache: Path, runs: Sequence[Run], data: DataConfig) -> pd.DataFrame:
-        """Every training-partition word of `data.subjects` that `data.grouping` carries outside the extra validation
-        runs, read from the word table without any MEG: the text a novel span must not repeat."""
-        withheld = {r.name for r in data.extras(runs)}
-        names = [
-            r.name
-            for r in runs
-            if r.partition is Partition.TRAIN and r.subject in data.subjects and r.name not in withheld
-        ]
-        return cls.words(Continuous.table(cache, names, data.rate), data.grouping, data.rate)
+        """Every word of the runs training reads (`DataConfig.trained`) that `data.grouping` carries, with its run's
+        sampling `weight`, read from the word table without any MEG: the text a novel span must not repeat, and the
+        labels the training prior counts."""
+        trained = data.trained(runs)
+        table = Continuous.table(cache, [r.name for r in trained], data.rate)
+        weights = {r.name: data.weight(r) for r in trained}
+        return cls.words(table.assign(weight=table["run"].map(weights)), data.grouping, data.rate)
+
+    @staticmethod
+    def prior(heard: pd.DataFrame, data: DataConfig) -> Float[Tensor, " v"]:
+        """The label prior of training's draws (`Split.log_prior` of the train split) counted from `heard` without
+        any MEG: each word at its run's weight, a recited span's words down-weighted by `data.repeat_power`."""
+        repeats = Split.repeats(data.grouping.spans(heard).index, heard["token"].to_numpy(), data.repeat_power)
+        weight = torch.tensor(heard["weight"].to_numpy(dtype=np.float64), dtype=torch.float32)
+        return Split.prior(torch.tensor(heard["target"].to_numpy()), weight * torch.from_numpy(repeats).float())
 
     @staticmethod
     def sequences(heard: pd.DataFrame, grouping: Grouping) -> frozenset[tuple[int, ...]]:

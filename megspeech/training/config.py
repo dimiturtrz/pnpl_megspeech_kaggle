@@ -7,7 +7,7 @@ from pathlib import Path
 
 from core.tree import Tree
 from megspeech.data.corpus import METRICS, DataConfig
-from megspeech.evaluation.report import MIN_NOVEL, Epoch
+from megspeech.evaluation.report import Epoch, SelectionConfig
 from megspeech.model.onsets import CONTEXT, ContextConfig
 from megspeech.training.augment import Augment
 
@@ -61,12 +61,6 @@ class OptimConfig:
     pretrained: float = 0.1
     """Peak learning rate of a pretrained trunk's weights relative to `lr`: fine-tuning moves them less than the
     freshly initialised layers above them, which start from noise. 0 freezes them."""
-
-
-@dataclass(frozen=True)
-class SelectionConfig:
-    min_novel: int = MIN_NOVEL
-    """Unseen-span words a domain needs to count toward selection: two per class of the 50 on average."""
 
 
 @dataclass(frozen=True)

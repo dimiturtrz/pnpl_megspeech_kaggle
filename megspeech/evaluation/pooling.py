@@ -13,6 +13,7 @@ import argparse
 import json
 import logging
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -26,12 +27,14 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.data.continuous import Continuous
 from megspeech.data.corpus import METRICS, Corpus, DataConfig
+from megspeech.data.features import Features
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import Partition, Run
 from megspeech.data.split import Split
 from megspeech.data.vocabulary import WORDS
+from megspeech.evaluation.balance import Sinkhorn
 from megspeech.evaluation.overlap import RULER, Text
-from megspeech.evaluation.report import Evaluator, Head, Score
+from megspeech.evaluation.report import Evaluator, Head, Score, SelectionConfig
 from megspeech.evaluation.ruler import TOP
 from megspeech.model.ensemble import Ensemble
 from megspeech.model.subjects import AS_TRAINED, Fallback, SubjectLayer
@@ -104,6 +107,18 @@ class Echoes:
 
 
 @dataclass(frozen=True)
+class Scoring:
+    """How a loaded model is scored: spans cut by `grouping` on `device`, subjects read as `fallback` says, each
+    scored set reshaped by `balance` and every window read moved by each of `shifts`."""
+
+    grouping: Grouping
+    device: torch.device
+    fallback: Fallback = AS_TRAINED
+    balance: Sinkhorn = Sinkhorn()
+    shifts: tuple[int, ...] = (0,)
+
+
+@dataclass(frozen=True)
 class Pooling:
     """One trained model scored on validation with the ruler's text pooled across subjects."""
 
@@ -118,15 +133,26 @@ class Pooling:
         cls, root: DataRoot, name: str, grouping: Grouping, device: torch.device, fallback: Fallback = AS_TRAINED
     ) -> "Pooling":
         """The model `name`, its subject layer reading subjects as `fallback` says."""
-        directories = cls.members(root.models(), name)
-        model = Ensemble.load([directory / "model.pt" for directory in directories], fallback.unseen).to(device)
+        return cls.loaded(root, cls.members(root.models(), name), Scoring(grouping, device, fallback))
+
+    @classmethod
+    def loaded(cls, root: DataRoot, directories: Sequence[Path], scoring: "Scoring") -> "Pooling":
+        """The trained runs in `directories` averaged as one model, scored as their training scored them: the
+        prior of the draws they trained on, and the selection that counted their domains."""
+        paths = [directory / "model.pt" for directory in directories]
+        model = Ensemble.load(paths, scoring.fallback.unseen).to(scoring.device)
         for layer in (module for module in model.modules() if isinstance(module, SubjectLayer)):
-            layer.shrink(fallback.keep, fallback.unseen)
-        data = DataConfig.shared(directories, grouping)
+            layer.shrink(scoring.fallback.keep, scoring.fallback.unseen)
+        data = DataConfig.shared(directories, scoring.grouping)
         heard = Corpus.heard(data.decimator(root).cache, Run.discover(root.raw()), data)
-        labels = heard["target"].to_numpy()
-        log_prior = Split.prior(torch.tensor(labels), torch.ones(len(labels))).to(device)
-        return cls(root, model, data, Evaluator(device, Corpus.sequences(heard, grouping)), log_prior)
+        evaluator = Evaluator(
+            scoring.device,
+            Corpus.sequences(heard, scoring.grouping),
+            SelectionConfig.shared(directories).min_novel,
+            balance=scoring.balance,
+            shifts=scoring.shifts,
+        )
+        return cls(root, model, data, evaluator, Corpus.prior(heard, data).to(scoring.device))
 
     @staticmethod
     def members(models: Path, name: str) -> list[Path]:
@@ -145,11 +171,21 @@ class Pooling:
         keyed = Text.of(source.words).words
         return source, Corpus.words(keyed, self.data.grouping, self.data.rate)
 
+    @property
+    def features(self) -> Features:
+        """What the model reads in place of MEG windows, if it trained on saved features."""
+        return Features.under(self.root, self.data.features)
+
     def domains(self, held: dict[str, list[Run]]) -> tuple[dict[str, Split], pd.DataFrame]:
-        """Subject 0's validation domains, and the ruler domain's words in its split's order."""
+        """Subject 0's validation domains as the model reads them, and the ruler domain's words in its split's order."""
         source, words = self.load([r for group in held.values() for r in group])
-        ruler = words[words["run"].isin([r.name for r in held[RULER]])]
-        return Corpus.domains(source, words, held, self.data), ruler
+        ruler = words[words["run"].isin([r.name for r in held.get(RULER, [])])]
+        domains = Corpus.domains(source, words, held, self.data)
+        return {name: self.features.split(name, split) for name, split in domains.items()}, ruler
+
+    def split(self, source: Continuous, rows: pd.DataFrame, run: Run) -> Split:
+        """`run`'s `rows` as a split the model reads: its windows, or its saved features."""
+        return self.features.split(run.name, Corpus.split(source, rows, self.data, np.ones(len(rows))))
 
     def context(self, split: Split) -> Float[Tensor, "n v"]:
         return self.evaluator.logits(self.model, split)[Head.CONTEXT]
@@ -161,7 +197,7 @@ class Pooling:
         which words it heard, and its reliability on its `trained` run."""
         source, words = self.load([pooled, trained])
         runs = {run: words[words["run"] == run.name] for run in (pooled, trained)}
-        splits = {run: Corpus.split(source, rows, self.data, np.ones(len(rows))) for run, rows in runs.items()}
+        splits = {run: self.split(source, rows, run) for run, rows in runs.items()}
         at = torch.from_numpy(Text(reference).matches(Text(runs[pooled]))).to(self.evaluator.device)
         logits = self.context(splits[pooled])
         aligned = torch.where((at >= 0)[:, None], logits[at.clamp(min=0)], 0.0)

@@ -6,7 +6,9 @@ from torch import nn
 
 from megspeech.data.runs import CHANNELS
 from megspeech.data.vocabulary import WORDS
-from megspeech.model.ensemble import Ensemble
+from megspeech.model.encoder import Encoder
+from megspeech.model.ensemble import SCALE_MEDIAN, Ensemble
+from megspeech.model.megxl_words import POOLED
 from megspeech.model.onsets import ContextConfig
 from megspeech.model.scaler import Scaler
 from megspeech.model.sentence import SentenceNet
@@ -65,3 +67,12 @@ def test_load_unseen(tmp_path: Path) -> None:
     layer = Ensemble.load([tmp_path / "model.pt"], Unseen.MEAN).members[0].subjects
     assert isinstance(layer, SubjectLayer)
     assert layer.unseen is Unseen.MEAN
+
+
+def test_load_cached(tmp_path: Path) -> None:
+    context = ContextConfig(width=32, heads=2, layers=1, encoder=Encoder.CACHED)
+    model = SentenceNet(Scaler(torch.zeros(1, POOLED, 1)), context=context)
+    torch.save(model.state_dict(), tmp_path / "model.pt")
+    context.save(tmp_path)
+    loaded = Ensemble.load([tmp_path / "model.pt"]).members[0].state_dict()
+    assert loaded[SCALE_MEDIAN].shape == (POOLED, 1)

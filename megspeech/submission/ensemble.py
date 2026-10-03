@@ -11,14 +11,11 @@ from dataclasses import asdict
 import torch
 
 from core.paths import DataRoot
-from megspeech.data.continuous import Continuous
-from megspeech.data.corpus import METRICS, Corpus, DataConfig
+from megspeech.data.corpus import METRICS, DataConfig
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import Run
-from megspeech.data.split import Split
 from megspeech.evaluation.balance import BALANCES
-from megspeech.evaluation.report import Evaluator
-from megspeech.model.ensemble import Ensemble
+from megspeech.evaluation.pooling import Pooling, Scoring
 from megspeech.submission.submission import Submitter
 
 LOG = logging.getLogger(__name__)
@@ -34,22 +31,11 @@ def main() -> None:
     parser.add_argument("--shifts", type=int, nargs="+", default=[0], help="samples each window is also read moved by")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    device = torch.device("cuda")
     root = DataRoot.from_config()
-    runs = Run.discover(root.raw())
-    model = Ensemble.load([root.models() / name / "model.pt" for name in args.names]).to(device)
-    data = DataConfig.shared([root.models() / name for name in args.names], args.grouping)
-    cache = data.decimator(root).cache
-    heard = Corpus.heard(cache, runs, data)
-    labels = heard["target"].to_numpy()
-    log_prior = Split.prior(torch.tensor(labels), torch.ones(len(labels))).to(device)
-    evaluator = Evaluator(
-        device, Corpus.sequences(heard, args.grouping), balance=BALANCES[args.balance], shifts=tuple(args.shifts)
-    )
-    held = data.held(runs)
-    names = [r.name for group in held.values() for r in group]
-    source = Continuous.load(cache, device, names, standardised=data.standardised, rate=data.rate)
-    validation = Corpus.domains(source, Corpus.words(source.words, args.grouping, data.rate), held, data)
+    scoring = Scoring(args.grouping, torch.device("cuda"), balance=BALANCES[args.balance], shifts=tuple(args.shifts))
+    pooling = Pooling.loaded(root, [root.models() / name for name in args.names], scoring)
+    model, data, evaluator, log_prior = pooling.model, pooling.data, pooling.evaluator, pooling.log_prior
+    validation, _ = pooling.domains(data.held(Run.discover(root.raw())))
     report = evaluator.report(model, validation, log_prior, 0, 0.0)
     LOG.info("%s", {task: (round(r.context.bacc10, 4), round(r.novel.bacc10, 4)) for task, r in report.domains.items()})
     LOG.info("macro %.4f tau %s over %d words", report.macro.bacc10, report.macro.tau, report.macro.n)

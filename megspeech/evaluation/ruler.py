@@ -8,6 +8,7 @@ same resamples for every run scored on the same words, so differences between ru
 
 import argparse
 import logging
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -93,7 +94,9 @@ class Ruler:
         return float(np.mean([self.balanced(hits, labels) for hits, labels in graded.domains.values()]))
 
     def macro(self, graded: Graded) -> Float[Tensor, " b"]:
-        """Resampled mean over domains, each domain resampled within itself."""
+        """Resampled mean over domains, each domain resampled within itself; NaN draws when no domain counts."""
+        if not graded.domains:
+            return torch.full((self.resamples,), math.nan)
         return torch.stack([self.draws(hits, labels) for hits, labels in graded.domains.values()]).mean(dim=0)
 
     def delta(self, a: Graded, b: Graded) -> Float[Tensor, " b"]:

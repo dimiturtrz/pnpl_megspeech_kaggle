@@ -27,7 +27,7 @@ from jaxtyping import Bool, Float, Int
 from pnpl.competition.holdout import DEEP_SUBJECTS, HOLDOUT_SUBDIR, TRACKS, LibriBrainCompetitionHoldout
 
 from core.paths import DataRoot
-from megspeech.data.continuous import WORDS, Continuous, Decimator
+from megspeech.data.continuous import Continuous, Decimator
 from megspeech.data.epochs import DECIMATE, SFREQ
 from megspeech.data.windows import Windows
 
@@ -156,13 +156,12 @@ class HoldoutCache:
 
     def build(self) -> pd.DataFrame:
         """Cache every archive, then write the word table of all of them."""
-        cache = self.decimator.ready()
+        self.decimator.ready()
         archives = self.archives()
         for archive in archives:
             LOG.info("%s", archive.write(self.decimator).name)
         table = pd.concat([archive.words(self.decimator) for archive in archives], ignore_index=True)
-        table.to_csv(cache / WORDS, sep="\t", index=False)
-        return table
+        return self.decimator.publish(table)
 
     def windows(self, device: torch.device | str, length: int, *, standardised: bool = False) -> Windows:
         """Every holdout row's `length`-sample window, in canonical order, from the built cache, each archive
