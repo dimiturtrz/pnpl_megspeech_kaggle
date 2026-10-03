@@ -53,4 +53,5 @@ def test_forward_reads_zero_where_every_weighted_sensor_is_dropped() -> None:
     merged.sum().backward()
     assert x.grad is not None
     assert torch.isfinite(x.grad).all()
+    assert layer.scores.grad is not None
     assert torch.isfinite(layer.scores.grad).all()
