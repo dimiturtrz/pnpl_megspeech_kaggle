@@ -30,6 +30,16 @@ def test_sentence_net_forward() -> None:
     assert torch.isfinite(context[slot < len(x)]).all()
 
 
+def test_embed() -> None:
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    subject = torch.zeros(len(x), dtype=torch.long)
+    embedded = model.embed(x, subject)
+    assert embedded.shape == (3, CONTEXT.conv.width)
+    _, slots = model.features(x, torch.zeros(1, 3), torch.tensor([[0, 1, 2]]), subject)
+    assert torch.allclose(slots[0], embedded, atol=1e-6)
+
+
 def test_readouts() -> None:
     model = SentenceNet(nn.Identity(), CONTEXT)
     assert model.readouts() == (model.head, model.words.head)

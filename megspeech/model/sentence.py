@@ -84,12 +84,19 @@ class SentenceNet(nn.Module):
         """The transformer's input at each span position, and the position's word embedding (zeros when empty)."""
         rows = len(x)
         valid = torch.zeros(rows + 1, dtype=torch.bool, device=x.device).index_fill_(0, slot.flatten(), value=True)
-        scaled = self.words.normalise(self.subjects(self.scale(x), subject), x.ne(0).any(dim=1, keepdim=True))
-        embedded = self.words.embed(scaled, valid[:rows])
+        embedded = self.embed(x, subject, valid[:rows])
         slots = nn.functional.pad(embedded, (0, 0, 0, 1))[slot]
         mask = slot < rows
         timing = self.onsets(self.clock.times(onset, mask), self.intervals.features(onset, mask))
         return self.project(slots) + timing, slots
+
+    def embed(
+        self, x: Float[Tensor, "r c t"], subject: Int[Tensor, " r"], valid: Bool[Tensor, " r"] | None = None
+    ) -> Float[Tensor, "r e"]:
+        """Each window's word embedding through the scaler, the subject layer and the encoder; `valid` rows alone
+        set any batch statistics."""
+        scaled = self.words.normalise(self.subjects(self.scale(x), subject), x.ne(0).any(dim=1, keepdim=True))
+        return self.words.embed(scaled, valid)
 
     def classify(
         self, h: Float[Tensor, "g w h"], slots: Float[Tensor, "g w e"], mask: Bool[Tensor, "g w"]

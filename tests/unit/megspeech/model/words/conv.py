@@ -15,6 +15,13 @@ def test_embed() -> None:
     assert ConvWords(SMALL).embed(x).shape == (3, 2 * SMALL.hidden)
 
 
+def test_width() -> None:
+    assert SMALL.width == 2 * SMALL.hidden
+    assert ConvConfig(hidden=8, segments=3).width == 48
+    assert ConvConfig(hidden=8, segments=3, queries=2).width == 16
+    assert ConvWords(ConvConfig(hidden=8, queries=2)).width == 16
+
+
 def test_embed_segments_one_is_mean_and_max() -> None:
     net = ConvWords(SMALL).eval()
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)

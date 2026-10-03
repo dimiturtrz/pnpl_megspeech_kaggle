@@ -30,6 +30,7 @@ from core.tree import Tree
 from megspeech.data.batching.split import HOLDOUT_FEATURES, TRAIN, Features, Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.holdout import Track
+from megspeech.data.config import DataConfig
 from megspeech.data.constants import CHANNELS, RATE
 from megspeech.data.corpus import Corpus
 from megspeech.data.spans.spans import PAD
@@ -211,6 +212,36 @@ class Read(StrEnum):
         return Segments(extractor, lambda x: x).pooled(sample, spans)[1]
 
 
+@dataclass
+class Export:
+    """The MEG of the training split, every validation domain and the Deep holdout, whose extracted features are
+    saved under models/features/<name>, one file per split, beside the settings that made them."""
+
+    corpus: Corpus
+    holdout: Split
+    features: Features
+
+    @classmethod  # devtools-ignore: test-mirror
+    def of(cls, data: DataConfig, root: DataRoot, name: str, device: torch.device) -> Self:
+        """The splits `data` reads, their MEG rather than any features it names."""
+        meg = replace(data, features="")
+        track = Track.DEEP
+        holdout = Split.from_holdout(track.holdout(root.raw()), meg.holdout(root, track, device))
+        return cls(Corpus.load(meg, root, device), holdout, Features.under(root, name))
+
+    def splits(self) -> dict[str, Split]:
+        """Every split by the name its features are saved and read under."""
+        holdout = {f"{HOLDOUT_FEATURES}-{Track.DEEP}": self.holdout}
+        return {TRAIN: self.corpus.train} | self.corpus.validation | holdout
+
+    def save(self, extract: Extraction, settings: dict[str, object]) -> None:
+        for name, split in self.splits().items():
+            start = time.perf_counter()
+            path = self.features.save(name, extract(split))
+            LOG.info("%s: %d words in %.0fs -> %s", name, len(split.windows), time.perf_counter() - start, path)
+        (self.features.path(TRAIN).parent / "config.json").write_text(json.dumps(settings, indent=1))
+
+
 def main() -> None:
     """Save the features of the training split, validation domains and Deep holdout under models/features/<name>."""
     tree = Tree(RunConfig)
@@ -222,22 +253,12 @@ def main() -> None:
     config = tree.parse(args)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), torch.device("cuda")
-    data = replace(config.data, features="")
-    corpus = Corpus.load(data, root, device)
+    export = Export.of(config.data, root, args.name, device)
+    train = export.corpus.train
     torch.manual_seed(config.optim.seed)
     words = MegxlWords.pretrained(root, config.context.conv).to(device).eval()
-    base = Extractor(words, Scaler(corpus.train.sample(SCALER_SAMPLE)).to(device), Pooled(words))
-    extract = args.read.extraction(base, corpus.train)
-    track = Track.DEEP
-    holdout = Split.from_holdout(track.holdout(root.raw()), data.holdout(root, track, device))
-    splits = {TRAIN: corpus.train} | dict(corpus.validation.items()) | {f"{HOLDOUT_FEATURES}-{track}": holdout}
-    features = Features.under(root, args.name)
-    for name, split in splits.items():
-        start = time.perf_counter()
-        path = features.save(name, extract(split))
-        LOG.info("%s: %d words in %.0fs -> %s", name, len(split.windows), time.perf_counter() - start, path)
-    settings = asdict(config) | {"read": args.read}
-    (features.path(TRAIN).parent / "config.json").write_text(json.dumps(settings, indent=1))
+    base = Extractor(words, Scaler(train.sample(SCALER_SAMPLE)).to(device), Pooled(words))
+    export.save(args.read.extraction(base, train), asdict(config) | {"read": args.read})
 
 
 if __name__ == "__main__":

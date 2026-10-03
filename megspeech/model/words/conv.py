@@ -46,13 +46,18 @@ class ConvConfig:
         if self.lora:
             raise ValueError(f"lora={self.lora}: the end-to-end MEG-XL encoder it adapted is retired")
 
+    @property
+    def width(self) -> int:
+        """The embedding's width: each attention query's pooled channels, or each segment's mean and max."""
+        return self.hidden * (self.queries or 2 * self.segments)
+
 
 CONV = ConvConfig()
 
 
 class ConvWords(WordEncoder):
     def __init__(self, config: ConvConfig = CONV) -> None:
-        super().__init__(config.hidden * (config.queries or 2 * config.segments), instance=config.instance)
+        super().__init__(config.width, instance=config.instance)
         self.pool = AttentionPool(config.hidden, config.queries) if config.queries else MeanMax(config.segments)
         self.spatial = nn.Conv1d(CHANNELS, config.hidden, 1)
         self.blocks = nn.ModuleList(

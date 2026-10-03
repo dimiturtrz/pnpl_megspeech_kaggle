@@ -23,12 +23,14 @@ from megspeech.objective.context import Objective
 
 
 class Encoder(StrEnum):
-    """The CNN trained from scratch, or a head over MEG-XL's features `DataConfig.features` names: pooled over the
-    sensors, or each channel's own."""
+    """The CNN trained from scratch, or a head over the features `DataConfig.features` names: MEG-XL's pooled over
+    the sensors or each channel's own, or a trained run's CNN embeddings."""
 
     CONV = "conv"
     CACHED = "cached"
     RESOLVED = "resolved"
+    TRAINED = "trained"
+    """A head over a trained run's own CNN embeddings (`megspeech.features.trained`), `conv` giving their width."""
 
     def build(self, config: ConvConfig) -> WordEncoder:
         return BUILDERS[self](config)
@@ -43,6 +45,7 @@ BUILDERS: dict[Encoder, Callable[[ConvConfig], WordEncoder]] = {
     Encoder.CONV: ConvWords,
     Encoder.CACHED: partial(FeatureWords, width=POOLED),
     Encoder.RESOLVED: partial(FeatureWords, width=RESOLVED),
+    Encoder.TRAINED: lambda config: FeatureWords(config, config.width),
 }
 
 

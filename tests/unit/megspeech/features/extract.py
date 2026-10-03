@@ -1,13 +1,18 @@
+import json
 from dataclasses import replace
+from pathlib import Path
 
 import torch
 
-from megspeech.data.batching.split import Split
+from megspeech.data.batching.split import HOLDOUT_FEATURES, TRAIN, Features, Split
 from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.holdout import Track
+from megspeech.data.corpus import Corpus
 from megspeech.data.spans.spans import PAD
 from megspeech.features.extract import (
     WORD,
     Averaged,
+    Export,
     Extractor,
     Pooled,
     Projection,
@@ -45,6 +50,24 @@ def split(spans: int) -> Split:
 
 def segments(chunk: int = 2) -> Segments:
     return Segments(extractor(), lambda x: x[..., :COMPONENTS], length=SPAN * GAP, chunk=chunk)
+
+
+def export(directory: Path) -> Export:
+    corpus = Corpus(split(1), {"Sherlock1": split(2)}, frozenset())
+    return Export(corpus, split(3), Features(directory))
+
+
+def test_splits(tmp_path: Path):
+    splits = export(tmp_path).splits()
+    assert list(splits) == [TRAIN, "Sherlock1", f"{HOLDOUT_FEATURES}-{Track.DEEP}"]
+    assert [len(s.index) for s in splits.values()] == [1, 2, 3]
+
+
+def test_save(tmp_path: Path):
+    target = export(tmp_path)
+    target.save(lambda s: torch.ones(len(s.windows), 2, 1), {"read": "pooled"})
+    assert torch.load(tmp_path / "Sherlock1.pt").shape == (2 * SPAN + 1, 2, 1)
+    assert json.loads((tmp_path / "config.json").read_text()) == {"read": "pooled"}
 
 
 def test_call():

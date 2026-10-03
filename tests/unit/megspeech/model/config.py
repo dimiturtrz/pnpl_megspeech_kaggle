@@ -54,10 +54,11 @@ def test_build() -> None:
     assert isinstance(Encoder.CONV.build(config), ConvWords)
     assert Encoder.CACHED.build(config).width == POOLED
     assert Encoder.RESOLVED.build(config).width == RESOLVED
+    assert Encoder.TRAINED.build(config).width == config.width
 
 
 def test_cached() -> None:
-    assert [encoder for encoder in Encoder if encoder.cached] == [Encoder.CACHED, Encoder.RESOLVED]
+    assert [encoder for encoder in Encoder if encoder.cached] == [Encoder.CACHED, Encoder.RESOLVED, Encoder.TRAINED]
 
 
 def test_onset_encoding_forward() -> None:
