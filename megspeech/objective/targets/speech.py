@@ -133,6 +133,11 @@ class Targets:
     def masked(self, keep: Bool[np.ndarray, " n"]) -> "Targets":
         return Targets(np.where(keep[:, None], self.vectors, np.float16(np.nan)))
 
+    def centred(self) -> "Targets":
+        """Less the run's mean target over its present words: the direction all targets share removed."""
+        mean = np.nanmean(self.vectors.astype(np.float32), axis=0) if self.present.any() else 0.0
+        return Targets((self.vectors - mean).astype(np.float16))
+
     @property
     def present(self) -> Bool[np.ndarray, " n"]:
         return np.isfinite(self.vectors).all(axis=1)
@@ -210,9 +215,9 @@ class Speech:
     vectors: Float[Tensor, "k d"]
 
     @classmethod
-    def gather(cls, directory: Path, words: pd.DataFrame) -> "Speech":
-        """The targets of `words` (`run`, `position` in its run's word table), in order; a run without a file has
-        none."""
+    def gather(cls, directory: Path, words: pd.DataFrame, *, centred: bool = False) -> "Speech":
+        """The targets of `words` (`run`, `position` in its run's word table), in order, each run's `Targets.centred`
+        when `centred`; a run without a file has none."""
         if not directory.is_dir():
             raise FileNotFoundError(directory)
         words = words.reset_index(drop=True)
@@ -221,7 +226,9 @@ class Speech:
         for run, group in words.groupby("run", sort=False):
             path = directory / f"{run}.npy"
             if path.exists():
-                vectors[group.index] = np.load(path, mmap_mode="r")[group["position"].to_numpy()]
+                targets = Targets(np.load(path))
+                chosen = targets.centred() if centred else targets
+                vectors[group.index] = chosen.vectors[group["position"].to_numpy()]
         present = np.isfinite(vectors).all(axis=1)
         rows = np.where(present, np.cumsum(present) - 1, -1)
         return cls(torch.from_numpy(rows), torch.from_numpy(vectors[present]))

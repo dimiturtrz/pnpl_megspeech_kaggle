@@ -219,8 +219,17 @@ def test_gather(tmp_path: Path) -> None:
     speech = Speech.gather(tmp_path, words)
     assert speech.rows.tolist() == [0, 1, -1, -1, 2]
     assert speech.vectors.tolist() == [[3, 4], [1, 2], [1, 2]]
+    assert Speech.gather(tmp_path, words, centred=True).vectors.tolist() == [[1, 1], [-1, -1], [-1, -1]]
     with pytest.raises(FileNotFoundError):
         Speech.gather(tmp_path / "absent", words)
+
+
+def test_centred() -> None:
+    vectors = np.array([[1.0, 2.0], [np.nan, np.nan], [3.0, 6.0]], np.float16)
+    centred = Targets(vectors).centred()
+    assert centred.vectors[[0, 2]].tolist() == [[-1, -2], [1, 2]]
+    assert centred.present.tolist() == [True, False, True]
+    assert not Targets(np.full((1, DIM), np.nan, np.float16)).centred().present.any()
 
 
 def test_to() -> None:

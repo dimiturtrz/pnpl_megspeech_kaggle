@@ -40,6 +40,9 @@ class OptimConfig:
     """Weight of the speech auxiliary (`megspeech.objective.auxiliary.speech`): every training word whose chapter audio
     is aligned, SigLIP-aligned to the wav2vec2 latent of its 0.5 s of heard speech (Défossez et al. 2023), one target
     per word token, not per word type as the semantic auxiliary's; 0 never reads the targets."""
+    speech_centred: bool = False
+    """Centre each run's speech targets on its own mean (`Targets.centred`), removing the direction every target
+    shares: raw, two random targets' cosine is ~0.6, so the L2-normalised SigLIP target is mostly that one direction."""
     positions: int = 1
     """Leading phonemes the phonetic auxiliary classifies, up to `megspeech.data.labels.phonemes.POSITIONS`: a 0.5 s
     window hears ~4 of ~0.1 s, and 1 is the onset phoneme alone."""

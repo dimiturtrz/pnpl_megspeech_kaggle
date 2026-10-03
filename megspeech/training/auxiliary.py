@@ -42,7 +42,10 @@ class Auxiliary(ABC):
         builders: tuple[tuple[float, Callable[[], AuxiliaryTerm]], ...] = (
             (
                 optim.speech,
-                lambda: SpeechTerm(optim.speech, Speech.gather(Targets.directory(root), words).to(device)),
+                lambda: SpeechTerm(
+                    optim.speech,
+                    Speech.gather(Targets.directory(root), words, centred=optim.speech_centred).to(device),
+                ),
             ),
             (optim.semantic, lambda: SemanticTerm(optim.semantic, Lexicon.load(Lexicon.path(root)).to(device))),
             (optim.lexical, lambda: LexicalTerm(optim.lexical, Lexicon.load(Lexicon.path(root)).to(device))),
