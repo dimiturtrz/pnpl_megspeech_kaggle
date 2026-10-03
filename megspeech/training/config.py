@@ -8,7 +8,7 @@ from pathlib import Path
 from core.tree import Tree
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.evaluation.report import Epoch, SelectionConfig
-from megspeech.model.onsets import CONTEXT, ContextConfig
+from megspeech.model.config import CONTEXT, ContextConfig
 from megspeech.training.augment import Augment
 
 
@@ -59,8 +59,7 @@ class OptimConfig:
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
     pretrained: float = 0.1
-    """Peak learning rate of a pretrained trunk's weights relative to `lr`: fine-tuning moves them less than the
-    freshly initialised layers above them, which start from noise. 0 freezes them."""
+    """Retired with the end-to-end MEG-XL encoder it scaled; kept so the configs saved with it still load."""
 
 
 @dataclass(frozen=True)

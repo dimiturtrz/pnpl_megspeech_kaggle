@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
-from megspeech.model.subjects import SubjectLayer, Unseen
+from megspeech.model.input.subjects import SubjectLayer, Unseen
 
 
 @dataclass(frozen=True)

@@ -8,10 +8,10 @@ from torch import nn
 from core.paths import DataRoot
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.phonemes import Pronunciation
-from megspeech.model.onsets import ContextConfig
+from megspeech.model.config import ContextConfig
 from megspeech.model.pretraining import Pretraining
 from megspeech.model.sentence import SentenceNet
-from megspeech.model.wordnet import ConvConfig
+from megspeech.model.words.conv import ConvConfig
 from megspeech.objective.heads import DIM
 from megspeech.objective.prototypes import Lexicon
 from megspeech.training.auxiliary import Aligned, Auxiliary, Joint, Lexical, Pronounced, Silent

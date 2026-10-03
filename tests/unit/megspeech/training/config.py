@@ -5,7 +5,7 @@ from pathlib import Path
 from megspeech.data.config import DataConfig
 from megspeech.evaluation.report import Epoch, Score
 from megspeech.evaluation.ruler import Interval
-from megspeech.model.onsets import Clock
+from megspeech.model.context.timing import Clock
 from megspeech.training.augment import Augment
 from megspeech.training.config import METRICS, RunConfig
 

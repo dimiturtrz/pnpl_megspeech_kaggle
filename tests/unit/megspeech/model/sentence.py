@@ -1,4 +1,5 @@
 from dataclasses import replace
+from pathlib import Path
 from typing import cast
 
 import torch
@@ -6,11 +7,12 @@ from torch import nn
 
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.model.onsets import ContextConfig
+from megspeech.model.config import ContextConfig
+from megspeech.model.context.span import SpanConformer
+from megspeech.model.input.scaler import Scaler
+from megspeech.model.input.subjects import SubjectLayer
 from megspeech.model.sentence import SentenceNet
-from megspeech.model.span import SpanConformer
-from megspeech.model.subjects import SubjectLayer
-from megspeech.model.wordnet import ConvConfig
+from megspeech.model.words.conv import ConvConfig
 
 CONTEXT = ContextConfig(width=16, heads=2, layers=1, conv=ConvConfig(hidden=8, dilations=(1, 2)))
 SAMPLES = 50
@@ -105,3 +107,11 @@ def test_padding_rows_change_nothing_mixing() -> None:
     )
     mask = torch.tensor([[True, True, False], [True, False, False]])
     assert torch.allclose(exact[0][mask], padded[0][mask], atol=1e-5)
+
+
+def test_load(tmp_path: Path) -> None:
+    model = SentenceNet(Scaler(torch.randn(4, CHANNELS, SAMPLES, generator=GENERATOR)), CONTEXT)
+    torch.save(model.state_dict(), tmp_path / "model.pt")
+    CONTEXT.save(tmp_path)
+    loaded = SentenceNet.load(tmp_path / "model.pt")
+    assert all(torch.equal(loaded.state_dict()[key], value) for key, value in model.state_dict().items())

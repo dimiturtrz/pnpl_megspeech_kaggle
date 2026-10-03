@@ -1,5 +1,6 @@
-"""The sentence-context model: per-word CNN embeddings, onset timing, and a transformer across the span."""
+"""The sentence-context model: per-word embeddings, onset timing, and a transformer across the span."""
 
+from pathlib import Path
 from typing import override
 
 import torch
@@ -7,13 +8,17 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from megspeech.data.constants import CHANNELS
-from megspeech.model.onsets import CONTEXT, ContextConfig, OnsetEncoding
-from megspeech.model.span import SpanConformer
-from megspeech.model.subjects import SubjectLayer, Unseen
+from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
+from megspeech.model.context.span import SpanConformer
+from megspeech.model.input.scaler import Scaler
+from megspeech.model.input.subjects import SubjectLayer, Unseen
+
+SCALE_MEDIAN = "scale.median"
+"""A SentenceNet state's per-channel scaler median: one entry per channel the model reads."""
 
 
 class SentenceNet(nn.Module):
-    """Per-word CNN embeddings refined by a transformer over the span of words heard together.
+    """Per-word embeddings refined by a transformer over the span of words heard together.
 
     Returns the context head's logits and the word head's, both per word slot, so one model is both the
     isolated-word classifier and the sentence-context one.
@@ -38,14 +43,22 @@ class SentenceNet(nn.Module):
         self.context = self.mixer(context)
         self.head = context.objective.head(context.width, prototypes)
 
+    @classmethod
+    def load(cls, path: Path, unseen: Unseen = Unseen.IDENTITY) -> "SentenceNet":
+        """The checkpoint at `path` in the shape its directory's config records; its state overwrites a placeholder
+        scaler shaped as the state's own: MEG channels, or a cached encoder's feature channels."""
+        state = torch.load(path, map_location="cpu")
+        placeholder = Scaler(torch.zeros(1, state[SCALE_MEDIAN].shape[0], 1))
+        model = cls(placeholder, context=ContextConfig.load(path.parent), unseen=unseen)
+        model.load_state_dict(state)
+        return model
+
     @staticmethod
     def mixer(context: ContextConfig) -> nn.Module:
         """The layers that refine word embeddings across the span: a transformer, conformer when `mixing`."""
         if context.mixing:
             return SpanConformer(context.width, context.heads, context.layers, context.dropout, context.mixing)
-        layer = nn.TransformerEncoderLayer(
-            context.width, context.heads, 4 * context.width, context.dropout, batch_first=True, norm_first=True
-        )
+        layer = SpanConformer.layer(context.width, context.heads, context.dropout)
         return nn.TransformerEncoder(layer, context.layers, enable_nested_tensor=False)
 
     @override

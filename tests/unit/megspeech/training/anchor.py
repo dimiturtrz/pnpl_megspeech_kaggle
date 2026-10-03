@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 from megspeech.data.raw.runs import DEEP
-from megspeech.model.subjects import SubjectLayer
+from megspeech.model.input.subjects import SubjectLayer
 from megspeech.training.anchor import Anchor
 
 GENERATOR = torch.Generator().manual_seed(0)

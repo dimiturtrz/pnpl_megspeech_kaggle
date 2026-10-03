@@ -237,6 +237,18 @@ layers = [
     "megspeech.data.raw",
     "megspeech.data.constants",
 ]
+
+[[tool.importlinter.contracts]]
+name = "megspeech.model layers: inputs and word encoders -> span context -> config -> sentence model -> its users"
+type = "layers"
+layers = [
+    "megspeech.model.ensemble | megspeech.model.pretraining",
+    "megspeech.model.sentence",
+    "megspeech.model.config",
+    "megspeech.model.context",
+    "megspeech.model.words",
+    "megspeech.model.input",
+]
 # <<< LOCAL-SLOT: import-contracts
 
 

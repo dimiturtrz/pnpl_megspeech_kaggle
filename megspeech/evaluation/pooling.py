@@ -37,7 +37,7 @@ from megspeech.evaluation.overlap import RULER, Text
 from megspeech.evaluation.report import Evaluator, Head, Score, SelectionConfig
 from megspeech.evaluation.ruler import TOP
 from megspeech.model.ensemble import Ensemble
-from megspeech.model.subjects import AS_TRAINED, Fallback, SubjectLayer
+from megspeech.model.input.subjects import AS_TRAINED, Fallback, SubjectLayer
 
 LOG = logging.getLogger(__name__)
 

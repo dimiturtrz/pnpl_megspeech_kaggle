@@ -11,7 +11,7 @@ from core.paths import DataRoot
 from megspeech.evaluation import broad as module
 from megspeech.evaluation.broad import BroadRuler, Options, Reading, main
 from megspeech.evaluation.report import Score
-from megspeech.model.subjects import Fallback, Unseen
+from megspeech.model.input.subjects import Fallback, Unseen
 from tests.unit.megspeech.evaluation.pooling import CPU, SPOKEN, pooling, runs
 
 POOLED = 2

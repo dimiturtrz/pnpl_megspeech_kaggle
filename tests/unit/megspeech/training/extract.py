@@ -5,8 +5,8 @@ import torch
 from megspeech.data.batching.split import Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.spans.spans import PAD
-from megspeech.model.megxl import DOWNSAMPLING, LATENT
-from megspeech.model.scaler import Scaler
+from megspeech.model.input.scaler import Scaler
+from megspeech.model.words.trunk import DOWNSAMPLING, LATENT
 from megspeech.training.extract import (
     WORD,
     Averaged,
@@ -18,7 +18,7 @@ from megspeech.training.extract import (
     Segments,
     Windowed,
 )
-from tests.unit.megspeech.model.megxl_words import words
+from tests.unit.megspeech.model.words.megxl import words
 
 MEG = torch.arange(5 * 2 * 8, dtype=torch.float32).reshape(5, 2, 8).sin()
 COMPONENTS = 3

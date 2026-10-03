@@ -17,8 +17,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.evaluation.report import Epoch, Evaluator
-from megspeech.model.megxl import Trunk
-from megspeech.model.scaler import SCALER_SAMPLE, Scaler
+from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.heads import Objective
 from megspeech.objective.prototypes import Prototypes
@@ -83,7 +82,7 @@ class Trainer:
         """AdamW as one fused kernel on the GPU; per-parameter launches were most of a step's device time."""
         optim = self.config.optim
         fused = self.evaluator.device.type == "cuda"
-        groups = Trunk.groups(model, anchor.groups(model, optim.weight_decay), optim.lr * optim.pretrained)
+        groups = anchor.groups(model, optim.weight_decay)
         return torch.optim.AdamW(groups, lr=optim.lr, weight_decay=optim.weight_decay, fused=fused)
 
     def balanced(self, y: Int[Tensor, " n"]) -> Float[Tensor, " v"] | None:

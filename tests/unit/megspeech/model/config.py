@@ -1,0 +1,71 @@
+import json
+from pathlib import Path
+
+import pytest
+import torch
+
+from megspeech.model.config import CONTEXT as DEFAULT
+from megspeech.model.config import FILE, ContextConfig, Encoder, OnsetEncoding
+from megspeech.model.context.timing import Clock, Intervals
+from megspeech.model.words.conv import ConvConfig, ConvWords
+from megspeech.model.words.megxl import POOLED, RESOLVED
+from megspeech.objective.heads import Objective
+
+CONTEXT = ContextConfig(width=16, timescales=4)
+
+
+def test_save(tmp_path: Path) -> None:
+    assert CONTEXT.save(tmp_path).exists()
+
+
+def test_load(tmp_path: Path) -> None:
+    assert ContextConfig.load(tmp_path) == DEFAULT
+    CONTEXT.save(tmp_path)
+    assert ContextConfig.load(tmp_path) == CONTEXT
+    ordered = ContextConfig(clock=Clock.ORDER)
+    ordered.save(tmp_path)
+    assert ContextConfig.load(tmp_path).clock is Clock.ORDER
+    retrieval = ContextConfig(objective=Objective.SIGLIP)
+    retrieval.save(tmp_path)
+    assert ContextConfig.load(tmp_path).objective is Objective.SIGLIP
+    timed = ContextConfig(intervals=Intervals.LOG)
+    timed.save(tmp_path)
+    assert ContextConfig.load(tmp_path).intervals is Intervals.LOG
+
+
+def test_load_conv(tmp_path: Path) -> None:
+    shaped = ContextConfig(conv=ConvConfig(kernels=(3, 5, 7), segments=4))
+    shaped.save(tmp_path)
+    assert ContextConfig.load(tmp_path) == shaped
+    (tmp_path / FILE).write_text(json.dumps({"width": 16, "clock": "order"}))
+    assert ContextConfig.load(tmp_path) == ContextConfig(width=16, clock=Clock.ORDER)
+
+
+def test_combination() -> None:
+    assert ContextConfig(encoder=Encoder.CACHED).subjects == 0
+    assert ContextConfig(subjects=3).subjects == 3
+    for encoder in (Encoder.CACHED, Encoder.RESOLVED):
+        with pytest.raises(ValueError, match="subjects=3"):
+            ContextConfig(encoder=encoder, subjects=3)
+
+
+def test_build() -> None:
+    config = ConvConfig(hidden=8, dilations=(1,))
+    assert isinstance(Encoder.CONV.build(config), ConvWords)
+    assert Encoder.CACHED.build(config).width == POOLED
+    assert Encoder.RESOLVED.build(config).width == RESOLVED
+
+
+def test_cached() -> None:
+    assert [encoder for encoder in Encoder if encoder.cached] == [Encoder.CACHED, Encoder.RESOLVED]
+
+
+def test_onset_encoding_forward() -> None:
+    timing = ContextConfig(width=16, timescales=4)
+    onset = torch.tensor([[0.0, 0.3], [0.0, 0.0]])
+    out = OnsetEncoding(timing).forward(onset, Intervals.NONE.features(onset, onset.ge(0)))
+    assert out.shape == (2, 2, timing.width)
+    assert torch.equal(out[0, 0], out[1, 1])
+    timed = ContextConfig(width=16, timescales=4, intervals=Intervals.LOG)
+    mask = torch.ones(2, 2, dtype=torch.bool)
+    assert OnsetEncoding(timed).forward(onset, Intervals.LOG.features(onset, mask)).shape == (2, 2, 16)

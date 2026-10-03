@@ -33,9 +33,9 @@ from megspeech.data.cache.holdout import Track
 from megspeech.data.constants import CHANNELS, RATE
 from megspeech.data.corpus import Corpus
 from megspeech.data.spans.spans import PAD
-from megspeech.model.megxl import ATTENTION_BATCH, DOWNSAMPLING
-from megspeech.model.megxl_words import COMPONENTS, Words
-from megspeech.model.scaler import SCALER_SAMPLE, Scaler
+from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
+from megspeech.model.words.megxl import COMPONENTS, MegxlWords
+from megspeech.model.words.trunk import ATTENTION_BATCH, DOWNSAMPLING
 from megspeech.training.config import RunConfig
 
 LOG = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ Extraction = Callable[[Split], Float[Tensor, "n f k"]]
 class Pooled:
     """The trunk's mean and max over every channel's tokens, one feature per window's channel axis entry."""
 
-    words: Words
+    words: MegxlWords
 
     def __call__(self, x: Float[Tensor, "b c t"]) -> Float[Tensor, "b e 1"]:
         return self.words.embed(x)[..., None]
@@ -73,7 +73,7 @@ class Pooled:
 class Averaged:
     """Each channel's tokens averaged over the window's time."""
 
-    words: Words
+    words: MegxlWords
 
     def __call__(self, x: Float[Tensor, "b c t"]) -> Float[Tensor, "b c d"]:
         return self.words.trunk(x).mean(2)
@@ -112,7 +112,7 @@ class Resolved:
 class Extractor:
     """What `read` makes of windows `scaler` standardises and `words` normalises, as the sentence model reads them."""
 
-    words: Words
+    words: MegxlWords
     scaler: Scaler
     read: Reader
     chunk: int = CHUNK
@@ -225,7 +225,7 @@ def main() -> None:
     data = replace(config.data, features="")
     corpus = Corpus.load(data, root, device)
     torch.manual_seed(config.optim.seed)
-    words = Words.pretrained(root, config.context.conv).to(device).eval()
+    words = MegxlWords.pretrained(root, config.context.conv).to(device).eval()
     base = Extractor(words, Scaler(corpus.train.sample(SCALER_SAMPLE)).to(device), Pooled(words))
     extract = args.read.extraction(base, corpus.train)
     track = Track.DEEP

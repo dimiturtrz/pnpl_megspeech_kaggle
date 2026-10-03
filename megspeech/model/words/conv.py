@@ -1,0 +1,71 @@
+"""A word classifier over one decimated MEG window: spatial mixing, dilated temporal convolutions, pooling."""
+
+from dataclasses import dataclass
+from typing import override
+
+import torch
+from jaxtyping import Bool, Float
+from torch import Tensor, nn
+
+from megspeech.data.constants import CHANNELS
+from megspeech.model.words.base import WordEncoder
+from megspeech.model.words.layers.conformer import TimeConformer
+from megspeech.model.words.layers.dilated import DilatedBlock
+from megspeech.model.words.layers.ssm import Ssm
+
+
+@dataclass(frozen=True)
+class ConvConfig:
+    hidden: int = 256
+    dilations: tuple[int, ...] = (1, 2, 4, 8, 1, 2)
+    dropout: float = 0.3
+    kernels: tuple[int, ...] = (3,)
+    """Kernel sizes every block sums in parallel at its dilation, a multi-resolution front end: dropping it cost
+    BrainWatson's MEGState 5.3 BAcc points (LibriBrain 2025 phoneme track). Odd, so each keeps the time axis."""
+    segments: int = 1
+    """Equal time chunks the readout pools mean and max over; more keep when in the window the response came."""
+    ssm: int = 0
+    """Modes per direction of a bidirectional state-space layer after the convolutions; 0 adds none."""
+    conformer: int = 0
+    """Conformer blocks after the convolutions: self-attention and a 0.5 s depthwise convolution, MEGConformer's
+    encoder; with no `dilations` they replace the convolutions."""
+    instance: bool = False
+    """Z-score each sensor within each window over its recorded samples: MEGConformer (LibriBrain 2025 phoneme
+    winner) found per-window normalisation critical for the shift to the holdout."""
+    lora: int = 0
+    """Retired: the rank of adapters on an end-to-end MEG-XL trunk, never trained above 0; kept so the configs
+    saved with it still load."""
+
+    def __post_init__(self) -> None:
+        if any(kernel % 2 == 0 for kernel in self.kernels):
+            raise ValueError(f"kernels {self.kernels} must be odd to keep the time axis")
+        if self.lora:
+            raise ValueError(f"lora={self.lora}: the end-to-end MEG-XL encoder it adapted is retired")
+
+
+CONV = ConvConfig()
+
+
+class ConvWords(WordEncoder):
+    def __init__(self, config: ConvConfig = CONV) -> None:
+        super().__init__(2 * config.hidden * config.segments, instance=config.instance)
+        self.segments = config.segments
+        self.spatial = nn.Conv1d(CHANNELS, config.hidden, 1)
+        self.blocks = nn.ModuleList(
+            DilatedBlock(config.hidden, d, config.dropout, config.kernels) for d in config.dilations
+        )
+        if config.ssm:
+            self.blocks.append(Ssm(config.hidden, config.ssm, config.dropout))
+        self.blocks.extend(TimeConformer(config.hidden, config.dropout) for _ in range(config.conformer))
+        self.head = self.classifier(config.dropout)
+
+    @override
+    def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:
+        h = self.spatial(x)
+        for block in self.blocks:
+            h = block(h, valid)
+        pooled = [
+            nn.functional.adaptive_avg_pool1d(h, self.segments),
+            nn.functional.adaptive_max_pool1d(h, self.segments),
+        ]
+        return torch.cat([p.flatten(1) for p in pooled], dim=-1)
