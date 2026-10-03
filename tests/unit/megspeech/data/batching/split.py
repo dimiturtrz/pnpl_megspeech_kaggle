@@ -115,8 +115,12 @@ def test_batch() -> None:
 
 
 def test_capacity() -> None:
-    assert split().capacity(1) == 8
-    assert split().capacity(100) == 192
+    s = split()
+    natural = s.weight[s.index[:, 0]]
+    assert s.capacity(1, natural) == 8
+    assert s.capacity(100, natural) == 192
+    longest = (s.index != PAD).sum(dim=1) == (s.index != PAD).sum(dim=1).max()
+    assert s.capacity(100, longest.float()) > s.capacity(100, natural)
 
 
 def test_holdout_like() -> None:

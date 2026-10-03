@@ -181,11 +181,10 @@ class Split:
         words = index.new_zeros(rows + 1).scatter_(0, slot.flatten(), index.clamp(min=0).flatten())[:rows]
         return Batch(self.windows(words, jitter), self.onset[spans], slot, index, self.subject[words])
 
-    def capacity(self, batch: int) -> int:
-        """Word rows for `batch` spans drawn as training draws them: the expected count plus `SIGMAS` deviations."""
+    def capacity(self, batch: int, weights: Float[Tensor, " g"]) -> int:
+        """Word rows for `batch` spans drawn at `weights`: the expected count plus `SIGMAS` deviations."""
         lengths = (self.index != PAD).sum(dim=1).double()
-        draw = self.weight[self.index[:, 0]].double()
-        draw = draw / draw.sum()
+        draw = weights.double() / weights.double().sum()
         mean = float((draw * lengths).sum())
         spread = math.sqrt(batch * float((draw * (lengths - mean).square()).sum()))
         rows = ROW_ALIGN * math.ceil((batch * mean + SIGMAS * spread) / ROW_ALIGN)

@@ -125,10 +125,23 @@ class Trainer:
         peaks = [group["lr"] for group in optimizer.param_groups]
         schedule = Scheduled(torch.optim.lr_scheduler.OneCycleLR(optimizer, peaks, total_steps=total))
         ema = Ema.of(model, optim.ema)
-        rows = train.capacity(optim.batch)
         return TrainState(
-            model, optimizer, schedule, rows, self.terms(train), model.readouts(), ema, (anchor, schedule, ema)
+            model,
+            optimizer,
+            schedule,
+            self.rows(train),
+            self.terms(train),
+            model.readouts(),
+            ema,
+            (anchor, schedule, ema),
         )
+
+    def rows(self, train: Split) -> int:
+        """Word rows for one batch at the curriculum's draw weights in whichever epoch draws the most words."""
+        optim = self.config.optim
+        curriculum = Annealed.of(optim.curriculum)
+        epochs = range(optim.epochs)
+        return max(train.capacity(optim.batch, curriculum.weights(train, epoch, optim.epochs)) for epoch in epochs)
 
     def fit(
         self, train: Split, validation: dict[str, Split], log_prior: Float[Tensor, " v"]

@@ -28,6 +28,7 @@ from megspeech.training.loop.ema import Ema
 from megspeech.training.loop.trainer import Trainer, TrainState
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
+from megspeech.training.sampling.curriculum import Annealed
 
 SAMPLES = 50
 CPU = torch.device("cpu")
@@ -127,7 +128,17 @@ def test_state() -> None:
     assert state.hooks == (Anchor.of(0.5, 0.01, 10), state.schedule, state.ema)
     assert state.readouts == net.readouts()
     assert len(state.terms) == len(state.readouts)
-    assert state.rows == split().capacity(optim.batch)
+    assert state.rows == made.rows(split())
+
+
+def test_rows() -> None:
+    train = split()
+    natural = trainer(RunConfig(optim=OptimConfig(epochs=3)))
+    assert natural.rows(train) == train.capacity(natural.config.optim.batch, train.weight[train.index[:, 0]])
+    annealed = trainer(RunConfig(optim=OptimConfig(epochs=3, curriculum=0.9)))
+    epochs = range(3)
+    draws = (Annealed(0.9).weights(train, epoch, 3) for epoch in epochs)
+    assert annealed.rows(train) == max(train.capacity(annealed.config.optim.batch, draw) for draw in draws)
 
 
 def test_step() -> None:
@@ -138,7 +149,7 @@ def test_step() -> None:
     ema = Ema.of(model, 0.0)
     schedule = Scheduled(torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0))
     state = TrainState(
-        model, optimizer, schedule, split().capacity(2), made.terms(split()), model.readouts(), ema, (schedule, ema)
+        model, optimizer, schedule, made.rows(split()), made.terms(split()), model.readouts(), ema, (schedule, ema)
     )
     value = made.step(state, split(), torch.tensor([0, 1]))
     assert value.ndim == 0
