@@ -89,7 +89,7 @@ class LoadedModel:
         for layer in (module for module in model.modules() if isinstance(module, SubjectLayer)):
             layer.shrink(scoring.fallback.keep, scoring.fallback.unseen)
         data = DataConfig.shared(directories, scoring.grouping)
-        heard = Corpus.heard(data.run_cache(root), Run.discover(root.raw()), data)
+        heard = Corpus.heard(data.run_cache(root), Run.everywhere(root), data)
         evaluator = Evaluator(
             device,
             Corpus.sequences(heard, scoring.grouping),

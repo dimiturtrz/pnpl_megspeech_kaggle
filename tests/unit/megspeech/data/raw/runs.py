@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.raw.runs import Partition, Run
 
 NAME = "sub-0_ses-11_task-Sherlock1_run-2"
@@ -58,6 +59,16 @@ def test_discover(tmp_path: Path) -> None:
     other = Run(meg(tmp_path, OTHER))
     other.events.write_text("kind\n")
     assert Run.discover(tmp_path) == [ready, other]
+
+
+def test_everywhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
+    root = DataRoot.from_config()
+    runs = [Run(meg(root.raw())), Run(meg(root.processed("meg_masc"), "sub-101_ses-0_task-MASC2_run-1"))]
+    for run in runs:
+        run.events.parent.mkdir(parents=True)
+        run.events.write_text("kind\n")
+    assert Run.everywhere(root) == runs
 
 
 def test_pooled(tmp_path: Path) -> None:

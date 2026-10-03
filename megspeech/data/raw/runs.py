@@ -11,6 +11,9 @@ import numpy as np
 import pandas as pd
 from jaxtyping import Int
 
+from core.paths import DataRoot
+from megspeech.data.raw.fetch import MASC
+
 DEEP = 0
 """The Deep track's subject: the one the official split, the validation domains and the holdout belong to."""
 
@@ -89,6 +92,11 @@ class Run:
         """Every run of every subject under `raw` whose MEG and events have both finished downloading."""
         runs = (cls(meg) for meg in sorted(raw.rglob("sub-*_meg.h5")))
         return [run for run in runs if run.events.exists() and run.events.stat().st_size]
+
+    @classmethod
+    def everywhere(cls, root: DataRoot) -> list["Run"]:
+        """LibriBrain's runs, then every other study's recordings rewritten as runs (`megspeech.data.raw.masc`)."""
+        return [*cls.discover(root.raw()), *cls.discover(root.processed(MASC.dataset))]
 
     @staticmethod
     def pooled(runs: Iterable["Run"]) -> list["Run"]:

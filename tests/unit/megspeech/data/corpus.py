@@ -32,8 +32,8 @@ class Root:
     def raw(self) -> Path:
         return self.path
 
-    def processed(self) -> Path:
-        return self.path / "processed"
+    def processed(self, *parts: str) -> Path:
+        return self.path.joinpath("processed", *parts)
 
 
 def corpus_root(tmp_path: Path) -> DataRoot:

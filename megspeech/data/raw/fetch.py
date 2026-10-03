@@ -9,6 +9,7 @@ events `.tsv` are pulled; the raw `.fif` (hundreds of GB) is never needed.
     uv run python -m megspeech.data.raw.fetch --weights  # pretrained MEG-XL and a GPT-2-class LM, into models/foreign,
                                                      # and MEG-XL's code at its pin, into external/
     uv run python -m megspeech.data.raw.fetch --stimuli  # Sherlock audiobook audio + wav2vec2 (speech targets)
+    uv run python -m megspeech.data.raw.fetch --masc     # MEG-MASC's BIDS tree, into raw/meg_masc
 """
 
 import argparse
@@ -21,6 +22,7 @@ from urllib.request import urlopen
 from zipfile import ZipFile
 
 from huggingface_hub import snapshot_download
+from osfclient import OSF
 
 from core.paths import DataRoot
 
@@ -135,6 +137,31 @@ class Download:
         return home
 
 
+@dataclass(frozen=True)
+class OsfProject:
+    """Every file of an OSF project's storages, mirrored as `raw/<dataset>/<storage>/<path>`."""
+
+    project: str
+    dataset: str
+
+    def home(self, root: DataRoot) -> Path:
+        return root.raw(self.dataset)
+
+    def fetch(self, root: DataRoot) -> Path:
+        """Mirror the project; a file already there at its remote size is skipped, so an interrupted fetch resumes."""
+        home = self.home(root)
+        LOG.info("fetching osf %s -> %s", self.project, home)
+        for storage in OSF().project(self.project).storages:
+            for remote in storage.files:
+                target = home / storage.name / remote.path.lstrip("/")
+                if target.exists() and target.stat().st_size == remote.size:
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with target.open("wb") as handle:
+                    remote.write_to(handle)
+        return home
+
+
 HOLDOUT = HubRepo("pnpl/LibriBrain-Competition-2026", ("*.npz",))
 SOURCES = (
     HOLDOUT,
@@ -171,14 +198,20 @@ NEUROMAG = Download(
 are the system's and the same in every recording, are the sensor geometry MEG-XL embeds and LibriBrain's files omit."""
 
 
+MASC = OsfProject("ag3kj", "meg_masc")
+"""MEG-MASC (Gwilliams et al. 2023, CC0): 27 subjects hearing four English stories on a KIT-208 system, ~100 GB of
+BIDS; `megspeech.data.raw.masc` rewrites it as LibriBrain runs."""
+
+
 def main() -> None:
-    """Fetch every source, or only the holdout, the other subjects, or the pretrained weights."""
+    """Fetch every source, or only the holdout, the other subjects, the pretrained weights, or MEG-MASC."""
     parser = argparse.ArgumentParser(description=__doc__)
     choice = parser.add_mutually_exclusive_group()
     choice.add_argument("--holdout-only", dest="sources", action="store_const", const=(HOLDOUT,), default=SOURCES)
     choice.add_argument("--others", dest="sources", action="store_const", const=(OTHERS,))
     choice.add_argument("--weights", dest="sources", action="store_const", const=(*WEIGHTS, MEGXL, NEUROMAG))
     choice.add_argument("--stimuli", dest="sources", action="store_const", const=STIMULI)
+    choice.add_argument("--masc", dest="sources", action="store_const", const=(MASC,))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()

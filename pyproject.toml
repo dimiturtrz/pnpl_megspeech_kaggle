@@ -22,6 +22,7 @@ dependencies = [
     "transformers>=5",
     "mne>=1.10",  # ICA artifact cleaning of the caches (megspeech.data.cache.cleaning)
     "triton-windows>=3.8.0.post29 ; sys_platform == 'win32'",
+    "osfclient>=0.0.5",
 ]
 
 [project.optional-dependencies]

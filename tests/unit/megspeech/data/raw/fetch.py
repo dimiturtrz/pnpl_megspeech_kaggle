@@ -2,6 +2,7 @@ import sys
 from fnmatch import fnmatch
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from zipfile import ZipFile
 
 import pytest
@@ -10,6 +11,7 @@ from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.raw import fetch as module
 from megspeech.data.raw.fetch import (
     HOLDOUT,
+    MASC,
     MEGXL,
     NEUROMAG,
     OTHERS,
@@ -19,6 +21,7 @@ from megspeech.data.raw.fetch import (
     Checkout,
     Download,
     HubRepo,
+    OsfProject,
     Weights,
     main,
 )
@@ -149,6 +152,47 @@ def test_checkout_fetch(served: list[str], tmp_path: Path, root: DataRoot):
     assert served == [checkout.archive()]
     Checkout("org/repo", "def", tmp_path).fetch(root)
     assert len(served) == 2
+
+
+class Remote:
+    def __init__(self, path: str, content: bytes, written: list[str]) -> None:
+        self.path, self.content, self.size, self.written = path, content, len(content), written
+
+    def write_to(self, handle: BytesIO) -> None:
+        self.written.append(self.path)
+        handle.write(self.content)
+
+
+@pytest.fixture
+def osf(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """One OSF project with one storage of two files; every path written recorded."""
+    written: list[str] = []
+    files = [Remote("/a/x.con", b"abc", written), Remote("/b.tsv", b"t", written)]
+    storage = SimpleNamespace(name="osfstorage", files=files)
+    project = SimpleNamespace(storages=[storage])
+    monkeypatch.setattr(module, "OSF", lambda: SimpleNamespace(project=lambda _key: project))
+    return written
+
+
+def test_osf_project_home(root: DataRoot):
+    assert OsfProject("key", "set").home(root) == root.raw("set")
+
+
+def test_osf_project_fetch(osf: list[str], root: DataRoot):
+    home = OsfProject("key", "set").fetch(root)
+    assert (home / "osfstorage" / "a" / "x.con").read_bytes() == b"abc"
+    (home / "osfstorage" / "b.tsv").write_bytes(b"")
+    OsfProject("key", "set").fetch(root)
+    assert osf == ["/a/x.con", "/b.tsv", "/b.tsv"]
+
+
+def test_main_masc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
+    monkeypatch.setattr(sys, "argv", ["fetch", "--masc"])
+    fetched: list[object] = []
+    monkeypatch.setattr(OsfProject, "fetch", lambda self, _root: fetched.append(self))
+    main()
+    assert fetched == [MASC]
 
 
 def test_download_home(root: DataRoot):

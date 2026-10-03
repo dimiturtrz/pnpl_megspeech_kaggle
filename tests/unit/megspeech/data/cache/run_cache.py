@@ -210,8 +210,8 @@ class FakeRoot:
     def raw(self) -> Path:
         return self.root
 
-    def processed(self) -> Path:
-        return self.root / "processed"
+    def processed(self, *parts: str) -> Path:
+        return self.root.joinpath("processed", *parts)
 
 
 class FakePool:

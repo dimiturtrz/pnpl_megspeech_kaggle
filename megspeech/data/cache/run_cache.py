@@ -279,7 +279,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format=FORMAT)
     root = DataRoot.from_config()
     cache = RunCache.under(root.processed(), args.decimate, args.cleaning)
-    runs = Run.discover(root.raw())
+    runs = Run.everywhere(root)
     began = time.perf_counter()
     table = cache.build(runs, args.workers)
     size = sum(cache.path(run.name).stat().st_size for run in runs) / GB

@@ -18,7 +18,7 @@ from megspeech.data.cache.run_cache import DeviceRecording, RunCache
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import RATE
 from megspeech.data.labels.vocabulary import ABSENT, IGNORE, PRIMARY, Vocabulary
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import DEEP, Run
 from megspeech.data.spans.spans import Grouping
 
 LOG = logging.getLogger(__name__)
@@ -37,11 +37,12 @@ class Corpus:
     @classmethod
     def load(cls, data: DataConfig, root: DataRoot, device: torch.device) -> "Corpus":
         cache = data.run_cache(root)
-        runs = Run.discover(root.raw())
+        runs = Run.everywhere(root)
         trained, held = data.trained(runs), data.held(runs)
         reading = [r.name for r in trained] + [r.name for group in held.values() for r in group]
         names = list(dict.fromkeys(reading))
-        alignment = data.alignment(root, device) if data.aligned else None
+        foreign = any(run.subject != DEEP for run in trained)
+        alignment = data.alignment(root, device) if data.aligned or foreign else None
         source = DeviceRecording.load(cache, device, names, standardised=data.standardised, alignment=alignment)
         table = source.words.assign(position=source.words.groupby("run").cumcount())
         words = cls.words(table, data.grouping, data.rate)
