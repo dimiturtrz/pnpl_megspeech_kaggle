@@ -209,4 +209,6 @@ def test_fold_range() -> None:
 def test_weight(tmp_path: Path) -> None:
     sherlock = Run(tmp_path / TRAIN)
     timit = Run(tmp_path / "sub-0_ses-1_task-TIMIT_run-1_meg.h5")
-    assert [DataConfig(read_weight=0.25).weight(r) for r in (sherlock, timit)] == [1.0, 0.25]
+    moth = Run(tmp_path / "sub-0_ses-1_task-TheMoth_run-1_meg.h5")
+    assert [DataConfig(read_weight=0.25).weight(r) for r in (sherlock, timit, moth)] == [1.0, 0.25, 1.0]
+    assert [DataConfig(narrator_weight=0.5).weight(r) for r in (sherlock, timit, moth)] == [0.5, 1.0, 1.0]

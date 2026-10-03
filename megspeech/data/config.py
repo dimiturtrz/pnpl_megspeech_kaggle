@@ -27,6 +27,9 @@ READ = frozenset({"TIMIT", "MOCHATIMIT"})
 NARRATIVE = ("Sherlock", "TheMoth")
 """The strata the ruler scores: Sherlock's nine books are one, TheMoth's stories another."""
 
+NARRATOR = "Sherlock"
+"""The stratum read by one voice throughout; every TheMoth story and read sentence has its own speaker."""
+
 
 @dataclass(frozen=True)
 class DataConfig:
@@ -34,6 +37,9 @@ class DataConfig:
     """Training restricted to these tasks' runs; empty trains on every task."""
     read_weight: float = 1.0
     """Sampling weight of read-sentence runs (TIMIT, MOCHA-TIMIT) — the holdout's domain — against narrative ones."""
+    narrator_weight: float = 1.0
+    """Sampling weight of runs in `NARRATOR`'s one voice (112 of sub-0's 156 training runs) against the
+    multi-speaker rest: TheMoth validation is a voice training never heard, as are the holdout's read sentences."""
     repeat_power: float = 0.0
     """A span heard `k` times in training is drawn with weight `k ** -repeat_power`; 1 draws each sentence once."""
     grouping: Grouping = Grouping.SENTENCE
@@ -124,8 +130,10 @@ class DataConfig:
         return self.reading(cache.windows(device, self.samples, standardised=self.standardised))
 
     def weight(self, run: Run) -> float:
-        """`run`'s sampling weight: `read_weight` for a read-sentence task, 1 for a narrative one."""
-        return self.read_weight if run.key[0] in READ else 1.0
+        """`run`'s sampling weight: `read_weight` for a read-sentence task, `narrator_weight` for `NARRATOR`'s
+        voice, 1 for the other narrative runs."""
+        weights = {**dict.fromkeys(READ, self.read_weight), NARRATOR: self.narrator_weight}
+        return weights.get(self.stratum(run.key[0]), 1.0)
 
     def trains_on(self, run: Run) -> bool:
         trained = (Partition.TRAIN, Partition.VALIDATION) if self.refit else (Partition.TRAIN,)
