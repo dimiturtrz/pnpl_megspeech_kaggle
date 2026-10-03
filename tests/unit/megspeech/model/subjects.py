@@ -1,6 +1,6 @@
 import torch
 
-from megspeech.data.runs import DEEP
+from megspeech.data.raw.runs import DEEP
 from megspeech.model.shared import Shared
 from megspeech.model.subjects import SubjectLayer, Unseen
 

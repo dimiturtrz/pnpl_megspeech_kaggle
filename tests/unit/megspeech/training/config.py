@@ -2,7 +2,7 @@ import dataclasses
 import json
 from pathlib import Path
 
-from megspeech.data.corpus import DataConfig
+from megspeech.data.config import DataConfig
 from megspeech.evaluation.report import Epoch, Score
 from megspeech.evaluation.ruler import Interval
 from megspeech.model.onsets import Clock

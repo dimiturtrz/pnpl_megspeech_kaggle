@@ -25,7 +25,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov"]
-# What MEG-XL's checked-out code (`megspeech.data.fetch.MEGXL`) imports beyond torch: its trunk is a LightningModule.
+# What MEG-XL's checked-out code (`megspeech.data.raw.fetch.MEGXL`) imports beyond torch: its trunk is a LightningModule.
 megxl = ["pytorch-lightning>=2", "einops>=0.6", "mne>=1.10"]
 # The guardrail ANALYZERS are an installed package pinned by scaffold tag (not vendored source) — an engine
 # update is a one-line `devtools_ref` bump on `copier update`, no source diff in your PRs. Imports as
@@ -222,6 +222,20 @@ layers = [
     "megspeech.model",
     "megspeech.objective",
     "megspeech.data",
+]
+
+[[tool.importlinter.contracts]]
+name = "megspeech.data layers: raw files -> labels/spans -> batching -> caches -> config -> corpus"
+type = "layers"
+layers = [
+    "megspeech.data.corpus",
+    "megspeech.data.config",
+    "megspeech.data.cache",
+    "megspeech.data.batching",
+    "megspeech.data.spans",
+    "megspeech.data.labels",
+    "megspeech.data.raw",
+    "megspeech.data.constants",
 ]
 # <<< LOCAL-SLOT: import-contracts
 

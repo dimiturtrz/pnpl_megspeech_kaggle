@@ -1,0 +1,204 @@
+"""Every run of every subject as one continuous 50 Hz recording, cached in float16 for loading whole onto the GPU.
+
+A continuous copy lets word windows be gathered on the device at any offset and length (`batching.windows.Windows`).
+The recordings are 250 Hz and already low-passed at 125 Hz; d'Ascoli 2025 decode at 50 Hz, and 250 / 50 = 5
+is an integer, so `resample_poly(x, 1, 5)` is a pure polyphase decimation whose FIR filter removes everything
+above the new 25 Hz Nyquist before keeping every fifth sample. The holdout is cached the same way
+(`megspeech.data.cache.holdout`).
+
+    uv run python -m megspeech.data.cache.run_cache               # every downloaded run under processed/continuous50
+    uv run python -m megspeech.data.cache.run_cache --decimate 2  # the same at 125 Hz, under processed/continuous125
+"""
+
+import argparse
+import logging
+import time
+from collections.abc import Callable, Iterator, Sequence
+from concurrent.futures import ProcessPoolExecutor
+from contextlib import contextmanager
+from dataclasses import dataclass
+from functools import partial
+from pathlib import Path
+
+import h5py
+import numpy as np
+import pandas as pd
+from jaxtyping import Bool, Float, Int
+from scipy.signal import resample_poly
+
+from core.paths import DataRoot
+from megspeech.data.constants import DECIMATE, HALF, MISSING, PICO, RATE, SFREQ, WORKERS
+from megspeech.data.raw.runs import Run
+
+LOG = logging.getLogger(__name__)
+
+DIRECTORY = "continuous{rate:g}"
+"""A cache's directory under `processed/`, named by its rate; the default 50 Hz cache is `continuous50`."""
+WORD_TABLE = "words.tsv"
+NO_SENTENCE = -1
+GB = 1e9
+
+TAIL = 1.0
+"""Seconds a holdout sentence epoch runs past its sentence's last word (`sentence_extra_end_s`), measured from the
+word's end: the epochs' tails after their last onset are never under 1.022 s, though one in nine training sentences
+ends on a vocabulary word whose tail from its onset would be exactly 1 s."""
+
+
+@dataclass(frozen=True)
+class RunCache:
+    """Each run's MEG as one `channels x time` float16 `.npy` in picotesla under `cache`, plus one word-event table."""
+
+    cache: Path
+    decimate: int = DECIMATE
+
+    @classmethod
+    def under(cls, processed: Path, decimate: int = DECIMATE) -> "RunCache":
+        """The cache at `decimate` in its own directory of `processed`, so caches at different rates coexist."""
+        return cls(processed / DIRECTORY.format(rate=SFREQ / decimate), decimate)
+
+    @property
+    def rate(self) -> float:
+        """Samples per second the cache keeps."""
+        return SFREQ / self.decimate
+
+    def path(self, name: str) -> Path:
+        return self.cache / f"{name}.npy"
+
+    def ready(self) -> Path:
+        """The cache directory, created if missing."""
+        self.cache.mkdir(parents=True, exist_ok=True)
+        return self.cache
+
+    def signal(self, run: Run) -> Float[np.ndarray, "c s"]:
+        """The whole run decimated, in picotesla, saturated to the float16 range rather than overflowing to inf."""
+        with h5py.File(run.meg) as stored:
+            rate = float(stored.attrs["sample_frequency"])
+            if rate != SFREQ:
+                raise ValueError(f"{run.meg.name} is {rate} Hz, not {SFREQ}")
+            meg = stored["data"][:]
+        return self.decimated(meg)
+
+    def decimated(self, meg: Float[np.ndarray, "c t"]) -> Float[np.ndarray, "c s"]:
+        """One continuous 250 Hz stretch in tesla as cached: decimated, in picotesla, saturated, float16."""
+        down = resample_poly(meg * np.float32(PICO), 1, self.decimate, axis=-1)
+        return np.clip(down, -HALF, HALF).astype(np.float16)
+
+    def length(self, samples: Int[np.ndarray, " n"]) -> Int[np.ndarray, " n"]:
+        """Samples `decimated` keeps of `samples`: `resample_poly` rounds `samples / decimate` up."""
+        return -(-samples // self.decimate)
+
+    def write(self, name: str, produce: Callable[[], Float[np.ndarray, "c s"]]) -> Path:
+        """Cache the signal `produce` makes as run `name`; a run already cached is skipped, never produced."""
+        path = self.path(name)
+        if not path.exists():
+            self.save(path, produce())
+        return path
+
+    def cache_run(self, run: Run) -> Path:
+        return self.write(run.name, partial(self.signal, run))
+
+    @staticmethod
+    @contextmanager
+    def staged(path: Path) -> Iterator[Path]:
+        """A sibling to write in place of `path`, moved onto it once written, so a crash mid-write never leaves a
+        final-named, truncated file."""
+        partial_path = path.with_name(f"{path.name}.partial")
+        yield partial_path
+        partial_path.replace(path)
+
+    @classmethod
+    def save(cls, path: Path, signal: Float[np.ndarray, "c s"]) -> Path:
+        with cls.staged(path) as staging, staging.open("wb") as handle:
+            np.save(handle, signal)
+        return path
+
+    @staticmethod
+    def words(run: Run) -> pd.DataFrame:
+        """A run's heard words: onset in seconds into the run, the word as spoken, its sentence in the run, and the
+        `end` its window stops at — `TAIL` after its sentence's last word ends, as a holdout sentence epoch does."""
+        events = pd.read_csv(
+            run.events,
+            sep="\t",
+            usecols=["kind", "segment", "sentenceidx", "timemeg", "duration"],
+            keep_default_na=False,
+            na_values=MISSING,
+        )
+        heard = events[(events["kind"] == "word") & events["segment"].notna()]
+        sentence = heard["sentenceidx"].fillna(NO_SENTENCE).to_numpy(dtype=np.int64)
+        finish = (heard["timemeg"] + heard["duration"].fillna(0.0)).groupby(sentence).transform("max")
+        return pd.DataFrame(
+            {
+                "run": run.name,
+                "onset": heard["timemeg"].to_numpy(dtype=np.float64),
+                "word": heard["segment"].to_numpy(),
+                "sentence": sentence,
+                "end": finish.to_numpy(dtype=np.float64) + TAIL,
+            }
+        )
+
+    def build(self, runs: Sequence[Run], workers: int = WORKERS) -> pd.DataFrame:
+        """Cache every run in parallel, then write the word table of all of them."""
+        self.ready()
+        with ProcessPoolExecutor(workers) as pool:
+            for path in pool.map(self.cache_run, runs):
+                LOG.info("%s", path.name)
+        return self.publish(pd.concat([self.words(run) for run in runs], ignore_index=True))
+
+    def publish(self, table: pd.DataFrame) -> pd.DataFrame:
+        """Write the cache's word table."""
+        with self.staged(self.cache / WORD_TABLE) as staging:
+            table.to_csv(staging, sep="\t", index=False)
+        return table
+
+    def published(self) -> pd.DataFrame:
+        """The cache's word table as `publish` wrote it."""
+        return pd.read_csv(self.cache / WORD_TABLE, sep="\t", keep_default_na=False, na_values=MISSING)
+
+    def table(self, names: Sequence[str]) -> pd.DataFrame:
+        """The named runs' words, run by run in `names` order, with each word's onset `sample` in its run, the
+        run's length in `samples` — read from the cache's headers, so no signal is loaded — and the exclusive
+        `stop` sample of its `end`, never before its 1 s window nor past its run, all at the cache's `rate`."""
+        samples = {name: np.load(self.path(name), mmap_mode="r").shape[1] for name in names}
+        table = self.published()
+        table = table[table["run"].isin(samples)]
+        order = table["run"].map({name: position for position, name in enumerate(names)}).to_numpy()
+        table = table.iloc[np.argsort(order, kind="stable")].reset_index(drop=True)
+        table["sample"] = np.round(table["onset"] * self.rate).astype(np.int64)
+        table["opening"] = table.groupby(["run", "sentence"])["sample"].transform("min")
+        table["samples"] = table["run"].map(samples).astype(np.int64)
+        stop = np.round(table["end"].to_numpy() * self.rate).astype(np.int64)
+        table["stop"] = np.minimum(np.maximum(stop, table["sample"] + round(self.rate)), table["samples"])
+        return table
+
+    @staticmethod
+    def inside(table: pd.DataFrame, length: int = RATE, offset: int = 0) -> Bool[np.ndarray, " n"]:
+        """Words whose window of `length` samples, `offset` after the onset, lies wholly within their run."""
+        begin = table["sample"].to_numpy() + offset
+        return (begin >= 0) & (begin + length <= table["samples"].to_numpy())
+
+
+def main() -> None:
+    """Cache every downloaded run at 250 Hz / `--decimate` and report the cache's size and wall time."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--workers", type=int, default=WORKERS)
+    parser.add_argument("--decimate", type=int, default=DECIMATE)
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+    root = DataRoot.from_config()
+    cache = RunCache.under(root.processed(), args.decimate)
+    runs = Run.discover(root.raw())
+    began = time.perf_counter()
+    table = cache.build(runs, args.workers)
+    size = sum(cache.path(run.name).stat().st_size for run in runs) / GB
+    LOG.info(
+        "%d runs, %d words, %.2f GB float16 in %s, %.0f s",
+        len(runs),
+        len(table),
+        size,
+        cache.cache,
+        time.perf_counter() - began,
+    )
+
+
+if __name__ == "__main__":
+    main()

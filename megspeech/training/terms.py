@@ -8,7 +8,7 @@ from typing import cast, override
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 
-from megspeech.data.phonemes import PHONEMES, Pronunciation
+from megspeech.data.labels.phonemes import PHONEMES, Pronunciation
 from megspeech.objective.phonetic import Phonetic
 from megspeech.objective.prototypes import Lexicon
 from megspeech.objective.semantic import Semantic

@@ -17,7 +17,7 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 
 LOG = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class Coverage:
 
     @classmethod
     def of(cls, labels: Int[Tensor, " n"]) -> "Coverage":
-        counts = torch.bincount(labels, minlength=WORDS)
+        counts = torch.bincount(labels, minlength=VOCAB_SIZE)
         held = counts[counts > 0]
         if not len(held):
             return cls(0, 0.0, 0)
@@ -119,7 +119,7 @@ class Ruler:
         of the confusion matrix weighted by `prior` renormalised over the present classes — the competition's OVMI
         reads it under SUBTLEX-UK frequencies, times a coverage every team shares. 0 when the prediction ignores
         the word; biased upward at a few words per class, so runs compare only on the same words."""
-        joint = torch.zeros(WORDS, WORDS, device=labels.device)
+        joint = torch.zeros(VOCAB_SIZE, VOCAB_SIZE, device=labels.device)
         joint.index_put_((labels, predicted), torch.ones_like(labels, dtype=joint.dtype), accumulate=True)
         rows = joint.sum(dim=1, keepdim=True)
         weight = torch.where(rows > 0, prior[:, None], 0.0)
@@ -131,9 +131,11 @@ class Ruler:
     def score(hits: Bool[Tensor, "b n"], labels: Int[Tensor, "b n"]) -> Float[Tensor, " b"]:
         """Balanced accuracy of every row, one bincount over rows offset into their own class block."""
         rows = len(labels)
-        slot = (labels + WORDS * torch.arange(rows, device=labels.device)[:, None]).flatten()
-        counts = torch.bincount(slot, minlength=rows * WORDS).view(rows, WORDS)
-        correct = torch.bincount(slot, weights=hits.flatten().float(), minlength=rows * WORDS).view(rows, WORDS)
+        slot = (labels + VOCAB_SIZE * torch.arange(rows, device=labels.device)[:, None]).flatten()
+        counts = torch.bincount(slot, minlength=rows * VOCAB_SIZE).view(rows, VOCAB_SIZE)
+        correct = torch.bincount(slot, weights=hits.flatten().float(), minlength=rows * VOCAB_SIZE).view(
+            rows, VOCAB_SIZE
+        )
         return (correct / counts.clamp(min=1)).sum(dim=1) / (counts > 0).sum(dim=1)
 
 

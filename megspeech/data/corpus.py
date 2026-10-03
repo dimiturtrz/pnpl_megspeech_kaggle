@@ -1,199 +1,30 @@
-"""What a training run reads: which runs train and at what weight, cut from the continuous cache with validation."""
+"""The on-device train set and validation domains a training run reads, cut from the run cache."""
 
-import itertools
-import json
 import logging
-import re
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
-from pathlib import Path
+from dataclasses import dataclass
+from itertools import chain
 
 import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Float
 from torch import Tensor
 
 from core.paths import DataRoot
-from core.tree import Tree
-from megspeech.data.continuous import Continuous, Decimator
-from megspeech.data.epochs import DECIMATE, RATE, SFREQ
-from megspeech.data.features import TRAIN, Features
-from megspeech.data.grouping import Grouping
-from megspeech.data.runs import DEEP, Partition, Run
-from megspeech.data.split import Split
-from megspeech.data.vocabulary import ABSENT, IGNORE, PRIMARY
-from megspeech.data.windows import Windows
+from megspeech.data.batching.features import TRAIN, Features
+from megspeech.data.batching.span_text import SpanText
+from megspeech.data.batching.split import Split
+from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.recording import DeviceRecording
+from megspeech.data.cache.run_cache import RunCache
+from megspeech.data.config import DataConfig
+from megspeech.data.constants import RATE
+from megspeech.data.labels.vocabulary import ABSENT, IGNORE, PRIMARY, Vocabulary
+from megspeech.data.raw.runs import Run
+from megspeech.data.spans.grouping import Grouping
 
 LOG = logging.getLogger(__name__)
-
-METRICS = "metrics.json"
-"""The record a finished run leaves in its directory, its config under `config`."""
-
-READ = frozenset({"TIMIT", "MOCHATIMIT"})
-"""Tasks of read sentences, the holdout's domain; the rest is narrative (Sherlock, TheMoth)."""
-
-NARRATIVE = ("Sherlock", "TheMoth")
-"""The strata the ruler scores: Sherlock's nine books are one, TheMoth's stories another."""
-
-READING = (
-    "window",
-    "standardised",
-    "extra",
-    "baseline",
-    "lead",
-    "decimate",
-    "subjects",
-    "refit",
-    "features",
-    "read_weight",
-    "repeat_power",
-    "tasks",
-    "folds",
-)
-"""The `DataConfig` fields an ensemble's members must agree on: how each reads the MEG, which runs trained it and at
-what weight. The rest are `grouping`, the scorer's own, and `fold`, which bagged members differ in by design."""
-
-
-@dataclass(frozen=True)
-class DataConfig:
-    tasks: tuple[str, ...] = ()
-    """Training restricted to these tasks' runs; empty trains on every task."""
-    read_weight: float = 1.0
-    """Sampling weight of read-sentence runs (TIMIT, MOCHA-TIMIT) — the holdout's domain — against narrative ones."""
-    repeat_power: float = 0.0
-    """A span heard `k` times in training is drawn with weight `k ** -repeat_power`; 1 draws each sentence once."""
-    grouping: Grouping = Grouping.SENTENCE
-    """`sentence`: every word of each PNPL sentence; `gap`: vocabulary words only, spans by onset gap."""
-    refit: bool = False
-    """Train on the validation runs too, for a final fit of an already selected recipe; validation then scores
-    words training heard, so it can no longer select."""
-    window: float = 1.0
-    """Seconds of MEG from each word's onset; a model is scored and submitted at the window it trained on."""
-    standardised: bool = False
-    """Each recording — training or validation run, holdout archive — robust-scaled per channel by its own median and
-    IQR before the model's scaler. Across the 162 runs a channel's IQR over its median run spans 0.78-1.28 (p5-p95);
-    the holdout sentence archive's sits at 0.90."""
-    extra: int = 0
-    """Whole training sessions per narrative stratum held out as one more validation domain, `<stratum>+`, beside
-    the official run: each book's or story's last session first. One official run per stratum leaves the macro's
-    interval near +-0.035; `k` more runs of similar size shrink it by about `sqrt(1 + k)`, for `k` runs of the
-    ~150 trained."""
-    baseline: float = 0.0
-    """Seconds from each window's start its centring mean is taken over; 0 centres on the whole window. The
-    reference pipeline baselines on 0-0.5 s, the pre-response stretch, so the word's evoked field is kept whole."""
-    lead: float = 0.0
-    """Seconds of MEG before each word's onset, read ahead of its `window`: never before its sentence's first onset,
-    as a holdout sentence epoch starts there."""
-    decimate: int = DECIMATE
-    """The 250 Hz recordings' decimation factor: which continuous cache training reads (`Decimator.under`)."""
-    folds: int = 1
-    """Bagging: training runs, in key order, dealt round-robin into `folds` folds; 1 trains on them all."""
-    fold: int = 0
-    """The fold left out of training when `folds` > 1, so each bagged member sees `1 - 1/folds` of the runs."""
-    subjects: tuple[int, ...] = (DEEP,)
-    """Subjects whose training runs train; validation is always subject 0's, and pooled runs never train."""
-    features: str = ""
-    """Features a frozen encoder saved under models/features/<name> (`megspeech.data.features`), read in place of
-    every split's MEG; empty reads the MEG."""
-
-    def __post_init__(self) -> None:
-        if not 0 <= self.fold < self.folds:
-            raise ValueError(f"fold {self.fold} is not one of the {self.folds} folds")
-
-    @classmethod
-    def saved(cls, directory: Path) -> "DataConfig":
-        """The data config a run in `directory` recorded; a record without one, or a flat one, falls to defaults."""
-        config = json.loads((directory / METRICS).read_text())["config"]
-        return Tree(cls).load(config.get("data", {}))
-
-    @classmethod
-    def shared(cls, directories: Sequence[Path], grouping: Grouping) -> "DataConfig":
-        """The `READING` every run in `directories` trained at, spans cut by `grouping`: members that read MEG
-        differently cannot share one set of holdout windows, nor members trained on different runs one prior. Bagged
-        members leaving out different folds together trained on every run, so they share an unbagged config."""
-        saved = [cls.saved(directory) for directory in directories]
-        readings = {tuple(getattr(config, name) for name in READING) for config in saved}
-        if len(readings) != 1:
-            raise ValueError(f"runs trained at {READING} {sorted(readings)}; an ensemble needs one")
-        folds = {config.fold for config in saved}
-        bagged = saved[0] if len(folds) == 1 else replace(saved[0], folds=1, fold=0)
-        return replace(bagged, grouping=grouping)
-
-    @property
-    def rate(self) -> float:
-        """Samples per second of the cache training reads."""
-        return SFREQ / self.decimate
-
-    @property
-    def samples(self) -> int:
-        """The window in samples at the cache's `rate`."""
-        return round(self.window * self.rate)
-
-    @property
-    def centring(self) -> int:
-        """The centring baseline in samples; 0 centres on the whole window."""
-        return round(self.baseline * self.rate)
-
-    @property
-    def leading(self) -> int:
-        """The lead before each onset in samples."""
-        return round(self.lead * self.rate)
-
-    def reading(self, windows: Windows) -> Windows:
-        """`windows` cut as this config reads them: `lead` before each onset, `window` after it, centred on
-        `baseline`."""
-        return replace(windows, length=self.samples + self.leading, offset=-self.leading, baseline=self.centring)
-
-    def decimator(self, root: DataRoot) -> Decimator:
-        """The continuous cache training reads, at `decimate`."""
-        return Decimator.under(root.processed(), self.decimate)
-
-    def weight(self, run: Run) -> float:
-        """`run`'s sampling weight: `read_weight` for a read-sentence task, 1 for a narrative one."""
-        return self.read_weight if run.key[0] in READ else 1.0
-
-    def trains_on(self, run: Run) -> bool:
-        trained = (Partition.TRAIN, Partition.VALIDATION) if self.refit else (Partition.TRAIN,)
-        return (
-            run.partition in trained and run.subject in self.subjects and (not self.tasks or run.key[0] in self.tasks)
-        )
-
-    @staticmethod
-    def stratum(task: str) -> str:
-        """The task without its book number: `Sherlock3` reads as `Sherlock`."""
-        return re.sub(r"\d+$", "", task)
-
-    def extras(self, runs: Sequence[Run]) -> list[Run]:
-        """The `extra` training runs per narrative stratum held out: every book's last session, then every book's
-        second-to-last, books in order."""
-        deep = (r for r in runs if r.partition is Partition.TRAIN and r.subject == DEEP)
-        train = sorted(deep, key=lambda r: r.key, reverse=True)
-        ranked = sorted(
-            ((rank, run.key[0]), run)
-            for _, book in itertools.groupby(train, key=lambda r: r.key[0])
-            for rank, run in enumerate(book)
-        )
-        return [
-            run
-            for stratum in NARRATIVE
-            for _, run in [entry for entry in ranked if self.stratum(entry[0][1]) == stratum][: self.extra]
-        ]
-
-    def trained(self, runs: Sequence[Run]) -> list[Run]:
-        """The runs training reads: `trains_on`, less the extra validation runs unless refitting on validation."""
-        withheld = set() if self.refit else {r.name for r in self.extras(runs)}
-        kept = [r for r in runs if self.trains_on(r) and r.name not in withheld]
-        ordered = sorted(kept, key=lambda r: (r.key, r.subject))
-        bagged = {r.name for at, r in enumerate(ordered) if self.folds == 1 or at % self.folds != self.fold}
-        return [r for r in kept if r.name in bagged]
-
-    def held(self, runs: Sequence[Run]) -> dict[str, list[Run]]:
-        """The validation domains' runs: each official validation run under its task, the extras under `<stratum>+`."""
-        official = [r for r in runs if r.partition is Partition.VALIDATION]
-        domains = {task: [r for r in official if r.key[0] == task] for task in sorted({r.key[0] for r in official})}
-        extras = {f"{s}+": [r for r in self.extras(runs) if self.stratum(r.key[0]) == s] for s in NARRATIVE}
-        return domains | {name: chosen for name, chosen in extras.items() if chosen}
 
 
 @dataclass(frozen=True)
@@ -206,12 +37,12 @@ class Corpus:
 
     @classmethod
     def load(cls, data: DataConfig, root: DataRoot, device: torch.device) -> "Corpus":
-        cache = data.decimator(root).cache
+        cache = data.run_cache(root)
         runs = Run.discover(root.raw())
         trained, held = data.trained(runs), data.held(runs)
         reading = [r.name for r in trained] + [r.name for group in held.values() for r in group]
         names = list(dict.fromkeys(reading))
-        source = Continuous.load(cache, device, names, standardised=data.standardised, rate=data.rate)
+        source = DeviceRecording.load(cache, device, names, standardised=data.standardised)
         words = cls.words(source.words, data.grouping, data.rate)
         weights = {r.name: data.weight(r) for r in trained}
         chosen = words[words["run"].isin(weights)]
@@ -233,17 +64,12 @@ class Corpus:
         with their `target` and `token` (the lower-cased word, hashed)."""
         labels = PRIMARY.labels(table["word"])
         target = np.where(labels == ABSENT, IGNORE, labels)
-        return table.assign(target=target, token=Corpus.token(table["word"]))[
-            grouping.keep(target) & Continuous.inside(table, round(rate))
+        return table.assign(target=target, token=Vocabulary.token(table["word"]))[
+            grouping.keep(target) & RunCache.inside(table, round(rate))
         ]
 
     @staticmethod
-    def token(words: pd.Series) -> Int[np.ndarray, " n"]:
-        """Each word lower-cased and hashed: the key every per-word table shares with a split's `token`."""
-        return pd.util.hash_array(words.astype(str).str.lower().to_numpy()).view(np.int64)
-
-    @staticmethod
-    def split(source: Continuous, words: pd.DataFrame, data: DataConfig, weight: Float[np.ndarray, " n"]) -> Split:
+    def split(source: DeviceRecording, words: pd.DataFrame, data: DataConfig, weight: Float[np.ndarray, " n"]) -> Split:
         """`words` (rows of `source.words`) as a split whose `data.window`-long windows are gathered from `source`'s
         device signal, each stopped where `data.grouping` bounds it."""
         windows = data.reading(
@@ -259,19 +85,19 @@ class Corpus:
 
     @classmethod
     def domains(
-        cls, source: Continuous, words: pd.DataFrame, held: dict[str, list[Run]], data: DataConfig
+        cls, source: DeviceRecording, words: pd.DataFrame, held: dict[str, list[Run]], data: DataConfig
     ) -> dict[str, Split]:
         """Each validation domain's `words` (`DataConfig.held`), one split per domain so each is scored alone."""
         chosen = {name: words[words["run"].isin([r.name for r in runs])] for name, runs in held.items()}
         return {name: cls.split(source, rows, data, np.ones(len(rows))) for name, rows in chosen.items()}
 
     @classmethod
-    def heard(cls, cache: Path, runs: Sequence[Run], data: DataConfig) -> pd.DataFrame:
+    def heard(cls, cache: RunCache, runs: Sequence[Run], data: DataConfig) -> pd.DataFrame:
         """Every word of the runs training reads (`DataConfig.trained`) that `data.grouping` carries, with its run's
         sampling `weight`, read from the word table without any MEG: the text a novel span must not repeat, and the
         labels the training prior counts."""
         trained = data.trained(runs)
-        table = Continuous.table(cache, [r.name for r in trained], data.rate)
+        table = cache.table([r.name for r in trained])
         weights = {r.name: data.weight(r) for r in trained}
         return cls.words(table.assign(weight=table["run"].map(weights)), data.grouping, data.rate)
 
@@ -279,7 +105,7 @@ class Corpus:
     def prior(heard: pd.DataFrame, data: DataConfig) -> Float[Tensor, " v"]:
         """The label prior of training's draws (`Split.log_prior` of the train split) counted from `heard` without
         any MEG: each word at its run's weight, a recited span's words down-weighted by `data.repeat_power`."""
-        repeats = Split.repeats(data.grouping.spans(heard).index, heard["token"].to_numpy(), data.repeat_power)
+        repeats = SpanText(data.grouping.spans(heard).index, heard["token"].to_numpy()).repeats(data.repeat_power)
         weight = torch.tensor(heard["weight"].to_numpy(dtype=np.float64), dtype=torch.float32)
         return Split.prior(torch.tensor(heard["target"].to_numpy()), weight * torch.from_numpy(repeats).float())
 
@@ -287,4 +113,5 @@ class Corpus:
     def sequences(heard: pd.DataFrame, grouping: Grouping) -> frozenset[tuple[int, ...]]:
         """The text of every span of `heard` as its token sequence, spans cut run by run."""
         runs = heard.groupby("run", sort=False)
-        return Split.seen((run["token"].to_numpy(), grouping.spans(run)) for _, run in runs)
+        texts = (SpanText(grouping.spans(run).index, run["token"].to_numpy()).sequences() for _, run in runs)
+        return frozenset(chain.from_iterable(texts))

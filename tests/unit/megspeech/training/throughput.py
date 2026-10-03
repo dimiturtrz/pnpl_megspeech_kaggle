@@ -5,10 +5,10 @@ import numpy as np
 import pytest
 import torch
 
+from megspeech.data.batching.split import Split
+from megspeech.data.constants import CHANNELS
 from megspeech.data.corpus import Corpus
-from megspeech.data.runs import CHANNELS
-from megspeech.data.spans import Spans
-from megspeech.data.split import Split
+from megspeech.data.spans.spans import Spans
 from megspeech.evaluation.report import Evaluator
 from megspeech.training import throughput as module
 from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig

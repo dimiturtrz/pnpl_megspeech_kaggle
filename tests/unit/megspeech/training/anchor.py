@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch import nn
 
-from megspeech.data.runs import DEEP
+from megspeech.data.raw.runs import DEEP
 from megspeech.model.subjects import SubjectLayer
 from megspeech.training.anchor import Anchor
 

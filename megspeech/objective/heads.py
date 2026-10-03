@@ -9,7 +9,7 @@ from jaxtyping import Float, Int
 from torch import Tensor, nn
 from torch.nn import functional
 
-from megspeech.data.vocabulary import IGNORE, WORDS
+from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 
 DIM = 1024
 """Width of a t5-large hidden state, the prototypes' space."""
@@ -44,8 +44,8 @@ class Objective(StrEnum):
 
     def head(self, width: int, prototypes: Float[Tensor, "v d"] | None) -> nn.Module:
         """`prototypes` None stands in zeros, for a checkpoint that will overwrite them."""
-        anchors = torch.zeros(WORDS, DIM) if prototypes is None else prototypes
-        return nn.Linear(width, WORDS) if self is Objective.SOFTMAX else CosineHead(width, anchors)
+        anchors = torch.zeros(VOCAB_SIZE, DIM) if prototypes is None else prototypes
+        return nn.Linear(width, VOCAB_SIZE) if self is Objective.SOFTMAX else CosineHead(width, anchors)
 
     def loss(
         self,

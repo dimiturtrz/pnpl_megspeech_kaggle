@@ -6,7 +6,7 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
-from megspeech.data.runs import CHANNELS
+from megspeech.data.constants import CHANNELS
 from megspeech.model.onsets import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.span import SpanConformer
 from megspeech.model.subjects import SubjectLayer, Unseen

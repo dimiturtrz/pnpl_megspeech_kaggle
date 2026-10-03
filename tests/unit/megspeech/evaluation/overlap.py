@@ -7,10 +7,11 @@ import pandas as pd
 import pytest
 
 from core.paths import DataRoot
-from megspeech.data.continuous import WORDS, Decimator
-from megspeech.data.holdout import Epochs, HoldoutCache, Source
-from megspeech.data.runs import Run
-from megspeech.data.vocabulary import ABSENT, PRIMARY
+from megspeech.data.cache.archive import ArchiveKind, Epochs
+from megspeech.data.cache.holdout import HoldoutCache
+from megspeech.data.cache.run_cache import WORD_TABLE, RunCache
+from megspeech.data.labels.vocabulary import ABSENT, PRIMARY
+from megspeech.data.raw.runs import Run
 from megspeech.evaluation import overlap as module
 from megspeech.evaluation.overlap import Onsets, Survey, Text, main
 
@@ -82,9 +83,9 @@ def survey(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Survey:
     names = ["sub-0_ses-11_task-Sherlock1_run-2", "sub-1_ses-11_task-Sherlock1_run-1", "sub-1_ses-1_task-TheMoth_run-1"]
     runs = [Run(tmp_path / f"{name}_meg.h5") for name in names]
     monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: runs))
-    cache = Decimator.under(root.processed()).ready()
+    cache = RunCache.under(root.processed()).ready()
     pd.concat([table(names[0]), table(names[1], shift=2.0), table(names[2])]).to_csv(
-        cache / WORDS, sep="\t", index=False
+        cache / WORD_TABLE, sep="\t", index=False
     )
     raw = HoldoutCache.of(root).raw
     raw.mkdir(parents=True)
@@ -92,7 +93,7 @@ def survey(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Survey:
         rows = [[0.0, 0.1 * (subject + 1)], [0.0, 0.5, 0.9]]
         epochs = onsets(rows[:: 1 - 2 * (subject % 2)]).epochs
         np.savez(
-            raw / f"subj{subject:02d}_{Source.SENTENCE}.npz",
+            raw / f"subj{subject:02d}_{ArchiveKind.SENTENCE}.npz",
             sentence_n_times=epochs.length,
             word_onsets_s=np.where(epochs.mask, epochs.onset, np.nan),
             word_mask=epochs.mask,

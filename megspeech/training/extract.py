@@ -27,14 +27,13 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from core.tree import Tree
+from megspeech.data.batching.features import HOLDOUT_FEATURES, TRAIN, Features
+from megspeech.data.batching.split import Split
+from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.holdout import Track
+from megspeech.data.constants import CHANNELS, RATE
 from megspeech.data.corpus import Corpus
-from megspeech.data.epochs import RATE
-from megspeech.data.features import HOLDOUT, TRAIN, Features
-from megspeech.data.holdout import HoldoutCache, Track
-from megspeech.data.runs import CHANNELS
-from megspeech.data.spans import PAD
-from megspeech.data.split import Split
-from megspeech.data.windows import Windows
+from megspeech.data.spans.spans import PAD
 from megspeech.model.megxl import ATTENTION_BATCH, DOWNSAMPLING
 from megspeech.model.megxl_words import COMPONENTS, Words
 from megspeech.model.scaler import SCALER_SAMPLE, Scaler
@@ -231,11 +230,8 @@ def main() -> None:
     base = Extractor(words, Scaler(corpus.train.sample(SCALER_SAMPLE)).to(device), Pooled(words))
     extract = args.read.extraction(base, corpus.train)
     track = Track.DEEP
-    cache = HoldoutCache.of(root, data.decimate, track)
-    cache.build()
-    windows = data.reading(cache.windows(device, data.samples, standardised=data.standardised))
-    holdout = Split.from_holdout(track.holdout(root.raw()), windows)
-    splits = {TRAIN: corpus.train} | dict(corpus.validation.items()) | {f"{HOLDOUT}-{track}": holdout}
+    holdout = Split.from_holdout(track.holdout(root.raw()), data.holdout(root, track, device))
+    splits = {TRAIN: corpus.train} | dict(corpus.validation.items()) | {f"{HOLDOUT_FEATURES}-{track}": holdout}
     features = Features.under(root, args.name)
     for name, split in splits.items():
         start = time.perf_counter()

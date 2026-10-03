@@ -1,11 +1,11 @@
-"""The word encoder over features a frozen MEG-XL trunk already computed (`megspeech.data.features`)."""
+"""The word encoder over features a frozen MEG-XL trunk already computed (`megspeech.data.batching.features`)."""
 
 from typing import override
 
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.wordnet import ConvConfig
 
 
@@ -16,7 +16,7 @@ class Cached(nn.Module):
     def __init__(self, config: ConvConfig, width: int) -> None:
         super().__init__()
         self.width = width
-        self.head = nn.Sequential(nn.Dropout(config.dropout), nn.Linear(self.width, WORDS))
+        self.head = nn.Sequential(nn.Dropout(config.dropout), nn.Linear(self.width, VOCAB_SIZE))
 
     def embed(self, x: Float[Tensor, "b c k"], _valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:
         return x.flatten(1)

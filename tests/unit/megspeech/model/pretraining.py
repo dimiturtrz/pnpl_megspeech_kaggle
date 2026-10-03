@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from megspeech.data.runs import CHANNELS
+from megspeech.data.constants import CHANNELS
 from megspeech.model.onsets import ContextConfig
 from megspeech.model.pretraining import Pretraining
 from megspeech.model.sentence import SentenceNet

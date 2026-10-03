@@ -23,12 +23,12 @@ from pnpl.competition import PRIMARY_VOCAB, SECONDARY_VOCAB, submit_to_kaggle, w
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.data.continuous import MISSING
-from megspeech.data.corpus import DataConfig
-from megspeech.data.features import HOLDOUT, Features
-from megspeech.data.holdout import HoldoutCache, Track
-from megspeech.data.split import Split
-from megspeech.data.vocabulary import SECONDARY, Vocabulary
+from megspeech.data.batching.features import HOLDOUT_FEATURES, Features
+from megspeech.data.batching.split import Split
+from megspeech.data.cache.holdout import Track
+from megspeech.data.config import DataConfig
+from megspeech.data.constants import MISSING
+from megspeech.data.labels.vocabulary import SECONDARY, Vocabulary
 from megspeech.evaluation.broad import Reading
 from megspeech.evaluation.report import Evaluator, Head
 
@@ -98,11 +98,9 @@ class Submitter:
         """Context-head probabilities for every row of the track's holdout, each read from its own subject's MEG and
         logit-adjusted by `tau`, written as a submission."""
         holdout = self.track.holdout(root.raw())
-        cache = HoldoutCache.of(root, self.data.decimate, self.track)
-        cache.build()
-        windows = cache.windows(self.evaluator.device, self.data.samples, standardised=self.data.standardised)
+        windows = self.data.holdout(root, self.track, self.evaluator.device)
         features = Features.under(root, self.data.features)
-        windows = features.read(f"{HOLDOUT}-{self.track}", self.data.reading(windows))
+        windows = features.read(f"{HOLDOUT_FEATURES}-{self.track}", windows)
         split = Split.from_holdout(holdout, windows)
         split = replace(split, subject=self.reading.subjects(split.subject))
         logits = self.evaluator.logits(model, split)[Head.CONTEXT]

@@ -13,11 +13,12 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
-from megspeech.data.continuous import WORDS as TABLE
-from megspeech.data.corpus import METRICS, DataConfig
-from megspeech.data.features import FEATURES
-from megspeech.data.runs import CHANNELS, Run
-from megspeech.data.vocabulary import PRIMARY, WORDS
+from megspeech.data.batching.features import FEATURES
+from megspeech.data.cache.run_cache import WORD_TABLE as TABLE
+from megspeech.data.config import METRICS, DataConfig
+from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
+from megspeech.data.raw.runs import Run
 from megspeech.evaluation import pooling as module
 from megspeech.evaluation.balance import Sinkhorn
 from megspeech.evaluation.overlap import RULER
@@ -42,7 +43,7 @@ class Favourite(nn.Module):
     def forward(
         self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        ranks = -torch.arange(WORDS, dtype=torch.float32)
+        ranks = -torch.arange(VOCAB_SIZE, dtype=torch.float32)
         rows = torch.where(subject[:, None] == 0, ranks, ranks.flip(0))
         logits = nn.functional.pad(rows, (0, 0, 0, 1))[slot]
         return logits, logits
@@ -50,7 +51,7 @@ class Favourite(nn.Module):
 
 def runs(tmp_path: Path) -> list[Run]:
     root = DataRoot(tmp_path)
-    cache = DataConfig().decimator(root).ready()
+    cache = DataConfig().run_cache(root).ready()
     rows = []
     for name in NAMES:
         np.save(cache / f"{name}.npy", np.ones((CHANNELS, SAMPLES), dtype=np.float16))
@@ -62,7 +63,7 @@ def runs(tmp_path: Path) -> list[Run]:
 
 def pooling(tmp_path: Path) -> Pooling:
     evaluator = Evaluator(CPU, min_novel=1)
-    return Pooling(DataRoot(tmp_path), Favourite(), DataConfig(), evaluator, torch.zeros(WORDS))
+    return Pooling(DataRoot(tmp_path), Favourite(), DataConfig(), evaluator, torch.zeros(VOCAB_SIZE))
 
 
 def test_equal_weights() -> None:
@@ -77,7 +78,10 @@ def test_reliable_weights() -> None:
 
 def test_combine() -> None:
     generator = torch.Generator().manual_seed(0)
-    reference, others = torch.randn(3, WORDS, generator=generator), torch.randn(2, 3, WORDS, generator=generator)
+    reference, others = (
+        torch.randn(3, VOCAB_SIZE, generator=generator),
+        torch.randn(2, 3, VOCAB_SIZE, generator=generator),
+    )
     present = torch.tensor([[True, True, False], [True, False, False]])
     reliability = torch.ones(2)
     alone = Pool(math.inf, Equal()).combine(reference, others, present, reliability)
@@ -110,7 +114,7 @@ def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     built = Pooling.of(DataRoot(tmp_path), "m", DataConfig().grouping, CPU)
     assert built.evaluator.seen == frozenset({(7, 8)})
     assert built.evaluator.min_novel == 3
-    assert built.log_prior.shape == (WORDS,)
+    assert built.log_prior.shape == (VOCAB_SIZE,)
 
 
 def test_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -118,7 +122,7 @@ def test_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     directories = members(tmp_path, monkeypatch, {"a": 5, "b": 5, "c": 7})
     scoring = Scoring(DataConfig().grouping, CPU, balance=Sinkhorn(2), shifts=(0, 1))
     built = Pooling.loaded(DataRoot(tmp_path), directories[:2], scoring)
-    expected = torch.tensor([1.0, 1.0] + [0.0] * (WORDS - 2)) + 1
+    expected = torch.tensor([1.0, 1.0] + [0.0] * (VOCAB_SIZE - 2)) + 1
     assert torch.allclose(built.log_prior, (expected / expected.sum()).log())
     assert (built.evaluator.min_novel, built.evaluator.balance, built.evaluator.shifts) == (5, Sinkhorn(2), (0, 1))
     with pytest.raises(ValueError, match="an ensemble needs one"):
@@ -186,7 +190,7 @@ def test_echo(tmp_path: Path) -> None:
     _, reference = tool.domains({RULER: every[:1]})
     logits, present, reliability = tool.echo(reference.iloc[:4], every[2], every[3])
     assert present.tolist() == [True] * 4
-    assert logits.argmax(dim=1).tolist() == [WORDS - 1] * 4
+    assert logits.argmax(dim=1).tolist() == [VOCAB_SIZE - 1] * 4
     assert reliability == pytest.approx(0.0)
 
 
@@ -195,7 +199,7 @@ def test_echoes(tmp_path: Path) -> None:
     tool = pooling(tmp_path)
     _, reference = tool.domains({RULER: every[:1]})
     echoes = tool.echoes(reference, every)
-    assert echoes.logits.shape == (1, len(SPOKEN), WORDS)
+    assert echoes.logits.shape == (1, len(SPOKEN), VOCAB_SIZE)
     assert echoes.present.all()
     assert echoes.reliability.shape == (1,)
 

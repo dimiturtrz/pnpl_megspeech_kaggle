@@ -7,8 +7,8 @@ import torch
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
-from megspeech.data.runs import CHANNELS
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.block import Block
 from megspeech.model.conformer import Conformer
 from megspeech.model.ssm import Ssm
@@ -57,7 +57,7 @@ class WordNet(nn.Module):
         if config.ssm:
             self.blocks.append(Ssm(config.hidden, config.ssm, config.dropout))
         self.blocks.extend(Conformer(config.hidden, config.dropout) for _ in range(config.conformer))
-        self.head = nn.Sequential(nn.Dropout(config.dropout), nn.Linear(self.width, WORDS))
+        self.head = nn.Sequential(nn.Dropout(config.dropout), nn.Linear(self.width, VOCAB_SIZE))
 
     def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:
         """`valid` rows alone set the batch statistics; the rest are padding."""

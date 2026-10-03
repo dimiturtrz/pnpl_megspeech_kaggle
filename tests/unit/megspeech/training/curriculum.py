@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 import torch
 
-from megspeech.data.spans import Spans
-from megspeech.data.split import Split
-from megspeech.data.windows import Windows
+from megspeech.data.batching.split import Split
+from megspeech.data.batching.windows import Windows
+from megspeech.data.spans.spans import Spans
 from megspeech.training.curriculum import Annealed, Natural
 
 

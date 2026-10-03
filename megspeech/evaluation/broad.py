@@ -24,10 +24,10 @@ from pnpl.competition.holdout import N_SUBJECTS
 from torch import Tensor
 
 from core.paths import DataRoot
-from megspeech.data.corpus import DataConfig
-from megspeech.data.grouping import Grouping
-from megspeech.data.runs import Partition, Run
-from megspeech.data.split import Split
+from megspeech.data.batching.split import Split
+from megspeech.data.config import DataConfig
+from megspeech.data.raw.runs import Partition, Run
+from megspeech.data.spans.grouping import Grouping
 from megspeech.evaluation.pooling import Pooling
 from megspeech.evaluation.report import Score
 from megspeech.model.subjects import Fallback, Unseen

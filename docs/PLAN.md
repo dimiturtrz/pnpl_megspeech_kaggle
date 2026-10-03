@@ -77,7 +77,7 @@ not fit and is not used.
 | subjects 1–32 | none | Sherlock1 ses-11 run1 | Sherlock1 ses-12 run1 |
 
 The Deep training set is therefore Sherlock1–**9** plus TIMIT, MOCHA and Podcasts (HF dirs `MOCHATIMIT`,
-`TheMoth`) — ~96 GB of sub-0 `.h5` across the two repos (measured 2026-10-01). Fetch: `python -m megspeech.data.fetch`. For Broad, `validation` IS the SFT set: `partition="train"`
+`TheMoth`) — ~96 GB of sub-0 `.h5` across the two repos (measured 2026-10-01). Fetch: `python -m megspeech.data.raw.fetch`. For Broad, `validation` IS the SFT set: `partition="train"`
 raises.
 
 **`pnpl` loader pitfalls:**

@@ -2,9 +2,9 @@ from dataclasses import replace
 
 import torch
 
-from megspeech.data.spans import PAD
-from megspeech.data.split import Split
-from megspeech.data.windows import Windows
+from megspeech.data.batching.split import Split
+from megspeech.data.batching.windows import Windows
+from megspeech.data.spans.spans import PAD
 from megspeech.model.megxl import DOWNSAMPLING, LATENT
 from megspeech.model.scaler import Scaler
 from megspeech.training.extract import (

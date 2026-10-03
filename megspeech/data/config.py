@@ -1,0 +1,188 @@
+"""What a training run reads: which runs train and at what weight, from which cache, cut how."""
+
+import itertools
+import json
+import re
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
+from pathlib import Path
+
+import torch
+
+from core.paths import DataRoot
+from core.tree import Tree
+from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.holdout import HoldoutCache, Track
+from megspeech.data.cache.run_cache import RunCache
+from megspeech.data.constants import DECIMATE, SFREQ
+from megspeech.data.raw.runs import DEEP, Partition, Run
+from megspeech.data.spans.grouping import Grouping
+
+METRICS = "metrics.json"
+"""The record a finished run leaves in its directory, its config under `config`."""
+
+READ = frozenset({"TIMIT", "MOCHATIMIT"})
+"""Tasks of read sentences, the holdout's domain; the rest is narrative (Sherlock, TheMoth)."""
+
+NARRATIVE = ("Sherlock", "TheMoth")
+"""The strata the ruler scores: Sherlock's nine books are one, TheMoth's stories another."""
+
+READING = (
+    "window",
+    "standardised",
+    "extra",
+    "baseline",
+    "lead",
+    "decimate",
+    "subjects",
+    "refit",
+    "features",
+    "read_weight",
+    "repeat_power",
+    "tasks",
+    "folds",
+)
+"""The `DataConfig` fields an ensemble's members must agree on: how each reads the MEG, which runs trained it and at
+what weight. The rest are `grouping`, the scorer's own, and `fold`, which bagged members differ in by design."""
+
+
+@dataclass(frozen=True)
+class DataConfig:
+    tasks: tuple[str, ...] = ()
+    """Training restricted to these tasks' runs; empty trains on every task."""
+    read_weight: float = 1.0
+    """Sampling weight of read-sentence runs (TIMIT, MOCHA-TIMIT) — the holdout's domain — against narrative ones."""
+    repeat_power: float = 0.0
+    """A span heard `k` times in training is drawn with weight `k ** -repeat_power`; 1 draws each sentence once."""
+    grouping: Grouping = Grouping.SENTENCE
+    """`sentence`: every word of each PNPL sentence; `gap`: vocabulary words only, spans by onset gap."""
+    refit: bool = False
+    """Train on the validation runs too, for a final fit of an already selected recipe; validation then scores
+    words training heard, so it can no longer select."""
+    window: float = 1.0
+    """Seconds of MEG from each word's onset; a model is scored and submitted at the window it trained on."""
+    standardised: bool = False
+    """Each recording — training or validation run, holdout archive — robust-scaled per channel by its own median and
+    IQR before the model's scaler. Across the 162 runs a channel's IQR over its median run spans 0.78-1.28 (p5-p95);
+    the holdout sentence archive's sits at 0.90."""
+    extra: int = 0
+    """Whole training sessions per narrative stratum held out as one more validation domain, `<stratum>+`, beside
+    the official run: each book's or story's last session first. One official run per stratum leaves the macro's
+    interval near +-0.035; `k` more runs of similar size shrink it by about `sqrt(1 + k)`, for `k` runs of the
+    ~150 trained."""
+    baseline: float = 0.0
+    """Seconds from each window's start its centring mean is taken over; 0 centres on the whole window. The
+    reference pipeline baselines on 0-0.5 s, the pre-response stretch, so the word's evoked field is kept whole."""
+    lead: float = 0.0
+    """Seconds of MEG before each word's onset, read ahead of its `window`: never before its sentence's first onset,
+    as a holdout sentence epoch starts there."""
+    decimate: int = DECIMATE
+    """The 250 Hz recordings' decimation factor: which continuous cache training reads (`RunCache.under`)."""
+    folds: int = 1
+    """Bagging: training runs, in key order, dealt round-robin into `folds` folds; 1 trains on them all."""
+    fold: int = 0
+    """The fold left out of training when `folds` > 1, so each bagged member sees `1 - 1/folds` of the runs."""
+    subjects: tuple[int, ...] = (DEEP,)
+    """Subjects whose training runs train; validation is always subject 0's, and pooled runs never train."""
+    features: str = ""
+    """Features a frozen encoder saved under models/features/<name> (`megspeech.data.batching.features`), read in
+    place of every split's MEG; empty reads the MEG."""
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.fold < self.folds:
+            raise ValueError(f"fold {self.fold} is not one of the {self.folds} folds")
+
+    @classmethod
+    def saved(cls, directory: Path) -> "DataConfig":
+        """The data config a run in `directory` recorded; a record without one, or a flat one, falls to defaults."""
+        config = json.loads((directory / METRICS).read_text())["config"]
+        return Tree(cls).load(config.get("data", {}))
+
+    @classmethod
+    def shared(cls, directories: Sequence[Path], grouping: Grouping) -> "DataConfig":
+        """The `READING` every run in `directories` trained at, spans cut by `grouping`: members that read MEG
+        differently cannot share one set of holdout windows, nor members trained on different runs one prior. Bagged
+        members leaving out different folds together trained on every run, so they share an unbagged config."""
+        saved = [cls.saved(directory) for directory in directories]
+        readings = {tuple(getattr(config, name) for name in READING) for config in saved}
+        if len(readings) != 1:
+            raise ValueError(f"runs trained at {READING} {sorted(readings)}; an ensemble needs one")
+        folds = {config.fold for config in saved}
+        bagged = saved[0] if len(folds) == 1 else replace(saved[0], folds=1, fold=0)
+        return replace(bagged, grouping=grouping)
+
+    @property
+    def rate(self) -> float:
+        """Samples per second of the cache training reads."""
+        return SFREQ / self.decimate
+
+    def to_samples(self, seconds: float) -> int:
+        """`seconds` in samples at the cache's `rate`."""
+        return round(seconds * self.rate)
+
+    @property
+    def samples(self) -> int:
+        """The window in samples at the cache's `rate`."""
+        return self.to_samples(self.window)
+
+    def reading(self, windows: Windows) -> Windows:
+        """`windows` cut as this config reads them: `lead` before each onset, `window` after it, centred on
+        `baseline` (0 centres on the whole window)."""
+        lead = self.to_samples(self.lead)
+        return replace(windows, length=self.samples + lead, offset=-lead, baseline=self.to_samples(self.baseline))
+
+    def run_cache(self, root: DataRoot) -> RunCache:
+        """The run cache training reads, at `decimate`."""
+        return RunCache.under(root.processed(), self.decimate)
+
+    def holdout(self, root: DataRoot, track: Track, device: torch.device | str) -> Windows:
+        """`track`'s holdout windows as this config reads them, its cache built first if missing."""
+        cache = HoldoutCache.of(root, self.decimate, track)
+        cache.build()
+        return self.reading(cache.windows(device, self.samples, standardised=self.standardised))
+
+    def weight(self, run: Run) -> float:
+        """`run`'s sampling weight: `read_weight` for a read-sentence task, 1 for a narrative one."""
+        return self.read_weight if run.key[0] in READ else 1.0
+
+    def trains_on(self, run: Run) -> bool:
+        trained = (Partition.TRAIN, Partition.VALIDATION) if self.refit else (Partition.TRAIN,)
+        return (
+            run.partition in trained and run.subject in self.subjects and (not self.tasks or run.key[0] in self.tasks)
+        )
+
+    @staticmethod
+    def stratum(task: str) -> str:
+        """The task without its book number: `Sherlock3` reads as `Sherlock`."""
+        return re.sub(r"\d+$", "", task)
+
+    def extras(self, runs: Sequence[Run]) -> list[Run]:
+        """The `extra` training runs per narrative stratum held out: every book's last session, then every book's
+        second-to-last, books in order."""
+        deep = (r for r in runs if r.partition is Partition.TRAIN and r.subject == DEEP)
+        train = sorted(deep, key=lambda r: r.key, reverse=True)
+        ranked = sorted(
+            ((rank, run.key[0]), run)
+            for _, book in itertools.groupby(train, key=lambda r: r.key[0])
+            for rank, run in enumerate(book)
+        )
+        return [
+            run
+            for stratum in NARRATIVE
+            for _, run in [entry for entry in ranked if self.stratum(entry[0][1]) == stratum][: self.extra]
+        ]
+
+    def trained(self, runs: Sequence[Run]) -> list[Run]:
+        """The runs training reads: `trains_on`, less the extra validation runs unless refitting on validation."""
+        withheld = set() if self.refit else {r.name for r in self.extras(runs)}
+        kept = [r for r in runs if self.trains_on(r) and r.name not in withheld]
+        ordered = sorted(kept, key=lambda r: (r.key, r.subject))
+        bagged = {r.name for at, r in enumerate(ordered) if self.folds == 1 or at % self.folds != self.fold}
+        return [r for r in kept if r.name in bagged]
+
+    def held(self, runs: Sequence[Run]) -> dict[str, list[Run]]:
+        """The validation domains' runs: each official validation run under its task, the extras under `<stratum>+`."""
+        official = [r for r in runs if r.partition is Partition.VALIDATION]
+        domains = {task: [r for r in official if r.key[0] == task] for task in sorted({r.key[0] for r in official})}
+        extras = {f"{s}+": [r for r in self.extras(runs) if self.stratum(r.key[0]) == s] for s in NARRATIVE}
+        return domains | {name: chosen for name, chosen in extras.items() if chosen}

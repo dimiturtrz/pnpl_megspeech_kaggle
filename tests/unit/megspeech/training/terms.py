@@ -4,7 +4,7 @@ from typing import cast
 import pytest
 import torch
 
-from megspeech.data.phonemes import PHONEMES, Pronunciation
+from megspeech.data.labels.phonemes import PHONEMES, Pronunciation
 from megspeech.objective.heads import DIM
 from megspeech.objective.prototypes import Lexicon
 from megspeech.objective.semantic import Semantic

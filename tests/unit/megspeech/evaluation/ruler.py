@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import torch
 
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.evaluation.ruler import Coverage, Graded, Interval, Ruler, main
 
 CPU = torch.device("cpu")
@@ -13,7 +13,7 @@ CPU = torch.device("cpu")
 
 def scored(n: int = 200, seed: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
     generator = torch.Generator().manual_seed(seed)
-    return torch.randn(n, WORDS, generator=generator), torch.randint(WORDS, (n,), generator=generator)
+    return torch.randn(n, VOCAB_SIZE, generator=generator), torch.randint(VOCAB_SIZE, (n,), generator=generator)
 
 
 def graded(seed: int = 0) -> Graded:
@@ -21,17 +21,17 @@ def graded(seed: int = 0) -> Graded:
     domains = {}
     for name, n in (("a", 120), ("b", 80)):
         scores, labels = scored(n, seed=n)
-        domains[name] = (ruler.hits(scores + seed * torch.nn.functional.one_hot(labels, WORDS), labels), labels)
+        domains[name] = (ruler.hits(scores + seed * torch.nn.functional.one_hot(labels, VOCAB_SIZE), labels), labels)
     return Graded(domains)
 
 
 def test_hits() -> None:
-    scores = torch.zeros(2, WORDS)
+    scores = torch.zeros(2, VOCAB_SIZE)
     scores[0, 3] = 1
     scores[1, :20] = 1
     hits = Ruler(k=10).hits(scores, torch.tensor([3, 40]))
     assert hits.tolist() == [True, False]
-    assert not Ruler().hits(torch.full((1, WORDS), torch.nan), torch.tensor([0])).any()
+    assert not Ruler().hits(torch.full((1, VOCAB_SIZE), torch.nan), torch.tensor([0])).any()
 
 
 def test_balanced() -> None:
@@ -82,10 +82,10 @@ def test_interval() -> None:
 
 
 def test_information() -> None:
-    labels, uniform = torch.arange(4).repeat(5), torch.ones(WORDS)
+    labels, uniform = torch.arange(4).repeat(5), torch.ones(VOCAB_SIZE)
     assert Ruler.information(labels, labels, uniform) == pytest.approx(2.0)
     assert Ruler.information(torch.zeros_like(labels), labels, uniform) == pytest.approx(0.0)
-    skewed = torch.ones(WORDS)
+    skewed = torch.ones(VOCAB_SIZE)
     skewed[0] = 3
     pair = torch.tensor([0, 1, 1])
     assert Ruler.information(pair, pair, skewed) == pytest.approx(-(0.75 * np.log2(0.75) + 0.25 * np.log2(0.25)))

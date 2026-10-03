@@ -9,7 +9,7 @@ import torch
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 
-from megspeech.data.runs import DEEP
+from megspeech.data.raw.runs import DEEP
 from megspeech.model.shared import Shared
 
 

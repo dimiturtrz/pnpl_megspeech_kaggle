@@ -25,13 +25,14 @@ from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.data.continuous import Continuous
-from megspeech.data.corpus import METRICS, Corpus, DataConfig
-from megspeech.data.features import Features
-from megspeech.data.grouping import Grouping
-from megspeech.data.runs import Partition, Run
-from megspeech.data.split import Split
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.batching.features import Features
+from megspeech.data.batching.split import Split
+from megspeech.data.cache.recording import DeviceRecording
+from megspeech.data.config import METRICS, DataConfig
+from megspeech.data.corpus import Corpus
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.data.raw.runs import Partition, Run
+from megspeech.data.spans.grouping import Grouping
 from megspeech.evaluation.balance import Sinkhorn
 from megspeech.evaluation.overlap import RULER, Text
 from megspeech.evaluation.report import Evaluator, Head, Score, SelectionConfig
@@ -41,7 +42,7 @@ from megspeech.model.subjects import AS_TRAINED, Fallback, SubjectLayer
 
 LOG = logging.getLogger(__name__)
 
-CHANCE = TOP / WORDS
+CHANCE = TOP / VOCAB_SIZE
 """Balanced top-10 of a predictor that ignores the MEG."""
 
 TRAINED = ("Sherlock1", 12, 1)
@@ -144,7 +145,7 @@ class Pooling:
         for layer in (module for module in model.modules() if isinstance(module, SubjectLayer)):
             layer.shrink(scoring.fallback.keep, scoring.fallback.unseen)
         data = DataConfig.shared(directories, scoring.grouping)
-        heard = Corpus.heard(data.decimator(root).cache, Run.discover(root.raw()), data)
+        heard = Corpus.heard(data.run_cache(root), Run.discover(root.raw()), data)
         evaluator = Evaluator(
             scoring.device,
             Corpus.sequences(heard, scoring.grouping),
@@ -162,12 +163,11 @@ class Pooling:
         saved: dict[str, list[str]] = json.loads(record.read_text()) if record.exists() else {}
         return [models / member for member in saved.get("members", [name])]
 
-    def load(self, runs: list[Run]) -> tuple[Continuous, pd.DataFrame]:
+    def load(self, runs: list[Run]) -> tuple[DeviceRecording, pd.DataFrame]:
         """`runs` on the device, and their words keyed by `Text` and cut as the model's grouping cuts them."""
-        cache = self.data.decimator(self.root).cache
         names = [r.name for r in runs]
-        device = self.evaluator.device
-        source = Continuous.load(cache, device, names, standardised=self.data.standardised, rate=self.data.rate)
+        cache = self.data.run_cache(self.root)
+        source = DeviceRecording.load(cache, self.evaluator.device, names, standardised=self.data.standardised)
         keyed = Text.of(source.words).words
         return source, Corpus.words(keyed, self.data.grouping, self.data.rate)
 
@@ -183,7 +183,7 @@ class Pooling:
         domains = Corpus.domains(source, words, held, self.data)
         return {name: self.features.split(name, split) for name, split in domains.items()}, ruler
 
-    def split(self, source: Continuous, rows: pd.DataFrame, run: Run) -> Split:
+    def split(self, source: DeviceRecording, rows: pd.DataFrame, run: Run) -> Split:
         """`run`'s `rows` as a split the model reads: its windows, or its saved features."""
         return self.features.split(run.name, Corpus.split(source, rows, self.data, np.ones(len(rows))))
 

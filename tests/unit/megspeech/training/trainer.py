@@ -8,12 +8,12 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
+from megspeech.data.batching.split import DENSE, Split
+from megspeech.data.constants import CHANNELS
 from megspeech.data.corpus import Corpus
-from megspeech.data.phonemes import Pronunciation
-from megspeech.data.runs import CHANNELS
-from megspeech.data.spans import Spans
-from megspeech.data.split import DENSE, Split
-from megspeech.data.vocabulary import IGNORE, WORDS
+from megspeech.data.labels.phonemes import Pronunciation
+from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
+from megspeech.data.spans.spans import Spans
 from megspeech.evaluation.report import Evaluator
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.heads import DIM
@@ -98,7 +98,7 @@ def test_balanced() -> None:
     assert trainer(RunConfig()).balanced(y) is None
     weight = trainer(RunConfig(optim=OptimConfig(balance=0.5))).balanced(y)
     assert weight is not None
-    assert weight.shape == (WORDS,)
+    assert weight.shape == (VOCAB_SIZE,)
     assert torch.allclose(weight[:2], torch.tensor([2 / 3, 4 / 3]))
     assert weight[2:].eq(0).all()
 
@@ -140,19 +140,19 @@ def test_step() -> None:
 
 def test_fit() -> None:
     model, history = trainer(RunConfig(augment=Augment(0.5, 0.1), optim=OptimConfig(epochs=1, batch=4, clip=1.0))).fit(
-        split(), {"a": split(seed=1)}, torch.zeros(WORDS)
+        split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE)
     )
     assert len(history) == 1
     assert isinstance(model, SentenceNet)
     train = split()
     made = Trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4)), Evaluator(CPU, min_novel=1), auxiliary=joint(train))
-    net, _ = made.fit(train, {"a": split(seed=1)}, torch.zeros(WORDS))
+    net, _ = made.fit(train, {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE))
     assert isinstance(net, SentenceNet)
     anchored = trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, anchor=0.5)))
-    assert isinstance(anchored.fit(split(), {"a": split(seed=1)}, torch.zeros(WORDS))[0], SentenceNet)
+    assert isinstance(anchored.fit(split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE))[0], SentenceNet)
     balanced = trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, balance=0.5)))
-    assert isinstance(balanced.fit(split(), {"a": split(seed=1)}, torch.zeros(WORDS))[0], SentenceNet)
+    assert isinstance(balanced.fit(split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE))[0], SentenceNet)
     with pytest.raises(FloatingPointError):
         trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, lr=math.inf))).fit(
-            split(), {"a": split(seed=1)}, torch.zeros(WORDS)
+            split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE)
         )

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.tree import Tree
-from megspeech.data.corpus import METRICS, DataConfig
+from megspeech.data.config import METRICS, DataConfig
 from megspeech.evaluation.report import Epoch, SelectionConfig
 from megspeech.model.onsets import CONTEXT, ContextConfig
 from megspeech.training.augment import Augment
@@ -34,11 +34,11 @@ class OptimConfig:
     auxiliary aligns to a frozen embedding; 0 never reads the lexicon."""
     phonetic: float = 0.0
     """Weight of the phonetic auxiliary: every heard word's window, in or out of the 50, classified into the first of
-    its 39 ARPAbet phonemes (`megspeech.data.phonemes`). Speech MEG decodes phonetic features (Gwilliams et al.
+    its 39 ARPAbet phonemes (`megspeech.data.labels.phonemes`). Speech MEG decodes phonetic features (Gwilliams et al.
     2022), and the onset phoneme is what the window's first ~100 ms hear; 0 never reads the table."""
     positions: int = 1
-    """Leading phonemes the phonetic auxiliary classifies, up to `megspeech.data.phonemes.POSITIONS`: a 0.5 s window
-    hears ~4 of ~0.1 s, and 1 is the onset phoneme alone."""
+    """Leading phonemes the phonetic auxiliary classifies, up to `megspeech.data.labels.phonemes.POSITIONS`: a 0.5 s
+    window hears ~4 of ~0.1 s, and 1 is the onset phoneme alone."""
     balance: float = 0.0
     """Class-weight exponent of the cross-entropies: each class weighs `count ** -balance` over the training labels,
     mean 1, so 0.5 is 1/sqrt(count) (the PNPL 2025 phoneme winner's). The metric is balanced accuracy, and the

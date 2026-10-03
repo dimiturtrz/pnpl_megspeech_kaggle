@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from core.paths import DataRoot
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.megxl import LATENT, Geometry, Trunk
 from megspeech.model.megxl_words import Words
 from megspeech.model.wordnet import ConvConfig
@@ -36,4 +36,4 @@ def test_normalise():
 
 
 def test_forward():
-    assert words().forward(torch.ones(3, 2, 8)).shape == (3, WORDS)
+    assert words().forward(torch.ones(3, 2, 8)).shape == (3, VOCAB_SIZE)

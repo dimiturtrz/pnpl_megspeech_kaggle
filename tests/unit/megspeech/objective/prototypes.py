@@ -7,9 +7,9 @@ import pytest
 import torch
 from torch import Tensor
 
-from megspeech.data.continuous import DIRECTORY, RATE, WORDS
-from megspeech.data.runs import CHANNELS
-from megspeech.data.vocabulary import PRIMARY
+from megspeech.data.cache.run_cache import DIRECTORY, RATE, WORD_TABLE
+from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import PRIMARY
 from megspeech.objective import prototypes as module
 from megspeech.objective.prototypes import LAYER, Lexicon, Prototypes
 
@@ -62,7 +62,7 @@ def cache(root: Path) -> None:
     np.save(directory / "run.npy", np.zeros((CHANNELS, 4 * RATE), np.float16))
     heard = [("The", 0.5), ("cat", 1.0), ("the", 1.5), ("zebra", 3.9)]
     rows = [("run", onset, word, 0, 3.9) for word, onset in heard]
-    pd.DataFrame(rows, columns=["run", "onset", "word", "sentence", "end"]).to_csv(directory / WORDS, sep="\t")
+    pd.DataFrame(rows, columns=["run", "onset", "word", "sentence", "end"]).to_csv(directory / WORD_TABLE, sep="\t")
 
 
 def test_prototypes_encode() -> None:

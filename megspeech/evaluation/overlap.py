@@ -18,10 +18,11 @@ from jaxtyping import Bool, Float, Int
 from pnpl.competition.holdout import N_SUBJECTS
 
 from core.paths import DataRoot
-from megspeech.data.continuous import MISSING, WORDS, Decimator
-from megspeech.data.holdout import Epochs, HoldoutCache, Source
-from megspeech.data.runs import DEEP, Partition, Run
-from megspeech.data.vocabulary import ABSENT, PRIMARY
+from megspeech.data.cache.archive import ArchiveKind, Epochs
+from megspeech.data.cache.holdout import HoldoutCache
+from megspeech.data.cache.run_cache import RunCache
+from megspeech.data.labels.vocabulary import ABSENT, PRIMARY
+from megspeech.data.raw.runs import DEEP, Partition, Run
 
 LOG = logging.getLogger(__name__)
 
@@ -135,14 +136,13 @@ class Survey:
             r for r in runs if r.subject == DEEP and r.partition is Partition.VALIDATION and r.key[0] == RULER
         )
         pooled = sorted((r for r in runs if r.partition is Partition.POOL), key=lambda r: r.subject)
-        cache = Decimator.under(self.root.processed()).cache
-        table = pd.read_csv(cache / WORDS, sep="\t", keep_default_na=False, na_values=MISSING)
+        table = RunCache.under(self.root.processed()).published()
         texts = {run.name: Text.of(table[table["run"] == run.name]) for run in [reference, *pooled]}
         return [texts[reference.name].overlap(texts[run.name], run.subject) for run in pooled]
 
     def holdout(self) -> list[Echo]:
         cache = replace(HoldoutCache.of(self.root), subjects=tuple(range(N_SUBJECTS)))
-        sentences = [Onsets(a.epochs()) for a in cache.archives() if a.name.endswith(Source.SENTENCE)]
+        sentences = [Onsets(a.epochs()) for a in cache.archives() if a.name.endswith(ArchiveKind.SENTENCE)]
         onsets = dict(zip(cache.subjects, sentences, strict=True))
         return [onsets[DEEP].echo(other, subject) for subject, other in onsets.items()]
 

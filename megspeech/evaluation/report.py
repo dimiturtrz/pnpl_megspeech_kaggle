@@ -18,10 +18,10 @@ from jaxtyping import Float, Int
 from torch import Tensor, nn
 
 from core.tree import Tree
-from megspeech.data.corpus import METRICS
-from megspeech.data.spans import PAD
-from megspeech.data.split import EVAL_SPANS, Split
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.batching.split import EVAL_SPANS, Split
+from megspeech.data.config import METRICS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.balance import Sinkhorn
 from megspeech.evaluation.ruler import Coverage, Graded, Interval, Ruler
 
@@ -136,7 +136,7 @@ class Evaluator:
         """
         model.eval()
         words, rows = len(split.y), EVAL_SPANS * split.index.shape[1]
-        out = {head: torch.zeros(words + 1, WORDS, device=self.device) for head in Head}
+        out = {head: torch.zeros(words + 1, VOCAB_SIZE, device=self.device) for head in Head}
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
             for spans in torch.arange(len(split.index), device=self.device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
@@ -167,7 +167,7 @@ class Evaluator:
     def scored(self, logits: dict[Head, Float[Tensor, "n v"]], split: Split, log_prior: Float[Tensor, " v"]) -> Report:
         """One domain's report from its already computed logits: every labelled word scored, out-of-vocabulary
         words only lending their spans context."""
-        labelled, dense, novel = split.labelled(), split.dense(), split.novel(self.seen)
+        labelled, dense, novel = split.labelled(), split.holdout_like(), split.novel(self.seen)
         context, word, y = logits[Head.CONTEXT][labelled], logits[Head.WORD][labelled], split.y[labelled]
         unseen, heard = logits[Head.CONTEXT][novel], split.y[novel]
         adjusted = {tau: self.adjusted(unseen, log_prior, tau) for tau in ADJUSTMENTS}

@@ -7,8 +7,8 @@ from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.data.runs import CHANNELS
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.lora import Lora
 from megspeech.model.megxl import LATENT, Trunk
 from megspeech.model.wordnet import ConvConfig, WordNet
@@ -32,7 +32,7 @@ class Words(nn.Module):
         self.trunk = trunk
         self.instance = config.instance
         self.width = POOLED
-        self.head = nn.Sequential(nn.Dropout(config.dropout), nn.Linear(self.width, WORDS))
+        self.head = nn.Sequential(nn.Dropout(config.dropout), nn.Linear(self.width, VOCAB_SIZE))
 
     @classmethod
     def pretrained(cls, root: DataRoot, config: ConvConfig) -> "Words":

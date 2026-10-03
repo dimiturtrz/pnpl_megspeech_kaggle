@@ -11,11 +11,11 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
-from megspeech.data.corpus import METRICS, DataConfig
-from megspeech.data.runs import CHANNELS
-from megspeech.data.spans import Spans
-from megspeech.data.split import DENSE, Split
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.batching.split import DENSE, Split
+from megspeech.data.config import METRICS, DataConfig
+from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.data.spans.spans import Spans
 from megspeech.evaluation.pooling import Pooling, Scoring
 from megspeech.evaluation.report import Evaluator
 from megspeech.submission import ensemble as module
@@ -31,7 +31,7 @@ class Constant(nn.Module):
     def forward(
         self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        logits = torch.zeros(*slot.shape, WORDS)
+        logits = torch.zeros(*slot.shape, VOCAB_SIZE)
         logits[..., 0] = 1
         return logits, logits
 
@@ -49,7 +49,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     def pooled(_: type[Pooling], root: DataRoot, directories: list[Path], scoring: Scoring) -> Pooling:
         loaded.append((directories, scoring))
-        return Pooling(root, Constant(), data, Evaluator(CPU, min_novel=1), torch.zeros(WORDS))
+        return Pooling(root, Constant(), data, Evaluator(CPU, min_novel=1), torch.zeros(VOCAB_SIZE))
 
     monkeypatch.setattr(module, "torch", SimpleNamespace(device=lambda _: CPU))
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))

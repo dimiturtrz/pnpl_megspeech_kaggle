@@ -3,7 +3,7 @@
 The trunk tokenises each channel with its frozen BioCodec (12x downsampling, so one token per 240 ms at 50 Hz),
 embeds every token with its sensor's position, orientation and type, and alternates temporal attention along each
 channel with spatial attention across the channels. Its code and its weights are fetched by
-`python -m megspeech.data.fetch --weights`; its imports beyond torch come with the `megxl` extra.
+`python -m megspeech.data.raw.fetch --weights`; its imports beyond torch come with the `megxl` extra.
 """
 
 import importlib
@@ -20,7 +20,7 @@ from jaxtyping import Float, Int
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.data.fetch import MEGXL, NEUROMAG
+from megspeech.data.raw.fetch import MEGXL, NEUROMAG
 from megspeech.model.lora import Lora
 
 CHECKPOINT = "meg-xl-med-v2.ckpt"

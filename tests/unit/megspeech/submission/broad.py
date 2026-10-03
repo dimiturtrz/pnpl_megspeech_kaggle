@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from core.paths import DataRoot
-from megspeech.data.holdout import Track
+from megspeech.data.cache.holdout import Track
 from megspeech.evaluation import broad as ruler
 from megspeech.evaluation.broad import Reading
 from megspeech.submission import broad as module

@@ -16,7 +16,8 @@ from torch.profiler import ProfilerActivity, profile
 
 from core.paths import DataRoot
 from core.tree import Tree
-from megspeech.data.corpus import Corpus, DataConfig
+from megspeech.data.config import DataConfig
+from megspeech.data.corpus import Corpus
 from megspeech.training.config import RunConfig
 from megspeech.training.trainer import Trainer
 

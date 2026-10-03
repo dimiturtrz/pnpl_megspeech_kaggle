@@ -6,7 +6,7 @@ from jaxtyping import Float, Int
 from torch import Tensor, nn
 from torch.nn import functional
 
-from megspeech.data.phonemes import PHONEMES, UNKNOWN
+from megspeech.data.labels.phonemes import PHONEMES, UNKNOWN
 
 
 class Phonetic(nn.Module):

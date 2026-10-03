@@ -1,6 +1,6 @@
 import torch
 
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.cached import Cached
 from megspeech.model.wordnet import ConvConfig
 
@@ -17,4 +17,4 @@ def test_normalise():
 
 
 def test_forward():
-    assert Cached(ConvConfig(), WIDTH).forward(FEATURES).shape == (2, WORDS)
+    assert Cached(ConvConfig(), WIDTH).forward(FEATURES).shape == (2, VOCAB_SIZE)

@@ -7,8 +7,8 @@ import torch
 from jaxtyping import Float
 from torch import Tensor
 
-from megspeech.data.runs import DEEP
-from megspeech.data.split import Split
+from megspeech.data.batching.split import Split
+from megspeech.data.raw.runs import DEEP
 
 
 class Curriculum(Protocol):

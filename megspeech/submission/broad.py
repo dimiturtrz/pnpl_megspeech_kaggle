@@ -11,8 +11,8 @@ import logging
 import torch
 
 from core.paths import DataRoot
-from megspeech.data.holdout import Track
-from megspeech.data.runs import Run
+from megspeech.data.cache.holdout import Track
+from megspeech.data.raw.runs import Run
 from megspeech.evaluation.broad import BroadRuler, Options
 from megspeech.submission.submission import Submitter
 

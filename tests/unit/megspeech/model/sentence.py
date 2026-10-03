@@ -4,8 +4,8 @@ from typing import cast
 import torch
 from torch import nn
 
-from megspeech.data.runs import CHANNELS
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.onsets import ContextConfig
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.span import SpanConformer
@@ -24,7 +24,7 @@ def test_sentence_net_forward() -> None:
     context, word = model.forward(
         x, torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]]), slot, torch.zeros(len(x), dtype=torch.long)
     )
-    assert context.shape == word.shape == (2, 3, WORDS)
+    assert context.shape == word.shape == (2, 3, VOCAB_SIZE)
     assert torch.isfinite(context[slot < len(x)]).all()
 
 

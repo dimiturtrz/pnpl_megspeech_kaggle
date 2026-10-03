@@ -10,11 +10,12 @@ from pnpl.competition.holdout import N_SUBJECTS
 from torch import nn
 
 from core.paths import ENV_OVERRIDE, DataRoot
-from megspeech.data.corpus import DataConfig
-from megspeech.data.holdout import Track
-from megspeech.data.runs import CHANNELS
-from megspeech.data.vocabulary import WORDS
-from megspeech.data.windows import Windows
+from megspeech.data import config as data_config
+from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.holdout import Track
+from megspeech.data.config import DataConfig
+from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.evaluation.broad import Reading
 from megspeech.evaluation.report import Evaluator
 from megspeech.submission import submission as module
@@ -144,7 +145,7 @@ class Constant(nn.Module):
         self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         self.subjects.append(subject)
-        logits = torch.zeros(*slot.shape, WORDS)
+        logits = torch.zeros(*slot.shape, VOCAB_SIZE)
         logits[..., 0] = 1
         return logits, logits
 
@@ -153,14 +154,14 @@ def test_submit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tracks: list[Track] = []
     monkeypatch.setattr(module.Track, "holdout", lambda track, _: tracks.append(track) or Holdout())
     monkeypatch.setattr(module, "Submission", Written)
-    monkeypatch.setattr(module, "HoldoutCache", Cache)
+    monkeypatch.setattr(data_config, "HoldoutCache", Cache)
     root = cast("DataRoot", Root(tmp_path))
     submitter = Submitter(
         Evaluator(torch.device("cpu")), DataConfig(window=2.0, standardised=True), Track.BROAD, Reading.UNSEEN
     )
-    path = submitter.submit(Constant(), root, torch.zeros(WORDS), 0.5, tmp_path / "s.npz")
+    path = submitter.submit(Constant(), root, torch.zeros(VOCAB_SIZE), 0.5, tmp_path / "s.npz")
     stored = np.load(path)
-    assert stored["primary"].shape == (3, WORDS)
+    assert stored["primary"].shape == (3, VOCAB_SIZE)
     assert np.allclose(stored["primary"].sum(axis=1), 1, atol=1e-5)
     assert Cache.built == [True]
     assert Cache.standardised == [True]

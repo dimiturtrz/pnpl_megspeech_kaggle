@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from megspeech.data.runs import CHANNELS
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.wordnet import ConvConfig, WordNet
 
 SMALL = ConvConfig(hidden=8, dilations=(1, 2))
@@ -17,7 +17,7 @@ def test_embed() -> None:
 
 def test_word_net_forward() -> None:
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
-    assert WordNet(SMALL).forward(x).shape == (3, WORDS)
+    assert WordNet(SMALL).forward(x).shape == (3, VOCAB_SIZE)
 
 
 def test_embed_segments_one_is_mean_and_max() -> None:
@@ -35,7 +35,7 @@ def test_embed_kernels_and_segments() -> None:
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     assert net.width == 2 * 8 * 4
     assert net.embed(x).shape == (3, net.width)
-    assert net.forward(x).shape == (3, WORDS)
+    assert net.forward(x).shape == (3, VOCAB_SIZE)
 
 
 def test_embed_ssm_appends_one_layer() -> None:

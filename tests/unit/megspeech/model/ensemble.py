@@ -4,8 +4,8 @@ from typing import override
 import torch
 from torch import nn
 
-from megspeech.data.runs import CHANNELS
-from megspeech.data.vocabulary import WORDS
+from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.encoder import Encoder
 from megspeech.model.ensemble import SCALE_MEDIAN, Ensemble
 from megspeech.model.megxl_words import POOLED
@@ -26,7 +26,7 @@ class Peaked(nn.Module):
     def forward(
         self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        logits = torch.zeros(*slot.shape, WORDS)
+        logits = torch.zeros(*slot.shape, VOCAB_SIZE)
         logits[..., self.word] = 10
         return logits, logits
 

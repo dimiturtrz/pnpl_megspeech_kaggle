@@ -6,8 +6,8 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
-from megspeech.data.phonemes import Pronunciation
-from megspeech.data.runs import CHANNELS
+from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.model.onsets import ContextConfig
 from megspeech.model.pretraining import Pretraining
 from megspeech.model.sentence import SentenceNet

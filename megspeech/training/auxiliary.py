@@ -11,7 +11,7 @@ from jaxtyping import Float, Int
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.data.phonemes import Pronunciation
+from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.model.pretraining import Pretraining
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.prototypes import Lexicon

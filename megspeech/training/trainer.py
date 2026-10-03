@@ -1,6 +1,6 @@
 """Fit the sentence-context word classifier: fixed-shape optimiser steps, best epoch kept by validation.
 
-Every word is read inside its span (`megspeech.data.spans`): a CNN embeds each 1 s window, a transformer refines
+Every word is read inside its span (`megspeech.data.spans.spans`): a CNN embeds each 1 s window, a transformer refines
 the embeddings across the span, and both the isolated-word head and the context head are trained.
 """
 
@@ -13,9 +13,9 @@ from jaxtyping import Float, Int
 from torch import Tensor, nn
 
 from core.paths import DataRoot
+from megspeech.data.batching.split import Split
 from megspeech.data.corpus import Corpus
-from megspeech.data.split import Split
-from megspeech.data.vocabulary import IGNORE, WORDS
+from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.evaluation.report import Epoch, Evaluator
 from megspeech.model.megxl import Trunk
 from megspeech.model.scaler import SCALER_SAMPLE, Scaler
@@ -89,7 +89,7 @@ class Trainer:
     def balanced(self, y: Int[Tensor, " n"]) -> Float[Tensor, " v"] | None:
         """Each class's cross-entropy weight, `count ** -balance` over the labelled `y`, mean 1 over the classes
         present and 0 for the absent; None at balance 0, the unweighted loss itself."""
-        counts = torch.bincount(y[y != IGNORE], minlength=WORDS).float()
+        counts = torch.bincount(y[y != IGNORE], minlength=VOCAB_SIZE).float()
         present = counts > 0
         weight = torch.where(present, counts.clamp(min=1).pow(-self.config.optim.balance), 0.0)
         return weight / weight[present].mean() if self.config.optim.balance else None

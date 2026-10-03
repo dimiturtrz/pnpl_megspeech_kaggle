@@ -3,7 +3,7 @@ import math
 import pytest
 import torch
 
-from megspeech.data.phonemes import PHONEMES, UNKNOWN
+from megspeech.data.labels.phonemes import PHONEMES, UNKNOWN
 from megspeech.objective.phonetic import Phonetic
 
 WIDTH = 6
