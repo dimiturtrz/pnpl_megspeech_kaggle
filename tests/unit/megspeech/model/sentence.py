@@ -96,6 +96,10 @@ def test_features_read_each_subject_through_its_layer() -> None:
 def test_mixer() -> None:
     assert isinstance(SentenceNet.mixer(CONTEXT), nn.TransformerEncoder)
     assert isinstance(SentenceNet.mixer(replace(CONTEXT, mixing=3)), SpanConformer)
+    assert cast("nn.TransformerEncoder", SentenceNet.mixer(CONTEXT)).norm is None
+    assert isinstance(
+        cast("nn.TransformerEncoder", SentenceNet.mixer(replace(CONTEXT, final_norm=True))).norm, nn.LayerNorm
+    )
 
 
 def test_padding_rows_change_nothing_mixing() -> None:

@@ -59,7 +59,8 @@ class SentenceNet(nn.Module):
         if context.mixing:
             return SpanConformer(context.width, context.heads, context.layers, context.dropout, context.mixing)
         layer = SpanConformer.layer(context.width, context.heads, context.dropout)
-        return nn.TransformerEncoder(layer, context.layers, enable_nested_tensor=False)
+        norm = nn.LayerNorm(context.width) if context.final_norm else None
+        return nn.TransformerEncoder(layer, context.layers, norm=norm, enable_nested_tensor=False)
 
     @override
     def forward(

@@ -69,6 +69,8 @@ class ContextConfig:
     """Depthwise kernel, in words, of a convolution module after each transformer layer (`span.SpanConformer`); 0
     keeps the plain transformer. Holdout sentences run 1-9 words, so 3 mixes each word with its neighbours."""
     subjects: int = 0
+    final_norm: bool = False
+    """A LayerNorm after the pre-norm transformer's last layer, before the context head (plain transformer only)."""
 
     def __post_init__(self) -> None:
         if self.encoder.cached and self.subjects:
