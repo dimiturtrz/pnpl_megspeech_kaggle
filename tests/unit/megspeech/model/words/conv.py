@@ -1,9 +1,12 @@
+from typing import cast
+
 import pytest
 import torch
 
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.words.conv import ConvConfig, ConvWords
+from megspeech.model.words.layers.spatial import SpatialAttention
 
 SMALL = ConvConfig(hidden=8, dilations=(1, 2))
 SAMPLES = 50
@@ -69,3 +72,13 @@ def test_embed_attention_queries() -> None:
     net = ConvWords(ConvConfig(hidden=8, dilations=(1, 2), queries=3))
     assert net.width == 24
     assert net.embed(torch.randn(3, CHANNELS, 50, generator=GENERATOR)).shape == (3, 24)
+
+
+def test_embed_merger_attends_before_the_convolution() -> None:
+    net = ConvWords(ConvConfig(hidden=8, dilations=(1, 2), merger=5)).eval()
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    attention, convolution = cast("torch.nn.Sequential", net.spatial)
+    assert isinstance(attention, SpatialAttention)
+    assert cast("torch.nn.Conv1d", convolution).in_channels == 5
+    assert net.embed(x).shape == (3, 2 * 8)
+    assert isinstance(ConvWords(SMALL).spatial, torch.nn.Conv1d)

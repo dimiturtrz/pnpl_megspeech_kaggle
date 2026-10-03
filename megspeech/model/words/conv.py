@@ -12,6 +12,7 @@ from megspeech.model.words.layers.attention_pool import AttentionPool
 from megspeech.model.words.layers.conformer import TimeConformer
 from megspeech.model.words.layers.dilated import DilatedBlock
 from megspeech.model.words.layers.mean_max import MeanMax
+from megspeech.model.words.layers.spatial import SpatialAttention
 from megspeech.model.words.layers.ssm import Ssm
 
 
@@ -39,6 +40,9 @@ class ConvConfig:
     queries: int = 0
     """Learned attention queries the readout pools time with (`AttentionPool`); 0 pools mean and max over
     `segments` chunks. Two queries scored 0.615 vs 0.621 mean-max on one seed (megspeech-7gf.45)."""
+    merger: int = 0
+    """Channels a `SpatialAttention` merges the sensors into before the 1x1 spatial convolution, with spatial
+    dropout in training: Défossez et al. 2023's front end, 270 there; 0 mixes the sensors with the convolution alone."""
 
     def __post_init__(self) -> None:
         if any(kernel % 2 == 0 for kernel in self.kernels):
@@ -59,7 +63,11 @@ class ConvWords(WordEncoder):
     def __init__(self, config: ConvConfig = CONV) -> None:
         super().__init__(config.width, instance=config.instance)
         self.pool = AttentionPool(config.hidden, config.queries) if config.queries else MeanMax(config.segments)
-        self.spatial = nn.Conv1d(CHANNELS, config.hidden, 1)
+        self.spatial = (
+            nn.Sequential(SpatialAttention(config.merger), nn.Conv1d(config.merger, config.hidden, 1))
+            if config.merger
+            else nn.Conv1d(CHANNELS, config.hidden, 1)
+        )
         self.blocks = nn.ModuleList(
             DilatedBlock(config.hidden, d, config.dropout, config.kernels) for d in config.dilations
         )
