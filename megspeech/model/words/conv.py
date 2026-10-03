@@ -3,14 +3,15 @@
 from dataclasses import dataclass
 from typing import override
 
-import torch
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
 from megspeech.data.constants import CHANNELS
 from megspeech.model.words.base import WordEncoder
+from megspeech.model.words.layers.attention_pool import AttentionPool
 from megspeech.model.words.layers.conformer import TimeConformer
 from megspeech.model.words.layers.dilated import DilatedBlock
+from megspeech.model.words.layers.mean_max import MeanMax
 from megspeech.model.words.layers.ssm import Ssm
 
 
@@ -35,6 +36,9 @@ class ConvConfig:
     lora: int = 0
     """Retired: the rank of adapters on an end-to-end MEG-XL trunk, never trained above 0; kept so the configs
     saved with it still load."""
+    queries: int = 0
+    """Learned attention queries the readout pools time with (`AttentionPool`); 0 pools mean and max over
+    `segments` chunks. Two queries scored 0.615 vs 0.621 mean-max on one seed (megspeech-7gf.45)."""
 
     def __post_init__(self) -> None:
         if any(kernel % 2 == 0 for kernel in self.kernels):
@@ -48,8 +52,8 @@ CONV = ConvConfig()
 
 class ConvWords(WordEncoder):
     def __init__(self, config: ConvConfig = CONV) -> None:
-        super().__init__(2 * config.hidden * config.segments, instance=config.instance)
-        self.segments = config.segments
+        super().__init__(config.hidden * (config.queries or 2 * config.segments), instance=config.instance)
+        self.pool = AttentionPool(config.hidden, config.queries) if config.queries else MeanMax(config.segments)
         self.spatial = nn.Conv1d(CHANNELS, config.hidden, 1)
         self.blocks = nn.ModuleList(
             DilatedBlock(config.hidden, d, config.dropout, config.kernels) for d in config.dilations
@@ -64,8 +68,4 @@ class ConvWords(WordEncoder):
         h = self.spatial(x)
         for block in self.blocks:
             h = block(h, valid)
-        pooled = [
-            nn.functional.adaptive_avg_pool1d(h, self.segments),
-            nn.functional.adaptive_max_pool1d(h, self.segments),
-        ]
-        return torch.cat([p.flatten(1) for p in pooled], dim=-1)
+        return self.pool(h)

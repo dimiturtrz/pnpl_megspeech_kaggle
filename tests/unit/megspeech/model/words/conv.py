@@ -56,3 +56,9 @@ def test_conv_config_rejects_even_kernel() -> None:
 def test_conv_config_rejects_lora() -> None:
     with pytest.raises(ValueError, match="retired"):
         ConvConfig(lora=4)
+
+
+def test_embed_attention_queries() -> None:
+    net = ConvWords(ConvConfig(hidden=8, dilations=(1, 2), queries=3))
+    assert net.width == 24
+    assert net.embed(torch.randn(3, CHANNELS, 50, generator=GENERATOR)).shape == (3, 24)
