@@ -6,7 +6,7 @@ p(MEG | word), the Bayes rule for a balanced metric.
 """
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 import numpy as np
@@ -90,8 +90,15 @@ class Evaluator:
     min_novel: int = MIN_NOVEL
     ruler: Ruler = Ruler()
     balance: Sinkhorn = Sinkhorn()
+    shifts: tuple[int, ...] = (0,)
+    """Samples every window is read moved by; the reads' log-probabilities are averaged (test-time augmentation)."""
 
     def logits(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
+        """Both heads' log-probabilities for every word of `split`, averaged over the `shifts`, in word order."""
+        reads = [self.read(model, replace(split, windows=split.windows.shifted(shift))) for shift in self.shifts]
+        return {head: torch.stack([read[head].log_softmax(-1) for read in reads]).mean(0) for head in Head}
+
+    def read(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
         """Both heads' logits for every word of `split`, in the split's word order.
 
         Every batch reserves room for full spans, so a compiled model sees one shape (and the last batch's).

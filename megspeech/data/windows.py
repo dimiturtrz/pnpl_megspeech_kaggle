@@ -7,7 +7,7 @@ every channel's mean over its valid samples removed, or over the valid ones amon
 Training, validation and holdout windows all come through here, from signals the same `continuous.Decimator` cached.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import torch
 from jaxtyping import Float, Int
@@ -43,6 +43,10 @@ class Windows:
 
     def __len__(self) -> int:
         return len(self.at)
+
+    def shifted(self, samples: int) -> "Windows":
+        """Every window read `samples` later, its bounds kept."""
+        return replace(self, at=self.at + samples)
 
     @property
     def device(self) -> torch.device:

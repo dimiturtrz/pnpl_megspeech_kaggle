@@ -38,6 +38,15 @@ def test_logits() -> None:
     out = Evaluator(CPU).logits(Constant(), split())
     assert out[Head.CONTEXT].shape == (12, WORDS)
     assert torch.all(out[Head.WORD].argmax(dim=1) == 0)
+    assert torch.allclose(out[Head.WORD].logsumexp(-1), torch.zeros(12), atol=1e-5)
+    shifted = Evaluator(CPU, shifts=(-1, 0, 1)).logits(Constant(), split())
+    assert torch.allclose(shifted[Head.CONTEXT], out[Head.CONTEXT], atol=1e-5)
+
+
+def test_read() -> None:
+    out = Evaluator(CPU).read(Constant(), split())
+    assert out[Head.CONTEXT].shape == (12, WORDS)
+    assert torch.all(out[Head.CONTEXT].argmax(dim=1) == 0)
 
 
 def test_evaluate() -> None:

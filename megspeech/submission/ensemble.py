@@ -31,6 +31,7 @@ def main() -> None:
     parser.add_argument("names", nargs="+")
     parser.add_argument("--grouping", type=Grouping, choices=list(Grouping), default=DataConfig().grouping)
     parser.add_argument("--balance", choices=list(BALANCES), default="none")
+    parser.add_argument("--shifts", type=int, nargs="+", default=[0], help="samples each window is also read moved by")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     device = torch.device("cuda")
@@ -42,7 +43,9 @@ def main() -> None:
     heard = Corpus.heard(cache, runs, data)
     labels = heard["target"].to_numpy()
     log_prior = Split.prior(torch.tensor(labels), torch.ones(len(labels))).to(device)
-    evaluator = Evaluator(device, Corpus.sequences(heard, args.grouping), balance=BALANCES[args.balance])
+    evaluator = Evaluator(
+        device, Corpus.sequences(heard, args.grouping), balance=BALANCES[args.balance], shifts=tuple(args.shifts)
+    )
     held = data.held(runs)
     names = [r.name for group in held.values() for r in group]
     source = Continuous.load(cache, device, names, standardised=data.standardised, rate=data.rate)

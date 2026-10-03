@@ -64,6 +64,16 @@ def test_call_lead_reads_nothing_before_begin() -> None:
     assert bare(torch.tensor([0, 1]))[:, 0].tolist() == [[0.0, 0.0, 0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0, 8.0, 9.0]]
 
 
+def test_shifted() -> None:
+    windows = signal()
+    moved = windows.shifted(1)
+    assert moved.at.tolist() == [1, 3, 5]
+    assert torch.equal(moved.end, windows.end)
+    assert torch.equal(
+        moved(torch.tensor([0])), Windows(windows.meg, windows.at + 1, windows.end, 3, 1)(torch.tensor([0]))
+    )
+
+
 def test_first() -> None:
     at = torch.tensor([3, 7])
     assert Windows(torch.zeros(1, 9), at, at).first(torch.tensor([1])).tolist() == [[0]]
