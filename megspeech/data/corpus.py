@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import chain
 
 import numpy as np
@@ -31,6 +31,8 @@ class Corpus:
     train: Split
     validation: dict[str, Split]
     seen: frozenset[tuple[int, ...]]
+    positions: pd.DataFrame = field(default_factory=pd.DataFrame)
+    """Each train word's `run` and `position` in that run's word table (`RunCache.words`), in train-split order."""
 
     @classmethod
     def load(cls, data: DataConfig, root: DataRoot, device: torch.device) -> "Corpus":
@@ -40,11 +42,13 @@ class Corpus:
         reading = [r.name for r in trained] + [r.name for group in held.values() for r in group]
         names = list(dict.fromkeys(reading))
         source = DeviceRecording.load(cache, device, names, standardised=data.standardised)
-        words = cls.words(source.words, data.grouping, data.rate)
+        table = source.words.assign(position=source.words.groupby("run").cumcount())
+        words = cls.words(table, data.grouping, data.rate)
         weights = {r.name: data.weight(r) for r in trained}
         chosen = words[words["run"].isin(weights)]
         weight = chosen["run"].map(weights).to_numpy(dtype=np.float64)
         train = cls.split(source, chosen, data, weight).recurring(data.repeat_power)
+        positions = chosen[["run", "position"]].reset_index(drop=True)
         validation = cls.domains(source, words, held, data)
         features = Features.under(root, data.features)
         train = features.split(TRAIN, train)
@@ -53,7 +57,9 @@ class Corpus:
         LOG.info("cache %.2f GB on %s", source.gigabytes, device)
         LOG.info("train %d words (%d labelled) / %d spans", len(train.y), len(train.labelled()), len(train.index))
         LOG.info("validation %s", {task: len(split.labelled()) for task, split in validation.items()})
-        return cls(train, validation, cls.sequences(heard, data.grouping))
+        if len(positions) != len(train.y):
+            raise ValueError(f"{len(positions)} train positions against {len(train.y)} train words")
+        return cls(train, validation, cls.sequences(heard, data.grouping), positions)
 
     @staticmethod
     def words(table: pd.DataFrame, grouping: Grouping, rate: float = RATE) -> pd.DataFrame:

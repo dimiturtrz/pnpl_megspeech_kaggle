@@ -1,0 +1,229 @@
+from dataclasses import dataclass
+from pathlib import Path
+from typing import cast
+
+import numpy as np
+import pandas as pd
+import pytest
+import torch
+from scipy.io import wavfile
+from torch import Tensor
+
+from core.paths import DataRoot
+from megspeech.data.raw.runs import Run
+from megspeech.objective.targets import speech as module
+from megspeech.objective.targets.speech import (
+    BLOCK,
+    CHUNK,
+    LAG,
+    SAMPLING,
+    STEM,
+    STRIDE,
+    WINDOW,
+    Chapter,
+    Heard,
+    Speech,
+    Targets,
+)
+from megspeech.objective.targets.t5 import Encoder as T5Encoder
+from tests.unit.megspeech.data.config import HELD, TRAIN
+
+DIM = 2
+LAYERS = 25
+CPU = torch.device("cpu")
+SECONDS = 4
+
+
+@dataclass(frozen=True)
+class Encoded:
+    hidden_states: tuple[Tensor, ...]
+
+
+class Encoder:
+    """Every layer's frame is the sample it starts at, so a latent names the audio it was read from."""
+
+    def __call__(self, *, input_values: Tensor, output_hidden_states: bool) -> Encoded:
+        frames = (input_values.shape[1] - 400) // STRIDE + 1
+        starts = input_values[:, ::STRIDE][:, :frames, None].expand(-1, -1, DIM)
+        return Encoded((starts,) * LAYERS)
+
+    def to(self, _: torch.device) -> "Encoder":
+        return self
+
+    def eval(self) -> "Encoder":
+        return self
+
+
+class Loader:
+    def from_pretrained(self, *_: object, **__: object) -> Encoder:
+        return Encoder()
+
+
+class Root:
+    def __init__(self, path: Path) -> None:
+        self.base = path
+
+    def raw(self) -> Path:
+        return self.base / "raw"
+
+    def processed(self) -> Path:
+        return self.base / "processed"
+
+    def foreign(self, name: str) -> Path:
+        return self.base / name
+
+
+def encoder() -> T5Encoder:
+    return cast("T5Encoder", Encoder())
+
+
+def loud(seconds: float, at: float) -> Chapter:
+    """Silence until `at`, a 440 Hz tone after."""
+    time = np.arange(round(seconds * SAMPLING)) / SAMPLING
+    return Chapter((np.sin(2 * np.pi * 440 * time) * (time >= at)).astype(np.float32))
+
+
+def heard_run(root: Path, name: str = TRAIN, *, audio: bool = True) -> Run:
+    """A run under `root/raw` whose events heard three words, the second outside any segment, and whose session's
+    chapter, `SECONDS` long, is silent until 1 s."""
+    task = root / "raw" / "Sherlock1"
+    run = Run(task / "derivatives" / "serialised" / name)
+    run.meg.parent.mkdir(parents=True, exist_ok=True)
+    run.meg.touch()
+    run.events.parent.mkdir(parents=True, exist_ok=True)
+    events = pd.DataFrame(
+        {
+            "kind": ["word", "phoneme", "word", "word"],
+            "segment": ["a", "a", "", "b"],
+            "timechapter": [0.94, 0.95, 2.0, 3.8],
+        }
+    )
+    events.to_csv(run.events, sep="\t", index=False)
+    if audio:
+        (task / "stimuli" / "audio").mkdir(parents=True, exist_ok=True)
+        _, session, _ = run.key
+        wav = task / "stimuli" / "audio" / f"sherlock1_{session:02d}_doyle_64kb.wav"
+        wavfile.write(wav, SAMPLING, (loud(SECONDS, 1.0).audio * 1000).astype(np.int16))
+    return run
+
+
+def test_read(tmp_path: Path) -> None:
+    path = tmp_path / "chapter.wav"
+    stereo = np.stack([np.arange(8000), -np.arange(8000) // 2], axis=1).astype(np.int16)
+    wavfile.write(path, SAMPLING // 2, stereo)
+    audio = Chapter.read(path).audio
+    assert len(audio) == 2 * 8000
+    assert audio.mean() == pytest.approx(0.0, abs=1e-5)
+    assert audio.std() == pytest.approx(1.0, rel=1e-4)
+
+
+def test_frames() -> None:
+    assert Chapter(np.zeros(400, np.float32)).frames == 1
+    assert Chapter(np.zeros(399, np.float32)).frames == 0
+    assert Chapter(np.zeros(SAMPLING, np.float32)).frames == SAMPLING // STRIDE - 1
+
+
+def test_latents() -> None:
+    """Chunks are stitched in order, every frame read once from its own place in the chapter."""
+    chapter = Chapter((np.arange(round(2.5 * CHUNK * STRIDE)) % 997).astype(np.float32))
+    latents = chapter.latents(encoder(), CPU)
+    assert latents.shape == (chapter.frames, DIM)
+    expected = torch.from_numpy(chapter.audio[::STRIDE][: chapter.frames])
+    assert torch.equal(latents[:, 0], expected)
+
+
+def test_contrast() -> None:
+    contrast = loud(2.0, 1.0).contrast(np.array([1.0, 0.5, 0.01, 1.98, np.nan]))
+    assert contrast[0] > np.log(100)
+    assert contrast[1] == pytest.approx(0.0)
+    assert np.isnan(contrast[2:]).all()
+
+
+def test_pool() -> None:
+    latents = torch.arange(100.0)[:, None].expand(-1, DIM)
+    pooled = Targets.pool(latents, np.array([0.0, 1.0, 1.6, -0.1, np.nan]))
+    assert pooled.vectors.dtype == np.float16
+    assert pooled.vectors[:2, 0].tolist() == [(WINDOW - 1) / 2, 50 + (WINDOW - 1) / 2]
+    assert np.isnan(pooled.vectors[2:]).all()
+
+
+def test_aligned() -> None:
+    contrast = np.concatenate([np.full(BLOCK, 1.0), np.full(BLOCK, 0.2), np.full(BLOCK // 2, np.nan)])
+    kept = Targets.aligned(contrast)
+    assert kept[:BLOCK].all()
+    assert not kept[BLOCK:].any()
+
+
+def test_masked() -> None:
+    masked = Targets(np.ones((3, DIM), np.float16)).masked(np.array([True, False, True]))
+    assert masked.present.tolist() == [True, False, True]
+
+
+def test_present() -> None:
+    vectors = np.array([[1.0, 2.0], [np.nan, 2.0]], np.float16)
+    assert Targets(vectors).present.tolist() == [True, False]
+
+
+def test_directory(tmp_path: Path) -> None:
+    assert Targets.directory(cast("DataRoot", Root(tmp_path))) == tmp_path / "processed" / "speech" / STEM
+
+
+def test_save(tmp_path: Path) -> None:
+    path = Targets(np.ones((2, DIM), np.float16)).save(tmp_path / "nested" / "run.npy")
+    assert np.load(path).shape == (2, DIM)
+
+
+def test_chapters(tmp_path: Path) -> None:
+    assert [path.name for path in Heard(heard_run(tmp_path)).chapters()] == ["sherlock1_01_doyle_64kb.wav"]
+    assert Heard(heard_run(tmp_path, HELD, audio=False)).chapters() == []
+
+
+def test_onsets(tmp_path: Path) -> None:
+    assert Heard(heard_run(tmp_path)).onsets() == pytest.approx([0.94 + LAG, 3.8 + LAG])
+
+
+def test_targets(tmp_path: Path) -> None:
+    """The first word starts the tone, so its block is aligned; the second's 0.5 s run past the chapter's end."""
+    targets = Heard(heard_run(tmp_path)).targets(encoder(), CPU)
+    assert targets.vectors.shape == (2, DIM)
+    assert targets.present.tolist() == [True, False]
+
+
+def test_trained(tmp_path: Path) -> None:
+    train, held = heard_run(tmp_path), heard_run(tmp_path, HELD)
+    assert [entry.run for entry in Heard.trained([train, held])] == [train]
+    assert Heard.trained([heard_run(tmp_path / "silent", audio=False)]) == []
+
+
+def test_write(tmp_path: Path) -> None:
+    heard_run(tmp_path)
+    heard_run(tmp_path, HELD)
+    root = cast("DataRoot", Root(tmp_path))
+    directory = Heard.write(root, encoder(), CPU)
+    assert [path.stem for path in directory.glob("*.npy")] == [Run(Path(TRAIN)).name]
+    assert Heard.write(root, encoder(), CPU) == directory
+
+
+def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    heard_run(tmp_path)
+    monkeypatch.setattr(module, "Wav2Vec2Model", Loader())
+    monkeypatch.setattr(module, "DEVICE", "cpu")
+    monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: Root(tmp_path)))
+    Heard.main()
+    assert np.load(tmp_path / "processed" / "speech" / STEM / f"{Run(Path(TRAIN)).name}.npy").shape == (2, DIM)
+
+
+def test_gather(tmp_path: Path) -> None:
+    np.save(tmp_path / "a.npy", np.array([[1, 2], [np.nan, np.nan], [3, 4]], np.float16))
+    words = pd.DataFrame({"run": ["a", "a", "b", "a", "a"], "position": [2, 0, 0, 1, 0]})
+    speech = Speech.gather(tmp_path, words)
+    assert speech.rows.tolist() == [0, 1, -1, -1, 2]
+    assert speech.vectors.tolist() == [[3, 4], [1, 2], [1, 2]]
+    with pytest.raises(FileNotFoundError):
+        Speech.gather(tmp_path / "absent", words)
+
+
+def test_to() -> None:
+    speech = Speech(torch.tensor([0, -1]), torch.ones(1, DIM)).to(CPU)
+    assert speech.rows.device == CPU
+    assert speech.vectors.device == CPU

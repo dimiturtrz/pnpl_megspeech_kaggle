@@ -155,6 +155,8 @@ def test_sequences(tmp_path: Path) -> None:
 def test_load(tmp_path: Path) -> None:
     corpus = Corpus.load(DataConfig(), corpus_root(tmp_path), CPU)
     assert corpus.train.y.tolist() == [THE, IGNORE, A]
+    assert corpus.positions["position"].tolist() == [0, 1, 2]
+    assert set(corpus.positions["run"]) == {Run(tmp_path / TRAIN).name}
     assert set(corpus.validation) == {"Sherlock1"}
     assert corpus.seen == {tokens("the", "zebra", "a")}
     widened = Corpus.load(DataConfig(extra=1), corpus_root(tmp_path / "widened"), CPU)

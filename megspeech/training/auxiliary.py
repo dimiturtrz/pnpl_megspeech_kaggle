@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import override
 
+import pandas as pd
 import torch
 from torch import nn
 
@@ -16,6 +17,8 @@ from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
+from megspeech.objective.auxiliary.speech import SpeechTerm
+from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import AuxiliaryTerm
 from megspeech.training.config import OptimConfig
@@ -33,9 +36,14 @@ class Auxiliary(ABC):
     ) -> SentenceNet | WithAuxiliary: ...
 
     @staticmethod
-    def of(optim: OptimConfig, root: DataRoot, device: torch.device) -> "Auxiliary":
-        """Nothing when every weight is 0, so no table is read; otherwise the terms of the nonzero weights."""
+    def of(optim: OptimConfig, root: DataRoot, device: torch.device, words: pd.DataFrame) -> "Auxiliary":
+        """Nothing when every weight is 0, so no table is read; otherwise the terms of the nonzero weights, the speech
+        term's targets those of the training `words` (`Corpus.positions`)."""
         builders: tuple[tuple[float, Callable[[], AuxiliaryTerm]], ...] = (
+            (
+                optim.speech,
+                lambda: SpeechTerm(optim.speech, Speech.gather(Targets.directory(root), words).to(device)),
+            ),
             (optim.semantic, lambda: SemanticTerm(optim.semantic, Lexicon.load(Lexicon.path(root)).to(device))),
             (optim.lexical, lambda: LexicalTerm(optim.lexical, Lexicon.load(Lexicon.path(root)).to(device))),
             (

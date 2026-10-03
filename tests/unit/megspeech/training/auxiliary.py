@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import cast
 
+import numpy as np
+import pandas as pd
 import pytest
 import torch
 from torch import nn
@@ -14,13 +16,16 @@ from megspeech.model.words.conv import ConvConfig
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
+from megspeech.objective.auxiliary.speech import SpeechTerm
 from megspeech.objective.scorer import DIM
+from megspeech.objective.targets.speech import Targets
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.training.auxiliary import Auxiliary, Joint, NoAuxiliary
 from megspeech.training.config import OptimConfig
 
 CPU = torch.device("cpu")
 GENERATOR = torch.Generator().manual_seed(0)
+WORDS = pd.DataFrame({"run": ["a", "b"], "position": [1, 0]})
 
 
 class Root:
@@ -65,20 +70,26 @@ def test_joint_trained() -> None:
 
 def test_of(tmp_path: Path) -> None:
     root = cast("DataRoot", Root(tmp_path))
-    assert isinstance(Auxiliary.of(OptimConfig(), root, CPU), NoAuxiliary)
+    assert isinstance(Auxiliary.of(OptimConfig(), root, CPU, WORDS), NoAuxiliary)
     with pytest.raises(FileNotFoundError):
-        Auxiliary.of(OptimConfig(semantic=1.0), root, CPU)
+        Auxiliary.of(OptimConfig(semantic=1.0), root, CPU, WORDS)
     with pytest.raises(FileNotFoundError):
-        Auxiliary.of(OptimConfig(phonetic=1.0), root, CPU)
+        Auxiliary.of(OptimConfig(phonetic=1.0), root, CPU, WORDS)
     semantic().lexicon.save(Lexicon.path(root))
     phonetic().pronunciation.save(Pronunciation.path(root))
-    made = Auxiliary.of(OptimConfig(semantic=0.5), root, CPU)
+    made = Auxiliary.of(OptimConfig(semantic=0.5), root, CPU, WORDS)
     assert isinstance(made, Joint)
     assert [type(t) for t in made.terms] == [SemanticTerm]
-    both = Auxiliary.of(OptimConfig(semantic=0.5, phonetic=1.0), root, CPU)
+    both = Auxiliary.of(OptimConfig(semantic=0.5, phonetic=1.0), root, CPU, WORDS)
     assert [type(t) for t in both.terms] == [SemanticTerm, PhoneticTerm]
     assert both.terms[1].weight == 1.0
-    worded = Auxiliary.of(OptimConfig(semantic=0.5, lexical=2.0), root, CPU)
+    worded = Auxiliary.of(OptimConfig(semantic=0.5, lexical=2.0), root, CPU, WORDS)
     assert [type(t) for t in worded.terms] == [SemanticTerm, LexicalTerm]
-    spelled = Auxiliary.of(OptimConfig(phonetic=1.0, positions=2), root, CPU)
+    spelled = Auxiliary.of(OptimConfig(phonetic=1.0, positions=2), root, CPU, WORDS)
     assert cast("PhoneticTerm", spelled.terms[0]).positions == 2
+    with pytest.raises(FileNotFoundError):
+        Auxiliary.of(OptimConfig(speech=1.0), root, CPU, WORDS)
+    Targets(np.ones((2, DIM), np.float16)).save(Targets.directory(root) / "a.npy")
+    heard = Auxiliary.of(OptimConfig(speech=1.0, semantic=0.5), root, CPU, WORDS)
+    assert [type(t) for t in heard.terms] == [SpeechTerm, SemanticTerm]
+    assert cast("SpeechTerm", heard.terms[0]).speech.rows.tolist() == [0, -1]

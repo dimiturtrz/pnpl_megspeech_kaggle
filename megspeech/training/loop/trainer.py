@@ -67,7 +67,7 @@ class Trainer:
         evaluator = Evaluator(device, corpus.seen, config.selection.min_novel)
         warm = config.optim.warm
         initial = torch.load(root.models() / warm / "model.pt", map_location=device, weights_only=True) if warm else {}
-        return cls(config, evaluator, prototypes, Auxiliary.of(config.optim, root, device), initial)
+        return cls(config, evaluator, prototypes, Auxiliary.of(config.optim, root, device, corpus.positions), initial)
 
     def model(self, train: Split) -> SentenceNet:
         """A fresh model, or the warm start's weights when there is one."""

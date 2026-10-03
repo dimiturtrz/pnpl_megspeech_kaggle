@@ -1,0 +1,234 @@
+"""Frozen wav2vec2 latents of the audiobook speech each training word was heard in: token-level acoustic targets
+(Défossez et al. 2023), where the t5 lexicon is one vector per word type.
+
+Each trained Sherlock run's chapter (`<book>_<session>_doyle_64kb.wav`) is encoded once; a word's target is the
+mean of the latents over the `WINDOW` after its chapter onset, a row of `<run>.npy` aligned with the run's word
+table (`RunCache.words`), NaN where there is none. Validation and test runs' audio is never read.
+
+uv run python -m megspeech.objective.targets.speech
+"""
+
+import logging
+from dataclasses import dataclass
+from math import gcd
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import torch
+from jaxtyping import Bool, Float, Int
+from scipy.io import wavfile
+from scipy.signal import resample_poly
+from torch import Tensor
+from transformers import Wav2Vec2Model
+
+from core.paths import DataRoot
+from megspeech.data.config import DataConfig
+from megspeech.data.constants import MISSING
+from megspeech.data.raw.runs import Partition, Run
+from megspeech.objective.targets.t5 import Encoder
+
+MODEL = "facebook/wav2vec2-large-xlsr-53"
+STEM = MODEL.split("/")[-1]
+LAYERS = slice(15, 19)
+"""Transformer layers 15-18 of xlsr-53's 24, averaged: Défossez et al. (2023) align MEG to mid-to-late wav2vec2
+layers, where phonetic and lexical content peaks."""
+SAMPLING = 16_000
+"""The rate wav2vec2 was pretrained at."""
+STRIDE = 320
+"""Samples per latent frame: 50 frames a second at `SAMPLING`."""
+RECEPTIVE = 400
+"""Samples the convolutional encoder reads for one frame."""
+CHUNK = 30 * SAMPLING // STRIDE
+"""Frames kept from one forward pass: 30 s, far below the quadratic-attention memory ceiling."""
+CONTEXT = 5 * SAMPLING // STRIDE
+"""Frames of audio read on each side of a chunk and discarded, so every kept frame attends to >= 5 s around it."""
+WINDOW = SAMPLING // 2 // STRIDE
+"""Frames a word's target averages: the 0.5 s after its onset, the acoustic content of the MEG window's response."""
+LAG = 0.06
+"""Seconds the audio runs behind the events' chapter clock: word-onset energy contrast peaks at +0.05-0.07 s on every
+aligned run."""
+ONSET = SAMPLING // 20
+"""Samples (50 ms) whose energy after a word's onset, against the 50 ms ending 50 ms before it, is its contrast."""
+BLOCK = 200
+"""Consecutive words whose targets are kept or dropped together, by their mean contrast."""
+ALIGNED = 0.7
+"""Least mean log energy contrast of an aligned block: the 2821 blocks of the 99 trained runs are bimodal, those of a
+different recording (Sherlock3 sessions 1-8, Sherlock4 8, Sherlock6 14) or past a splice at -0.7-0.6, the rest at
+0.8-2.5 bar 3 boundary blocks; the middle of the trough between."""
+SILENCE = 1e-3
+"""Energy floor, as a fraction of the chapter's mean energy, so a silent stretch has a finite contrast."""
+DEVICE = "cuda"
+LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class Chapter:
+    """A chapter's audio at `SAMPLING`, zero-mean and unit-variance as wav2vec2's feature extractor feeds it."""
+
+    audio: Float[np.ndarray, " s"]
+
+    @classmethod
+    def read(cls, path: Path) -> "Chapter":
+        rate, samples = wavfile.read(path)
+        mono = samples.reshape(len(samples), -1).astype(np.float64).mean(axis=1)
+        common = gcd(SAMPLING, rate)
+        audio = resample_poly(mono, SAMPLING // common, rate // common)
+        return cls(((audio - audio.mean()) / audio.std()).astype(np.float32))
+
+    @property
+    def frames(self) -> int:
+        return max(0, (len(self.audio) - RECEPTIVE) // STRIDE + 1)
+
+    def latents(self, encoder: Encoder, device: torch.device) -> Float[Tensor, "f d"]:
+        """Every frame's mean `LAYERS` hidden state, chunk by chunk, each chunk read with `CONTEXT` on both sides."""
+        parts: list[Tensor] = []
+        with torch.no_grad(), torch.autocast(device.type, dtype=torch.bfloat16):
+            for start in range(0, self.frames, CHUNK):
+                first = max(0, start - CONTEXT)
+                stop = min(self.frames, start + CHUNK)
+                end = min(self.frames, stop + CONTEXT)
+                audio = torch.from_numpy(self.audio[first * STRIDE : (end - 1) * STRIDE + RECEPTIVE]).to(device)
+                hidden = encoder(input_values=audio[None], output_hidden_states=True).hidden_states[LAYERS]
+                parts.append(torch.stack(hidden).float().mean(0)[0, start - first : stop - first])
+        return torch.cat(parts)
+
+    def contrast(self, onset: Float[np.ndarray, " n"]) -> Float[np.ndarray, " n"]:
+        """Each onset's log energy over the `ONSET` after it against the `ONSET` ending `ONSET` before it; NaN where
+        either falls outside the audio."""
+        energy = np.concatenate([[0.0], np.cumsum(self.audio.astype(np.float64) ** 2)])
+        floor = SILENCE * energy[-1] / max(len(self.audio), 1)
+        at = np.round(np.nan_to_num(onset, nan=-1.0) * SAMPLING).astype(np.int64)
+        inside = np.isfinite(onset) & (at >= 2 * ONSET) & (at + ONSET <= len(self.audio))
+        at = np.where(inside, at, 2 * ONSET)
+        after = (energy[at + ONSET] - energy[at]) / ONSET
+        before = (energy[at - ONSET] - energy[at - 2 * ONSET]) / ONSET
+        return np.where(inside, np.log((after + floor) / (before + floor)), np.nan)
+
+
+@dataclass(frozen=True)
+class Targets:
+    """One run's per-word speech targets, NaN rows where the word has none."""
+
+    vectors: Float[np.ndarray, "n d"]
+
+    @classmethod
+    def pool(cls, latents: Float[Tensor, "f d"], onset: Float[np.ndarray, " n"]) -> "Targets":
+        """Each word's mean latent over the `WINDOW` frames from its onset; NaN past either end of the audio."""
+        first = np.floor(np.nan_to_num(onset, nan=-1.0) * SAMPLING / STRIDE).astype(np.int64)
+        inside = np.isfinite(onset) & (first >= 0) & (first + WINDOW <= len(latents))
+        start = torch.from_numpy(np.where(inside, first, 0)).to(latents.device)
+        summed = torch.cat([latents.new_zeros(1, latents.shape[1]), latents.double().cumsum(0)])
+        mean = ((summed[start + WINDOW] - summed[start]) / WINDOW).float().cpu().numpy()
+        return cls(np.where(inside[:, None], mean, np.nan).astype(np.float16))
+
+    @staticmethod
+    def aligned(contrast: Float[np.ndarray, " n"]) -> Bool[np.ndarray, " n"]:
+        """Words in a `BLOCK` whose mean contrast reaches `ALIGNED`: the audio there is the recording the events
+        were timed on."""
+        blocks = np.arange(len(contrast)) // BLOCK
+        mean = pd.Series(contrast).groupby(blocks).transform("mean").to_numpy()
+        return np.nan_to_num(mean, nan=-np.inf) >= ALIGNED
+
+    def masked(self, keep: Bool[np.ndarray, " n"]) -> "Targets":
+        return Targets(np.where(keep[:, None], self.vectors, np.float16(np.nan)))
+
+    @property
+    def present(self) -> Bool[np.ndarray, " n"]:
+        return np.isfinite(self.vectors).all(axis=1)
+
+    @staticmethod
+    def directory(root: DataRoot) -> Path:
+        return root.processed() / "speech" / STEM
+
+    def save(self, path: Path) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.save(path, self.vectors)
+        return path
+
+
+@dataclass(frozen=True)
+class Heard:
+    """A training run and the chapter it played."""
+
+    run: Run
+
+    def chapters(self) -> list[Path]:
+        """The audio of the run's session in its task's stimuli: one chapter, or none where the dataset ships none."""
+        _, session, _ = self.run.key
+        return sorted((self.run.meg.parents[2] / "stimuli" / "audio").glob(f"*_{session:02d}_*.wav"))
+
+    def onsets(self) -> Float[np.ndarray, " n"]:
+        """Each heard word's (`RunCache.words`) onset in its chapter's audio."""
+        events = pd.read_csv(
+            self.run.events,
+            sep="\t",
+            usecols=["kind", "segment", "timechapter"],
+            keep_default_na=False,
+            na_values=MISSING,
+        )
+        heard = events[(events["kind"] == "word") & events["segment"].notna()]
+        return heard["timechapter"].to_numpy(dtype=np.float64) + LAG
+
+    def targets(self, encoder: Encoder, device: torch.device) -> Targets:
+        chapter = Chapter.read(self.chapters()[0])
+        onset = self.onsets()
+        return Targets.pool(chapter.latents(encoder, device), onset).masked(Targets.aligned(chapter.contrast(onset)))
+
+    @staticmethod
+    def trained(runs: list[Run]) -> list["Heard"]:
+        """The default config's training runs whose chapter audio is present: never a validation or test run."""
+        heard = [Heard(run) for run in DataConfig().trained(runs) if run.partition is Partition.TRAIN]
+        return [entry for entry in heard if entry.chapters()]
+
+    @staticmethod
+    def write(root: DataRoot, encoder: Encoder, device: torch.device) -> Path:
+        directory = Targets.directory(root)
+        for entry in Heard.trained(Run.discover(root.raw())):
+            path = directory / f"{entry.run.name}.npy"
+            if path.exists():
+                continue
+            targets = entry.targets(encoder, device)
+            targets.save(path)
+            LOG.info("%s: %d of %d words", entry.run.name, targets.present.sum(), len(targets.vectors))
+        return directory
+
+    @staticmethod
+    def main() -> None:
+        """Encode every trained run's chapter on the GPU and write its words' targets under processed/speech."""
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+        root, device = DataRoot.from_config(), torch.device(DEVICE)
+        encoder = Wav2Vec2Model.from_pretrained(root.foreign(STEM)).to(device).eval()
+        LOG.info("wrote %s", Heard.write(root, encoder, device))
+
+
+@dataclass(frozen=True)
+class Speech:
+    """Each training word's row of `vectors`, or -1 where it has no speech target."""
+
+    rows: Int[Tensor, " n"]
+    vectors: Float[Tensor, "k d"]
+
+    @classmethod
+    def gather(cls, directory: Path, words: pd.DataFrame) -> "Speech":
+        """The targets of `words` (`run`, `position` in its run's word table), in order; a run without a file has
+        none."""
+        if not directory.is_dir():
+            raise FileNotFoundError(directory)
+        words = words.reset_index(drop=True)
+        width = next((np.load(path, mmap_mode="r").shape[1] for path in directory.glob("*.npy")), 1)
+        vectors = np.full((len(words), width), np.nan, dtype=np.float16)
+        for run, group in words.groupby("run", sort=False):
+            path = directory / f"{run}.npy"
+            if path.exists():
+                vectors[group.index] = np.load(path, mmap_mode="r")[group["position"].to_numpy()]
+        present = np.isfinite(vectors).all(axis=1)
+        rows = np.where(present, np.cumsum(present) - 1, -1)
+        return cls(torch.from_numpy(rows), torch.from_numpy(vectors[present]))
+
+    def to(self, device: torch.device) -> "Speech":
+        return Speech(self.rows.to(device), self.vectors.to(device))
+
+
+if __name__ == "__main__":
+    Heard.main()
