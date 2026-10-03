@@ -1,6 +1,3 @@
-import json
-import math
-from pathlib import Path
 from typing import override
 
 import numpy as np
@@ -9,12 +6,12 @@ import torch
 from torch import nn
 
 from megspeech.data.batching.split import DENSE, Split
-from megspeech.data.config import METRICS
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.spans.spans import Spans
-from megspeech.evaluation.balance import Sinkhorn
-from megspeech.evaluation.report import ADJUSTMENTS, MIN_NOVEL, Evaluator, Head, Score, SelectionConfig
+from megspeech.evaluation.metric.balance import Sinkhorn
+from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.score import ADJUSTMENTS, Head, Score
 
 SAMPLES = 50
 CPU = torch.device("cpu")
@@ -70,59 +67,24 @@ def test_adjusted() -> None:
     assert torch.allclose(mass, mass.mean().expand_as(mass), atol=1e-3)
 
 
-def test_best() -> None:
-    score = Score.best({0.0: 0.2, 0.5: 0.4, 1.0: 0.3}, 7)
-    assert (score.tau, score.bacc10, score.n) == (0.5, 0.4, 7)
+def test_unseen() -> None:
+    evaluator, domain = Evaluator(CPU), split()
+    score = evaluator.unseen(evaluator.logits(Constant(), domain)[Head.CONTEXT], domain, torch.zeros(VOCAB_SIZE))
+    assert score.n == len(domain.novel(frozenset()))
 
 
-def test_mean() -> None:
-    """One adjustment is chosen for the unweighted mean, not each score's own best."""
-    scores = [Score.best({0.0: 0.2, 0.5: 0.4, 1.0: 0.3}, 7), Score.best({0.0: 0.6, 0.5: 0.4, 1.0: 0.1}, 3)]
-    macro = Score.mean(iter(scores))
-    assert (macro.tau, macro.n) == (0.0, 10)
-    assert macro.bacc10 == pytest.approx(0.4)
-    assert macro.by_tau == pytest.approx({0.0: 0.4, 0.5: 0.4, 1.0: 0.2})
+def test_counted() -> None:
+    scores = {"few": Score.best({0.0: 0.2}, 4), "enough": Score.best({0.0: 0.4}, 5)}
+    assert list(Evaluator(CPU, min_novel=5).counted(scores)) == ["enough"]
 
 
-def test_mean_empty() -> None:
-    """A macro over no counted domain scores nothing rather than a number."""
-    macro = Score.mean([])
-    assert macro.n == 0
-    assert all(math.isnan(value) for value in macro.by_tau.values())
-
-
-def test_average() -> None:
-    assert Score.average(iter([0.2, 0.4])) == pytest.approx(0.3)
-    assert math.isnan(Score.average([]))
-
-
-def selected(directory: Path, config: dict[str, object]) -> Path:
-    directory.mkdir()
-    (directory / METRICS).write_text(json.dumps({"config": config}))
-    return directory
-
-
-def test_saved(tmp_path: Path) -> None:
-    assert SelectionConfig.saved(selected(tmp_path / "old", {})) == SelectionConfig(MIN_NOVEL)
-    assert SelectionConfig.saved(selected(tmp_path / "new", {"selection": {"min_novel": 7}})).min_novel == 7
-
-
-def test_shared(tmp_path: Path) -> None:
-    """Members scored alike share their selection; members that counted domains differently cannot be pooled."""
-    one = selected(tmp_path / "one", {"selection": {"min_novel": 7}})
-    two = selected(tmp_path / "two", {"selection": {"min_novel": 7}})
-    other = selected(tmp_path / "other", {})
-    assert SelectionConfig.shared([one, two]) == SelectionConfig(7)
-    with pytest.raises(ValueError, match="an ensemble needs one"):
-        SelectionConfig.shared([one, other])
-
-
-def test_assess() -> None:
-    report = Evaluator(CPU).assess(Constant(), split(), torch.zeros(VOCAB_SIZE))
+def test_scored() -> None:
+    evaluator, domain = Evaluator(CPU), split()
+    report = evaluator.scored(evaluator.logits(Constant(), domain), domain, torch.zeros(VOCAB_SIZE))
     assert report.dense.n == DENSE
     assert report.novel.n == DENSE
-    assert report.context.n == len(split().y)
-    assert report.coverage.present == len(set(split().y[split().novel(frozenset())].tolist()))
+    assert report.context.n == len(domain.y)
+    assert report.coverage.present == len(set(domain.y[domain.novel(frozenset())].tolist()))
     assert set(report.top1) == set(report.bits) == set(ADJUSTMENTS)
     assert report.top1[0.0] == pytest.approx(1 / report.coverage.present)
     assert report.bits[0.0] == pytest.approx(0.0)
@@ -136,14 +98,6 @@ def test_graded() -> None:
     hits, labels = next(iter(graded.domains.values()))
     assert hits.shape == labels.shape == (max(sizes.values()),)
     assert torch.equal(hits, labels.eq(0))
-
-
-def test_scored() -> None:
-    evaluator, domain = Evaluator(CPU), split()
-    logits = evaluator.logits(Constant(), domain)
-    assert evaluator.scored(logits, domain, torch.zeros(VOCAB_SIZE)) == evaluator.assess(
-        Constant(), domain, torch.zeros(VOCAB_SIZE)
-    )
 
 
 def test_grade() -> None:

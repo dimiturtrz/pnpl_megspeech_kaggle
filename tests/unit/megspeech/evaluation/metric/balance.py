@@ -1,6 +1,6 @@
 import torch
 
-from megspeech.evaluation.balance import BALANCES, Sinkhorn
+from megspeech.evaluation.metric.balance import Sinkhorn
 
 GENERATOR = torch.Generator().manual_seed(0)
 
@@ -30,8 +30,3 @@ def test_sinkhorn_keeps_balanced_set() -> None:
 def test_sinkhorn_one_step_moves_toward_balance() -> None:
     scores = torch.randn(200, 5, generator=GENERATOR) + torch.tensor([3.0, 0.0, 0.0, 0.0, -2.0])
     assert column_mass(Sinkhorn(1)(scores)).std() < column_mass(scores).std()
-
-
-def test_balances() -> None:
-    assert BALANCES["none"] == Sinkhorn(0)
-    assert BALANCES["sinkhorn"] == Sinkhorn(50)

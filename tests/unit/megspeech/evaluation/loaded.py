@@ -1,0 +1,200 @@
+import json
+from dataclasses import replace
+from pathlib import Path
+from typing import override
+
+import numpy as np
+import pandas as pd
+import pytest
+import torch
+from pnpl.competition.holdout import N_SUBJECTS
+from torch import nn
+
+from core.paths import DataRoot
+from megspeech.data.batching.split import FEATURES
+from megspeech.data.cache.run_cache import WORD_TABLE as TABLE
+from megspeech.data.config import METRICS, DataConfig
+from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
+from megspeech.data.raw.runs import Run
+from megspeech.evaluation import loaded as module
+from megspeech.evaluation.loaded import RULER, LoadedModel, Scoring, Text
+from megspeech.evaluation.metric.balance import Sinkhorn
+from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.model.input.subjects import Reading
+
+CPU = torch.device("cpu")
+SAMPLES = 500
+SPOKEN = PRIMARY.words[:6]
+NAMES = (
+    "sub-0_ses-11_task-Sherlock1_run-2",
+    "sub-0_ses-29_task-TheMoth_run-1",
+    "sub-1_ses-11_task-Sherlock1_run-1",
+    "sub-1_ses-12_task-Sherlock1_run-1",
+)
+POOLED, TRAINED = 2, 3
+
+
+class Favourite(nn.Module):
+    """Ranks the vocabulary by index for subject 0 and in reverse for every other subject."""
+
+    @override
+    def forward(
+        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        ranks = -torch.arange(VOCAB_SIZE, dtype=torch.float32)
+        rows = torch.where(subject[:, None] == 0, ranks, ranks.flip(0))
+        logits = nn.functional.pad(rows, (0, 0, 0, 1))[slot]
+        return logits, logits
+
+
+def runs(tmp_path: Path) -> list[Run]:
+    cache = DataConfig().run_cache(DataRoot(tmp_path)).ready()
+    rows = []
+    for name in NAMES:
+        np.save(cache / f"{name}.npy", np.ones((CHANNELS, SAMPLES), dtype=np.float16))
+        onset = 0.5 + np.arange(len(SPOKEN)) * 0.5
+        rows.append(pd.DataFrame({"run": name, "onset": onset, "word": SPOKEN, "sentence": [0, 0, 0, 1, 1, 1]}))
+    pd.concat(rows).assign(end=5.0).to_csv(cache / TABLE, sep="\t", index=False)
+    return [Run(tmp_path / f"{name}_meg.h5") for name in NAMES]
+
+
+def loaded(tmp_path: Path, reading: Reading = Reading.OWN) -> LoadedModel:
+    evaluator = Evaluator(CPU, min_novel=1)
+    return LoadedModel(DataRoot(tmp_path), Favourite(), DataConfig(), evaluator, torch.zeros(VOCAB_SIZE), reading)
+
+
+def table(run: str, words: tuple[str, ...] = ("The", "man", "said", "hello")) -> pd.DataFrame:
+    return pd.DataFrame(
+        {"run": run, "onset": np.arange(len(words)) * 0.3, "word": list(words), "sentence": [0, 0, 1, 1]}
+    )
+
+
+def test_text_of() -> None:
+    assert Text.of(pd.concat([table("a"), table("b")])).words["position"].tolist() == [0, 1, 0, 1] * 2
+
+
+def test_keys() -> None:
+    assert Text.of(table("a")).keys[1] == (0, 1, "man")
+    assert Text.of(table("a")).keys.is_unique
+
+
+def test_matches() -> None:
+    reference = Text.of(table("a"))
+    other = Text(Text.of(table("b", words=("The", "boy", "said", "hello"))).words.iloc[::-1])
+    assert reference.matches(other).tolist() == [3, -1, 1, 0]
+
+
+def members(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selections: dict[str, int]) -> None:
+    """Trained runs named by `selections`, each recording its `min_novel`, behind a stubbed word table and model."""
+    heard = pd.DataFrame(
+        {"run": "r", "sentence": 0, "onset": [0.0, 0.1], "target": [0, 1], "token": [7, 8], "weight": 1.0}
+    )
+    monkeypatch.setattr(module.Corpus, "heard", classmethod(lambda *_: heard))
+    monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: []))
+    monkeypatch.setattr(module.Ensemble, "load", classmethod(lambda *_: Favourite()))
+    for name, min_novel in selections.items():
+        directory = DataRoot(tmp_path).models() / name
+        directory.mkdir(parents=True)
+        config: dict[str, dict[str, int]] = {"data": {}, "selection": {"min_novel": min_novel}}
+        (directory / METRICS).write_text(json.dumps({"config": config}))
+
+
+def test_loaded_model_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Members are scored by the prior training drew and the selection that counted them, or not at all."""
+    members(tmp_path, monkeypatch, {"a": 5, "b": 5, "c": 7})
+    (DataRoot(tmp_path).models() / "ab").mkdir()
+    (DataRoot(tmp_path).models() / "ab" / METRICS).write_text(json.dumps({"members": ["a", "b"]}))
+    scoring = Scoring(balance=Sinkhorn(2), shifts=(0, 1), reading=Reading.UNSEEN)
+    built = LoadedModel.of(DataRoot(tmp_path), ["ab"], scoring, CPU)
+    expected = torch.tensor([1.0, 1.0] + [0.0] * (VOCAB_SIZE - 2)) + 1
+    assert torch.allclose(built.log_prior, (expected / expected.sum()).log())
+    assert built.evaluator.seen == frozenset({(7, 8)})
+    assert (built.evaluator.min_novel, built.evaluator.balance, built.evaluator.shifts) == (5, Sinkhorn(2), (0, 1))
+    assert (built.names, built.reading) == (("a", "b"), Reading.UNSEEN)
+    with pytest.raises(ValueError, match="an ensemble needs one"):
+        LoadedModel.of(DataRoot(tmp_path), ["b", "c"], scoring, CPU)
+
+
+def test_members(tmp_path: Path) -> None:
+    assert LoadedModel.members(tmp_path, "run") == [tmp_path / "run"]
+    (tmp_path / "trained").mkdir()
+    (tmp_path / "trained" / METRICS).write_text(json.dumps({"best": {}}))
+    assert LoadedModel.members(tmp_path, "trained") == [tmp_path / "trained"]
+    (tmp_path / "ens").mkdir()
+    (tmp_path / "ens" / METRICS).write_text(json.dumps({"members": ["a", "b"]}))
+    assert LoadedModel.members(tmp_path, "ens") == [tmp_path / "a", tmp_path / "b"]
+
+
+def test_load(tmp_path: Path) -> None:
+    source, words = loaded(tmp_path).load(runs(tmp_path)[POOLED:])
+    assert source.names == NAMES[POOLED:]
+    assert words["position"].tolist() == [0, 1, 2, 0, 1, 2] * 2
+
+
+def test_features(tmp_path: Path) -> None:
+    assert loaded(tmp_path).features.directory is None
+    frozen = replace(loaded(tmp_path), data=DataConfig(features="frozen"))
+    assert frozen.features.directory == DataRoot(tmp_path).kind("models") / FEATURES / "frozen"
+
+
+def test_splits(tmp_path: Path) -> None:
+    every = runs(tmp_path)
+    splits = loaded(tmp_path, Reading.UNSEEN).splits(every[POOLED:])
+    assert list(splits) == every[POOLED:]
+    rows, split = splits[every[POOLED]]
+    assert (rows["run"] == NAMES[POOLED]).all()
+    assert split.subject.tolist() == [N_SUBJECTS] * len(SPOKEN)
+
+
+def test_read(tmp_path: Path) -> None:
+    """A run reads its MEG windows as `reading`'s subject, or fails loudly where a features model has none saved."""
+    every = runs(tmp_path)
+    (_, split), *_ = loaded(tmp_path).splits(every[POOLED : POOLED + 1]).values()
+    assert loaded(tmp_path).read(NAMES[POOLED], split).subject.tolist() == [1] * len(SPOKEN)
+    assert loaded(tmp_path, Reading.UNSEEN).read(NAMES[POOLED], split).subject.tolist() == [N_SUBJECTS] * len(SPOKEN)
+    with pytest.raises(FileNotFoundError):
+        replace(loaded(tmp_path), data=DataConfig(features="frozen")).read(NAMES[POOLED], split)
+
+
+def test_domains(tmp_path: Path) -> None:
+    every = runs(tmp_path)
+    domains, reference = loaded(tmp_path).domains({RULER: every[:1], "TheMoth": every[1:2]})
+    assert set(domains) == {RULER, "TheMoth"}
+    assert (reference["run"] == NAMES[0]).all()
+    assert len(reference) == len(domains[RULER].y)
+    unruled, empty = loaded(tmp_path).domains({"TheMoth": every[1:2]})
+    assert set(unruled) == {"TheMoth"}
+    assert empty.empty
+
+
+def test_context(tmp_path: Path) -> None:
+    domains, _ = loaded(tmp_path).domains({RULER: runs(tmp_path)[:1]})
+    assert loaded(tmp_path).context(domains[RULER]).argmax(dim=1).tolist() == [0] * len(SPOKEN)
+
+
+def test_labelled(tmp_path: Path) -> None:
+    """Another subject's reversed ranking hits none of its words."""
+    (_, split), *_ = loaded(tmp_path).splits(runs(tmp_path)[TRAINED:]).values()
+    score = loaded(tmp_path).labelled(split)
+    assert (score.n, score.bacc10) == (len(SPOKEN), pytest.approx(0.0))
+
+
+def test_unseen(tmp_path: Path) -> None:
+    """Every word of the pooled run is novel to a model that saw no orders."""
+    score = loaded(tmp_path).unseen(runs(tmp_path)[POOLED])
+    assert (score.n, score.bacc10) == (len(SPOKEN), pytest.approx(0.0))
+
+
+def test_report(tmp_path: Path) -> None:
+    report = loaded(tmp_path).report(runs(tmp_path))
+    assert RULER in report.domains
+    assert report.macro.n == sum(r.novel.n for r in report.domains.values())
+
+
+def test_probabilities(tmp_path: Path) -> None:
+    domains, _ = loaded(tmp_path).domains({RULER: runs(tmp_path)[:1]})
+    probabilities = loaded(tmp_path).probabilities(domains[RULER], 0.5)
+    assert probabilities.shape == (len(SPOKEN), VOCAB_SIZE)
+    assert np.allclose(probabilities.sum(axis=1), 1, atol=1e-5)
+    assert (probabilities.argmax(axis=1) == 0).all()

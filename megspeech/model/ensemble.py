@@ -1,4 +1,4 @@
-"""Average trained context models in log-probability space (`megspeech.submission.ensemble` scores and submits)."""
+"""Average trained context models in log-probability space (`megspeech.submission` scores and submits)."""
 
 from pathlib import Path
 from typing import override

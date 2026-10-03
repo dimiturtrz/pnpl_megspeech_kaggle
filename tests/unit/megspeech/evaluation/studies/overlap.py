@@ -11,8 +11,9 @@ from megspeech.data.cache.holdout import ArchiveKind, Epochs, HoldoutCache
 from megspeech.data.cache.run_cache import WORD_TABLE, RunCache
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation import overlap as module
-from megspeech.evaluation.overlap import Onsets, Survey, Text, main
+from megspeech.evaluation.loaded import Text
+from megspeech.evaluation.studies import overlap as module
+from megspeech.evaluation.studies.overlap import Onsets, Overlap, Survey, main
 
 SLOTS = 9
 SUBJECTS = 3
@@ -32,26 +33,9 @@ def onsets(rows: list[list[float]], length: list[int] | None = None) -> Onsets:
     return Onsets(Epochs(lengths, np.nan_to_num(onset), ~np.isnan(onset)))
 
 
-def test_text_of() -> None:
-    text = Text.of(pd.concat([table("a"), table("b")]))
-    assert text.words["position"].tolist() == [0, 1, 0, 1] * 2
-
-
-def test_keys() -> None:
-    keys = Text.of(table("a")).keys
-    assert keys[1] == (0, 1, "man")
-    assert keys.is_unique
-
-
-def test_matches() -> None:
+def test_of() -> None:
     reference = Text.of(table("a"))
-    other = Text(Text.of(table("b", words=("The", "boy", "said", "hello"))).words.iloc[::-1])
-    assert reference.matches(other).tolist() == [3, -1, 1, 0]
-
-
-def test_overlap() -> None:
-    reference = Text.of(table("a"))
-    result = reference.overlap(Text.of(table("b", shift=5.0, words=("The", "boy", "said", "hello"))), 4)
+    result = Overlap.of(reference, Text.of(table("b", shift=5.0, words=("The", "boy", "said", "hello"))), 4)
     assert (result.subject, result.words, result.total, result.sentences) == (4, 3, 4, 1)
     assert result.labelled == int((PRIMARY.labels(["The", "said", "hello"]) != ABSENT).sum())
     assert result.shift == pytest.approx(5.0)
@@ -70,11 +54,11 @@ def test_equal() -> None:
     assert a.equal(b).tolist() == [[False, False, True], [True, False, False]]
 
 
-def test_echo() -> None:
+def test_match() -> None:
     a = onsets([[0.0, 0.2], [0.0, 0.5, 0.9], [0.0, 0.7]], [100, 120, 90])
     b = onsets([[0.0, 0.5, 0.9], [0.0, 0.2], [0.0, 0.2]], [121, 98, 98])
-    echo = a.echo(b, 1)
-    assert (echo.subject, echo.matched, echo.unique, echo.length_spread, echo.total) == (1, 2, 1, 1, 3)
+    match = a.match(b, 1)
+    assert (match.subject, match.matched, match.unique, match.length_spread, match.total) == (1, 2, 1, 1, 3)
 
 
 def survey(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Survey:
@@ -108,8 +92,8 @@ def test_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_holdout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    echoes = survey(tmp_path, monkeypatch).holdout()
-    assert [(e.subject, e.matched, e.unique) for e in echoes] == [(0, 2, 2), (1, 1, 1), (2, 1, 1)]
+    matches = survey(tmp_path, monkeypatch).holdout()
+    assert [(m.subject, m.matched, m.unique) for m in matches] == [(0, 2, 2), (1, 1, 1), (2, 1, 1)]
 
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:

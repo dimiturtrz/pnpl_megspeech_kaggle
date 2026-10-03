@@ -17,7 +17,8 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.corpus import Corpus
-from megspeech.evaluation.report import Epoch, Evaluator
+from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.score import Epoch
 from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.context import Objective

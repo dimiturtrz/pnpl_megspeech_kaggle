@@ -1,9 +1,16 @@
 import torch
+from pnpl.competition.holdout import N_SUBJECTS
 
 from megspeech.data.raw.runs import DEEP
-from megspeech.model.input.subjects import Shared, SubjectLayer, Unseen
+from megspeech.model.input.subjects import Reading, Shared, SubjectLayer, Unseen
 
 GENERATOR = torch.Generator().manual_seed(0)
+
+
+def test_subjects() -> None:
+    subject = torch.tensor([1, 5, 32])
+    assert torch.equal(Reading.OWN.subjects(subject), subject)
+    assert Reading.UNSEEN.subjects(subject).tolist() == [N_SUBJECTS] * 3
 
 
 def test_subject_layer_forward() -> None:

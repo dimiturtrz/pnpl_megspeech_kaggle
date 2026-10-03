@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.evaluation.ruler import Coverage, Graded, Interval, Ruler, main
+from megspeech.evaluation.metric.ruler import Coverage, Graded, Interval, Ruler, main
 
 CPU = torch.device("cpu")
 

@@ -5,110 +5,18 @@ Balanced accuracy rewards rare words as much as frequent ones, so scores are rea
 p(MEG | word), the Bayes rule for a balanced metric.
 """
 
-import json
-import math
-from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
-from enum import StrEnum
-from pathlib import Path
 
-import numpy as np
 import torch
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 
-from core.tree import Tree
 from megspeech.data.batching.split import EVAL_SPANS, Split
-from megspeech.data.config import METRICS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.spans.spans import PAD
-from megspeech.evaluation.balance import Sinkhorn
-from megspeech.evaluation.ruler import Coverage, Graded, Interval, Ruler
-
-ADJUSTMENTS = (0.0, 0.5, 1.0)
-"""Logit-adjustment strengths tried on validation: none, half, and the full Bayes correction."""
-
-MIN_NOVEL = 100
-"""Unseen-span words a domain needs to count toward selection: two per class of the 50 on average."""
-
-
-@dataclass(frozen=True)
-class SelectionConfig:
-    min_novel: int = MIN_NOVEL
-    """Unseen-span words a domain needs to count toward selection: two per class of the 50 on average."""
-
-    @classmethod
-    def saved(cls, directory: Path) -> "SelectionConfig":
-        """The selection config a run in `directory` recorded; a record without one falls to defaults."""
-        config = json.loads((directory / METRICS).read_text())["config"]
-        return Tree(cls).load(config.get("selection", {}))
-
-    @classmethod
-    def shared(cls, directories: Sequence[Path]) -> "SelectionConfig":
-        """The selection every run in `directories` was scored by: an ensemble counts a domain as its members did."""
-        chosen = {cls.saved(directory) for directory in directories}
-        if len(chosen) != 1:
-            raise ValueError(f"runs selected by {sorted(chosen, key=repr)}; an ensemble needs one")
-        return chosen.pop()
-
-
-class Head(StrEnum):
-    CONTEXT = "context"
-    WORD = "word"
-
-
-@dataclass(frozen=True)
-class Score:
-    tau: float
-    bacc10: float
-    by_tau: dict[float, float]
-    n: int
-
-    @classmethod
-    def best(cls, by_tau: dict[float, float], n: int) -> "Score":
-        tau = max(by_tau, key=by_tau.__getitem__)
-        return cls(tau, by_tau[tau], by_tau, n)
-
-    @classmethod
-    def mean(cls, scores: Iterable["Score"]) -> "Score":
-        """The macro of `scores`: their unweighted mean at each adjustment, the best adjustment chosen once for all."""
-        chosen = list(scores)
-        by_tau = {tau: cls.average(score.by_tau[tau] for score in chosen) for tau in ADJUSTMENTS}
-        return cls.best(by_tau, sum(score.n for score in chosen))
-
-    @staticmethod
-    def average(values: Iterable[float]) -> float:
-        """The mean of `values`, NaN when there are none: a macro over no counted domain scores nothing."""
-        chosen = list(values)
-        return float(np.mean(chosen)) if chosen else math.nan
-
-
-@dataclass(frozen=True)
-class Report:
-    """One validation domain: both heads, the context head on holdout-like and on unseen spans, and — on the unseen
-    spans, by logit adjustment — its balanced top-1 (the competition's tiebreak) and the bits its top-1 carries."""
-
-    context: Score
-    word: Score
-    dense: Score
-    novel: Score
-    top1: dict[float, float]
-    bits: dict[float, float]
-    coverage: Coverage
-
-
-@dataclass(frozen=True)
-class Epoch:
-    """One validation pass over every domain, the macro over domains' unseen spans that selects, its interval, and
-    the macro top-1 and bits at the adjustment the macro selected — the one a submission is written at."""
-
-    epoch: int
-    loss: float
-    domains: dict[str, Report]
-    macro: Score
-    interval: Interval
-    top1: float
-    bits: float
+from megspeech.evaluation.metric.balance import Sinkhorn
+from megspeech.evaluation.metric.ruler import Coverage, Graded, Ruler
+from megspeech.evaluation.scoring.score import ADJUSTMENTS, MIN_NOVEL, Epoch, Head, Report, Score
 
 
 @dataclass(frozen=True)
@@ -161,25 +69,34 @@ class Evaluator:
         """`logits` logit-adjusted by `tau`, then balanced over the set."""
         return self.balance(logits - tau * log_prior)
 
-    def assess(self, model: nn.Module, split: Split, log_prior: Float[Tensor, " v"]) -> Report:
-        return self.scored(self.logits(model, split), split, log_prior)
+    def unseen(self, context: Float[Tensor, "n v"], split: Split, log_prior: Float[Tensor, " v"]) -> Score:
+        """The context head on `split`'s unseen-span words."""
+        novel = split.novel(self.seen)
+        return self.evaluate(context[novel], split.y[novel], log_prior)
+
+    def counted[K](self, scores: dict[K, Score]) -> dict[K, Score]:
+        """The `scores` over enough unseen-span words to count toward selection."""
+        return {key: score for key, score in scores.items() if score.n >= self.min_novel}
 
     def scored(self, logits: dict[Head, Float[Tensor, "n v"]], split: Split, log_prior: Float[Tensor, " v"]) -> Report:
         """One domain's report from its already computed logits: every labelled word scored, out-of-vocabulary
         words only lending their spans context."""
         labelled, dense, novel = split.labelled(), split.holdout_like(), split.novel(self.seen)
         context, word, y = logits[Head.CONTEXT][labelled], logits[Head.WORD][labelled], split.y[labelled]
-        unseen, heard = logits[Head.CONTEXT][novel], split.y[novel]
+        unseen, novel_y = logits[Head.CONTEXT][novel], split.y[novel]
         adjusted = {tau: self.adjusted(unseen, log_prior, tau) for tau in ADJUSTMENTS}
         top1 = Ruler(k=1)
         return Report(
             self.evaluate(context, y, log_prior),
             self.evaluate(word, y, log_prior),
             self.evaluate(logits[Head.CONTEXT][dense], split.y[dense], log_prior),
-            self.evaluate(unseen, heard, log_prior),
-            {tau: top1.balanced(top1.hits(scores, heard), heard) for tau, scores in adjusted.items()},
-            {tau: Ruler.information(scores.argmax(dim=1), heard, log_prior.exp()) for tau, scores in adjusted.items()},
-            Coverage.of(heard),
+            self.evaluate(unseen, novel_y, log_prior),
+            {tau: top1.balanced(top1.hits(scores, novel_y), novel_y) for tau, scores in adjusted.items()},
+            {
+                tau: Ruler.information(scores.argmax(dim=1), novel_y, log_prior.exp())
+                for tau, scores in adjusted.items()
+            },
+            Coverage.of(novel_y),
         )
 
     def graded(self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], tau: float) -> Graded:
@@ -216,7 +133,7 @@ class Evaluator:
         """
         logits = {name: self.logits(model, split) for name, split in domains.items()}
         reports = {name: self.scored(logits[name], split, log_prior) for name, split in domains.items()}
-        counted = {name: r.novel for name, r in reports.items() if r.novel.n >= self.min_novel}
+        counted = self.counted({name: r.novel for name, r in reports.items()})
         macro = Score.mean(counted.values())
         context = {name: logits[name][Head.CONTEXT] for name in counted}
         interval = self.ruler.interval(self.ruler.macro(self.grade(context, domains, log_prior, macro.tau)))

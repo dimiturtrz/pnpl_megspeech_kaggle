@@ -9,7 +9,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.constants import CHANNELS
 from megspeech.data.corpus import Corpus
 from megspeech.data.spans.spans import Spans
-from megspeech.evaluation.report import Evaluator
+from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.training.cli import throughput as module
 from megspeech.training.cli.throughput import EpochEstimate, Phase, Throughput, main
 from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig

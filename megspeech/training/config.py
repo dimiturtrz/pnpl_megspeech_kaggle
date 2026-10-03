@@ -7,7 +7,7 @@ from pathlib import Path
 
 from core.tree import Tree
 from megspeech.data.config import METRICS, DataConfig
-from megspeech.evaluation.report import Epoch, SelectionConfig
+from megspeech.evaluation.scoring.score import Epoch, SelectionConfig
 from megspeech.model.config import CONTEXT, ContextConfig
 from megspeech.training.regularise.augment import Augment
 

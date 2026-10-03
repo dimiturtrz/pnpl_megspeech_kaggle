@@ -23,6 +23,3 @@ class Sinkhorn:
             mass = shifted.log_softmax(-1).logsumexp(0)
             shifted = shifted - (mass - mass.mean())
         return shifted
-
-
-BALANCES: dict[str, Sinkhorn] = {"none": Sinkhorn(0), "sinkhorn1": Sinkhorn(1), "sinkhorn": Sinkhorn(50)}

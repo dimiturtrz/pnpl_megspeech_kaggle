@@ -3,7 +3,7 @@
 Validation holds a median of 4-13 words per class, so a balanced accuracy moves by whole classes; the
 interval resamples words with replacement and re-scores, all resamples at once. A fixed seed draws the
 same resamples for every run scored on the same words, so differences between runs are paired:
-`python -m megspeech.evaluation.ruler A/hits.pt B/hits.pt` bounds how much A beats B by.
+`python -m megspeech.evaluation.metric.ruler A/hits.pt B/hits.pt` bounds how much A beats B by.
 """
 
 import argparse

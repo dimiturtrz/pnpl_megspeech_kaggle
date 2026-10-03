@@ -59,6 +59,11 @@ def test_discover(tmp_path: Path) -> None:
     assert Run.discover(tmp_path) == [ready, other]
 
 
+def test_pooled(tmp_path: Path) -> None:
+    later, other, first = (Run(meg(tmp_path, name)) for name in (POOLED, OTHER, "sub-3_ses-11_task-Sherlock1_run-1"))
+    assert Run.pooled([later, other, first]) == [first, later]
+
+
 def test_subjects() -> None:
     names = pd.Series(["sub-0_ses-1_task-Sherlock1_run-1", "sub-17_ses-12_task-Sherlock1_run-1"])
     assert Run.subjects(names).tolist() == [0, 17]

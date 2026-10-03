@@ -14,7 +14,7 @@ from megspeech.data.corpus import Corpus
 from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.spans.spans import Spans
-from megspeech.evaluation.report import Evaluator
+from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm

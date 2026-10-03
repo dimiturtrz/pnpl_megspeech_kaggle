@@ -7,6 +7,7 @@ from typing import override
 
 import torch
 from jaxtyping import Float, Int
+from pnpl.competition.holdout import N_SUBJECTS
 from torch import Tensor, nn
 
 from megspeech.data.raw.runs import DEEP
@@ -53,6 +54,23 @@ class Fallback:
 
 AS_TRAINED = Fallback()
 """Unseen subjects read through the identity, every subject's matrix as trained."""
+
+
+class Reading(StrEnum):
+    """Which subject a run's words are presented to the model as; every word is still read from its own MEG."""
+
+    OWN = "own"
+    UNSEEN = "unseen"
+    """A subject past every trained one, as a zero-shot holdout subject is."""
+
+    def subjects(self, subject: Int[Tensor, " n"]) -> Int[Tensor, " n"]:
+        return READINGS[self](subject)
+
+
+READINGS: dict[Reading, Callable[[Tensor], Tensor]] = {
+    Reading.OWN: lambda subject: subject,
+    Reading.UNSEEN: lambda subject: torch.full_like(subject, N_SUBJECTS),
+}
 
 
 class SubjectLayer(Shared):

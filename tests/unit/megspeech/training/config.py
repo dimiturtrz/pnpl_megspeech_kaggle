@@ -3,8 +3,8 @@ import json
 from pathlib import Path
 
 from megspeech.data.config import DataConfig
-from megspeech.evaluation.report import Epoch, Score
-from megspeech.evaluation.ruler import Interval
+from megspeech.evaluation.metric.ruler import Interval
+from megspeech.evaluation.scoring.score import Epoch, Score
 from megspeech.model.context.timing import Clock
 from megspeech.training.config import METRICS, RunConfig
 from megspeech.training.regularise.augment import Augment

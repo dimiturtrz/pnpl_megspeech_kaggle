@@ -12,8 +12,10 @@ import torch
 
 from core.paths import DataRoot
 from core.tree import Tree
+from megspeech.data.cache.holdout import Track
 from megspeech.data.corpus import Corpus
-from megspeech.submission.submission import Submitter
+from megspeech.evaluation.loaded import LoadedModel
+from megspeech.submission.writer import HoldoutWriter
 from megspeech.training.config import METRICS, RunConfig
 from megspeech.training.loop.trainer import Trainer
 
@@ -47,8 +49,9 @@ def main() -> None:
     (out / METRICS).write_text(json.dumps({**summary, "history": [asdict(row) for row in history]}, indent=1))
     LOG.info("best %s", best)
     evaluator = trainer.evaluator
-    evaluator.graded(model, validation, log_prior, best.macro.tau).save(out / "hits.pt")
-    Submitter(evaluator, config.data).submit(model, root, log_prior, best.macro.tau, out / "submission.csv")
+    evaluator.graded(model, validation, log_prior, best.tau).save(out / "hits.pt")
+    loaded = LoadedModel(root, model, config.data, evaluator, log_prior)
+    HoldoutWriter(Track.DEEP).write(loaded, best.tau, out / "submission.csv")
 
 
 if __name__ == "__main__":

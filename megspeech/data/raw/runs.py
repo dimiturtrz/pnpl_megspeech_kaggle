@@ -2,6 +2,7 @@
 the pooling split for subjects 1-32."""
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -88,3 +89,8 @@ class Run:
         """Every run of every subject under `raw` whose MEG and events have both finished downloading."""
         runs = (cls(meg) for meg in sorted(raw.rglob("sub-*_meg.h5")))
         return [run for run in runs if run.events.exists() and run.events.stat().st_size]
+
+    @staticmethod
+    def pooled(runs: Iterable["Run"]) -> list["Run"]:
+        """The pooled runs (`Partition.POOL`) of `runs`, in subject order."""
+        return sorted((run for run in runs if run.partition is Partition.POOL), key=lambda run: run.subject)
