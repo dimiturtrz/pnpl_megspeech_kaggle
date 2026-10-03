@@ -5,7 +5,7 @@ import json
 import logging
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -63,6 +63,9 @@ class DataConfig:
     baseline: float = 0.0
     """Seconds from each window's start its centring mean is taken over; 0 centres on the whole window. The
     reference pipeline baselines on 0-0.5 s, the pre-response stretch, so the word's evoked field is kept whole."""
+    lead: float = 0.0
+    """Seconds of MEG before each word's onset, read ahead of its `window`: never before its sentence's first onset,
+    as a holdout sentence epoch starts there."""
     decimate: int = DECIMATE
     """The 250 Hz recordings' decimation factor: which continuous cache training reads (`Decimator.under`)."""
     folds: int = 1
@@ -86,21 +89,22 @@ class DataConfig:
         """The holdout reading — window and standardisation — every run in `directories` trained on, spans cut by
         `grouping`; members that read MEG differently cannot share one set of holdout windows."""
         readings = {
-            (saved.window, saved.standardised, saved.extra, saved.baseline, saved.decimate)
+            (saved.window, saved.standardised, saved.extra, saved.baseline, saved.lead, saved.decimate)
             for saved in map(cls.saved, directories)
         }
         if len(readings) != 1:
             raise ValueError(
-                f"runs trained at (window, standardised, extra, baseline, decimate) {sorted(readings)}; an ensemble "
-                "needs one"
+                f"runs trained at (window, standardised, extra, baseline, lead, decimate) {sorted(readings)}; an "
+                "ensemble needs one"
             )
-        window, standardised, extra, baseline, decimate = readings.pop()
+        window, standardised, extra, baseline, lead, decimate = readings.pop()
         return cls(
             grouping=grouping,
             window=window,
             standardised=standardised,
             extra=extra,
             baseline=baseline,
+            lead=lead,
             decimate=decimate,
         )
 
@@ -118,6 +122,16 @@ class DataConfig:
     def centring(self) -> int:
         """The centring baseline in samples; 0 centres on the whole window."""
         return round(self.baseline * self.rate)
+
+    @property
+    def leading(self) -> int:
+        """The lead before each onset in samples."""
+        return round(self.lead * self.rate)
+
+    def reading(self, windows: Windows) -> Windows:
+        """`windows` cut as this config reads them: `lead` before each onset, `window` after it, centred on
+        `baseline`."""
+        return replace(windows, length=self.samples + self.leading, offset=-self.leading, baseline=self.centring)
 
     def decimator(self, root: DataRoot) -> Decimator:
         """The continuous cache training reads, at `decimate`."""
@@ -216,12 +230,13 @@ class Corpus:
     def split(source: Continuous, words: pd.DataFrame, data: DataConfig, weight: Float[np.ndarray, " n"]) -> Split:
         """`words` (rows of `source.words`) as a split whose `data.window`-long windows are gathered from `source`'s
         device signal, each stopped where `data.grouping` bounds it."""
-        windows = Windows(
-            source.meg,
-            source.samples(words["at"]),
-            source.samples(data.grouping.bound(words)),
-            data.samples,
-            baseline=data.centring,
+        windows = data.reading(
+            Windows(
+                source.meg,
+                source.samples(words["at"]),
+                source.samples(data.grouping.bound(words)),
+                begin=source.samples(words["start"] + words["opening"]),
+            )
         )
         labels = (words["target"].to_numpy(), words["token"].to_numpy())
         return Split.of(windows, labels, data.grouping.spans(words), weight, Run.subjects(words["run"]))

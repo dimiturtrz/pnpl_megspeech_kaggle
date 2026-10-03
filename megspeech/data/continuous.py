@@ -207,6 +207,7 @@ class Continuous:
         order = table["run"].map({name: position for position, name in enumerate(names)}).to_numpy()
         table = table.iloc[np.argsort(order, kind="stable")].reset_index(drop=True)
         table["sample"] = np.round(table["onset"] * rate).astype(np.int64)
+        table["opening"] = table.groupby(["run", "sentence"])["sample"].transform("min")
         table["samples"] = table["run"].map(samples).astype(np.int64)
         stop = np.round(table["end"].to_numpy() * rate).astype(np.int64)
         table["stop"] = np.minimum(np.maximum(stop, table["sample"] + round(rate)), table["samples"])
@@ -219,9 +220,14 @@ class Continuous:
         return (begin >= 0) & (begin + length <= table["samples"].to_numpy())
 
     def windows(self, length: int = RATE) -> Windows:
-        """Every word of `words`, in its order, as a `length`-sample window gathered from `meg`, ending at `stop`."""
+        """Every word of `words`, in its order, as a `length`-sample window gathered from `meg`, ending at `stop` and
+        reading nothing before its sentence's first onset."""
         return Windows(
-            self.meg, self.samples(self.words["at"]), self.samples(self.words["start"] + self.words["stop"]), length
+            self.meg,
+            self.samples(self.words["at"]),
+            self.samples(self.words["start"] + self.words["stop"]),
+            length,
+            begin=self.samples(self.words["start"] + self.words["opening"]),
         )
 
     def samples(self, column: pd.Series) -> Int[Tensor, " n"]:

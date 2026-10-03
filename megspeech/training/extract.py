@@ -233,7 +233,7 @@ def main() -> None:
     track = Track.DEEP
     cache = HoldoutCache.of(root, data.decimate, track)
     cache.build()
-    windows = replace(cache.windows(device, data.samples, standardised=data.standardised), baseline=data.centring)
+    windows = data.reading(cache.windows(device, data.samples, standardised=data.standardised))
     holdout = Split.from_holdout(track.holdout(root.raw()), windows)
     splits = {TRAIN: corpus.train} | dict(corpus.validation.items()) | {f"{HOLDOUT}-{track}": holdout}
     features = Features.under(root, args.name)

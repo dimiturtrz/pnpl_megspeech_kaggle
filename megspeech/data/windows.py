@@ -29,6 +29,9 @@ class Windows:
     baseline: int = 0
     centred: bool = True
     """False reads windows as they are: features already computed from centred windows, not a signal."""
+    begin: Int[Tensor, " n"] | None = None
+    """Each word's first readable sample, its sentence epoch's start: samples before it are zero, as a holdout epoch
+    holds none before its first onset. None bounds only at the signal's start."""
 
     @classmethod
     def stacked(cls, x: Float[Tensor, "n c s"], *, centred: bool = True) -> "Windows":
@@ -57,11 +60,16 @@ class Windows:
             start = (start + torch.randint_like(start, -jitter, jitter + 1)).clamp(min=0)
         position = start + torch.arange(self.length, device=self.meg.device)
         end = self.end[words, None]
-        valid = (position < end)[:, None, :]
-        cut = self.meg[:, torch.minimum(position, end - 1)].transpose(0, 1).float()
+        valid = ((position < end) & (position >= self.first(words)))[:, None, :]
+        cut = self.meg[:, torch.minimum(position, end - 1).clamp(min=0)].transpose(0, 1).float()
         cut = torch.where(valid, cut, 0.0)
         counted = valid & (torch.arange(self.length, device=self.meg.device) < (self.baseline or self.length))
         mean = torch.where(counted, cut, 0.0).mean(dim=-1, keepdim=True)
         mean = mean * (self.length / counted.sum(dim=-1, keepdim=True).clamp(min=1)) * self.centred
         largest = torch.finfo(self.meg.dtype).max
         return torch.where(valid, cut - mean, 0.0).clamp(-largest, largest).to(self.meg.dtype)
+
+    def first(self, words: Int[Tensor, " k"]) -> Int[Tensor, "k 1"]:
+        """The first sample each of `words` may read."""
+        begin = self.at.new_zeros(len(self.at)) if self.begin is None else self.begin
+        return begin[words, None]

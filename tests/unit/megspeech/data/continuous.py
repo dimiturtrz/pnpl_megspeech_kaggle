@@ -168,6 +168,7 @@ def test_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert table["sample"].tolist() == [25, 100, 150] * 2
     assert set(table["samples"]) == {SAMPLES}
     assert table["stop"].tolist() == [90, 170, SAMPLES] * 2
+    assert table["opening"].tolist() == table["sample"].tolist()
     assert table.index.tolist() == list(range(6))
     assert Continuous.table(decimator.cache, [runs[0].name])["word"].tolist() == ["The", "null", "end"]
     doubled = Continuous.table(decimator.cache, [runs[0].name], 2 * RATE)
@@ -183,13 +184,15 @@ def test_inside() -> None:
 
 def test_windows() -> None:
     meg = torch.arange(2 * 100, dtype=torch.float32).reshape(2, 100)
-    words = pd.DataFrame({"at": [40, 0], "start": [0, 0], "stop": [90, 50]})
+    words = pd.DataFrame({"at": [40, 0], "start": [0, 0], "stop": [90, 50], "opening": [30, 0]})
     loaded = Continuous(meg, np.array([0, 100]), ("r",), words)
     windows = loaded.windows()
     assert len(windows) == len(loaded.words)
     assert windows(torch.tensor([0])).shape == (1, 2, RATE)
     assert windows.at.tolist() == [40, 0]
     assert windows.end.tolist() == [90, 50]
+    assert windows.begin is not None
+    assert windows.begin.tolist() == [30, 0]
     assert loaded.windows(2 * RATE)(torch.tensor([0]))[0, :, RATE:].eq(0).all()
 
 

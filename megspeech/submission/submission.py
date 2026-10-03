@@ -102,7 +102,7 @@ class Submitter:
         cache.build()
         windows = cache.windows(self.evaluator.device, self.data.samples, standardised=self.data.standardised)
         features = Features.under(root, self.data.features)
-        windows = features.read(f"{HOLDOUT}-{self.track}", replace(windows, baseline=self.data.centring))
+        windows = features.read(f"{HOLDOUT}-{self.track}", self.data.reading(windows))
         split = Split.from_holdout(holdout, windows)
         split = replace(split, subject=self.reading.subjects(split.subject))
         logits = self.evaluator.logits(model, split)[Head.CONTEXT]

@@ -54,6 +54,25 @@ def test_call() -> None:
     assert bounded(torch.tensor([0]))[0, 0].tolist() == [-0.5, 0.5, 0.0]
 
 
+def test_call_lead_reads_nothing_before_begin() -> None:
+    """A window led before its onset zeroes the samples before its `begin`; without one, before the signal."""
+    meg = torch.arange(20.0)[None]
+    at = torch.tensor([0, 6])
+    led = Windows(meg, at, at + 4, length=6, offset=-2, centred=False, begin=torch.tensor([0, 5]))
+    assert led(torch.tensor([0, 1]))[:, 0].tolist() == [[0.0, 0.0, 0.0, 1.0, 2.0, 3.0], [0.0, 5.0, 6.0, 7.0, 8.0, 9.0]]
+    bare = Windows(meg, at, at + 4, length=6, offset=-2, centred=False)
+    assert bare(torch.tensor([0, 1]))[:, 0].tolist() == [[0.0, 0.0, 0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0, 8.0, 9.0]]
+
+
+def test_first() -> None:
+    at = torch.tensor([3, 7])
+    assert Windows(torch.zeros(1, 9), at, at).first(torch.tensor([1])).tolist() == [[0]]
+    assert Windows(torch.zeros(1, 9), at, at, begin=torch.tensor([1, 5])).first(torch.tensor([1, 0])).tolist() == [
+        [5],
+        [1],
+    ]
+
+
 def test_call_bounded_past_the_window_is_the_plain_centred_cut() -> None:
     """Every bound at or past its window's end: bit for bit the cut centred by its plain mean, in float16 too."""
     meg = torch.randn(5, 400, generator=torch.Generator().manual_seed(0)).half()

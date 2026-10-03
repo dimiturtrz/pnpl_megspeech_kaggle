@@ -14,6 +14,7 @@ from megspeech.data.corpus import METRICS, Corpus, DataConfig
 from megspeech.data.grouping import Grouping
 from megspeech.data.runs import CHANNELS, Run
 from megspeech.data.vocabulary import IGNORE, PRIMARY
+from megspeech.data.windows import Windows
 
 SECONDS = 4
 CPU = torch.device("cpu")
@@ -157,6 +158,17 @@ def test_centring() -> None:
     assert DataConfig(baseline=0.5, decimate=2).centring == 62
 
 
+def test_leading() -> None:
+    assert DataConfig().leading == 0
+    assert DataConfig(lead=0.1).leading == round(0.1 * RATE)
+
+
+def test_reading() -> None:
+    at = torch.tensor([0])
+    windows = DataConfig(window=2.0, lead=0.1, baseline=0.5).reading(Windows(torch.zeros(1, 10), at, at))
+    assert (windows.length, windows.offset, windows.baseline) == (2 * RATE + 5, -5, round(0.5 * RATE))
+
+
 def test_rate() -> None:
     assert DataConfig().rate == RATE
     assert DataConfig(decimate=4).rate == 62.5
@@ -192,7 +204,9 @@ def test_shared(tmp_path: Path) -> None:
     based = record(tmp_path / "based", {"data": {"baseline": 0.5}})
     assert DataConfig.shared([based], Grouping.SENTENCE).baseline == 0.5
     assert DataConfig.shared([record(tmp_path / "fast", {"data": {"decimate": 2}})], Grouping.SENTENCE).decimate == 2
-    with pytest.raises(ValueError, match=r"\[\(1.0, False, 0, 0.0, 5\), \(2.0, False, 0, 0.0, 5\)\]"):
+    led = record(tmp_path / "led", {"data": {"lead": 0.1}})
+    assert DataConfig.shared([led], Grouping.SENTENCE).lead == 0.1
+    with pytest.raises(ValueError, match=r"\[\(1.0, False, 0, 0.0, 0.0, 5\), \(2.0, False, 0, 0.0, 0.0, 5\)\]"):
         DataConfig.shared([one, two], Grouping.SENTENCE)
     with pytest.raises(ValueError, match="an ensemble needs one"):
         DataConfig.shared([one, scaled], Grouping.SENTENCE)
@@ -228,6 +242,10 @@ def test_split(tmp_path: Path) -> None:
     assert long[..., :tail].ne(0).all()
     headed = Corpus.split(loaded, words, DataConfig(baseline=0.02), np.ones(5)).windows(torch.tensor([4]))
     assert headed[..., 0].float().eq(0).all()
+    led = Corpus.split(loaded, words, DataConfig(lead=0.1), np.ones(5)).windows(torch.tensor([0, 1]))
+    assert led.shape == (2, CHANNELS, RATE + 5)
+    assert led[0, :, :5].eq(0).all()
+    assert led[1, :, :5].ne(0).all()
     gap = DataConfig(grouping=Grouping.GAP, window=2.0)
     assert Corpus.split(loaded, Corpus.words(loaded.words, Grouping.GAP), gap, np.ones(4)).windows(first).ne(0).all()
 
