@@ -14,7 +14,7 @@ from megspeech.model.sentence import SentenceNet
 from megspeech.model.wordnet import ConvConfig
 from megspeech.objective.heads import DIM
 from megspeech.objective.prototypes import Lexicon
-from megspeech.training.auxiliary import Aligned, Auxiliary, Joint, Pronounced, Silent
+from megspeech.training.auxiliary import Aligned, Auxiliary, Joint, Lexical, Pronounced, Silent
 from megspeech.training.config import OptimConfig
 
 CPU = torch.device("cpu")
@@ -104,5 +104,7 @@ def test_of(tmp_path: Path) -> None:
     assert isinstance(both, Joint)
     assert [type(t) for t in both.terms] == [Aligned, Pronounced]
     assert cast("Pronounced", both.terms[1]).weight == 1.0
+    worded = Auxiliary.of(OptimConfig(semantic=0.5, lexical=2.0), root, CPU)
+    assert [type(t) for t in cast("Joint", worded).terms] == [Aligned, Lexical]
     spelled = Auxiliary.of(OptimConfig(phonetic=1.0, positions=2), root, CPU)
     assert cast("Pronounced", cast("Joint", spelled).terms[0]).positions == 2

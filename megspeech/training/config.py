@@ -28,6 +28,10 @@ class OptimConfig:
     """Weight of the semantic auxiliary (`megspeech.training.auxiliary`): every heard word's window, the ~60% outside
     the 50 included, SigLIP-aligned to the word's t5-large layer-12 embedding, d'Ascoli et al.'s objective. It
     supervises ~2.5x the windows the heads see; 0 trains the heads alone and never reads the lexicon."""
+    lexical: float = 0.0
+    """Weight of the lexical auxiliary: every heard word's window, in or out of the 50, classified into its word among
+    the ~25k distinct words of the lexicon (`megspeech.training.terms.Lexical`). Word identity, where the semantic
+    auxiliary aligns to a frozen embedding; 0 never reads the lexicon."""
     phonetic: float = 0.0
     """Weight of the phonetic auxiliary: every heard word's window, in or out of the 50, classified into the first of
     its 39 ARPAbet phonemes (`megspeech.data.phonemes`). Speech MEG decodes phonetic features (Gwilliams et al.

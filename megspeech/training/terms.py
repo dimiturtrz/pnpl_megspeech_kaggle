@@ -44,6 +44,23 @@ class Aligned(Term):
 
 
 @dataclass(frozen=True)
+class Lexical(Term):
+    """Every heard word's window, in or out of the 50, classified into its word among every distinct word heard
+    (the `Lexicon`'s keys): the 60% of windows the heads never label get a word identity to discriminate."""
+
+    weight: float
+    lexicon: Lexicon
+
+    @override
+    def head(self, width: int) -> nn.Module:
+        return nn.Linear(width, len(self.lexicon.keys)).to(self.lexicon.keys.device)
+
+    @override
+    def loss(self, head: nn.Module, output: Float[Tensor, "g w _"], tokens: Int[Tensor, "g w"]) -> Float[Tensor, ""]:
+        return self.weight * Phonetic.loss(output.flatten(0, 1), self.lexicon.rows(tokens).flatten())
+
+
+@dataclass(frozen=True)
 class Pronounced(Term):
     """Every heard word's window, in or out of the 50, classified into its first `positions` phonemes
     (`Phonetic`)."""

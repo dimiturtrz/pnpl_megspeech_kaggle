@@ -8,7 +8,7 @@ from megspeech.data.phonemes import PHONEMES, Pronunciation
 from megspeech.objective.heads import DIM
 from megspeech.objective.prototypes import Lexicon
 from megspeech.objective.semantic import Semantic
-from megspeech.training.terms import Aligned, Pronounced
+from megspeech.training.terms import Aligned, Lexical, Pronounced
 
 GENERATOR = torch.Generator().manual_seed(0)
 TOKENS = torch.tensor([[10, 20, -100], [10, -100, -100]])
@@ -42,6 +42,24 @@ def test_aligned_loss() -> None:
     value.backward()
     assert cast("Semantic", head).project.weight.grad is not None
     assert rule.loss(head, projected, torch.full((2, 3), 99)).item() == 0.0
+
+
+def lexical() -> Lexical:
+    return Lexical(3.0, aligned().lexicon)
+
+
+def test_lexical_head() -> None:
+    assert lexical().head(16)(torch.zeros(2, 16)).shape == (2, 2)
+
+
+def test_lexical_loss() -> None:
+    """Tokens 10 and 20 are the lexicon's 2 words; uniform logits cost log 2 per known row, unknown rows nothing."""
+    rule = lexical()
+    head = rule.head(16)
+    assert rule.loss(head, torch.zeros(2, 3, 2), TOKENS).item() == pytest.approx(3.0 * math.log(2))
+    assert rule.loss(head, torch.zeros(2, 3, 2), torch.full((2, 3), 99)).item() == 0.0
+    sure = torch.tensor([[[50.0, -50.0], [-50.0, 50.0], [0.0, 0.0]]])
+    assert rule.loss(head, sure, TOKENS[:1]).item() == pytest.approx(0.0, abs=1e-6)
 
 
 def test_pronounced_loss() -> None:

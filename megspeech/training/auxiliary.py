@@ -16,7 +16,7 @@ from megspeech.model.pretraining import Pretraining
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.prototypes import Lexicon
 from megspeech.training.config import OptimConfig
-from megspeech.training.terms import Aligned, Pronounced, Term
+from megspeech.training.terms import Aligned, Lexical, Pronounced, Term
 
 
 class Auxiliary(ABC):
@@ -37,6 +37,8 @@ class Auxiliary(ABC):
         terms: list[Term] = []
         if optim.semantic:
             terms.append(Aligned(optim.semantic, Lexicon.load(Lexicon.path(root)).to(device)))
+        if optim.lexical:
+            terms.append(Lexical(optim.lexical, Lexicon.load(Lexicon.path(root)).to(device)))
         if optim.phonetic:
             pronunciation = Pronunciation.load(Pronunciation.path(root)).to(device)
             terms.append(Pronounced(optim.phonetic, pronunciation, optim.positions))
