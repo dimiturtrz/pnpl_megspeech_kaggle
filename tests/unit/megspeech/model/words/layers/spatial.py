@@ -46,6 +46,11 @@ def test_forward_reads_zero_where_every_weighted_sensor_is_dropped() -> None:
     layer = SpatialAttention(1).train()
     with torch.no_grad():
         layer.scores.copy_(1e4 * layer.fourier[:1])
-    merged = layer.forward(torch.ones(256, CHANNELS, 5))
+    x = torch.ones(256, CHANNELS, 5, requires_grad=True)
+    merged = layer.forward(x)
     assert torch.isfinite(merged).all()
     assert merged.eq(0).any()
+    merged.sum().backward()
+    assert x.grad is not None
+    assert torch.isfinite(x.grad).all()
+    assert torch.isfinite(layer.scores.grad).all()
