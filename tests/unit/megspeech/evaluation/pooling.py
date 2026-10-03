@@ -13,7 +13,7 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
-from megspeech.data.batching.features import FEATURES
+from megspeech.data.batching.split import FEATURES
 from megspeech.data.cache.run_cache import WORD_TABLE as TABLE
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.constants import CHANNELS

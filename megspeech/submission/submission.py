@@ -23,8 +23,7 @@ from pnpl.competition import PRIMARY_VOCAB, SECONDARY_VOCAB, submit_to_kaggle, w
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.data.batching.features import HOLDOUT_FEATURES, Features
-from megspeech.data.batching.split import Split
+from megspeech.data.batching.split import HOLDOUT_FEATURES, Features, Split
 from megspeech.data.cache.holdout import Track
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import MISSING

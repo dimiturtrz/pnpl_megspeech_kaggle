@@ -7,11 +7,15 @@ to nine; or by sentence, every word of one PNPL sentence (`sentenceidx`, as pnpl
 groups them), a sentence longer than nine split into the fewest near-equal pieces.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 
 import numpy as np
 import pandas as pd
-from jaxtyping import Float, Int
+from jaxtyping import Bool, Float, Int
+
+from megspeech.data.labels.vocabulary import IGNORE
 
 MAX_WORDS = 9
 """Width of the holdout's `word_onsets_s`."""
@@ -71,10 +75,59 @@ class Spans:
     @classmethod
     def by_key(cls, keys: pd.DataFrame, onset: Float[np.ndarray, " n"]) -> "Spans":
         """One span per distinct key row (e.g. a holdout sentence), in the order the words appear."""
-        span = keys.groupby(list(keys.columns), sort=False).ngroup().to_numpy()
-        slot = keys.groupby(list(keys.columns), sort=False).cumcount().to_numpy()
-        return cls.assemble(span, slot, onset)
+        grouped = keys.groupby(list(keys.columns), sort=False)
+        return cls.assemble(grouped.ngroup().to_numpy(), grouped.cumcount().to_numpy(), onset)
 
     @property
     def lengths(self) -> Int[np.ndarray, " g"]:
         return (self.index != PAD).sum(axis=1)
+
+
+@dataclass(frozen=True)
+class Rule:
+    """How a grouping cuts: the word-table column, in samples into the run, at which it stops a word's window, the
+    spans it cuts a word table into, and whether it carries words outside the vocabulary."""
+
+    stop: str
+    cut: Callable[[pd.DataFrame], Spans]
+    unlabelled: bool
+
+
+class Grouping(StrEnum):
+    """`GAP`: vocabulary words only, spans by onset gap. `SENTENCE`: every word, spans by PNPL sentence.
+
+    Under `SENTENCE` an out-of-vocabulary word still carries its MEG into its span's context, labelled `IGNORE`
+    so no loss or score counts it.
+    """
+
+    GAP = "gap"
+    SENTENCE = "sentence"
+
+    @property
+    def rule(self) -> Rule:
+        return RULES[self]
+
+    def keep(self, target: Int[np.ndarray, " n"]) -> Bool[np.ndarray, " n"]:
+        """Of words with these targets (`IGNORE` outside the vocabulary), the ones this grouping carries."""
+        return (target != IGNORE) | self.rule.unlabelled
+
+    def spans(self, words: pd.DataFrame) -> Spans:
+        """Spans over `words` (a word table in run order: `run`, `sentence`, `onset`)."""
+        return self.rule.cut(words)
+
+    def bound(self, words: pd.DataFrame) -> pd.Series:
+        """Each of `words`' exclusive end sample in the loaded signal (`DeviceRecording.load`'s columns): its
+        sentence epoch's end under `SENTENCE`, as the holdout cuts it; its run's end under `GAP`."""
+        return words["start"] + words[self.rule.stop]
+
+
+RULES = {
+    Grouping.GAP: Rule("samples", lambda words: Spans.by_gap(words["onset"].to_numpy()), unlabelled=False),
+    Grouping.SENTENCE: Rule(
+        "stop",
+        lambda words: Spans.by_sentence(
+            words.groupby(["run", "sentence"], sort=False).ngroup().to_numpy(), words["onset"].to_numpy()
+        ),
+        unlabelled=True,
+    ),
+}

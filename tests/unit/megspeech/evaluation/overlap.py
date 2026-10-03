@@ -7,8 +7,7 @@ import pandas as pd
 import pytest
 
 from core.paths import DataRoot
-from megspeech.data.cache.archive import ArchiveKind, Epochs
-from megspeech.data.cache.holdout import HoldoutCache
+from megspeech.data.cache.holdout import ArchiveKind, Epochs, HoldoutCache
 from megspeech.data.cache.run_cache import WORD_TABLE, RunCache
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY
 from megspeech.data.raw.runs import Run

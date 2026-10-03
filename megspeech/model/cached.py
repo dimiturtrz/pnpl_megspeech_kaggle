@@ -1,4 +1,4 @@
-"""The word encoder over features a frozen MEG-XL trunk already computed (`megspeech.data.batching.features`)."""
+"""The word encoder over features a frozen MEG-XL trunk already computed (`megspeech.data.batching.split`)."""
 
 from typing import override
 

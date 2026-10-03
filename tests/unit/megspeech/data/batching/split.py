@@ -1,12 +1,13 @@
 import dataclasses
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 import torch
 
-from megspeech.data.batching.span_text import SpanText
-from megspeech.data.batching.split import DENSE, Split
+from core.paths import DataRoot
+from megspeech.data.batching.split import DENSE, FEATURES, TRAIN, Batch, Features, SpanText, Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import IGNORE
@@ -74,7 +75,7 @@ def test_prior() -> None:
     assert torch.allclose(prior.exp().sum(), torch.tensor(1.0))
 
 
-def test_novel() -> None:
+def test_split_novel() -> None:
     held = split()
     onset = np.r_[np.arange(DENSE) * 0.2, 10 + np.arange(12 - DENSE) * 2.0]
     everything = frozenset(SpanText(Spans.by_gap(onset).index, held.y.numpy()).sequences())
@@ -132,3 +133,86 @@ def test_from_holdout() -> None:
     assert held.onset[0, :2].tolist() == pytest.approx([0.0, 0.3])
     with pytest.raises(ValueError, match="2 holdout windows for 3"):
         Split.from_holdout(Holdout(), Windows.stacked(torch.zeros(2, CHANNELS, SAMPLES)))
+
+
+def test_target() -> None:
+    slot = torch.tensor([[0, 1, 2]])
+    batch = Batch(torch.zeros(2, 1, 1), torch.zeros(1, 3), slot, torch.tensor([[4, 3, PAD]]), torch.zeros(2))
+    assert batch.target(torch.tensor([0, 1, 2, 7, 8])).tolist() == [[8, 7, IGNORE]]
+
+
+TOKEN = np.array([5, 6, 7, 5, 6, 7, 9, 9])
+INDEX = np.array([[0, 1, 2], [3, 4, 5], [6, 7, PAD]])
+
+
+def test_sequences() -> None:
+    assert SpanText(INDEX, TOKEN).sequences() == [(5, 6, 7), (5, 6, 7), (9, 9)]
+    spans = Spans.by_gap(np.array([0.0, 0.2, 9.0]))
+    assert set(SpanText(spans.index, np.array([4, 5, 6])).sequences()) == {(4, 5), (6,)}
+
+
+def test_repeats() -> None:
+    """A recited text heard twice weighs each of its words half at power 1; a span too short to recite keeps 1."""
+    text = SpanText(INDEX, TOKEN)
+    assert text.repeats(1.0).tolist() == [0.5] * 6 + [1.0, 1.0]
+    assert text.repeats(0.0).tolist() == [1.0] * 8
+    shifted = SpanText(np.array([[PAD, 0, 1, 2], [3, 4, 5, PAD]]), TOKEN[:6])
+    assert shifted.repeats(1.0).tolist() == [0.5] * 6
+    unspanned = SpanText(np.array([[0, 1, 2]]), TOKEN)
+    assert unspanned.repeats(1.0).tolist() == [1.0] * 8
+
+
+def test_span_text_novel() -> None:
+    text = SpanText(INDEX, TOKEN)
+    assert text.novel(frozenset()).tolist() == list(range(8))
+    assert text.novel(frozenset({(5, 6, 7)})).tolist() == [6, 7]
+    assert len(SpanText(np.array([[0, PAD]]), TOKEN).novel(frozenset())) == 0
+
+
+FEATURE = torch.arange(6.0).reshape(3, 2)
+
+
+def saved(tmp_path: Path) -> Features:
+    features = Features(tmp_path / "f")
+    features.save(TRAIN, FEATURE)
+    return features
+
+
+def windows(count: int = 3) -> Windows:
+    return Windows.stacked(torch.ones(count, 4, 5))
+
+
+def test_under(tmp_path: Path):
+    root = DataRoot(tmp_path)
+    assert Features.under(root, "x").directory == root.kind("models") / FEATURES / "x"
+    assert Features.under(root, "").directory is None
+
+
+def test_path(tmp_path: Path):
+    assert Features(tmp_path).path(TRAIN) == tmp_path / "train.pt"
+    with pytest.raises(ValueError, match="no features"):
+        Features().path(TRAIN)
+
+
+def test_save(tmp_path: Path):
+    path = saved(tmp_path).path(TRAIN)
+    assert torch.equal(torch.load(path, weights_only=True), FEATURE)
+
+
+def test_read(tmp_path: Path):
+    raw = windows()
+    assert Features().read(TRAIN, raw) is raw
+    read = saved(tmp_path).read(TRAIN, raw)
+    assert torch.equal(read(torch.tensor([2, 0])), FEATURE[[2, 0], :, None])
+    resolved = Features(tmp_path / "r")
+    resolved.save(TRAIN, FEATURE.reshape(3, 1, 2))
+    assert torch.equal(resolved.read(TRAIN, raw)(torch.tensor([1])), FEATURE[[1], None])
+    with pytest.raises(ValueError, match="2 windows"):
+        saved(tmp_path).read(TRAIN, windows(2))
+
+
+def test_split(tmp_path: Path):
+    split = Split.of(windows(), (np.zeros(3, np.int64),) * 2, Spans.by_gap(np.array([0.0, 0.1, 9.0])), np.ones(3))
+    read = saved(tmp_path).split(TRAIN, split)
+    assert read.windows.length == 1
+    assert read.y is split.y

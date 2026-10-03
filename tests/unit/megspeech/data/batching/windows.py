@@ -10,14 +10,13 @@ from scipy.signal import resample_poly
 
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache import run_cache
-from megspeech.data.cache.recording import DeviceRecording
-from megspeech.data.cache.run_cache import RunCache
+from megspeech.data.cache.run_cache import DeviceRecording, RunCache
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import DECIMATE, PICO, RATE, SFREQ, WINDOW
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import PRIMARY
 from megspeech.data.raw.runs import Run
-from megspeech.data.spans.grouping import Grouping
+from megspeech.data.spans.spans import Grouping
 
 CHANNELS = 4
 SECONDS = 6

@@ -25,14 +25,13 @@ from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.data.batching.features import Features
-from megspeech.data.batching.split import Split
-from megspeech.data.cache.recording import DeviceRecording
+from megspeech.data.batching.split import Features, Split
+from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.data.spans.grouping import Grouping
+from megspeech.data.spans.spans import Grouping
 from megspeech.evaluation.balance import Sinkhorn
 from megspeech.evaluation.overlap import RULER, Text
 from megspeech.evaluation.report import Evaluator, Head, Score, SelectionConfig

@@ -11,9 +11,8 @@ from megspeech.data.cache.holdout import Track
 from megspeech.data.config import METRICS, READING, DataConfig
 from megspeech.data.constants import RATE
 from megspeech.data.raw.runs import Run
-from megspeech.data.spans.grouping import Grouping
-from tests.unit.megspeech.data.cache.archive import ONSETS, WORD_EPOCHS
-from tests.unit.megspeech.data.cache.holdout import holdout
+from megspeech.data.spans.spans import Grouping
+from tests.unit.megspeech.data.cache.holdout import ONSETS, WORD_EPOCHS, holdout
 
 TRAIN = "sub-0_ses-1_task-Sherlock1_run-1_meg.h5"
 HELD = "sub-0_ses-11_task-Sherlock1_run-2_meg.h5"
@@ -163,7 +162,7 @@ def test_shared(tmp_path: Path) -> None:
     assert DataConfig.shared([record(tmp_path / "fast", {"data": {"decimate": 2}})], Grouping.SENTENCE).decimate == 2
     led = record(tmp_path / "led", {"data": {"lead": 0.1}})
     assert DataConfig.shared([led], Grouping.SENTENCE).lead == 0.1
-    with pytest.raises(ValueError, match=r"\(1.0, False, 0, 0.0, 0.0, 5, .*\(2.0, False, 0, 0.0, 0.0, 5, "):
+    with pytest.raises(ValueError, match=r"False, 1.0, False, 0, 0.0, 0.0, 5, .*False, 2.0, False, 0, 0.0, 0.0, 5, "):
         DataConfig.shared([one, two], Grouping.SENTENCE)
     with pytest.raises(ValueError, match="an ensemble needs one"):
         DataConfig.shared([one, scaled], Grouping.SENTENCE)

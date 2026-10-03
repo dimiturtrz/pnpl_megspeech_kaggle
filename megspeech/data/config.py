@@ -4,7 +4,7 @@ import itertools
 import json
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
 import torch
@@ -16,7 +16,7 @@ from megspeech.data.cache.holdout import HoldoutCache, Track
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
 from megspeech.data.raw.runs import DEEP, Partition, Run
-from megspeech.data.spans.grouping import Grouping
+from megspeech.data.spans.spans import Grouping
 
 METRICS = "metrics.json"
 """The record a finished run leaves in its directory, its config under `config`."""
@@ -26,24 +26,6 @@ READ = frozenset({"TIMIT", "MOCHATIMIT"})
 
 NARRATIVE = ("Sherlock", "TheMoth")
 """The strata the ruler scores: Sherlock's nine books are one, TheMoth's stories another."""
-
-READING = (
-    "window",
-    "standardised",
-    "extra",
-    "baseline",
-    "lead",
-    "decimate",
-    "subjects",
-    "refit",
-    "features",
-    "read_weight",
-    "repeat_power",
-    "tasks",
-    "folds",
-)
-"""The `DataConfig` fields an ensemble's members must agree on: how each reads the MEG, which runs trained it and at
-what weight. The rest are `grouping`, the scorer's own, and `fold`, which bagged members differ in by design."""
 
 
 @dataclass(frozen=True)
@@ -85,7 +67,7 @@ class DataConfig:
     subjects: tuple[int, ...] = (DEEP,)
     """Subjects whose training runs train; validation is always subject 0's, and pooled runs never train."""
     features: str = ""
-    """Features a frozen encoder saved under models/features/<name> (`megspeech.data.batching.features`), read in
+    """Features a frozen encoder saved under models/features/<name> (`megspeech.data.batching.split`), read in
     place of every split's MEG; empty reads the MEG."""
 
     def __post_init__(self) -> None:
@@ -186,3 +168,8 @@ class DataConfig:
         domains = {task: [r for r in official if r.key[0] == task] for task in sorted({r.key[0] for r in official})}
         extras = {f"{s}+": [r for r in self.extras(runs) if self.stratum(r.key[0]) == s] for s in NARRATIVE}
         return domains | {name: chosen for name, chosen in extras.items() if chosen}
+
+
+READING = tuple(field.name for field in fields(DataConfig) if field.name not in {"grouping", "fold"})
+"""The `DataConfig` fields an ensemble's members must agree on: how each reads the MEG, which runs trained it and at
+what weight. The rest are `grouping`, the scorer's own, and `fold`, which bagged members differ in by design."""

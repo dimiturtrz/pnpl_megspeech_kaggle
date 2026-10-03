@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import torch
 from jaxtyping import Int
+from pnpl.datasets.constants import ARPABET
 from torch import Tensor
 
 from core.paths import DataRoot
@@ -26,48 +27,8 @@ from megspeech.data.labels.vocabulary import Vocabulary
 
 LOG = logging.getLogger(__name__)
 
-PHONEMES = [
-    "aa",
-    "ae",
-    "ah",
-    "ao",
-    "aw",
-    "ay",
-    "b",
-    "ch",
-    "d",
-    "dh",
-    "eh",
-    "er",
-    "ey",
-    "f",
-    "g",
-    "hh",
-    "ih",
-    "iy",
-    "jh",
-    "k",
-    "l",
-    "m",
-    "n",
-    "ng",
-    "ow",
-    "oy",
-    "p",
-    "r",
-    "s",
-    "sh",
-    "t",
-    "th",
-    "uh",
-    "uw",
-    "v",
-    "w",
-    "y",
-    "z",
-    "zh",
-]
-"""The 39 ARPAbet phonemes the alignment uses; its `oov` and `sil` name no sound and are left out."""
+PHONEMES = sorted(phoneme.lower() for phoneme in ARPABET)
+"""The 39 ARPAbet phonemes the alignment uses, as it spells them; its `oov` and `sil` name no sound and are left out."""
 
 UNKNOWN = -1
 """The phoneme of a token the table lacks, at an `oov` position, or past the end of a shorter word."""

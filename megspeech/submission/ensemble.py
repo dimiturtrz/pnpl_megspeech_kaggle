@@ -13,7 +13,7 @@ import torch
 from core.paths import DataRoot
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.raw.runs import Run
-from megspeech.data.spans.grouping import Grouping
+from megspeech.data.spans.spans import Grouping
 from megspeech.evaluation.balance import BALANCES
 from megspeech.evaluation.pooling import Pooling, Scoring
 from megspeech.submission.submission import Submitter

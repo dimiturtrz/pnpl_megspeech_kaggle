@@ -7,14 +7,13 @@ import pytest
 import torch
 
 from core.paths import DataRoot
-from megspeech.data.cache.recording import DeviceRecording
-from megspeech.data.cache.run_cache import DIRECTORY, WORD_TABLE
+from megspeech.data.cache.run_cache import DIRECTORY, WORD_TABLE, DeviceRecording
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import CHANNELS, RATE
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import IGNORE, PRIMARY
 from megspeech.data.raw.runs import Run
-from megspeech.data.spans.grouping import Grouping
+from megspeech.data.spans.spans import Grouping
 from tests.unit.megspeech.data.config import HELD, OTHER, TRAIN
 
 SECONDS = 4

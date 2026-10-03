@@ -27,8 +27,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from core.tree import Tree
-from megspeech.data.batching.features import HOLDOUT_FEATURES, TRAIN, Features
-from megspeech.data.batching.split import Split
+from megspeech.data.batching.split import HOLDOUT_FEATURES, TRAIN, Features, Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.holdout import Track
 from megspeech.data.constants import CHANNELS, RATE
