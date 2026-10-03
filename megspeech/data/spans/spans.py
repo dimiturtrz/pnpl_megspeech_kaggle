@@ -1,10 +1,10 @@
 """Spans of words heard together: the unit the context model reads.
 
-A holdout sentence is a run of vocabulary words only — onset gaps p50 0.21 s, max 0.92 s, at most nine
-words (`word_onsets_s` is `(N_sent, 9)` in `pnpl.competition.holdout`). Training spans are cut one of two ways:
-by gap, consecutive vocabulary words of one run whose onset gaps stay within the holdout's widest gap, chunked
-to nine; or by sentence, every word of one PNPL sentence (`sentenceidx`, as pnpl's `LibriBrainSentence`
-groups them), a sentence longer than nine split into the fewest near-equal pieces.
+A holdout sentence carries every word's onset, out-of-vocabulary ones included — onset gaps p50 0.20 s, at most
+nine words (`word_onsets_s` is `(N_sent, 9)` in `pnpl.competition.holdout`). Training spans are cut one of two
+ways: by sentence, every word of one PNPL sentence (`sentenceidx`, as pnpl's `LibriBrainSentence` groups them), a
+sentence longer than nine split into the fewest near-equal pieces; or, the older gap rule, consecutive vocabulary
+words of one run whose onset gaps stay within `MAX_GAP`, chunked to nine.
 """
 
 from collections.abc import Callable
