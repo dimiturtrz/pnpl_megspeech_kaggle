@@ -43,12 +43,16 @@ def test_loss() -> None:
 
 def test_balanced() -> None:
     y = torch.tensor([0, 0, 0, 0, 1, IGNORE])
-    assert LabelTerm.balanced(y, 0.0) is None
-    weight = LabelTerm.balanced(y, 0.5)
+    uniform = torch.ones(len(y))
+    assert LabelTerm.balanced(y, uniform, 0.0) is None
+    weight = LabelTerm.balanced(y, uniform, 0.5)
     assert weight is not None
     assert weight.shape == (VOCAB_SIZE,)
     assert torch.allclose(weight[:2], torch.tensor([2 / 3, 4 / 3]))
     assert weight[2:].eq(0).all()
+    drawn = LabelTerm.balanced(y, torch.tensor([1.0, 1.0, 1.0, 1.0, 4.0, 1.0]), 0.5)
+    assert drawn is not None
+    assert torch.allclose(drawn[:2], torch.ones(2))
 
 
 def lexical() -> LexicalTerm:

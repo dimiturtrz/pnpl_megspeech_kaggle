@@ -49,10 +49,12 @@ class LabelTerm(Term):
     weight: float = field(default=1.0, kw_only=True)
 
     @staticmethod
-    def balanced(y: Int[Tensor, " n"], balance: float) -> Float[Tensor, " v"] | None:
-        """Each class's cross-entropy weight, `count ** -balance` over the labelled `y`, mean 1 over the classes
-        present and 0 for the absent; None at balance 0, the unweighted loss itself."""
-        counts = torch.bincount(y[y != IGNORE], minlength=VOCAB_SIZE).float()
+    def balanced(y: Int[Tensor, " n"], weight: Float[Tensor, " n"], balance: float) -> Float[Tensor, " v"] | None:
+        """Each class's cross-entropy weight, `count ** -balance` over the labelled `y` counted at the draw `weight`
+        training samples them with, mean 1 over the classes present and 0 for the absent; None at balance 0, the
+        unweighted loss itself."""
+        known = y != IGNORE
+        counts = torch.bincount(y[known], weight[known], minlength=VOCAB_SIZE).float()
         present = counts > 0
         weight = torch.where(present, counts.clamp(min=1).pow(-balance), 0.0)
         return weight / weight[present].mean() if balance else None

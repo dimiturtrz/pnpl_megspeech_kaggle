@@ -94,7 +94,7 @@ class Trainer:
     def terms(self, train: Split) -> tuple[Term, ...]:
         """The context head's term, the word head's softmax, then the auxiliary heads'; class-weighted alike."""
         optim = self.config.optim
-        classes = LabelTerm.balanced(train.y, optim.balance)
+        classes = LabelTerm.balanced(train.y, train.weight, optim.balance)
         context = ContextTerm(optim.label_smoothing, classes, objective=self.config.context.objective)
         return context, WordTerm(optim.label_smoothing, classes), *self.auxiliary.terms
 
