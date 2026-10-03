@@ -98,7 +98,7 @@ class LoadedModel:
             shifts=scoring.shifts,
         )
         prior = Corpus.prior(heard, data).to(device)
-        alignment = data.alignment(root, device) if scoring.aligned or data.aligned else None
+        alignment = data.alignment(root, device) if scoring.aligned or data.recoloured else None
         named = tuple(d.name for d in directories)
         return cls(root, model, data, evaluator, prior, scoring.reading, named, alignment)
 

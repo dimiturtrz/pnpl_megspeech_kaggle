@@ -123,6 +123,19 @@ def test_rate() -> None:
     assert DataConfig(decimate=4).rate == 62.5
 
 
+@pytest.mark.parametrize(
+    ("data", "recoloured"),
+    [
+        (DataConfig(), False),
+        (DataConfig(aligned=True), True),
+        (DataConfig(subjects=(0, 101)), True),
+        (DataConfig(subjects=(101,)), True),
+    ],
+)
+def test_recoloured(data: DataConfig, recoloured: bool) -> None:
+    assert data.recoloured is recoloured
+
+
 def test_run_cache(tmp_path: Path) -> None:
     root = DataRoot(tmp_path)
     assert DataConfig().run_cache(root).cache == root.processed() / "continuous50"

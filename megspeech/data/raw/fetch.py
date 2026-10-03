@@ -201,6 +201,8 @@ are the system's and the same in every recording, are the sensor geometry MEG-XL
 MASC = OsfProject("ag3kj", "meg_masc")
 """MEG-MASC (Gwilliams et al. 2023, CC0): 27 subjects hearing four English stories on a KIT-208 system, ~100 GB of
 BIDS; `megspeech.data.raw.masc` rewrites it as LibriBrain runs."""
+MASC_PARTS = (MASC, OsfProject("h2tzn", MASC.dataset), OsfProject("u5327", MASC.dataset))
+"""OSF caps a project's storage, so MEG-MASC is three projects (subjects 01-11 in the first) merged into one tree."""
 
 
 def main() -> None:
@@ -211,7 +213,7 @@ def main() -> None:
     choice.add_argument("--others", dest="sources", action="store_const", const=(OTHERS,))
     choice.add_argument("--weights", dest="sources", action="store_const", const=(*WEIGHTS, MEGXL, NEUROMAG))
     choice.add_argument("--stimuli", dest="sources", action="store_const", const=STIMULI)
-    choice.add_argument("--masc", dest="sources", action="store_const", const=(MASC,))
+    choice.add_argument("--masc", dest="sources", action="store_const", const=MASC_PARTS)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()

@@ -128,6 +128,12 @@ class DataConfig:
         lead = self.to_samples(self.lead)
         return replace(windows, length=self.samples + lead, offset=-lead, baseline=self.to_samples(self.baseline))
 
+    @property
+    def recoloured(self) -> bool:
+        """Whether recordings are re-coloured (`alignment`): every one when `aligned`, the other subjects' whenever
+        they train, so evaluation reads them in the geometry training did."""
+        return self.aligned or any(subject != DEEP for subject in self.subjects)
+
     def run_cache(self, root: DataRoot) -> RunCache:
         """The run cache training reads, at `decimate`."""
         return RunCache.under(root.processed(), self.decimate, self.cleaning)

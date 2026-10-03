@@ -12,6 +12,7 @@ from megspeech.data.raw import fetch as module
 from megspeech.data.raw.fetch import (
     HOLDOUT,
     MASC,
+    MASC_PARTS,
     MEGXL,
     NEUROMAG,
     OTHERS,
@@ -192,7 +193,9 @@ def test_main_masc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     fetched: list[object] = []
     monkeypatch.setattr(OsfProject, "fetch", lambda self, _root: fetched.append(self))
     main()
-    assert fetched == [MASC]
+    assert fetched == list(MASC_PARTS)
+    assert fetched[0] == MASC
+    assert {part.home(DataRoot.from_config()) for part in MASC_PARTS} == {MASC.home(DataRoot.from_config())}
 
 
 def test_download_home(root: DataRoot):
