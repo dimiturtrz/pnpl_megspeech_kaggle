@@ -14,26 +14,33 @@ from megspeech.training.hook import StepHook
 
 @dataclass(frozen=True)
 class Ema(StepHook):
-    """Shadow parameters moved toward the model's by `1 - decay` each step; decay 0 tracks the model exactly."""
+    """Shadow state moved toward the model's by `1 - decay` each step; decay 0 tracks the model exactly. The state
+    is the parameters and the floating buffers, so normalisation statistics match the averaged weights."""
 
     decay: float
     shadow: list[Tensor]
 
     @classmethod
     def of(cls, model: nn.Module, decay: float) -> "Ema":
-        return cls(decay, [p.detach().clone() for p in model.parameters()])
+        return cls(decay, [t.clone() for t in cls.state(model)])
+
+    @staticmethod
+    def state(model: nn.Module) -> list[Tensor]:
+        """`model`'s parameters and floating buffers (BatchNorm running statistics), detached; counters excluded."""
+        buffers = [b for b in model.buffers() if b.is_floating_point()]
+        return [p.detach() for p in model.parameters()] + buffers
 
     @torch.no_grad()
     @override
     def step(self, model: nn.Module, lr: float) -> None:
         """Move the average toward `model` after an optimiser step at `lr`, which the average does not read."""
-        get_ema_multi_avg_fn(self.decay)(self.shadow, [p.detach() for p in model.parameters()], None)
+        get_ema_multi_avg_fn(self.decay)(self.shadow, self.state(model), None)
 
     @contextmanager
     def applied(self, model: nn.Module) -> Iterator[nn.Module]:
-        """`model` holding the average for the block, its own weights restored after; copied in place so the
+        """`model` holding the average for the block, its own state restored after; copied in place so the
         tensors a compiled graph captured stay the ones it reads."""
-        parameters = [p.detach() for p in model.parameters()]
+        parameters = self.state(model)
         own = [p.clone() for p in parameters]
         self.copy(parameters, self.shadow)
         try:

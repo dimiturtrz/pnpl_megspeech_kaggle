@@ -42,6 +42,20 @@ def test_applied() -> None:
     assert [p.data_ptr() for p in net.parameters()] == pointers
 
 
+def test_state() -> None:
+    """BatchNorm running statistics are averaged with the weights; its integer batch counter is not."""
+    net = nn.BatchNorm1d(2)
+    state = Ema.state(net)
+    assert len(state) == len(list(net.parameters())) + 2
+    assert all(t.is_floating_point() for t in state)
+    ema, running_mean = Ema.of(net, 0.5), state[2]
+    running_mean.fill_(4.0)
+    ema.step(net, 0.0)
+    with ema.applied(net):
+        assert running_mean.tolist() == [2.0, 2.0]
+    assert running_mean.tolist() == [4.0, 4.0]
+
+
 def test_copy() -> None:
     into = [torch.zeros(2), torch.zeros(3)]
     Ema.copy(into, [torch.ones(2), torch.full((3,), 2.0)])
