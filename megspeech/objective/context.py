@@ -10,6 +10,7 @@ from torch.nn import functional
 
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.objective.scorer import DIM, SigmoidScorer
+from megspeech.objective.topk import SmoothTopK
 
 
 class CosineHead(SigmoidScorer):
@@ -31,11 +32,12 @@ class Objective(StrEnum):
 
     SOFTMAX = "softmax"
     SIGLIP = "siglip"
+    TOPK = "topk"
 
     def head(self, width: int, prototypes: Float[Tensor, "v d"] | None) -> nn.Module:
         """`prototypes` None stands in zeros, for a checkpoint that will overwrite them."""
         anchors = torch.zeros(VOCAB_SIZE, DIM) if prototypes is None else prototypes
-        return nn.Linear(width, VOCAB_SIZE) if self is Objective.SOFTMAX else CosineHead(width, anchors)
+        return CosineHead(width, anchors) if self is Objective.SIGLIP else nn.Linear(width, VOCAB_SIZE)
 
     def loss(
         self,
@@ -44,11 +46,14 @@ class Objective(StrEnum):
         smoothing: float,
         weight: Float[Tensor, " v"] | None = None,
     ) -> Float[Tensor, ""]:
-        """Softmax cross-entropy, or SigLIP's per-pair sigmoid loss summed over the 50 candidates.
+        """Softmax cross-entropy, the smooth top-k loss over the same logits, or SigLIP's per-pair sigmoid loss summed
+        over the 50 candidates.
 
         Rows labelled `IGNORE` are padding: they add nothing and do not count toward the mean. `weight` scales each
-        class's rows in the cross-entropy; SigLIP scores every candidate per row and ignores it.
+        class's rows in the cross-entropy and top-k loss; SigLIP scores every candidate per row and ignores it.
         """
+        if self is Objective.TOPK:
+            return SmoothTopK()(logits, y, weight)
         if self is Objective.SOFTMAX:
             return functional.cross_entropy(
                 logits.float(), y, weight=weight, ignore_index=IGNORE, label_smoothing=smoothing
