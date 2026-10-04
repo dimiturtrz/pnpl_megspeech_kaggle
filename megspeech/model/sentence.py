@@ -48,7 +48,7 @@ class SentenceNet(nn.Module):
         self.scale = scale
         self.whiten = Whitener(channels, active=context.whiten)
         self.subjects = SubjectLayer.of(context.subjects, channels, unseen)
-        self.words = context.encoder.build(context.conv, channels)
+        self.words = context.encoder.build(context, channels)
         self.tokens = context.tokens
         self.project = nn.Linear(self.words.width // self.tokens, context.width)
         self.clock = context.clock

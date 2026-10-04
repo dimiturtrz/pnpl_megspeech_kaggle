@@ -6,9 +6,12 @@ from pathlib import Path
 import pytest
 import torch
 
+from core.paths import DataRoot
 from megspeech.data.batching.split import KAGGLE_FEATURES, TRAIN, Features, Split
 from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.alignment import Geometry
 from megspeech.data.cache.kaggle import Track
+from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
 from megspeech.data.spans.spans import PAD
 from megspeech.features.extract import (
@@ -64,6 +67,25 @@ def test_splits(tmp_path: Path):
     splits = export(tmp_path).splits()
     assert list(splits) == [TRAIN, "Sherlock1", f"{KAGGLE_FEATURES}-{Track.DEEP}"]
     assert [len(s.index) for s in splits.values()] == [1, 2, 3]
+
+
+def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    shaped = Geometry()
+    loaded = replace(export(tmp_path).corpus, geometry=shaped)
+    read: list[object] = []
+
+    def kaggle(*args: object) -> Windows:
+        read.append(args[-1])
+        return split(3).windows
+
+    monkeypatch.setattr(Corpus, "load", classmethod(lambda *_: loaded))
+    monkeypatch.setattr(Corpus, "kaggle", kaggle)
+    monkeypatch.setattr(Track, "kaggle", lambda *_: None)
+    monkeypatch.setattr(Split, "from_kaggle", classmethod(lambda *_: split(3)))
+    made = Export.of(DataConfig(features="x"), DataRoot(tmp_path), "name", torch.device("cpu"))
+    assert made.corpus is loaded
+    assert read == [shaped]
+    assert read[0] is shaped
 
 
 @pytest.mark.parametrize("flags", [["--data.subspace"], ["--data.regions", "Left-temporal"]])

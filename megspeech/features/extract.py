@@ -221,13 +221,14 @@ class Export:
     kaggle: Split
     features: Features
 
-    @classmethod  # devtools-ignore: test-mirror
+    @classmethod
     def of(cls, data: DataConfig, root: DataRoot, name: str, device: torch.device) -> Self:
         """The splits `data` reads, their MEG rather than any features it names, in `data`'s own geometry."""
         meg = replace(data, features="")
         track = Track.DEEP
-        kaggle = Split.from_kaggle(track.kaggle(root.raw()), Corpus.kaggle(root, meg, track, device))
-        return cls(Corpus.load(meg, root, device), kaggle, Features.under(root, name))
+        corpus = Corpus.load(meg, root, device)
+        windows = Corpus.kaggle(root, meg, track, device, corpus.geometry)
+        return cls(corpus, Split.from_kaggle(track.kaggle(root.raw()), windows), Features.under(root, name))
 
     def splits(self) -> dict[str, Split]:
         """Every split by the name its features are saved and read under."""

@@ -9,6 +9,8 @@ from megspeech.model.config import CONTEXT as DEFAULT
 from megspeech.model.config import FILE, ContextConfig, Encoder, OnsetEncoding
 from megspeech.model.context.timing import Clock, Intervals
 from megspeech.model.words.conv import ConvConfig, ConvWords
+from megspeech.model.words.expert import Crop
+from megspeech.model.words.experts import ExpertWords
 from megspeech.model.words.megxl import POOLED, RESOLVED
 from megspeech.objective.context import Objective
 
@@ -63,16 +65,32 @@ def test_tokens() -> None:
 
 
 def test_build() -> None:
-    config = ConvConfig(hidden=8, dilations=(1,))
+    conv = ConvConfig(hidden=8, dilations=(1,))
+    config = ContextConfig(conv=conv)
     assert isinstance(Encoder.CONV.build(config), ConvWords)
     assert Encoder.CACHED.build(config).width == POOLED
     assert Encoder.RESOLVED.build(config).width == RESOLVED
-    assert Encoder.TRAINED.build(config).width == config.width
+    assert Encoder.TRAINED.build(config).width == conv.width
     narrow = Encoder.CONV.build(config, 5)
     assert isinstance(narrow, ConvWords)
     assert isinstance(narrow.spatial, nn.Conv1d)
     assert narrow.spatial.in_channels == 5
     assert Encoder.CACHED.build(config, 5).width == POOLED
+    experts = ContextConfig(conv=conv, encoder=Encoder.EXPERTS, starts=(0, 10), lengths=(50, 10))
+    assert isinstance(Encoder.EXPERTS.build(experts, 5), ExpertWords)
+    assert Encoder.EXPERTS.build(experts, 5).width == 2 * conv.width
+
+
+def test_crops() -> None:
+    config = ContextConfig(encoder=Encoder.EXPERTS, starts=(0, 10), lengths=(50, 10))
+    assert config.crops == (Crop(0, 50), Crop(10, 10))
+    assert CONTEXT.crops == ()
+    with pytest.raises(ValueError, match="one crop per expert"):
+        ContextConfig(encoder=Encoder.EXPERTS)
+    with pytest.raises(ValueError, match="one crop per expert"):
+        ContextConfig(starts=(0,), lengths=(10,))
+    with pytest.raises(ValueError, match="one crop per expert"):
+        ContextConfig(encoder=Encoder.EXPERTS, starts=(0,), lengths=(10, 5))
 
 
 def test_cached() -> None:

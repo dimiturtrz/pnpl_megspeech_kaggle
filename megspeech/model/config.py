@@ -18,6 +18,8 @@ from megspeech.data.constants import CHANNELS
 from megspeech.model.context.timing import Clock, Intervals
 from megspeech.model.words.base import WordEncoder
 from megspeech.model.words.conv import CONV, ConvConfig, ConvWords
+from megspeech.model.words.expert import Crop
+from megspeech.model.words.experts import ExpertWords
 from megspeech.model.words.megxl import POOLED, RESOLVED, FeatureWords
 from megspeech.objective.context import Objective
 
@@ -31,22 +33,26 @@ class Encoder(StrEnum):
     RESOLVED = "resolved"
     TRAINED = "trained"
     """A head over a trained run's own CNN embeddings (`megspeech.features.trained`), `conv` giving their width."""
+    EXPERTS = "experts"
+    """Trained runs' CNNs, each `conv`-shaped, reading their own crops of the window side by side and fine-tuning
+    together (`words.experts`)."""
 
-    def build(self, config: ConvConfig, channels: int = CHANNELS) -> WordEncoder:
+    def build(self, context: "ContextConfig", channels: int = CHANNELS) -> WordEncoder:
         """This encoder for recordings of `channels` rows; a cached encoder reads its features, not them."""
-        return BUILDERS[self](config, channels)
+        return BUILDERS[self](context, channels)
 
     @property
     def cached(self) -> bool:
         """Whether the encoder reads features saved ahead of training rather than the MEG's sensors."""
-        return self is not Encoder.CONV
+        return self not in {Encoder.CONV, Encoder.EXPERTS}
 
 
-BUILDERS: dict[Encoder, Callable[[ConvConfig, int], WordEncoder]] = {
-    Encoder.CONV: ConvWords,
-    Encoder.CACHED: lambda config, _: FeatureWords(config, POOLED),
-    Encoder.RESOLVED: lambda config, _: FeatureWords(config, RESOLVED),
-    Encoder.TRAINED: lambda config, _: FeatureWords(config, config.width),
+BUILDERS: dict[Encoder, Callable[["ContextConfig", int], WordEncoder]] = {
+    Encoder.CONV: lambda context, channels: ConvWords(context.conv, channels),
+    Encoder.CACHED: lambda context, _: FeatureWords(context.conv, POOLED),
+    Encoder.RESOLVED: lambda context, _: FeatureWords(context.conv, RESOLVED),
+    Encoder.TRAINED: lambda context, _: FeatureWords(context.conv, context.conv.width),
+    Encoder.EXPERTS: lambda context, channels: ExpertWords(context.conv, channels, context.crops),
 }
 
 
@@ -84,8 +90,17 @@ class ContextConfig:
     rhythm: bool = False
     """A timing head's logits added to the context head's (`context.timing.TimingHead`); with `intervals` none, the
     transformer is told no gaps and timing reaches the words only through that head."""
+    starts: tuple[int, ...] = ()
+    """Samples into the window each `experts` encoder's crop starts at."""
+    lengths: tuple[int, ...] = ()
+    """Samples each `experts` encoder's crop runs, one per `starts`."""
 
     def __post_init__(self) -> None:
+        if len(self.starts) != len(self.lengths) or (self.encoder is Encoder.EXPERTS) != bool(self.starts):
+            raise ValueError(
+                f"the experts encoder, and it alone, reads one crop per expert: starts={self.starts}, "
+                f"lengths={self.lengths} for encoder {self.encoder}"
+            )
         if self.encoder.cached and self.subjects:
             raise ValueError(
                 f"encoder {self.encoder} reads saved features, not sensors, so a per-subject sensor matrix "
@@ -103,6 +118,11 @@ class ContextConfig:
     def tokens(self) -> int:
         """Transformer tokens per word: one per readout chunk with `latency`, else one."""
         return self.conv.segments if self.latency else 1
+
+    @property
+    def crops(self) -> tuple[Crop, ...]:
+        """The `experts` encoder's crops of the window, one per expert."""
+        return tuple(Crop(start, length) for start, length in zip(self.starts, self.lengths, strict=True))
 
     def save(self, directory: Path) -> Path:
         path = directory / FILE
