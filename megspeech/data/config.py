@@ -33,6 +33,9 @@ NARRATIVE = ("Sherlock", "TheMoth")
 NARRATOR = "Sherlock"
 """The stratum read by one voice throughout; every TheMoth story and read sentence has its own speaker."""
 
+DEALT = {Partition.VALIDATION: 0.25, Partition.TEST: 0.75}
+"""Where in each stride of a source's sessions the session dealt to each partition sits (`DataConfig.dealt`)."""
+
 
 @dataclass(frozen=True)
 class DataConfig:
@@ -61,6 +64,11 @@ class DataConfig:
     the official run: each book's or story's last session first. One official run per stratum leaves the macro's
     interval near +-0.035; `k` more runs of similar size shrink it by about `sqrt(1 + k)`, for `k` runs of the
     ~150 trained."""
+    share: float = 0.0
+    """Of each source's subject-0 training sessions (`stratum`), the share dealt to validation and the same share to
+    test (`dealt`); domains are then scored per source, the official runs joining theirs. 0 keeps the official split,
+    one run per task. 0.1 deals 11+11 of Sherlock's 112 sessions, 3+3 of TheMoth's 28 and 1+1 of TIMIT's 14: ~30k
+    scored words per partition against the official ~2.5k, whose interval spans +-0.03 (megspeech-7gf.81)."""
     baseline: float = 0.0
     """Seconds from each window's start its centring mean is taken over; 0 centres on the whole window. The
     reference pipeline baselines on 0-0.5 s, the pre-response stretch, so the word's evoked field is kept whole."""
@@ -201,20 +209,55 @@ class DataConfig:
             for _, run in [entry for entry in ranked if self.stratum(entry[0][1]) == stratum][: self.extra]
         ]
 
+    def source(self, run: Run) -> tuple[str, tuple[str, int, int]]:
+        return self.stratum(run.key[0]), run.key
+
+    def dealt(self, runs: Sequence[Run]) -> dict[Partition, list[Run]]:
+        """Subject 0's training sessions `share` deals to validation and to test: within each source, in key order
+        (book, then recording date), one session per stride, so each partition spans every book and date."""
+        deep = sorted((r for r in runs if r.partition is Partition.TRAIN and r.subject == DEEP), key=self.source)
+        sources = [list(group) for _, group in itertools.groupby(deep, key=lambda r: self.source(r)[0])]
+        strides = [(source, round(self.share * len(source))) for source in sources]
+        return {
+            partition: [
+                source[int((j + phase) * len(source) / count)] for source, count in strides for j in range(count)
+            ]
+            for partition, phase in DEALT.items()
+        }
+
     def trained(self, runs: Sequence[Run]) -> list[Run]:
-        """The runs training reads: `trains_on`, less the extra validation runs unless refitting on validation."""
-        withheld = set() if self.refit else {r.name for r in self.extras(runs)}
+        """The runs training reads: `trains_on`, less the dealt test runs, and less the extra and dealt validation
+        runs unless refitting on validation."""
+        dealt = self.dealt(runs)
+        held: list[Run] = [] if self.refit else [*self.extras(runs), *dealt[Partition.VALIDATION]]
+        withheld = {r.name for r in [*held, *dealt[Partition.TEST]]}
         kept = [r for r in runs if self.trains_on(r) and r.name not in withheld]
         ordered = sorted(kept, key=lambda r: (r.key, r.subject))
         bagged = {r.name for at, r in enumerate(ordered) if self.folds == 1 or at % self.folds != self.fold}
         return [r for r in kept if r.name in bagged]
 
+    def domain(self, run: Run) -> str:
+        """The domain `run` is scored in: its source once `share` deals sessions, else its task."""
+        return self.stratum(run.key[0]) if self.share else run.key[0]
+
+    def scored(self, runs: Sequence[Run], partition: Partition) -> dict[str, list[Run]]:
+        """`partition`'s domains: subject 0's official runs of it with the sessions dealt to it, under `domain`."""
+        chosen = [r for r in runs if r.partition is partition and r.subject == DEEP] + self.dealt(runs)[partition]
+        names = sorted({self.domain(r) for r in chosen})
+        return {name: [r for r in chosen if self.domain(r) == name] for name in names}
+
+    def tested(self, runs: Sequence[Run]) -> dict[str, list[Run]]:
+        return self.scored(runs, Partition.TEST)
+
     def held(self, runs: Sequence[Run]) -> dict[str, list[Run]]:
-        """The validation domains' runs: each official validation run under its task, the extras under `<stratum>+`."""
-        official = [r for r in runs if r.partition is Partition.VALIDATION]
-        domains = {task: [r for r in official if r.key[0] == task] for task in sorted({r.key[0] for r in official})}
+        """The validation domains' runs (`scored`), the extras under `<stratum>+`."""
+        domains = self.scored(runs, Partition.VALIDATION)
         extras = {f"{s}+": [r for r in self.extras(runs) if self.stratum(r.key[0]) == s] for s in NARRATIVE}
         return domains | {name: chosen for name, chosen in extras.items() if chosen}
+
+    def ruled(self, runs: Sequence[Run], partition: Partition) -> dict[str, list[Run]]:
+        """The domains `partition` is scored over: validation's (`held`) or test's (`tested`)."""
+        return {Partition.VALIDATION: self.held, Partition.TEST: self.tested}[partition](runs)
 
 
 READING = tuple(field.name for field in fields(DataConfig) if field.name not in {"grouping", "fold"})

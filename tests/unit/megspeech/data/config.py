@@ -12,7 +12,7 @@ from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.holdout import Track
 from megspeech.data.config import METRICS, READING, DataConfig
 from megspeech.data.constants import RATE
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import Grouping
 from tests.unit.megspeech.data.cache.holdout import ONSETS, WORD_EPOCHS, holdout
 
@@ -64,6 +64,53 @@ def test_extras(tmp_path: Path) -> None:
     )
 
 
+def keyed(domains: dict[str, list[Run]]) -> dict[str, list[tuple[str, int, int]]]:
+    return {name: [r.key for r in chosen] for name, chosen in domains.items()}
+
+
+def test_source(tmp_path: Path) -> None:
+    assert DataConfig().source(Run(tmp_path / TRAIN)) == ("Sherlock", ("Sherlock1", 1, 1))
+
+
+def test_dealt(tmp_path: Path) -> None:
+    """Each source deals one session per stride to each partition; a source too small for one deals none."""
+    dealt = {p.value: [r.key for r in chosen] for p, chosen in DataConfig(share=0.4).dealt(runs(tmp_path)).items()}
+    assert dealt == {
+        "validation": [("Sherlock1", 1, 1), ("Sherlock2", 1, 1), ("TheMoth", 1, 1)],
+        "test": [("Sherlock1", 2, 1), ("Sherlock2", 2, 1), ("TheMoth", 2, 1)],
+    }
+    assert DataConfig(share=0.4).dealt(subjects(tmp_path)) == DataConfig(share=0.4).dealt(runs(tmp_path))
+    assert not any(DataConfig().dealt(runs(tmp_path)).values())
+
+
+def test_trained_dealt(tmp_path: Path) -> None:
+    """Dealt sessions never train; refitting takes the validation ones back, never the test ones."""
+    every = runs(tmp_path)
+    assert {r.key for r in DataConfig(share=0.4).trained(every)} == {("Sherlock1", 3, 1), ("TIMIT", 1, 1)}
+    refit = {r.key for r in DataConfig(share=0.4, refit=True).trained(every)}
+    assert refit == {r.key for r in every} - {("Sherlock1", 2, 1), ("Sherlock2", 2, 1), ("TheMoth", 2, 1)}
+
+
+def test_domain(tmp_path: Path) -> None:
+    assert [DataConfig(share=s).domain(Run(tmp_path / TRAIN)) for s in (0.0, 0.1)] == ["Sherlock1", "Sherlock"]
+
+
+def test_scored(tmp_path: Path) -> None:
+    """Under a share, the official runs join their source's dealt sessions; other subjects' test runs never count."""
+    assert keyed(DataConfig(share=0.4).scored(runs(tmp_path), Partition.VALIDATION)) == {
+        "Sherlock": [("Sherlock1", 11, 2), ("Sherlock1", 1, 1), ("Sherlock2", 1, 1)],
+        "TheMoth": [("TheMoth", 29, 1), ("TheMoth", 1, 1)],
+    }
+    assert DataConfig().scored(subjects(tmp_path), Partition.TEST) == {}
+
+
+def test_tested(tmp_path: Path) -> None:
+    tested = DataConfig(share=0.4).tested(subjects(tmp_path))
+    assert keyed(tested) == {"Sherlock": [("Sherlock1", 2, 1), ("Sherlock2", 2, 1)], "TheMoth": [("TheMoth", 2, 1)]}
+    official = Run(tmp_path / "sub-0_ses-12_task-Sherlock1_run-2_meg.h5")
+    assert keyed(DataConfig().tested([*runs(tmp_path), official])) == {"Sherlock1": [("Sherlock1", 12, 2)]}
+
+
 def test_trained(tmp_path: Path) -> None:
     every = runs(tmp_path)
     assert len(DataConfig().trained(every)) == len(every) - 2
@@ -98,6 +145,14 @@ def test_held(tmp_path: Path) -> None:
     assert list(held) == ["Sherlock1", "TheMoth", "Sherlock+", "TheMoth+"]
     assert [r.key for r in held["Sherlock+"]] == [("Sherlock1", 3, 1)]
     assert DataConfig(extra=1, subjects=(0, 3, 4)).held(subjects(tmp_path)) == held
+
+
+def test_ruled(tmp_path: Path) -> None:
+    config = DataConfig(share=0.4)
+    every = subjects(tmp_path)
+    assert config.ruled(every, Partition.VALIDATION) == config.held(every)
+    assert config.ruled(every, Partition.TEST) == config.tested(every)
+    assert config.ruled(every, Partition.TEST) != config.ruled(every, Partition.VALIDATION)
 
 
 def test_samples() -> None:
@@ -219,7 +274,8 @@ def test_shared(tmp_path: Path) -> None:
     assert DataConfig.shared([record(tmp_path / "fast", {"data": {"decimate": 2}})], Grouping.SENTENCE).decimate == 2
     led = record(tmp_path / "led", {"data": {"lead": 0.1}})
     assert DataConfig.shared([led], Grouping.SENTENCE).lead == 0.1
-    with pytest.raises(ValueError, match=r"False, 1.0, False, 0, 0.0, 0.0, 5, .*False, 2.0, False, 0, 0.0, 0.0, 5, "):
+    differing = r"False, 1.0, False, 0, 0.0, 0.0, 0.0, 5, .*False, 2.0, False, 0, 0.0, 0.0, 0.0, 5, "
+    with pytest.raises(ValueError, match=differing):
         DataConfig.shared([one, two], Grouping.SENTENCE)
     with pytest.raises(ValueError, match="an ensemble needs one"):
         DataConfig.shared([one, scaled], Grouping.SENTENCE)

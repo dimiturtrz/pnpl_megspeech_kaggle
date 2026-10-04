@@ -14,7 +14,7 @@ from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import Grouping
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.metric.ruler import Graded
@@ -45,6 +45,9 @@ class Scoring:
     lowpass: float = 0.0
     """Hz above which every window read is zeroed (`LowPass`); 0 reads the full band. ema9998-s0 at 25/18/12/8/4 Hz:
     0.6445/0.6468/0.6389/0.6248/0.5924 (n=2512): the 12-25 Hz top of the 50 Hz cache carries ~0.006 (4te.5)."""
+    partition: Partition = Partition.VALIDATION
+    """The labelled partition scored (`DataConfig.ruled`): validation selects; test only reports, once, on a model
+    already chosen (megspeech-7gf.81)."""
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,7 @@ class LoadedModel:
     reading: Reading = Reading.OWN
     names: tuple[str, ...] = ()
     geometry: Geometry = AS_RECORDED
+    partition: Partition = Partition.VALIDATION
 
     @classmethod
     def of(cls, root: DataRoot, names: list[str], scoring: Scoring, device: torch.device) -> "LoadedModel":
@@ -83,7 +87,7 @@ class LoadedModel:
         prior = Corpus.prior(heard, data).to(device)
         geometry = data.geometry(root, device, aligned=scoring.aligned)
         named = tuple(d.name for d in directories)
-        return cls(root, model, data, evaluator, prior, scoring.reading, named, geometry)
+        return cls(root, model, data, evaluator, prior, scoring.reading, named, geometry, scoring.partition)
 
     def load(self, runs: list[Run]) -> tuple[DeviceRecording, pd.DataFrame]:
         """`runs` on the device, and their words keyed by `Text` and cut as the model's grouping cuts them."""
@@ -135,13 +139,13 @@ class LoadedModel:
         return self.evaluator.unseen(self.context(split), split, self.log_prior)
 
     def report(self, runs: list[Run]) -> Epoch:
-        """Every validation domain of `runs` scored alone, and the macro that selects."""
-        domains, _ = self.domains(self.data.held(runs))
+        """Every domain of `runs` in the scored partition, scored alone, and the macro that selects."""
+        domains, _ = self.domains(self.data.ruled(runs, self.partition))
         return self.evaluator.report(self.model, domains, self.log_prior, 0, 0.0)
 
     def graded(self, runs: list[Run], tau: float) -> Graded:
-        """Every counted validation domain of `runs`: its unseen-span words' hits at `tau`."""
-        domains, _ = self.domains(self.data.held(runs))
+        """Every counted domain of `runs` in the scored partition: its unseen-span words' hits at `tau`."""
+        domains, _ = self.domains(self.data.ruled(runs, self.partition))
         return self.evaluator.graded(self.model, domains, self.log_prior, tau)
 
     def probabilities(self, split: Split, tau: float) -> Float[np.ndarray, "n v"]:

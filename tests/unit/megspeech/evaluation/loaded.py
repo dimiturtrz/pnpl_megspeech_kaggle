@@ -16,7 +16,7 @@ from megspeech.data.cache.run_cache import WORD_TABLE as TABLE
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation import loaded as module
 from megspeech.evaluation.loaded import LoadedModel, Scoring
@@ -34,8 +34,9 @@ NAMES = (
     "sub-0_ses-29_task-TheMoth_run-1",
     "sub-1_ses-11_task-Sherlock1_run-1",
     "sub-1_ses-12_task-Sherlock1_run-1",
+    "sub-0_ses-12_task-Sherlock1_run-2",
 )
-POOLED, TRAINED = 2, 3
+POOLED, TRAINED, TESTED = 2, 3, 4
 
 
 class Favourite(nn.Module):
@@ -99,8 +100,8 @@ def test_loaded_model_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_load(tmp_path: Path) -> None:
-    source, words = loaded(tmp_path).load(runs(tmp_path)[POOLED:])
-    assert source.names == NAMES[POOLED:]
+    source, words = loaded(tmp_path).load(runs(tmp_path)[POOLED:TESTED])
+    assert source.names == NAMES[POOLED:TESTED]
     assert words["position"].tolist() == [0, 1, 2, 0, 1, 2] * 2
 
 
@@ -112,8 +113,8 @@ def test_features(tmp_path: Path) -> None:
 
 def test_splits(tmp_path: Path) -> None:
     every = runs(tmp_path)
-    splits = loaded(tmp_path, Reading.UNSEEN).splits(every[POOLED:])
-    assert list(splits) == every[POOLED:]
+    splits = loaded(tmp_path, Reading.UNSEEN).splits(every[POOLED:TESTED])
+    assert list(splits) == every[POOLED:TESTED]
     rows, split = splits[every[POOLED]]
     assert (rows["run"] == NAMES[POOLED]).all()
     assert split.subject.tolist() == [N_SUBJECTS] * len(SPOKEN)
@@ -162,6 +163,13 @@ def test_report(tmp_path: Path) -> None:
     report = loaded(tmp_path).report(runs(tmp_path))
     assert RULER in report.domains
     assert report.macro.n == sum(r.novel.n for r in report.domains.values())
+
+
+def test_report_tested(tmp_path: Path) -> None:
+    """The test partition scores subject 0's official test run alone, not the validation domains."""
+    report = replace(loaded(tmp_path), partition=Partition.TEST).report(runs(tmp_path))
+    assert list(report.domains) == ["Sherlock1"]
+    assert report.macro.n == report.domains["Sherlock1"].novel.n > 0
 
 
 def test_graded(tmp_path: Path) -> None:
