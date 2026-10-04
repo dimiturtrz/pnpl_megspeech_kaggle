@@ -78,6 +78,8 @@ class ContextConfig:
     """Each of the CNN readout's `conv.segments` time chunks enters the transformer as its own token, tagged by its
     chunk: words arrive ~0.21 s apart, so a word's late chunks overlap its successors' early responses, and attention
     across the chunks can tell them apart where one pooled token per word mixes them."""
+    whiten: bool = False
+    """Decorrelate the scaled sensors by their training covariance before the subject layer (`input.whitener`)."""
 
     def __post_init__(self) -> None:
         if self.encoder.cached and self.subjects:
@@ -90,6 +92,8 @@ class ContextConfig:
                 f"latency tokens split the CNN's mean-max chunks; encoder {self.encoder} with "
                 f"queries={self.conv.queries} pools none"
             )
+        if self.whiten and self.encoder.cached:
+            raise ValueError(f"encoder {self.encoder} reads saved features, not sensors, so there is nothing to whiten")
 
     @property
     def tokens(self) -> int:

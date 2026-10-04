@@ -129,6 +129,12 @@ def test_latency_tokens() -> None:
     assert torch.allclose(exact[0][mask], padded[0][mask], atol=1e-5)
 
 
+def test_whiten_saved_only_when_on() -> None:
+    """A whitening model saves its matrix; one without saves none, so earlier checkpoints still load."""
+    assert "whiten.matrix" in SentenceNet(nn.Identity(), replace(CONTEXT, whiten=True)).state_dict()
+    assert not any(key.startswith("whiten") for key in SentenceNet(nn.Identity(), CONTEXT).state_dict())
+
+
 def test_read() -> None:
     model = SentenceNet(nn.Identity(), CONTEXT).eval()
     refined = torch.randn(2, 3, CONTEXT.width, generator=GENERATOR)

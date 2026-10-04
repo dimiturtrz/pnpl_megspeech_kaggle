@@ -12,6 +12,7 @@ from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.context.span import SpanConformer
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer, Unseen
+from megspeech.model.input.whitener import Whitener
 from megspeech.model.words.layers.mean_max import MeanMax
 
 LATENCY_INIT = 0.02
@@ -40,6 +41,7 @@ class SentenceNet(nn.Module):
         """`unseen` reads a subject the subject layer has no matrix for (`SubjectLayer`)."""
         super().__init__()
         self.scale = scale
+        self.whiten = Whitener(CHANNELS, active=context.whiten)
         self.subjects = SubjectLayer.of(context.subjects, CHANNELS, unseen)
         self.words = context.encoder.build(context.conv)
         self.tokens = context.tokens
@@ -112,7 +114,8 @@ class SentenceNet(nn.Module):
     ) -> Float[Tensor, "r e"]:
         """Each window's word embedding through the scaler, the subject layer and the encoder; `valid` rows alone
         set any batch statistics."""
-        scaled = self.words.normalise(self.subjects(self.scale(x), subject), x.ne(0).any(dim=1, keepdim=True))
+        sensors = self.subjects(self.whiten(self.scale(x)), subject)
+        scaled = self.words.normalise(sensors, x.ne(0).any(dim=1, keepdim=True))
         return self.words.embed(scaled, valid)
 
     def classify(

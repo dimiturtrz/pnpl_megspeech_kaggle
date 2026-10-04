@@ -51,6 +51,8 @@ def test_combination() -> None:
         ContextConfig(latency=True, encoder=Encoder.CACHED)
     with pytest.raises(ValueError, match="latency"):
         ContextConfig(latency=True, conv=ConvConfig(queries=2))
+    with pytest.raises(ValueError, match="whiten"):
+        ContextConfig(whiten=True, encoder=Encoder.TRAINED)
 
 
 def test_tokens() -> None:

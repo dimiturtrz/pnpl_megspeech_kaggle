@@ -74,9 +74,9 @@ class Trainer:
 
     def model(self, train: Split) -> SentenceNet:
         """A fresh model, or the warm start's weights when there is one."""
-        model = SentenceNet(
-            Scaler(train.sample(SCALER_SAMPLE)), context=self.config.context, prototypes=self.prototypes
-        )
+        sample = train.sample(SCALER_SAMPLE)
+        model = SentenceNet(Scaler(sample), context=self.config.context, prototypes=self.prototypes)
+        model.whiten.fit(model.scale(sample))
         if self.initial:
             model.load_state_dict(self.initial)
         return self.compiled(model.to(self.evaluator.device))
