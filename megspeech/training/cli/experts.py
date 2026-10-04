@@ -15,10 +15,10 @@ import json
 import logging
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Self
+from typing import Self, override
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 
 from core.paths import DataRoot
 from megspeech.data.config import DataConfig
@@ -36,6 +36,8 @@ SPREAD = torch.finfo(torch.float16).max / CLAMP
 expert's scaler by its spread over this, so the two compose to the expert's own and the outer clamp never acts."""
 REBUILT = ("scale.", "subjects.", "whiten.")
 """The stacked run's state over the embeddings it read, which the assembled model reads from the sensors instead."""
+READERS = ("project", "words.head.1")
+"""The layers that read the joined word embeddings: the context model's input projection and the word head."""
 
 
 @dataclass(frozen=True)
@@ -112,17 +114,25 @@ class Assembly:
         """The assembled model's weights: the stack's above the embeddings, its embedding scaler over the joined
         experts, each expert's CNN and scaler beneath, and the shape `config` builds for whatever none of them has."""
         template = SentenceNet(Scaler(torch.zeros(1, CHANNELS, 1)), context=config.context).state_dict()
-        state = self.stack.weights(REBUILT, kept=False)
-        state |= {f"words.features.{name}": self.stack.state[f"scale.{name}"] for name in ("median", "spread")}
-        for index, expert in enumerate(self.experts):
-            branch = f"words.experts.{index}."
-            state |= {branch + key: value for key, value in expert.weights(("words.",), kept=True).items()}
-            state |= {f"{branch}scale.{name}": expert.state[f"scale.{name}"] / SPREAD for name in ("median", "spread")}
-        state |= {"scale.median": torch.zeros(CHANNELS, 1), "scale.spread": torch.full((CHANNELS, 1), SPREAD)}
+        state = self.top() | self.branches()
         mismatched = [key for key, value in state.items() if key not in template or template[key].shape != value.shape]
         if mismatched:
             raise ValueError(f"assembled weights the model has no place for: {mismatched}")
         return template | state
+
+    def top(self) -> dict[str, Tensor]:
+        """The stack's weights above the embeddings, and its embedding scaler over the joined experts."""
+        state = self.stack.weights(REBUILT, kept=False)
+        return state | {f"words.features.{name}": self.stack.state[f"scale.{name}"] for name in ("median", "spread")}
+
+    def branches(self) -> dict[str, Tensor]:
+        """Each expert's CNN and scaler as its branch, under a pass-through sensor scaler."""
+        state = {"scale.median": torch.zeros(CHANNELS, 1), "scale.spread": torch.full((CHANNELS, 1), SPREAD)}
+        for index, expert in enumerate(self.experts):
+            branch = f"words.experts.{index}."
+            state |= {branch + key: value for key, value in expert.weights(("words.",), kept=True).items()}
+            state |= {f"{branch}scale.{name}": expert.state[f"scale.{name}"] / SPREAD for name in ("median", "spread")}
+        return state
 
     def save(self, directory: Path, *, rhythm: bool = False) -> None:
         config = self.config(rhythm=rhythm)
@@ -132,6 +142,26 @@ class Assembly:
         (directory / METRICS).write_text(json.dumps({"config": asdict(config)}, indent=1))
 
 
+@dataclass(frozen=True)
+class Graft(Assembly):
+    """The first expert's own context model over all the experts: `stack` is that expert's end-to-end run, and the
+    others enter through zero columns of every layer reading the joined embeddings, so at step 0 it is that run.
+    `scaled`, a stacked run over the same experts, lends its embedding scaler; the reading layers absorb it."""
+
+    scaled: Run
+
+    @override
+    def top(self) -> dict[str, Tensor]:
+        median, spread = (self.scaled.state[f"scale.{name}"][:, 0] for name in ("median", "spread"))
+        width = self.stack.config.context.conv.width
+        state = self.stack.weights((*REBUILT, "words."), kept=False) | self.stack.weights(("words.head.",), kept=True)
+        for layer in READERS:
+            weight = state[f"{layer}.weight"]
+            state[f"{layer}.bias"] = state[f"{layer}.bias"] + weight @ median[:width]
+            state[f"{layer}.weight"] = nn.functional.pad(weight * spread[:width], (0, len(spread) - width))
+        return state | {"words.features.median": median[:, None], "words.features.spread": spread[:, None]}
+
+
 def main() -> None:
     """Write the assembled model under models/<name>, ready to warm-start a run."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -139,10 +169,12 @@ def main() -> None:
     parser.add_argument("--experts", nargs="+", required=True)
     parser.add_argument("--name", required=True)
     parser.add_argument("--rhythm", action="store_true", help="a timing head beside the context head, fresh")
+    parser.add_argument("--scaled", help="graft onto --stack, the first expert's own run, with this stack's scaler")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     models = DataRoot.from_config().models()
-    assembly = Assembly(Run.load(models / args.stack), tuple(Run.load(models / name) for name in args.experts))
+    parts = (Run.load(models / args.stack), tuple(Run.load(models / name) for name in args.experts))
+    assembly = Graft(*parts, Run.load(models / args.scaled)) if args.scaled else Assembly(*parts)
     assembly.save(models / args.name, rhythm=args.rhythm)
     LOG.info("%s -> %s", assembly.config(rhythm=args.rhythm).context, models / args.name)
 

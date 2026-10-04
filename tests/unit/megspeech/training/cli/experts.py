@@ -15,7 +15,7 @@ from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig
 from megspeech.model.words.expert import Crop
 from megspeech.training.cli import experts as module
-from megspeech.training.cli.experts import MODEL, Assembly, Run, main
+from megspeech.training.cli.experts import MODEL, REBUILT, SPREAD, Assembly, Graft, Run, main
 from megspeech.training.config import METRICS, RunConfig
 
 SMALL = ConvConfig(hidden=4, dilations=(1,))
@@ -126,6 +126,41 @@ def test_state() -> None:
     broken = replace(parts, stack=replace(parts.stack, state=parts.stack.state | {"stray": torch.zeros(1)}))
     with pytest.raises(ValueError, match="no place"):
         broken.state(config)
+
+
+def test_assembly_top() -> None:
+    parts = assembly()
+    top = parts.top()
+    assert torch.equal(top["words.features.spread"], parts.stack.state["scale.spread"])
+    assert not any(key.startswith(REBUILT) for key in top)
+
+
+def test_branches() -> None:
+    parts = assembly()
+    branches = parts.branches()
+    assert torch.equal(branches["words.experts.1.scale.median"], parts.experts[1].state["scale.median"] / SPREAD)
+    assert torch.equal(branches["scale.spread"], torch.full((CHANNELS, 1), SPREAD))
+
+
+def graft() -> Graft:
+    base = expert(*WINDOWS[0])
+    scaled = stack()
+    spread = torch.rand(scaled.state["scale.spread"].shape, generator=GENERATOR) + 10
+    scaled = replace(scaled, state=scaled.state | {"scale.spread": spread})
+    return Graft(base, (base, *assembly().experts[1:]), scaled)
+
+
+def test_graft_top() -> None:
+    parts = graft()
+    composite = loaded(Run(parts.config(), parts.state(parts.config())))
+    base = loaded(parts.stack)
+    x = Crop(0, 50)(torch.randn(4, CHANNELS, 50, generator=GENERATOR) * 4 + 1)
+    subject = torch.zeros(4, dtype=torch.long)
+    with torch.no_grad():
+        joined, alone = composite.embed(x, subject), base.embed(x, subject)
+        assert torch.allclose(composite.project(joined), base.project(alone), atol=1e-4)
+        assert torch.allclose(composite.words.head(joined), base.words.head(alone), atol=1e-4)
+    assert torch.equal(parts.top()["head.weight"], parts.stack.state["head.weight"])
 
 
 def test_save(tmp_path: Path) -> None:
