@@ -135,6 +135,34 @@ def test_whiten_saved_only_when_on() -> None:
     assert not any(key.startswith("whiten") for key in SentenceNet(nn.Identity(), CONTEXT).state_dict())
 
 
+def test_rhythm_adds_timing_logits() -> None:
+    """With a timing head, the context logits gain its logits and the word head's stay; without, nothing saved."""
+    model = SentenceNet(nn.Identity(), replace(CONTEXT, rhythm=True)).eval()
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
+    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
+    subject = torch.zeros(len(x), dtype=torch.long)
+    context, word = model.forward(x, onset, slot, subject)
+    plain, same = model.classify(*model.features(x, onset, slot, subject), slot < len(x))
+    assert torch.allclose(context - plain, model.timing(onset, slot < len(x)), atol=1e-5)
+    assert torch.equal(word, same)
+    assert not any(key.startswith("timing") for key in SentenceNet(nn.Identity(), CONTEXT).state_dict())
+
+
+def test_heard() -> None:
+    """The refined positions and slots the heads read, beside the same logits `forward` returns."""
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
+    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
+    refined, slots, context, word = model.heard(x, onset, slot, torch.zeros(len(x), dtype=torch.long))
+    assert refined.shape == (2, 3, CONTEXT.width)
+    assert slots.shape == (2, 3, model.words.width)
+    whole = model(x, onset, slot, torch.zeros(len(x), dtype=torch.long))
+    assert torch.equal(whole[0], context)
+    assert torch.equal(whole[1], word)
+
+
 def test_read() -> None:
     model = SentenceNet(nn.Identity(), CONTEXT).eval()
     refined = torch.randn(2, 3, CONTEXT.width, generator=GENERATOR)

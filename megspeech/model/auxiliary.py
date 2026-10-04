@@ -45,10 +45,9 @@ class WithAuxiliary(nn.Module):
     ) -> tuple[Float[Tensor, "g w _"], ...]:
         """`SentenceNet`'s two heads, then each auxiliary head's reading of every span position's tapped
         representation."""
-        h, slots = self.net.features(x, onset, slot, subject)
-        refined = self.net.refine(h, slot < len(x))
+        refined, slots, context, word = self.net.heard(x, onset, slot, subject)
         tapped = self.tap.pick(slots, refined)
-        return *self.net.read(refined, slots), *(head(tapped) for head in self.heads)
+        return context, word, *(head(tapped) for head in self.heads)
 
     def readouts(self) -> tuple[nn.Module, ...]:
         """The modules reading each of `forward`'s outputs, in order: `SentenceNet`'s, then the auxiliary heads."""

@@ -80,6 +80,9 @@ class ContextConfig:
     across the chunks can tell them apart where one pooled token per word mixes them."""
     whiten: bool = False
     """Decorrelate the scaled sensors by their training covariance before the subject layer (`input.whitener`)."""
+    rhythm: bool = False
+    """A timing head's logits added to the context head's (`context.timing.TimingHead`); with `intervals` none, the
+    transformer is told no gaps and timing reaches the words only through that head."""
 
     def __post_init__(self) -> None:
         if self.encoder.cached and self.subjects:

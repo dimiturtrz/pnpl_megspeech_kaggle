@@ -8,8 +8,10 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.context.span import SpanConformer
+from megspeech.model.context.timing import TimingHead
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer, Unseen
 from megspeech.model.input.whitener import Whitener
@@ -51,6 +53,7 @@ class SentenceNet(nn.Module):
         self.intervals = context.intervals
         self.context = self.mixer(context)
         self.head = context.objective.head(context.width, prototypes)
+        self.timing = TimingHead(VOCAB_SIZE, active=context.rhythm)
         self._tag(context)
 
     @classmethod
@@ -90,7 +93,23 @@ class SentenceNet(nn.Module):
     ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
         """`slot` is each span position's row of `x`; `len(x)` marks an empty position, and rows no slot names are
         padding that neither normalises nor reaches the transformer."""
-        return self.classify(*self.features(x, onset, slot, subject), slot < len(x))
+        _, _, context, word = self.heard(x, onset, slot, subject)
+        return context, word
+
+    def heard(
+        self,
+        x: Float[Tensor, "r c t"],
+        onset: Float[Tensor, "g w"],
+        slot: Int[Tensor, "g w"],
+        subject: Int[Tensor, " r"],
+    ) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"], Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
+        """The refined positions and the word embeddings, then the context head's logits with the timing head's
+        added, and the word head's."""
+        mask = slot < len(x)
+        h, slots = self.features(x, onset, slot, subject)
+        refined = self.refine(h, mask)
+        context, word = self.read(refined, slots)
+        return refined, slots, context + self.timing(onset, mask), word
 
     def features(
         self,
