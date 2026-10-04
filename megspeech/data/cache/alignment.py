@@ -29,6 +29,29 @@ UNALIGNED = (REFERENCE, "subj00_")
 
 
 @dataclass(frozen=True)
+class Projection:
+    """Subject 0's Maxwell-filtered signal subspace: a recording read as its coordinates along the `basis` its
+    reference covariance spans, in subject 0's units, the largest component first. One fixed linear map for every
+    run, so lossless on any signal inside that span."""
+
+    median: Float[Tensor, "c 1"]
+    spread: Float[Tensor, "c 1"]
+    basis: Float[Tensor, "k c"]
+
+    @property
+    def rank(self) -> int:
+        """Components a projected recording keeps."""
+        return self.basis.shape[0]
+
+    @torch.no_grad()
+    def project(self, run: Float[Tensor, "c s"], *, robust: bool = False) -> Float[Tensor, "k s"]:
+        """`run`'s coordinates in float32, from subject 0's median and range; a `robust` run, already standardised
+        by its own (`DeviceRecording.standardise`), is read as it stands."""
+        z = run.float() if robust else (run.float() - self.median) / self.spread
+        return self.basis @ z
+
+
+@dataclass(frozen=True)
 class Alignment:
     """Subject 0's per-channel median and interquartile range, and the square root of its sensor covariance in those
     units: what every aligned run is re-coloured to."""
@@ -76,6 +99,12 @@ class Alignment:
         scaled = torch.where(kept, values.clamp_min(values.max() * FLOOR) ** exponent, torch.zeros_like(values))
         return (vectors * scaled) @ vectors.T
 
+    def projection(self) -> Projection:
+        """The span of `root` — subject 0's covariance above `FLOOR` of its largest eigenvalue — as a `Projection`."""
+        values, vectors = torch.linalg.eigh(self.root)
+        kept = values > values.max() * FLOOR
+        return Projection(self.median, self.spread, vectors[:, kept].flip(1).T.float().contiguous())
+
     def applies(self, name: str) -> bool:
         """Whether run `name` is re-coloured: every run but the `exempt`."""
         return not name.startswith(self.exempt)
@@ -88,3 +117,28 @@ class Alignment:
         z = (x - median) / self.spread
         recolour = (self.root @ self.power(self.covariance(z), -0.5)).float()
         run.copy_((recolour @ z) * self.spread + self.median)
+
+
+@dataclass(frozen=True)
+class Geometry:
+    """The sensor geometry recordings load in: re-coloured by `alignment` when given, then kept as their coordinates
+    in `projection`'s subspace when given; as recorded without either."""
+
+    alignment: Alignment | None = None
+    projection: Projection | None = None
+
+    def rows(self, channels: int) -> int:
+        """Rows a recording of `channels` sensors loads as."""
+        return channels if self.projection is None else self.projection.rank
+
+    def align(self, run: Float[Tensor, "c s"], name: str) -> None:
+        """Run `name` in place, re-coloured when `alignment` applies to it."""
+        if self.alignment is not None and self.alignment.applies(name):
+            self.alignment.align(run)
+
+    def project(self, run: Float[Tensor, "c s"], *, robust: bool = False) -> Float[Tensor, "r s"]:
+        """`run` in `projection`'s subspace (`Projection.project`), or as it is without one."""
+        return run if self.projection is None else self.projection.project(run, robust=robust)
+
+
+AS_RECORDED = Geometry()

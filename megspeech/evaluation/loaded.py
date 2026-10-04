@@ -10,7 +10,7 @@ from torch import Tensor, nn
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import Features, Split
-from megspeech.data.cache.alignment import Alignment
+from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
@@ -82,7 +82,7 @@ class LoadedModel:
     log_prior: Float[Tensor, " v"]
     reading: Reading = Reading.OWN
     names: tuple[str, ...] = ()
-    alignment: Alignment | None = None
+    geometry: Geometry = AS_RECORDED
 
     @classmethod
     def of(cls, root: DataRoot, names: list[str], scoring: Scoring, device: torch.device) -> "LoadedModel":
@@ -105,16 +105,16 @@ class LoadedModel:
             adapted=scoring.adapted,
         )
         prior = Corpus.prior(heard, data).to(device)
-        alignment = data.alignment(root, device) if scoring.aligned or data.recoloured else None
+        geometry = data.geometry(root, device, aligned=scoring.aligned)
         named = tuple(d.name for d in directories)
-        return cls(root, model, data, evaluator, prior, scoring.reading, named, alignment)
+        return cls(root, model, data, evaluator, prior, scoring.reading, named, geometry)
 
     def load(self, runs: list[Run]) -> tuple[DeviceRecording, pd.DataFrame]:
         """`runs` on the device, and their words keyed by `Text` and cut as the model's grouping cuts them."""
         cache = self.data.run_cache(self.root)
         names = [run.name for run in runs]
         source = DeviceRecording.load(
-            cache, self.evaluator.device, names, standardised=self.data.standardised, alignment=self.alignment
+            cache, self.evaluator.device, names, standardised=self.data.standardised, geometry=self.geometry
         )
         return source, Corpus.words(Text.of(source.words).words, self.data.grouping, self.data.rate)
 

@@ -13,6 +13,7 @@ import torch
 from pnpl.competition.holdout import HOLDOUT_SUBDIR, LibriBrainCompetitionHoldout
 
 from core.paths import ENV_OVERRIDE, DataRoot
+from megspeech.data.cache.alignment import Alignment, Geometry, Projection
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.holdout import HOLDOUT_DIR, Archive, ArchiveKind, Epochs, HoldoutCache, Track, main
 from megspeech.data.cache.run_cache import DIRECTORY, TAIL, WORD_TABLE, DeviceRecording, RunCache
@@ -104,6 +105,24 @@ def test_train_and_holdout_windows_match(tmp_path: Path) -> None:
     tail = cache.windows("cpu", 2 * RATE)(stretch_rows[-1:])
     assert tail[..., past:].eq(0).all()
     assert tail[..., :past].ne(0).any(dim=-1).all()
+
+
+def test_train_and_holdout_project_alike(tmp_path: Path) -> None:
+    trained = RunCache(tmp_path / "train")
+    trained.ready()
+    run = training(tmp_path)
+    trained.cache_run(run)
+    trained.publish(RunCache.words(run))
+    median, spread = Alignment.robust(DeviceRecording.load(trained, "cpu").meg.float())
+    basis = torch.linalg.qr(torch.randn(CHANNELS, 2, generator=torch.Generator().manual_seed(0)))[0].T.contiguous()
+    geometry = Geometry(projection=Projection(median, spread, basis))
+    source = DeviceRecording.load(trained, "cpu", geometry=geometry)
+    cache = holdout(tmp_path / "raw")
+    cache.build()
+    every = torch.arange(len(ONSETS))
+    held = cache.windows("cpu", RATE, geometry=geometry)(1 + every)
+    assert held.shape == (len(ONSETS), 2, RATE)
+    assert torch.allclose(held.float(), source.windows(RATE)(every).float(), atol=1e-3)
 
 
 def test_rows_follow_competition_order(tmp_path: Path) -> None:

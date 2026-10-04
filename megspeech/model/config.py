@@ -6,7 +6,6 @@ import math
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from enum import StrEnum
-from functools import partial
 from pathlib import Path
 from typing import override
 
@@ -15,6 +14,7 @@ from jaxtyping import Float
 from torch import Tensor, nn
 
 from core.tree import Tree
+from megspeech.data.constants import CHANNELS
 from megspeech.model.context.timing import Clock, Intervals
 from megspeech.model.words.base import WordEncoder
 from megspeech.model.words.conv import CONV, ConvConfig, ConvWords
@@ -32,8 +32,9 @@ class Encoder(StrEnum):
     TRAINED = "trained"
     """A head over a trained run's own CNN embeddings (`megspeech.features.trained`), `conv` giving their width."""
 
-    def build(self, config: ConvConfig) -> WordEncoder:
-        return BUILDERS[self](config)
+    def build(self, config: ConvConfig, channels: int = CHANNELS) -> WordEncoder:
+        """This encoder for recordings of `channels` rows; a cached encoder reads its features, not them."""
+        return BUILDERS[self](config, channels)
 
     @property
     def cached(self) -> bool:
@@ -41,11 +42,11 @@ class Encoder(StrEnum):
         return self is not Encoder.CONV
 
 
-BUILDERS: dict[Encoder, Callable[[ConvConfig], WordEncoder]] = {
+BUILDERS: dict[Encoder, Callable[[ConvConfig, int], WordEncoder]] = {
     Encoder.CONV: ConvWords,
-    Encoder.CACHED: partial(FeatureWords, width=POOLED),
-    Encoder.RESOLVED: partial(FeatureWords, width=RESOLVED),
-    Encoder.TRAINED: lambda config: FeatureWords(config, config.width),
+    Encoder.CACHED: lambda config, _: FeatureWords(config, POOLED),
+    Encoder.RESOLVED: lambda config, _: FeatureWords(config, RESOLVED),
+    Encoder.TRAINED: lambda config, _: FeatureWords(config, config.width),
 }
 
 

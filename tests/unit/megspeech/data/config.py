@@ -156,7 +156,8 @@ def test_holdout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert (windows.length, windows.offset, windows.baseline) == (RATE + 5, -5, round(0.5 * RATE))
 
 
-def test_alignment(tmp_path: Path) -> None:
+def cached(tmp_path: Path) -> DataRoot:
+    """Subject 0's runs and another subject's, three channels each, cached."""
     root = DataRoot(tmp_path)
     cache = DataConfig().run_cache(root).ready()
     signal = np.random.default_rng(0).normal(5.0, 1.0, (3, 4000)).astype(np.float16)
@@ -165,6 +166,27 @@ def test_alignment(tmp_path: Path) -> None:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("onset\n")
         np.save(cache / f"{run.name}.npy", signal if run.subject == 0 else 100 * signal)
+    return root
+
+
+@pytest.mark.parametrize(
+    ("data", "aligned", "built"),
+    [
+        (DataConfig(), False, (False, False)),
+        (DataConfig(), True, (True, False)),
+        (DataConfig(aligned=True), False, (True, False)),
+        (DataConfig(subspace=True), False, (False, True)),
+        (DataConfig(subspace=True, aligned=True), False, (True, True)),
+    ],
+)
+def test_geometry(tmp_path: Path, data: DataConfig, *, aligned: bool, built: tuple[bool, bool]) -> None:
+    geometry = data.geometry(cached(tmp_path), "cpu", aligned=aligned)
+    assert (geometry.alignment is not None, geometry.projection is not None) == built
+    assert geometry.rows(3) == 3
+
+
+def test_alignment(tmp_path: Path) -> None:
+    root = cached(tmp_path)
     alignment = DataConfig().alignment(root, "cpu")
     assert alignment.root.shape == (3, 3)
     assert torch.allclose(alignment.median, torch.full((3, 1), 5.0), atol=0.1)
@@ -212,6 +234,7 @@ def test_shared(tmp_path: Path) -> None:
         ("read_weight", 0.5),
         ("repeat_power", 0.5),
         ("tasks", ["Sherlock1"]),
+        ("subspace", True),
     ],
 )
 def test_shared_reading(tmp_path: Path, field: str, value: object) -> None:

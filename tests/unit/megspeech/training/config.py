@@ -2,10 +2,14 @@ import dataclasses
 import json
 from pathlib import Path
 
+import pytest
+
 from megspeech.data.config import DataConfig
 from megspeech.evaluation.metric.ruler import Interval
 from megspeech.evaluation.scoring.score import Epoch, Score
+from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.context.timing import Clock
+from megspeech.model.words.conv import ConvConfig
 from megspeech.training.config import METRICS, RunConfig
 from megspeech.training.regularise.augment import Augment
 
@@ -31,3 +35,11 @@ def test_selected() -> None:
     history = [epoch(0, 0.2), epoch(1, 0.4), epoch(2, 0.4), epoch(3, 0.3)]
     assert RunConfig().selected(history) is history[1]
     assert RunConfig(data=DataConfig(refit=True)).selected(history) is history[-1]
+
+
+@pytest.mark.parametrize("context", [ContextConfig(encoder=Encoder.CACHED), ContextConfig(conv=ConvConfig(merger=270))])
+def test_subspace_needs_sensor_free_encoder(context: ContextConfig) -> None:
+    assert RunConfig(context=context).context is context
+    with pytest.raises(ValueError, match="306 sensors"):
+        RunConfig(data=DataConfig(subspace=True), context=context)
+    assert RunConfig(data=DataConfig(subspace=True)).data.subspace

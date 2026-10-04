@@ -14,6 +14,7 @@ from torch import Tensor
 from core.paths import DataRoot
 from megspeech.data.batching.split import TRAIN, Features, SpanText, Split
 from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.cache.run_cache import DeviceRecording, RunCache
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import RATE
@@ -33,6 +34,8 @@ class Corpus:
     seen: frozenset[tuple[int, ...]]
     positions: pd.DataFrame = field(default_factory=pd.DataFrame)
     """Each train word's `run` and `position` in that run's word table (`RunCache.words`), in train-split order."""
+    geometry: Geometry = AS_RECORDED
+    """The sensor geometry every split was loaded in, which the holdout must load in too."""
 
     @classmethod
     def load(cls, data: DataConfig, root: DataRoot, device: torch.device) -> "Corpus":
@@ -41,8 +44,8 @@ class Corpus:
         trained, held = data.trained(runs), data.held(runs)
         reading = [r.name for r in trained] + [r.name for group in held.values() for r in group]
         names = list(dict.fromkeys(reading))
-        alignment = data.alignment(root, device) if data.recoloured else None
-        source = DeviceRecording.load(cache, device, names, standardised=data.standardised, alignment=alignment)
+        geometry = data.geometry(root, device)
+        source = DeviceRecording.load(cache, device, names, standardised=data.standardised, geometry=geometry)
         table = source.words.assign(position=source.words.groupby("run").cumcount())
         words = cls.words(table, data.grouping, data.rate)
         weights = {r.name: data.weight(r) for r in trained}
@@ -60,7 +63,7 @@ class Corpus:
         LOG.info("validation %s", {task: len(split.labelled()) for task, split in validation.items()})
         if len(positions) != len(train.y):
             raise ValueError(f"{len(positions)} train positions against {len(train.y)} train words")
-        return cls(train, validation, cls.sequences(heard, data.grouping), positions)
+        return cls(train, validation, cls.sequences(heard, data.grouping), positions, geometry)
 
     @staticmethod
     def words(table: pd.DataFrame, grouping: Grouping, rate: float = RATE) -> pd.DataFrame:

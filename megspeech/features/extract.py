@@ -223,7 +223,10 @@ class Export:
 
     @classmethod  # devtools-ignore: test-mirror
     def of(cls, data: DataConfig, root: DataRoot, name: str, device: torch.device) -> Self:
-        """The splits `data` reads, their MEG rather than any features it names."""
+        """The splits `data` reads, their MEG rather than any features it names: every sensor, which a `subspace`
+        config no longer holds."""
+        if data.subspace:
+            raise ValueError("features are extracted from the 306 sensors; a subspace config keeps its components")
         meg = replace(data, features="")
         track = Track.DEEP
         holdout = Split.from_holdout(track.holdout(root.raw()), meg.holdout(root, track, device))

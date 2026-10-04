@@ -31,7 +31,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
-from megspeech.data.cache.alignment import Alignment
+from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.cache.cleaning import Cleaner, Cleaning
 from megspeech.data.constants import DECIMATE, HALF, MISSING, PICO, RATE, SFREQ, WORKERS
 from megspeech.data.raw.runs import Run
@@ -218,21 +218,20 @@ class DeviceRecording:
         names: Sequence[str] | None = None,
         *,
         standardised: bool = False,
-        alignment: Alignment | None = None,
+        geometry: Geometry = AS_RECORDED,
     ) -> "DeviceRecording":
-        """Load the named runs (default: every cached run) into one preallocated tensor, one run at a time, each
-        another subject's re-coloured by `alignment` and `standardised` on its own if asked."""
+        """Load the named runs (default: every cached run) into one preallocated tensor, one run at a time, each in
+        `geometry`: re-coloured if it applies, `standardised` on its own if asked, then projected if it projects."""
         chosen = tuple(names) if names is not None else tuple(sorted(path.stem for path in cache.cache.glob("*.npy")))
         stored = [np.load(cache.path(name), mmap_mode="r") for name in chosen]
         offsets = np.r_[0, np.cumsum([signal.shape[1] for signal in stored])].astype(np.int64)
-        meg = torch.empty((stored[0].shape[0], int(offsets[-1])), dtype=torch.float16, device=device)
+        meg = torch.empty((geometry.rows(stored[0].shape[0]), int(offsets[-1])), dtype=torch.float16, device=device)
         for begin, signal, name in zip(offsets, stored, chosen, strict=False):
-            run = meg[:, begin : begin + signal.shape[1]]
-            run.copy_(torch.from_numpy(np.array(signal)))
-            if alignment is not None and alignment.applies(name):
-                alignment.align(run)
+            run = torch.from_numpy(np.array(signal)).to(device)
+            geometry.align(run, name)
             if standardised:
                 cls.standardise(run)
+            meg[:, begin : begin + signal.shape[1]].copy_(geometry.project(run, robust=standardised))
         words = cache.table(chosen)
         words["start"] = words["run"].map(dict(zip(chosen, offsets[:-1].tolist(), strict=True)))
         words["at"] = words["start"] + words["sample"]

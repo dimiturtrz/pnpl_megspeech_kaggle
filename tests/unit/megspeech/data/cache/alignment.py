@@ -3,7 +3,7 @@ import dataclasses
 import numpy as np
 import torch
 
-from megspeech.data.cache.alignment import GATE, Alignment
+from megspeech.data.cache.alignment import AS_RECORDED, GATE, Alignment, Geometry
 
 GENERATOR = torch.Generator().manual_seed(0)
 CHANNELS = 4
@@ -27,6 +27,43 @@ def test_of() -> None:
     covariance = (alignment.root @ alignment.root).float()
     expected = mixing @ mixing.T / (alignment.spread * alignment.spread.T)
     assert torch.allclose(covariance, expected, rtol=0.1, atol=0.05)
+
+
+def deficient() -> tuple[Alignment, torch.Tensor]:
+    """A reference whose four channels mix two sources: rank 2, as a Maxwell filter leaves 75 of 306."""
+    mixing = torch.randn(CHANNELS, 2, generator=GENERATOR)
+    runs = [(mixing @ torch.randn(2, SAMPLES, generator=GENERATOR) + 3.0).numpy() for _ in range(2)]
+    return Alignment.of(runs, "cpu"), mixing
+
+
+def test_projection() -> None:
+    alignment, _ = deficient()
+    projection = alignment.projection()
+    assert projection.basis.shape == (2, CHANNELS)
+    assert projection.basis.dtype == torch.float32
+    assert torch.allclose(projection.basis @ projection.basis.T, torch.eye(2), atol=1e-5)
+    variance = (projection.basis @ alignment.root.float() @ alignment.root.float() @ projection.basis.T).diagonal()
+    assert variance[0] >= variance[1]
+    assert torch.equal(projection.median, alignment.median)
+    assert torch.equal(projection.spread, alignment.spread)
+
+
+def test_rank() -> None:
+    assert deficient()[0].projection().rank == 2
+    assert reference()[0].projection().rank == CHANNELS
+
+
+def test_projection_project() -> None:
+    alignment, mixing = deficient()
+    projection = alignment.projection()
+    run = mixing @ torch.randn(2, 500, generator=GENERATOR) + alignment.median
+    coordinates = projection.project(run)
+    assert coordinates.shape == (2, 500)
+    restored = projection.basis.T @ coordinates * projection.spread + projection.median
+    assert torch.allclose(restored, run, atol=1e-4)
+    z = (run - alignment.median) / alignment.spread
+    assert torch.allclose(projection.project(z, robust=True), coordinates, atol=1e-5)
+    assert projection.project(run.half()).dtype == torch.float32
 
 
 def test_robust() -> None:
@@ -61,7 +98,7 @@ def test_applies() -> None:
     assert all(dataclasses.replace(alignment, exempt=()).applies(name) for name in names)
 
 
-def test_align() -> None:
+def test_alignment_align() -> None:
     alignment, _ = reference()
     other = torch.diag(torch.tensor([3.0, 0.5, 1.0, 2.0])) + 0.3 * torch.randn(CHANNELS, CHANNELS, generator=GENERATOR)
     run = mixed(other, -7.0)
@@ -70,6 +107,35 @@ def test_align() -> None:
     assert torch.allclose(median, alignment.median, atol=0.1)
     covariance = Alignment.covariance((run - median) / alignment.spread).float()
     assert torch.allclose(covariance, (alignment.root @ alignment.root).float(), rtol=0.1, atol=0.05)
+
+
+def test_rows() -> None:
+    alignment, _ = deficient()
+    assert AS_RECORDED.rows(CHANNELS) == CHANNELS
+    assert Geometry(alignment).rows(CHANNELS) == CHANNELS
+    assert Geometry(projection=alignment.projection()).rows(CHANNELS) == 2
+
+
+def test_geometry_align() -> None:
+    alignment, _ = reference()
+    other = "sub-10_ses-1_task-Sherlock1_run-1"
+    run = mixed(torch.eye(CHANNELS), -7.0)
+    unchanged = run.clone()
+    AS_RECORDED.align(run, other)
+    Geometry(alignment).align(run, "sub-0_ses-1_task-Sherlock1_run-1")
+    assert torch.equal(run, unchanged)
+    Geometry(alignment).align(run, other)
+    expected = unchanged.clone()
+    alignment.align(expected)
+    assert torch.equal(run, expected)
+
+
+def test_geometry_project() -> None:
+    alignment, mixing = deficient()
+    run = mixing @ torch.randn(2, 100, generator=GENERATOR) + alignment.median
+    assert AS_RECORDED.project(run) is run
+    projected = Geometry(projection=alignment.projection()).project(run, robust=True)
+    assert torch.equal(projected, alignment.projection().project(run, robust=True))
 
 
 def test_align_keeps_dtype() -> None:

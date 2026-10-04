@@ -53,7 +53,7 @@ def main() -> None:
     LOG.info("best %s", best)
     evaluator = trainer.evaluator
     evaluator.graded(model, validation, log_prior, best.tau).save(out / "hits.pt")
-    loaded = LoadedModel(root, model, config.data, evaluator, log_prior)
+    loaded = LoadedModel(root, model, config.data, evaluator, log_prior, geometry=corpus.geometry)
     HoldoutWriter(Track.DEEP).write(loaded, best.tau, out / "submission.csv")
 
 

@@ -39,13 +39,16 @@ class SentenceNet(nn.Module):
         context: ContextConfig = CONTEXT,
         prototypes: Float[Tensor, "v d"] | None = None,
         unseen: Unseen = Unseen.IDENTITY,
+        *,
+        channels: int = CHANNELS,
     ) -> None:
-        """`unseen` reads a subject the subject layer has no matrix for (`SubjectLayer`)."""
+        """`unseen` reads a subject the subject layer has no matrix for (`SubjectLayer`); `channels` are the rows a
+        recording reaches the model in: the sensors, or a `Projection`'s components."""
         super().__init__()
         self.scale = scale
-        self.whiten = Whitener(CHANNELS, active=context.whiten)
-        self.subjects = SubjectLayer.of(context.subjects, CHANNELS, unseen)
-        self.words = context.encoder.build(context.conv)
+        self.whiten = Whitener(channels, active=context.whiten)
+        self.subjects = SubjectLayer.of(context.subjects, channels, unseen)
+        self.words = context.encoder.build(context.conv, channels)
         self.tokens = context.tokens
         self.project = nn.Linear(self.words.width // self.tokens, context.width)
         self.clock = context.clock
@@ -59,10 +62,12 @@ class SentenceNet(nn.Module):
     @classmethod
     def load(cls, path: Path, unseen: Unseen = Unseen.IDENTITY) -> "SentenceNet":
         """The checkpoint at `path` in the shape its directory's config records; its state overwrites a placeholder
-        scaler shaped as the state's own: MEG channels, or a cached encoder's feature channels."""
+        scaler shaped as the state's own: MEG channels or subspace components, or a cached encoder's feature
+        channels."""
         state = torch.load(path, map_location="cpu")
-        placeholder = Scaler(torch.zeros(1, state[SCALE_MEDIAN].shape[0], 1))
-        model = cls(placeholder, context=ContextConfig.load(path.parent), unseen=unseen)
+        channels = state[SCALE_MEDIAN].shape[0]
+        placeholder = Scaler(torch.zeros(1, channels, 1))
+        model = cls(placeholder, context=ContextConfig.load(path.parent), unseen=unseen, channels=channels)
         model.load_state_dict(state)
         return model
 

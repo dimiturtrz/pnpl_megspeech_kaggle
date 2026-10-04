@@ -219,3 +219,23 @@ def test_load(tmp_path: Path) -> None:
     CONTEXT.save(tmp_path)
     loaded = SentenceNet.load(tmp_path / "model.pt")
     assert all(torch.equal(loaded.state_dict()[key], value) for key, value in model.state_dict().items())
+
+
+def test_subspace_channels(tmp_path: Path) -> None:
+    """A model reading a `Projection`'s components: its input width is its scaler's, saved and loaded back so."""
+    components = 5
+    context = replace(CONTEXT, subjects=2, whiten=True)
+    sample = torch.randn(4, components, SAMPLES, generator=GENERATOR)
+    model = SentenceNet(Scaler(sample), context, channels=components).eval()
+    model.whiten.fit(model.scale(sample))
+    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
+    x = torch.randn(3, components, SAMPLES, generator=GENERATOR)
+    onsets = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
+    context_logits, _ = model.forward(x, onsets, slot, torch.zeros(len(x), dtype=torch.long))
+    assert context_logits.shape == (2, 3, VOCAB_SIZE)
+    torch.save(model.state_dict(), tmp_path / "model.pt")
+    context.save(tmp_path)
+    loaded = SentenceNet.load(tmp_path / "model.pt").eval()
+    assert loaded.state_dict()["whiten.matrix"].shape == (components, components)
+    again, _ = loaded.forward(x, onsets, slot, torch.zeros(len(x), dtype=torch.long))
+    assert torch.allclose(again, context_logits)
