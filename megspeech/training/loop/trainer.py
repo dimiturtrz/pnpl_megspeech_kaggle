@@ -30,6 +30,7 @@ from megspeech.training.hook import Scheduled, StepHook
 from megspeech.training.loop.ema import Ema
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.sampling.curriculum import Annealed
+from megspeech.training.teacher import Teacher, Untaught
 
 LOG = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class Trainer:
     prototypes: Float[Tensor, "v d"] | None = None
     auxiliary: Auxiliary = field(default_factory=NoAuxiliary)
     initial: dict[str, Tensor] = field(default_factory=dict)
+    teacher: Teacher = field(default_factory=Untaught)
 
     @classmethod
     def of(cls, corpus: Corpus, config: RunConfig, root: DataRoot) -> "Trainer":
@@ -67,7 +69,8 @@ class Trainer:
         evaluator = Evaluator(device, corpus.seen, config.selection.min_novel)
         warm = config.optim.warm
         initial = torch.load(root.models() / warm / "model.pt", map_location=device, weights_only=True) if warm else {}
-        return cls(config, evaluator, prototypes, Auxiliary.of(config.optim, root, device, corpus.positions), initial)
+        auxiliary = Auxiliary.of(config.optim, root, device, corpus.positions)
+        return cls(config, evaluator, prototypes, auxiliary, initial, Teacher.of(config.optim, root))
 
     def model(self, train: Split) -> SentenceNet:
         """A fresh model, or the warm start's weights when there is one."""
@@ -92,10 +95,12 @@ class Trainer:
         return torch.optim.AdamW(groups, lr=optim.lr, weight_decay=optim.weight_decay, fused=fused)
 
     def terms(self, train: Split) -> tuple[Term, ...]:
-        """The context head's term, the word head's softmax, then the auxiliary heads'; class-weighted alike."""
+        """The context head's term as the teacher teaches it, the word head's softmax, then the auxiliary heads';
+        class-weighted alike."""
         optim = self.config.optim
         classes = LabelTerm.balanced(train.y, train.weight, optim.balance)
         context = ContextTerm(optim.label_smoothing, classes, objective=self.config.context.objective)
+        context = self.teacher.taught(context, train, self.evaluator)
         return context, WordTerm(optim.label_smoothing, classes), *self.auxiliary.terms
 
     def step(self, state: TrainState, train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, ""]:

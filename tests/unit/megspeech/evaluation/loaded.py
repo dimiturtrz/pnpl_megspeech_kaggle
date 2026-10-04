@@ -118,16 +118,6 @@ def test_loaded_model_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         LoadedModel.of(DataRoot(tmp_path), ["b", "c"], scoring, CPU)
 
 
-def test_members(tmp_path: Path) -> None:
-    assert LoadedModel.members(tmp_path, "run") == [tmp_path / "run"]
-    (tmp_path / "trained").mkdir()
-    (tmp_path / "trained" / METRICS).write_text(json.dumps({"best": {}}))
-    assert LoadedModel.members(tmp_path, "trained") == [tmp_path / "trained"]
-    (tmp_path / "ens").mkdir()
-    (tmp_path / "ens" / METRICS).write_text(json.dumps({"members": ["a", "b"]}))
-    assert LoadedModel.members(tmp_path, "ens") == [tmp_path / "a", tmp_path / "b"]
-
-
 def test_load(tmp_path: Path) -> None:
     source, words = loaded(tmp_path).load(runs(tmp_path)[POOLED:])
     assert source.names == NAMES[POOLED:]

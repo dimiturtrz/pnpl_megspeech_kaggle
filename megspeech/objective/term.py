@@ -78,6 +78,36 @@ class ContextTerm(LabelTerm):
 
 
 @dataclass(frozen=True)
+class DistilledTerm(ContextTerm):
+    """The context head trained toward each word's label and, at `share`, toward a teacher's log-probabilities
+    `taught` of the same word (Hinton et al. 2015): the KL from the teacher's distribution, at temperature 1. Its
+    labels are the split's word rows, so a batch gathers both the label `y` and the teacher's row."""
+
+    taught: Float[Tensor, "n v"] = field(kw_only=True)
+    y: Int[Tensor, " n"] = field(kw_only=True)
+    share: float = field(kw_only=True)
+
+    @override
+    def labels(self, split: Split) -> Int[Tensor, " n"]:
+        if len(split.y) != len(self.y):
+            raise ValueError(f"{len(split.y)} words against {len(self.y)} taught rows")
+        return torch.arange(len(self.y), device=self.y.device)
+
+    @override
+    def unweighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
+    ) -> Float[Tensor, ""]:
+        rows = target.clamp(min=0)
+        y = torch.where(target == IGNORE, IGNORE, self.y[rows])
+        hard = super().unweighted(head, output, y)
+        keep = (y != IGNORE).float()
+        teacher = self.taught[rows].float()
+        kl = (teacher.exp() * (teacher - output.float().log_softmax(-1))).sum(-1)
+        soft = (kl * keep).sum() / keep.sum().clamp(min=1)
+        return (1 - self.share) * hard + self.share * soft
+
+
+@dataclass(frozen=True)
 class WordTerm(LabelTerm):
     """The isolated-word head's softmax at the autocast's precision: the logits stay bfloat16 into the
     cross-entropy, unlike the context head's float32, which every trained run's numbers were made with."""

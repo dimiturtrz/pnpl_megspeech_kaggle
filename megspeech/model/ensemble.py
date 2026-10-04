@@ -1,5 +1,6 @@
 """Average trained context models in log-probability space (`megspeech.submission` scores and submits)."""
 
+import json
 from pathlib import Path
 from typing import override
 
@@ -7,6 +8,7 @@ import torch
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 
+from megspeech.data.config import METRICS
 from megspeech.model.input.subjects import Unseen
 from megspeech.model.sentence import SentenceNet
 
@@ -22,6 +24,13 @@ class Ensemble(nn.Module):
     def load(cls, paths: list[Path], unseen: Unseen = Unseen.IDENTITY) -> "Ensemble":
         """SentenceNet checkpoints, each reading a subject it has no matrix for through `unseen`."""
         return cls([SentenceNet.load(path, unseen) for path in paths])
+
+    @staticmethod
+    def trained(models: Path, name: str) -> list[Path]:
+        """The trained runs behind `name`: those an ensemble's record lists, else the run itself."""
+        record = models / name / METRICS
+        saved: dict[str, list[str]] = json.loads(record.read_text()) if record.exists() else {}
+        return [models / member for member in saved.get("members", [name])]
 
     @override
     def forward(

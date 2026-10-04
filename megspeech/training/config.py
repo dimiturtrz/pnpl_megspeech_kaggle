@@ -67,6 +67,12 @@ class OptimConfig:
     """A trained run under models/ whose weights the model starts from instead of its initialisation, its context
     config the same as this run's: a run trained on every subject fine-tuned on the Deep subject alone. Empty starts
     from scratch."""
+    teacher: str = ""
+    """A trained run or ensemble under models/ whose context-head distribution on every labelled training word the
+    context head is also trained toward (`megspeech.training.teacher`); empty trains on the labels alone."""
+    distil: float = 0.5
+    """Share of the context loss that is the KL to the `teacher`'s distribution, the rest the label's; read only
+    with a teacher."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
     pretrained: float = 0.1

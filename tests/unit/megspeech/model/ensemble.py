@@ -1,9 +1,11 @@
+import json
 from pathlib import Path
 from typing import override
 
 import torch
 from torch import nn
 
+from megspeech.data.config import METRICS
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import ContextConfig, Encoder
@@ -75,3 +77,13 @@ def test_load_cached(tmp_path: Path) -> None:
     context.save(tmp_path)
     loaded = Ensemble.load([tmp_path / "model.pt"]).members[0].state_dict()
     assert loaded[SCALE_MEDIAN].shape == (POOLED, 1)
+
+
+def test_trained(tmp_path: Path) -> None:
+    assert Ensemble.trained(tmp_path, "run") == [tmp_path / "run"]
+    (tmp_path / "trained").mkdir()
+    (tmp_path / "trained" / METRICS).write_text(json.dumps({"best": {}}))
+    assert Ensemble.trained(tmp_path, "trained") == [tmp_path / "trained"]
+    (tmp_path / "ens").mkdir()
+    (tmp_path / "ens" / METRICS).write_text(json.dumps({"members": ["a", "b"]}))
+    assert Ensemble.trained(tmp_path, "ens") == [tmp_path / "a", tmp_path / "b"]

@@ -1,8 +1,6 @@
 """A trained model, or several averaged as one, loaded to score as their training scored them."""
 
-import json
 from dataclasses import dataclass, replace
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -14,7 +12,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Features, Split
 from megspeech.data.cache.alignment import Alignment
 from megspeech.data.cache.run_cache import DeviceRecording
-from megspeech.data.config import METRICS, DataConfig
+from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import Grouping
@@ -90,7 +88,7 @@ class LoadedModel:
     def of(cls, root: DataRoot, names: list[str], scoring: Scoring, device: torch.device) -> "LoadedModel":
         """The trained runs behind `names` averaged as one model, scored as their training scored them: the prior of
         the draws they trained on, and the selection that counted their domains."""
-        directories = [member for name in names for member in cls.members(root.models(), name)]
+        directories = [member for name in names for member in Ensemble.trained(root.models(), name)]
         model = Ensemble.load([directory / "model.pt" for directory in directories], scoring.fallback.unseen)
         model = model.to(device)
         for layer in (module for module in model.modules() if isinstance(module, SubjectLayer)):
@@ -110,13 +108,6 @@ class LoadedModel:
         alignment = data.alignment(root, device) if scoring.aligned or data.recoloured else None
         named = tuple(d.name for d in directories)
         return cls(root, model, data, evaluator, prior, scoring.reading, named, alignment)
-
-    @staticmethod
-    def members(models: Path, name: str) -> list[Path]:
-        """The trained runs behind `name`: those an ensemble's record lists, else the run itself."""
-        record = models / name / METRICS
-        saved: dict[str, list[str]] = json.loads(record.read_text()) if record.exists() else {}
-        return [models / member for member in saved.get("members", [name])]
 
     def load(self, runs: list[Run]) -> tuple[DeviceRecording, pd.DataFrame]:
         """`runs` on the device, and their words keyed by `Text` and cut as the model's grouping cuts them."""

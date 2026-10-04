@@ -14,7 +14,7 @@ from megspeech.data.spans.spans import Spans
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.context import Objective
 from megspeech.objective.targets.t5 import Lexicon
-from megspeech.objective.term import Classified, ContextTerm, LabelTerm, WordTerm
+from megspeech.objective.term import Classified, ContextTerm, DistilledTerm, LabelTerm, WordTerm
 
 CPU = torch.device("cpu")
 Y = torch.tensor([[3, 7], [IGNORE, 3]])
@@ -76,6 +76,31 @@ def test_context_term_unweighted(objective: Objective) -> None:
     flat = objective.loss(logits().flatten(0, 1), Y.flatten(), 0.1)
     assert torch.equal(context.unweighted(nn.Identity(), logits(), Y), flat)
     assert context.unweighted(nn.Identity(), logits(), Y) < context.unweighted(nn.Identity(), -logits(), Y)
+
+
+def distilled(share: float, taught: torch.Tensor) -> DistilledTerm:
+    return DistilledTerm(0.0, None, taught=taught, y=torch.tensor([3, 7, IGNORE]), share=share)
+
+
+def test_distilled_term_labels() -> None:
+    term = distilled(0.5, torch.zeros(3, VOCAB_SIZE))
+    with pytest.raises(ValueError, match="taught rows"):
+        term.labels(split())
+    train = split()
+    sized = DistilledTerm(0.0, None, taught=torch.zeros(len(train.y), VOCAB_SIZE), y=train.y, share=0.5)
+    assert torch.equal(sized.labels(train), torch.arange(len(train.y)))
+
+
+def test_distilled_term_unweighted() -> None:
+    """Share 0 is the label's loss alone; a teacher agreeing with the student adds no KL, one disagreeing adds some;
+    rows that are padding or unlabelled count in neither."""
+    rows = torch.tensor([[0, 1], [IGNORE, 2]])
+    agreeing = logits()[[0, 0, 1], [0, 1, 1]].log_softmax(-1)
+    labelled = ContextTerm(0.0, None).unweighted(nn.Identity(), logits(), torch.tensor([[3, 7], [IGNORE, IGNORE]]))
+    assert torch.allclose(distilled(0.0, agreeing).unweighted(nn.Identity(), logits(), rows), labelled)
+    assert torch.allclose(distilled(1.0, agreeing).unweighted(nn.Identity(), logits(), rows), torch.zeros(()))
+    uniform = torch.full((3, VOCAB_SIZE), -math.log(VOCAB_SIZE))
+    assert distilled(1.0, uniform).unweighted(nn.Identity(), logits(), rows) > 1.0
 
 
 def test_word_term_unweighted() -> None:
