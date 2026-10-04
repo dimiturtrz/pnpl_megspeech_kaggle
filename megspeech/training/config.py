@@ -37,6 +37,10 @@ class OptimConfig:
     """Weight of the phonetic auxiliary: every heard word's window, in or out of the 50, classified into the first of
     its 39 ARPAbet phonemes (`megspeech.data.labels.phonemes`). Speech MEG decodes phonetic features (Gwilliams et al.
     2022), and the onset phoneme is what the window's first ~100 ms hear; 0 never reads the table."""
+    syntactic: float = 0.0
+    """Weight of the syntactic auxiliary: every heard word's window, in or out of the 50, classified into its 17-way
+    universal part of speech as spaCy tags it in its sentence (`megspeech.data.labels.syntax`): dense placeholder
+    classes for the windows the 50 leave unlabelled, where the ~25k-way lexical target is sparse; 0 never reads it."""
     speech: float = 0.0
     """Weight of the speech auxiliary (`megspeech.objective.auxiliary.speech`): every training word whose chapter audio
     is aligned, SigLIP-aligned to the wav2vec2 latent of its 0.5 s of heard speech (Défossez et al. 2023), one target

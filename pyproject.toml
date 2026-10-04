@@ -23,6 +23,8 @@ dependencies = [
     "mne>=1.10",  # ICA artifact cleaning of the caches (megspeech.data.cache.cleaning)
     "triton-windows>=3.8.0.post29 ; sys_platform == 'win32'",
     "osfclient>=0.0.5",
+    "spacy>=3.8.16",
+    "en-core-web-sm",
 ]
 
 [project.optional-dependencies]
@@ -52,6 +54,7 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu130" }
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 
 [tool.setuptools.packages.find]
 include = ["core*", "megspeech*"]

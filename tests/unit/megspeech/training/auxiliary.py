@@ -9,6 +9,7 @@ from torch import nn
 
 from core.paths import DataRoot
 from megspeech.data.labels.phonemes import Pronunciation
+from megspeech.data.labels.syntax import PartsOfSpeech
 from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.config import ContextConfig
 from megspeech.model.sentence import SentenceNet
@@ -17,6 +18,7 @@ from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
 from megspeech.objective.auxiliary.speech import SpeechTerm
+from megspeech.objective.auxiliary.syntactic import SyntacticTerm
 from megspeech.objective.scorer import DIM
 from megspeech.objective.targets.speech import Targets
 from megspeech.objective.targets.t5 import Lexicon
@@ -92,6 +94,11 @@ def test_of(tmp_path: Path) -> None:
     assert [type(t) for t in worded.terms] == [SemanticTerm, LexicalTerm]
     spelled = Auxiliary.of(OptimConfig(phonetic=1.0, positions=2), root, CPU, WORDS)
     assert cast("PhoneticTerm", spelled.terms[0]).positions == 2
+    with pytest.raises(FileNotFoundError):
+        Auxiliary.of(OptimConfig(syntactic=1.0), root, CPU, WORDS)
+    PartsOfSpeech(torch.tensor([10, 20]), torch.tensor([7, 15])).save(PartsOfSpeech.path(root))
+    tagged = Auxiliary.of(OptimConfig(phonetic=1.0, syntactic=0.3), root, CPU, WORDS)
+    assert [type(t) for t in tagged.terms] == [PhoneticTerm, SyntacticTerm]
     with pytest.raises(FileNotFoundError):
         Auxiliary.of(OptimConfig(speech=1.0), root, CPU, WORDS)
     Targets(np.ones((2, DIM), np.float16)).save(Targets.directory(root) / "a.npy")

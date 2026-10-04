@@ -12,12 +12,14 @@ from torch import nn
 
 from core.paths import DataRoot
 from megspeech.data.labels.phonemes import Pronunciation
+from megspeech.data.labels.syntax import PartsOfSpeech
 from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
 from megspeech.objective.auxiliary.speech import SpeechTerm
+from megspeech.objective.auxiliary.syntactic import SyntacticTerm
 from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import AuxiliaryTerm
@@ -54,6 +56,10 @@ class Auxiliary(ABC):
                 lambda: PhoneticTerm(
                     optim.phonetic, Pronunciation.load(Pronunciation.path(root)).to(device), optim.positions
                 ),
+            ),
+            (
+                optim.syntactic,
+                lambda: SyntacticTerm(optim.syntactic, PartsOfSpeech.load(PartsOfSpeech.path(root)).to(device)),
             ),
         )
         terms = tuple(build() for weight, build in builders if weight)
