@@ -99,6 +99,7 @@ def test_trained_split(tmp_path: Path) -> None:
 
 def test_domain(tmp_path: Path) -> None:
     assert [DataConfig(share=s).domain(Run(tmp_path / TRAIN)) for s in (0.0, 0.1)] == ["Sherlock1", "Sherlock"]
+    assert DataConfig(folds=2).domain(Run(tmp_path / TRAIN)) == "Sherlock"
 
 
 def test_scored(tmp_path: Path) -> None:
@@ -130,16 +131,24 @@ def test_trained(tmp_path: Path) -> None:
 
 
 def test_trained_folds(tmp_path: Path) -> None:
-    """Folds partition the training runs: each member drops one fold, and the dropped folds tile the whole."""
+    """Each member trains on all but its validation fold, and the folds tile subject 0's training sessions."""
     every = {r.name for r in DataConfig().trained(runs(tmp_path))}
-    kept = [{r.name for r in DataConfig(folds=3, fold=f).trained(runs(tmp_path))} for f in range(3)]
-    dropped = [every - k for k in kept]
-    assert all(k < every for k in kept)
-    assert set().union(*dropped) == every
-    assert sum(map(len, dropped)) == len(every)
-    assert [DataConfig(folds=3, fold=f).trained(subjects(tmp_path)) for f in range(3)] == [
-        DataConfig(folds=3, fold=f).trained(runs(tmp_path)) for f in range(3)
-    ]
+    configs = [DataConfig(folds=3, fold=f) for f in range(3)]
+    held = [{r.name for r in config.split(runs(tmp_path))[Partition.VALIDATION]} for config in configs]
+    assert [every - {r.name for r in c.trained(runs(tmp_path))} for c in configs] == held
+    assert set().union(*held) == every
+    assert sum(map(len, held)) == len(every)
+    assert DataConfig(folds=3, subjects=(0, 3, 4)).trained(subjects(tmp_path)) == configs[0].trained(runs(tmp_path))
+
+
+def test_folded(tmp_path: Path) -> None:
+    """Validation deals the sessions test leaves round-robin into the folds; one fold keeps the pick unchanged."""
+    source = tuple(Run(tmp_path / f"sub-0_ses-{s}_task-Sherlock1_run-1_meg.h5") for s in range(1, 9))
+    picked = DataConfig.strided(source, 2)
+    assert DataConfig().folded(source, picked) == picked
+    val, test = DataConfig(folds=3, fold=1).folded(source, picked)
+    assert ([r.key[1] for r in val], [r.key[1] for r in test]) == ([2, 6], [4, 8])
+    assert DataConfig(folds=3, fold=2).folded(source, ([], []))[0] == [source[2], source[5]]
 
 
 def test_held(tmp_path: Path) -> None:

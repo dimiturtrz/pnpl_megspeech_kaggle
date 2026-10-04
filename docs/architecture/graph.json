@@ -2667,6 +2667,12 @@
     {
       "kind": "calls",
       "source": "megspeech.data.config.DataConfig.split",
+      "target": "megspeech.data.config.DataConfig.folded",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.config.DataConfig.split",
       "target": "megspeech.data.config.DataConfig.source",
       "weight": 1
     },
@@ -10102,6 +10108,14 @@
       "descendants": 0,
       "id": "megspeech.data.config.DataConfig.extras",
       "label": "extras",
+      "level": "method",
+      "parent": "megspeech.data.config.DataConfig",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.config.DataConfig.folded",
+      "label": "folded",
       "level": "method",
       "parent": "megspeech.data.config.DataConfig",
       "role": null

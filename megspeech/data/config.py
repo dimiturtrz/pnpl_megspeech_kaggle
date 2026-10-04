@@ -82,9 +82,11 @@ class DataConfig:
     decimate: int = DECIMATE
     """The 250 Hz recordings' decimation factor: which continuous cache training reads (`RunCache.under`)."""
     folds: int = 1
-    """Bagging: training runs, in key order, split round-robin into `folds` folds; 1 trains on them all."""
+    """Cross-fitting: each source's subject-0 training sessions that test leaves, in key order, dealt round-robin into
+    `folds` folds (`folded`); 1 keeps `share`'s validation pick. Every session trains `folds - 1` of the members, and
+    each member's validation is the fold it never saw (megspeech-7gf.85)."""
     fold: int = 0
-    """The fold left out of training when `folds` > 1, so each bagged member sees `1 - 1/folds` of the runs."""
+    """The fold held out as validation when `folds` > 1; the members over every fold ensemble into one."""
     subjects: tuple[int, ...] = (DEEP,)
     """Subjects whose training runs train; validation is always subject 0's, and pooled runs never train."""
     features: str = ""
@@ -219,11 +221,19 @@ class DataConfig:
         deep = sorted((r for r in runs if r.partition is Partition.TRAIN and r.subject == DEEP), key=self.source)
         sources = [tuple(group) for _, group in itertools.groupby(deep, key=lambda r: self.source(r)[0])]
         pick = Stratify.split if self.stratify else self.strided
-        held_out = [pick(source, round(self.share * len(source))) for source in sources]
+        held_out = [self.folded(source, pick(source, round(self.share * len(source)))) for source in sources]
         return {
             partition: [run for chosen in held_out for run in chosen[at]]
             for at, partition in enumerate((Partition.VALIDATION, Partition.TEST))
         }
+
+    def folded(self, source: tuple[Run, ...], picked: Picked) -> Picked:
+        """`picked`; when `folds` > 1, its validation the `fold`th of every `folds` sessions its test leaves."""
+        if self.folds == 1:
+            return picked
+        _, test = picked
+        tested = {r.name for r in test}
+        return [r for r in source if r.name not in tested][self.fold :: self.folds], test
 
     def trained(self, runs: Sequence[Run]) -> list[Run]:
         """The runs training reads: `trains_on`, less the held-out test runs, and less the extra and held-out validation
@@ -231,14 +241,11 @@ class DataConfig:
         held_out = self.split(runs)
         held: list[Run] = [] if self.refit else [*self.extras(runs), *held_out[Partition.VALIDATION]]
         excluded = {r.name for r in [*held, *held_out[Partition.TEST]]}
-        kept = [r for r in runs if self.trains_on(r) and r.name not in excluded]
-        ordered = sorted(kept, key=lambda r: (r.key, r.subject))
-        bagged = {r.name for at, r in enumerate(ordered) if self.folds == 1 or at % self.folds != self.fold}
-        return [r for r in kept if r.name in bagged]
+        return [r for r in runs if self.trains_on(r) and r.name not in excluded]
 
     def domain(self, run: Run) -> str:
-        """The domain `run` is scored in: its source once `share` holds out sessions, else its task."""
-        return self.stratum(run.key[0]) if self.share else run.key[0]
+        """The domain `run` is scored in: its source once `share` or `folds` holds out sessions, else its task."""
+        return self.stratum(run.key[0]) if self.share or self.folds > 1 else run.key[0]
 
     def scored(self, runs: Sequence[Run], partition: Partition) -> dict[str, list[Run]]:
         """`partition`'s domains: subject 0's official runs of it with the sessions held out for it, under `domain`."""
