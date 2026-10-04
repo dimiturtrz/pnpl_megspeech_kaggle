@@ -224,6 +224,7 @@ class Split:
 
 
 FEATURES = "features"
+JOIN = "+"
 TRAIN = "train"
 KAGGLE_FEATURES = "holdout"
 """The names of the training split's features and the prefix of a track's Kaggle test's, `holdout-<track>`; a
@@ -235,10 +236,16 @@ class Features:
     """The features saved under `directory`, one file per split; no directory reads every split's MEG."""
 
     directory: Path | None = None
+    joined: tuple["Features", ...] = ()
+    """Features of other encoders read beside these, word for word: each expert's embedding one stretch of channels."""
 
     @classmethod
     def under(cls, root: DataRoot, name: str) -> "Features":
-        return cls(root.kind("models") / FEATURES / name if name else None)
+        """The features `name` names; `a+b` joins `b`'s after `a`'s."""
+        if not name:
+            return cls()
+        first, *rest = (root.kind("models") / FEATURES / part for part in name.split(JOIN))
+        return cls(first, tuple(cls(directory) for directory in rest))
 
     def path(self, split: str) -> Path:
         if self.directory is None:
@@ -256,10 +263,15 @@ class Features:
         features each, one feature when saved flat."""
         if self.directory is None:
             return windows
+        parts = [self.loaded(split, windows), *(other.loaded(split, windows) for other in self.joined)]
+        return Windows.stacked(torch.cat(parts, dim=1), centred=False)
+
+    def loaded(self, split: str, windows: Windows) -> Float[Tensor, "n c k"]:
+        """The saved features of `split`, one row per window of `windows`."""
         features = torch.load(self.path(split), map_location=windows.device, weights_only=True)
         if len(features) != len(windows):
             raise ValueError(f"{len(features)} {split} features for {len(windows)} windows")
-        return Windows.stacked(features.reshape(len(features), features.shape[1], -1), centred=False)
+        return features.reshape(len(features), features.shape[1], -1)
 
     def split(self, name: str, split: Split) -> Split:
         """`split` reading `name`'s features as its windows."""

@@ -195,6 +195,9 @@ def test_under(tmp_path: Path):
     root = DataRoot(tmp_path)
     assert Features.under(root, "x").directory == root.kind("models") / FEATURES / "x"
     assert Features.under(root, "").directory is None
+    joined = Features.under(root, "x+y")
+    assert joined.directory == root.kind("models") / FEATURES / "x"
+    assert joined.joined == (Features(root.kind("models") / FEATURES / "y"),)
 
 
 def test_path(tmp_path: Path):
@@ -218,6 +221,22 @@ def test_read(tmp_path: Path):
     assert torch.equal(resolved.read(TRAIN, raw)(torch.tensor([1])), FEATURE[[1], None])
     with pytest.raises(ValueError, match="2 windows"):
         saved(tmp_path).read(TRAIN, windows(2))
+
+
+def test_read_joined(tmp_path: Path):
+    """Each word reads its first encoder's features, then the next's."""
+    other = Features(tmp_path / "o")
+    other.save(TRAIN, -FEATURE)
+    joined = Features(tmp_path / "f", (other,))
+    joined.save(TRAIN, FEATURE)
+    read = joined.read(TRAIN, windows())(torch.tensor([1]))
+    assert torch.equal(read, torch.cat([FEATURE, -FEATURE], dim=1)[[1], :, None])
+
+
+def test_loaded(tmp_path: Path):
+    assert saved(tmp_path).loaded(TRAIN, windows()).shape == (3, 2, 1)
+    with pytest.raises(ValueError, match="3 train features for 2 windows"):
+        saved(tmp_path).loaded(TRAIN, windows(2))
 
 
 def test_split(tmp_path: Path):

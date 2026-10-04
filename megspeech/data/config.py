@@ -93,7 +93,7 @@ class DataConfig:
     """Subjects whose training runs train; validation is always subject 0's, and pooled runs never train."""
     features: str = ""
     """Features a frozen encoder saved under models/features/<name> (`megspeech.data.batching.split`), read in
-    place of every split's MEG; empty reads the MEG."""
+    place of every split's MEG; `a+b` joins several encoders' per word (megspeech-7gf.77); empty reads the MEG."""
     cleaning: Cleaning = Cleaning.NONE
     """Artifacts removed from every recording before it is cached (`megspeech.data.cache.cleaning`): which cache
     training and the Kaggle test read."""

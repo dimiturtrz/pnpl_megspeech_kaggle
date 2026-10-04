@@ -8,7 +8,7 @@ uv run python -m megspeech.features.trained --run sent40-ioi-s0 --name ioi-s0
 
 import argparse
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 import torch
 from jaxtyping import Float
@@ -42,13 +42,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True)
     parser.add_argument("--name", required=True)
+    parser.add_argument("--official", action="store_true", help="the official split's words, as experts share")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), torch.device("cuda")
     run = root.models() / args.run
     config = RunConfig.saved(run)
+    data = replace(config.data, share=0.0, stratify=False, folds=1, fold=0) if args.official else config.data
     net = SentenceNet.load(run / "model.pt").to(device).eval()
-    Export.of(config.data, root, args.name, device).save(Trained(net), asdict(config) | {"run": args.run})
+    Export.of(data, root, args.name, device).save(Trained(net), asdict(config) | {"run": args.run})
 
 
 if __name__ == "__main__":
