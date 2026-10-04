@@ -170,6 +170,11 @@ def test_ruled(tmp_path: Path) -> None:
     assert config.ruled(every, Partition.TEST) != config.ruled(every, Partition.VALIDATION)
 
 
+def test_official_split() -> None:
+    folded = DataConfig(share=0.1, stratify=True, folds=5, fold=2, window=0.2).official_split
+    assert (folded.share, folded.stratify, folded.folds, folded.fold, folded.window) == (0.0, False, 1, 0, 0.2)
+
+
 def test_samples() -> None:
     assert DataConfig().samples == RATE
     assert DataConfig(window=2.5).samples == round(2.5 * RATE)

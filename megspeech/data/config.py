@@ -153,6 +153,11 @@ class DataConfig:
         return replace(windows, length=self.samples + lead, offset=offset, baseline=self.to_samples(self.baseline))
 
     @property
+    def official_split(self) -> "DataConfig":
+        """This config on the official split: no `share` carved off, no strata, no folds (megspeech-7gf.81)."""
+        return replace(self, share=0.0, stratify=False, folds=1, fold=0)
+
+    @property
     def recoloured(self) -> bool:
         """Whether recordings are re-coloured (`alignment`): every one when `aligned`, the other subjects' whenever
         they train, so evaluation reads them in the geometry training did."""

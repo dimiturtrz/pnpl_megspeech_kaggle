@@ -146,7 +146,7 @@ class LoadedModel:
 
     def ruled(self, runs: list[Run]) -> dict[str, list[Run]]:
         """The domains of `runs` scored: the partition's, under the split the model trained on or the official one."""
-        data = replace(self.data, share=0.0) if self.official else self.data
+        data = self.data.official_split if self.official else self.data
         return data.ruled(runs, self.partition)
 
     def report(self, runs: list[Run]) -> Epoch:

@@ -8,7 +8,7 @@ uv run python -m megspeech.features.trained --run sent40-ioi-s0 --name ioi-s0
 
 import argparse
 import logging
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass
 
 import torch
 from jaxtyping import Float
@@ -48,7 +48,7 @@ def main() -> None:
     root, device = DataRoot.from_config(), torch.device("cuda")
     run = root.models() / args.run
     config = RunConfig.saved(run)
-    data = replace(config.data, share=0.0, stratify=False, folds=1, fold=0) if args.official else config.data
+    data = config.data.official_split if args.official else config.data
     net = SentenceNet.load(run / "model.pt").to(device).eval()
     Export.of(data, root, args.name, device).save(Trained(net), asdict(config) | {"run": args.run})
 
