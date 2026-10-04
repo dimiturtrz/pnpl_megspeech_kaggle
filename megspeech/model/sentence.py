@@ -12,6 +12,10 @@ from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.context.span import SpanConformer
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer, Unseen
+from megspeech.model.words.layers.mean_max import MeanMax
+
+LATENCY_INIT = 0.02
+"""Spread of each latency tag at initialisation, a transformer's usual position-embedding scale (BERT, GPT-2)."""
 
 SCALE_MEDIAN = "scale.median"
 """A SentenceNet state's per-channel scaler median: one entry per channel the model reads."""
@@ -23,6 +27,8 @@ class SentenceNet(nn.Module):
     Returns the context head's logits and the word head's, both per word slot, so one model is both the
     isolated-word classifier and the sentence-context one.
     """
+
+    latency: Tensor
 
     def __init__(
         self,
@@ -36,12 +42,14 @@ class SentenceNet(nn.Module):
         self.scale = scale
         self.subjects = SubjectLayer.of(context.subjects, CHANNELS, unseen)
         self.words = context.encoder.build(context.conv)
-        self.project = nn.Linear(self.words.width, context.width)
+        self.tokens = context.tokens
+        self.project = nn.Linear(self.words.width // self.tokens, context.width)
         self.clock = context.clock
         self.onsets = OnsetEncoding(context)
         self.intervals = context.intervals
         self.context = self.mixer(context)
         self.head = context.objective.head(context.width, prototypes)
+        self._tag(context)
 
     @classmethod
     def load(cls, path: Path, unseen: Unseen = Unseen.IDENTITY) -> "SentenceNet":
@@ -61,6 +69,14 @@ class SentenceNet(nn.Module):
         layer = SpanConformer.layer(context.width, context.heads, context.dropout)
         norm = nn.LayerNorm(context.width) if context.final_norm else None
         return nn.TransformerEncoder(layer, context.layers, norm=norm, enable_nested_tensor=False)
+
+    def _tag(self, context: ContextConfig) -> None:
+        """Each latency token's learned tag as `latency`; with one token per word a zero outside the state, so the
+        checkpoints trained before it load, and their initialisation draws no more."""
+        if context.latency:
+            self.latency = nn.Parameter(torch.randn(self.tokens, context.width) * LATENCY_INIT)
+        else:
+            self.register_buffer("latency", torch.zeros(1, context.width), persistent=False)
 
     @override
     def forward(
@@ -88,7 +104,8 @@ class SentenceNet(nn.Module):
         slots = nn.functional.pad(embedded, (0, 0, 0, 1))[slot]
         mask = slot < rows
         timing = self.onsets(self.clock.times(onset, mask), self.intervals.features(onset, mask))
-        return self.project(slots) + timing, slots
+        chunks = self.project(MeanMax.segmented(slots, self.tokens)) + timing[..., None, :] + self.latency
+        return chunks.flatten(1, 2), slots
 
     def embed(
         self, x: Float[Tensor, "r c t"], subject: Int[Tensor, " r"], valid: Bool[Tensor, " r"] | None = None
@@ -105,8 +122,10 @@ class SentenceNet(nn.Module):
         return self.read(self.refine(h, mask), slots)
 
     def refine(self, h: Float[Tensor, "g w h"], mask: Bool[Tensor, "g w"]) -> Float[Tensor, "g w h"]:
-        """`h` refined across its span's `mask`ed positions: what the context head reads."""
-        return self.context(h, src_key_padding_mask=~mask)
+        """`h`, each word's `tokens` in a row, refined across its span's `mask`ed words and averaged back to one per
+        word: what the context head reads."""
+        tokens = mask.repeat_interleave(self.tokens, dim=1)
+        return self.context(h, src_key_padding_mask=~tokens).unflatten(1, (-1, self.tokens)).mean(2)
 
     def read(
         self, refined: Float[Tensor, "g w h"], slots: Float[Tensor, "g w e"]

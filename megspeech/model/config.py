@@ -74,6 +74,10 @@ class ContextConfig:
     subjects: int = 0
     final_norm: bool = False
     """A LayerNorm after the pre-norm transformer's last layer, before the context head (plain transformer only)."""
+    latency: bool = False
+    """Each of the CNN readout's `conv.segments` time chunks enters the transformer as its own token, tagged by its
+    chunk: words arrive ~0.21 s apart, so a word's late chunks overlap its successors' early responses, and attention
+    across the chunks can tell them apart where one pooled token per word mixes them."""
 
     def __post_init__(self) -> None:
         if self.encoder.cached and self.subjects:
@@ -81,6 +85,16 @@ class ContextConfig:
                 f"encoder {self.encoder} reads saved features, not sensors, so a per-subject sensor matrix "
                 f"(subjects={self.subjects}) has nothing to mix"
             )
+        if self.latency and (self.encoder.cached or self.conv.queries):
+            raise ValueError(
+                f"latency tokens split the CNN's mean-max chunks; encoder {self.encoder} with "
+                f"queries={self.conv.queries} pools none"
+            )
+
+    @property
+    def tokens(self) -> int:
+        """Transformer tokens per word: one per readout chunk with `latency`, else one."""
+        return self.conv.segments if self.latency else 1
 
     def save(self, directory: Path) -> Path:
         path = directory / FILE

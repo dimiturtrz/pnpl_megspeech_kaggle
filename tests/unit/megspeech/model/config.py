@@ -47,6 +47,16 @@ def test_combination() -> None:
     for encoder in (Encoder.CACHED, Encoder.RESOLVED):
         with pytest.raises(ValueError, match="subjects=3"):
             ContextConfig(encoder=encoder, subjects=3)
+    with pytest.raises(ValueError, match="latency"):
+        ContextConfig(latency=True, encoder=Encoder.CACHED)
+    with pytest.raises(ValueError, match="latency"):
+        ContextConfig(latency=True, conv=ConvConfig(queries=2))
+
+
+def test_tokens() -> None:
+    four = ConvConfig(segments=4)
+    assert ContextConfig(conv=four).tokens == 1
+    assert ContextConfig(conv=four, latency=True).tokens == 4
 
 
 def test_build() -> None:
