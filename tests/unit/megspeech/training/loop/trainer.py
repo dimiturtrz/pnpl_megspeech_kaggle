@@ -1,4 +1,5 @@
 import math
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -28,7 +29,7 @@ from megspeech.training.loop.ema import Ema
 from megspeech.training.loop.trainer import Trainer, TrainState
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
-from megspeech.training.sampling.curriculum import Annealed
+from megspeech.training.sampling.curriculum import Annealed, Natural, Robust
 
 SAMPLES = 50
 CPU = torch.device("cpu")
@@ -129,6 +130,9 @@ def test_state() -> None:
     assert state.readouts == net.readouts()
     assert len(state.terms) == len(state.readouts)
     assert state.rows == made.rows(split())
+    assert isinstance(state.curriculum, Natural)
+    tilted = trainer(RunConfig(optim=replace(optim, robust=1.0))).state(net, split(), 10)
+    assert isinstance(tilted.curriculum, Robust)
 
 
 def test_rows() -> None:

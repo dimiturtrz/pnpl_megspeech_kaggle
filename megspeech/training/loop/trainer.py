@@ -29,7 +29,7 @@ from megspeech.training.config import RunConfig
 from megspeech.training.hook import Scheduled, StepHook
 from megspeech.training.loop.ema import Ema
 from megspeech.training.regularise.anchor import Anchor
-from megspeech.training.sampling.curriculum import Annealed
+from megspeech.training.sampling.curriculum import Annealed, Curriculum, Natural, Robust
 from megspeech.training.teacher import Teacher, Untaught
 
 LOG = logging.getLogger(__name__)
@@ -48,6 +48,7 @@ class TrainState:
     readouts: tuple[nn.Module, ...]
     ema: Ema
     hooks: tuple[StepHook, ...]
+    curriculum: Curriculum = field(default_factory=Natural)
 
 
 @dataclass
@@ -113,6 +114,7 @@ class Trainer:
             parts = zip(state.terms, state.readouts, outputs, strict=True)
             losses = (term.loss(head, output, batch.target(term.labels(train))) for term, head, output in parts)
             value = functools.reduce(operator.add, losses)
+        state.curriculum.observe(spans, outputs[0], batch.target(train.y))
         state.optimizer.zero_grad(set_to_none=True)
         value.backward()
         nn.utils.clip_grad_norm_(state.model.parameters(), self.config.optim.clip)
@@ -141,6 +143,7 @@ class Trainer:
             model.readouts(),
             ema,
             (anchor, schedule, ema),
+            Robust.of(Annealed.of(optim.curriculum), train, optim.robust),
         )
 
     def rows(self, train: Split) -> int:
@@ -159,7 +162,7 @@ class Trainer:
         per_epoch = math.ceil(len(train.index) / optim.batch)
         state = self.state(net, train, optim.epochs * per_epoch)
         model = state.model
-        curriculum = Annealed.of(optim.curriculum)
+        curriculum = state.curriculum
         history: list[Epoch] = []
         best_state = net.state_dict()
         for epoch in range(optim.epochs):

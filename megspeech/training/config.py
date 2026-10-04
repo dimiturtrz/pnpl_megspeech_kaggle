@@ -59,6 +59,10 @@ class OptimConfig:
     """The Deep subject's share of the spans drawn at the last epoch, annealed linearly from an equal share per
     subject at the first (`megspeech.training.sampling.curriculum`); 0 draws every subject's spans at their own
     weight. Only meaningful when `DataConfig.subjects` trains on more than the Deep subject."""
+    robust: float = 0.0
+    """Power of the tilt toward the strata (subject x span length x word rate) whose training loss ran highest last
+    epoch (`megspeech.training.sampling.curriculum.Robust`): a stratum at twice the mean loss draws `2 ** robust` times
+    its weight, and none draws below its own; 0 draws at the curriculum's weights alone."""
     anchor: float = 1.0
     """Share of each subject matrix's deviation from the Deep subject's that the run's decay leaves by its end, were
     its gradient never to restore it (`megspeech.training.regularise.anchor`); 1 decays the matrices toward 0 like
