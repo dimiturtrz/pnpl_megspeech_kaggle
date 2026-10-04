@@ -11,9 +11,9 @@ from megspeech.data.cache.holdout import ArchiveKind, Epochs, HoldoutCache
 from megspeech.data.cache.run_cache import WORD_TABLE, RunCache
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation.loaded import Text
 from megspeech.evaluation.studies import overlap as module
 from megspeech.evaluation.studies.overlap import Onsets, Overlap, Survey, main
+from megspeech.evaluation.text import Text
 
 SLOTS = 9
 SUBJECTS = 3

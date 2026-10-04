@@ -24,9 +24,10 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation.loaded import RULER, LoadedModel, Scoring, Text
+from megspeech.evaluation.loaded import LoadedModel, Scoring
 from megspeech.evaluation.metric.ruler import TOP
 from megspeech.evaluation.scoring.score import Score
+from megspeech.evaluation.text import RULER, Text
 
 LOG = logging.getLogger(__name__)
 

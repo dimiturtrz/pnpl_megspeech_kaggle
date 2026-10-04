@@ -8,9 +8,9 @@ import torch
 
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.evaluation.loaded import RULER
 from megspeech.evaluation.studies import pooling as module
 from megspeech.evaluation.studies.pooling import CHANCE, AlignedSubjects, Equal, Pool, Reliable, main
+from megspeech.evaluation.text import RULER
 from tests.unit.megspeech.evaluation.loaded import NAMES, POOLED, SPOKEN, TRAINED, loaded, runs
 
 

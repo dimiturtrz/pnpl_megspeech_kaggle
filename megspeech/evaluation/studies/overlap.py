@@ -22,7 +22,7 @@ from megspeech.data.cache.holdout import ArchiveKind, Epochs, HoldoutCache
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY
 from megspeech.data.raw.runs import DEEP, Partition, Run
-from megspeech.evaluation.loaded import RULER, Text
+from megspeech.evaluation.text import RULER, Text
 
 LOG = logging.getLogger(__name__)
 

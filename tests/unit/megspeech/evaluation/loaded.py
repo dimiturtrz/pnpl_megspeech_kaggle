@@ -19,10 +19,11 @@ from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation import loaded as module
-from megspeech.evaluation.loaded import RULER, LoadedModel, Scoring, Text
+from megspeech.evaluation.loaded import LoadedModel, Scoring
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.text import RULER
 from megspeech.model.input.subjects import Reading
 
 CPU = torch.device("cpu")
@@ -64,27 +65,6 @@ def runs(tmp_path: Path) -> list[Run]:
 def loaded(tmp_path: Path, reading: Reading = Reading.OWN) -> LoadedModel:
     evaluator = Evaluator(CPU, min_novel=1)
     return LoadedModel(DataRoot(tmp_path), Favourite(), DataConfig(), evaluator, torch.zeros(VOCAB_SIZE), reading)
-
-
-def table(run: str, words: tuple[str, ...] = ("The", "man", "said", "hello")) -> pd.DataFrame:
-    return pd.DataFrame(
-        {"run": run, "onset": np.arange(len(words)) * 0.3, "word": list(words), "sentence": [0, 0, 1, 1]}
-    )
-
-
-def test_text_of() -> None:
-    assert Text.of(pd.concat([table("a"), table("b")])).words["position"].tolist() == [0, 1, 0, 1] * 2
-
-
-def test_keys() -> None:
-    assert Text.of(table("a")).keys[1] == (0, 1, "man")
-    assert Text.of(table("a")).keys.is_unique
-
-
-def test_matches() -> None:
-    reference = Text.of(table("a"))
-    other = Text(Text.of(table("b", words=("The", "boy", "said", "hello"))).words.iloc[::-1])
-    assert reference.matches(other).tolist() == [3, -1, 1, 0]
 
 
 def members(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selections: dict[str, int]) -> None:

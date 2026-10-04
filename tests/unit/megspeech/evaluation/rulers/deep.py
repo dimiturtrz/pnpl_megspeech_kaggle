@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from megspeech.evaluation.loaded import RULER
 from megspeech.evaluation.rulers import deep as module
 from megspeech.evaluation.rulers.deep import DeepRuler
+from megspeech.evaluation.text import RULER
 from tests.unit.megspeech.evaluation.loaded import loaded, runs
 
 

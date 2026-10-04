@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Float
 from torch import Tensor, nn
 
 from core.paths import DataRoot
@@ -20,34 +20,10 @@ from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Epoch, Head, Score, SelectionConfig
+from megspeech.evaluation.text import RULER, Text
 from megspeech.model.ensemble import Ensemble
 from megspeech.model.input.lowpass import LowPass
 from megspeech.model.input.subjects import AS_TRAINED, Fallback, Reading, SubjectLayer
-
-RULER = "Sherlock1"
-"""The validation task whose text the pooled runs repeat."""
-
-
-@dataclass(frozen=True)
-class Text:
-    """One run's heard words (a word table with `sentence`, `position`, `word`, `onset`), keyed word by word: by its
-    sentence, its place in that sentence and its lower-cased spelling, so two runs of one text match word for word."""
-
-    words: pd.DataFrame
-
-    @classmethod
-    def of(cls, table: pd.DataFrame) -> "Text":
-        """`table`'s words with their `position` in their sentence of their run."""
-        return cls(table.assign(position=table.groupby(["run", "sentence"]).cumcount()))
-
-    @property
-    def keys(self) -> pd.MultiIndex:
-        spelled = self.words["word"].astype(str).str.lower()
-        return pd.MultiIndex.from_arrays([self.words["sentence"], self.words["position"], spelled])
-
-    def matches(self, other: "Text") -> Int[np.ndarray, " n"]:
-        """Each word's row in `other` with the same key, -1 where `other` has none."""
-        return other.keys.get_indexer(self.keys)
 
 
 @dataclass(frozen=True)
