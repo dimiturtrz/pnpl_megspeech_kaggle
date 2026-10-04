@@ -9,16 +9,17 @@ tags are `megspeech.data.labels.syntax`'s, a training target: no holdout text is
 """
 
 import argparse
+import itertools
 import logging
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Float, Int, Shaped
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import balanced_accuracy_score
+from sklearn.metrics import balanced_accuracy_score, confusion_matrix
 from sklearn.model_selection import GroupKFold, cross_val_predict
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -41,8 +42,9 @@ FOLDS = 3
 FLOOR = 1e-6
 """Probability floor under each logged probability: a fold missing a tag predicts it at 0."""
 
-Piece = tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str, np.ndarray, str]
-"""One run's timing features, word and context embeddings, tags, name, membership in the 50 and domain."""
+Piece = tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str, np.ndarray, str, np.ndarray, np.ndarray, np.ndarray]
+"""One run's timing features, word and context embeddings, tags, name, membership in the 50, domain, sentence keys,
+onsets and 50-way targets."""
 
 
 @dataclass(frozen=True)
@@ -124,20 +126,79 @@ class Probed:
             for tag in np.unique(self.tags)
         }
 
+    def confusion(self, predicted: Int[np.ndarray, " n"], *, in_50: bool) -> pd.DataFrame:
+        """Word counts of each true tag (row) predicted as each tag (column), over the 50's words or every word."""
+        chosen = self.vocabulary if in_50 else np.ones(len(self.tags), bool)
+        present = np.union1d(self.tags[chosen], predicted[chosen])
+        names = [TAGS[tag] for tag in present]
+        counts = confusion_matrix(self.tags[chosen], predicted[chosen], labels=present)
+        return pd.DataFrame(counts, index=names, columns=names)
+
     def majority(self) -> float:
         """The accuracy of always predicting the most frequent tag."""
         return float(np.bincount(self.tags).max() / len(self.tags))
 
 
 @dataclass(frozen=True)
+class Grammar:
+    """A first-order tag grammar: a sentence's first tag's log-probability and each next tag's given the one before,
+    counted add-one on training sentences."""
+
+    start: Float[np.ndarray, " k"]
+    transition: Float[np.ndarray, "k k"]
+
+    @classmethod
+    def of(
+        cls, tags: Int[np.ndarray, " n"], sentences: Int[np.ndarray, " n"], onsets: Float[np.ndarray, " n"], k: int
+    ) -> "Grammar":
+        """The grammar of `tags` (each below `k`) read in onset order within each sentence."""
+        order = np.lexsort((onsets, sentences))
+        tag, sentence = tags[order], sentences[order]
+        follows = sentence[1:] == sentence[:-1]
+        start = np.bincount(tag[np.r_[True, ~follows]], minlength=k) + 1.0
+        pairs = np.ones((k, k))
+        np.add.at(pairs, (tag[:-1][follows], tag[1:][follows]), 1)
+        return cls(np.log(start / start.sum()), np.log(pairs / pairs.sum(1, keepdims=True)))
+
+    def viterbi(self, emissions: Float[np.ndarray, "t k"]) -> Int[np.ndarray, " t"]:
+        """The most probable tag path through one sentence's per-word emission log-likelihoods."""
+        score = self.start + emissions[0]
+        back = np.zeros(emissions.shape, np.int64)
+        for t in range(1, len(emissions)):
+            candidates = score[:, None] + self.transition
+            back[t] = candidates.argmax(0)
+            score = candidates.max(0) + emissions[t]
+        path = [int(score.argmax())]
+        for t in range(len(emissions) - 1, 0, -1):
+            path.append(int(back[t, path[-1]]))
+        return np.array(path[::-1])
+
+    def decode(
+        self, emissions: Float[np.ndarray, "n k"], sentences: Int[np.ndarray, " n"], onsets: Float[np.ndarray, " n"]
+    ) -> Int[np.ndarray, " n"]:
+        """Each sentence's words' tags decoded jointly, in onset order, returned in the rows' order."""
+        order = np.lexsort((onsets, sentences))
+        sentence = sentences[order]
+        bounds = np.flatnonzero(np.r_[True, sentence[1:] != sentence[:-1], True])
+        decoded = np.empty(len(order), np.int64)
+        for begin, end in itertools.pairwise(bounds):
+            rows = order[begin:end]
+            decoded[rows] = self.viterbi(emissions[rows])
+        return decoded
+
+
+@dataclass(frozen=True)
 class Table:
-    """Every probed word's features, tag, run, membership in the 50 and domain."""
+    """Every probed word's features, tag, run, membership in the 50, domain, sentence, onset and 50-way target."""
 
     features: dict[str, Float[np.ndarray, "n _"]]
     tags: Int[np.ndarray, " n"]
     runs: np.ndarray
     vocabulary: np.ndarray
     domain: np.ndarray
+    sentences: Int[np.ndarray, " n"]
+    onsets: Float[np.ndarray, " n"]
+    targets: Int[np.ndarray, " n"]
 
     @classmethod
     def of(  # devtools-ignore: test-mirror
@@ -149,13 +210,19 @@ class Table:
                 read = embedded(split)
                 tags = parts.classes(torch.from_numpy(words["token"].to_numpy(np.int64))).numpy()
                 in_50 = (words["target"] >= 0).to_numpy()
-                pieces.append((Timing.features(words), read[Tap.WORD], read[Tap.CONTEXT], tags, run.name, in_50, name))
+                sentences = (run.name + "/" + words["sentence"].astype(str)).to_numpy()
+                onsets = words["onset"].to_numpy(np.float64)
+                targets = words["target"].to_numpy(np.int64)
+                timing = Timing.features(words)
+                pieces.append(
+                    (timing, read[Tap.WORD], read[Tap.CONTEXT], tags, run.name, in_50, name, sentences, onsets, targets)
+                )
         return cls.joined(pieces)
 
     @classmethod
     def joined(cls, pieces: list[Piece]) -> "Table":
-        """The pieces' rows concatenated, the untagged dropped."""
-        timing, word, context, tags, run, vocabulary, domain = zip(*pieces, strict=True)
+        """The pieces' rows concatenated, the untagged dropped, each sentence numbered."""
+        timing, word, context, tags, run, vocabulary, domain, sentences, onsets, targets = zip(*pieces, strict=True)
         tag = np.concatenate(tags)
         known = tag != UNKNOWN
         repeat = [len(t) for t in tags]
@@ -169,7 +236,17 @@ class Table:
             np.repeat(run, repeat)[known],
             np.concatenate(vocabulary)[known],
             np.repeat(domain, repeat)[known],
+            np.unique(np.concatenate(sentences), return_inverse=True)[1][known],
+            np.concatenate(onsets)[known],
+            np.concatenate(targets)[known],
         )
+
+    def rows(self, runs: Shaped[np.ndarray, " m"], onsets: Float[np.ndarray, " m"]) -> Int[np.ndarray, " m"]:
+        """Each (run, onset) word's row in this table, -1 where it has none: a word is named by its run and onset."""
+        keys = pd.MultiIndex.from_arrays([self.runs, self.onsets])
+        if not keys.is_unique:
+            raise ValueError("a run holds two words at one onset")
+        return keys.get_indexer(pd.MultiIndex.from_arrays([runs, onsets]))
 
 
 @dataclass(frozen=True)
@@ -193,20 +270,37 @@ class Probe:
         folded = cross_val_predict(fit, x, y, cv=GroupKFold(FOLDS), groups=self.train.runs, method="predict_proba")
         return np.log(folded + FLOOR), np.log(fit.fit(x, y).predict_proba(self.valid.features[name]) + FLOOR)
 
+    def stacked(
+        self, names: tuple[str, ...], probed: dict[str, tuple[np.ndarray, np.ndarray]]
+    ) -> tuple[Int[np.ndarray, " k"], Float[np.ndarray, "n k"]]:
+        """The tags a logistic stacker fit on `names`' out-of-fold `probed` log-probabilities knows, and its
+        validation log-posterior over them."""
+        inputs, outputs = zip(*(probed[name] for name in names), strict=True)
+        stacker = LogisticRegression(max_iter=500).fit(np.hstack(inputs), self.train.tags)
+        return stacker.classes_, stacker.predict_log_proba(np.hstack(outputs))
+
     def predicted(
         self, names: tuple[str, ...], probed: dict[str, tuple[np.ndarray, np.ndarray]]
     ) -> Int[np.ndarray, " n"]:
-        """The validation tags predicted from `names`' `probed` log-probabilities, read by a logistic stacker fit on
-        their out-of-fold training ones."""
-        inputs, outputs = zip(*(probed[name] for name in names), strict=True)
-        stacker = LogisticRegression(max_iter=500).fit(np.hstack(inputs), self.train.tags)
-        return stacker.predict(np.hstack(outputs))
+        """Each validation word's most probable tag on its own."""
+        classes, posterior = self.stacked(names, probed)
+        return classes[posterior.argmax(1)]
+
+    def parsed(self, names: tuple[str, ...], probed: dict[str, tuple[np.ndarray, np.ndarray]]) -> Int[np.ndarray, " n"]:
+        """Each validation sentence's most probable tag path under the training sentences' grammar, each word's
+        emission its stacked posterior over the training tag prior."""
+        classes, posterior = self.stacked(names, probed)
+        train = np.searchsorted(classes, self.train.tags)
+        grammar = Grammar.of(train, self.train.sentences, self.train.onsets, len(classes))
+        prior = np.log(np.bincount(train, minlength=len(classes)) / len(train))
+        return classes[grammar.decode(posterior - prior, self.valid.sentences, self.valid.onsets)]
 
     def report(self) -> dict[str, Int[np.ndarray, " n"]]:
-        """Each arm's predicted validation tags."""
+        """Each arm's predicted validation tags, the best stack also parsed per sentence."""
         probed = {name: self.probabilities(name) for name in self.train.features}
         arms = (("timing",), ("meg-word",), ("meg-context",), ("timing", "meg-word"), ("timing", "meg-context"))
-        return {"+".join(arm): self.predicted(arm, probed) for arm in arms}
+        predicted = {"+".join(arm): self.predicted(arm, probed) for arm in arms}
+        return predicted | {"timing+meg-context+grammar": self.parsed(("timing", "meg-context"), probed)}
 
 
 def main() -> None:
@@ -235,6 +329,11 @@ def main() -> None:
             {k: (round(b, 4), round(a, 4), n) for k, (b, a, n) in scored.scores(predicted).items()},
         )
         LOG.info("%s recall %s", arm, {k: (round(r, 3), n) for k, (r, n) in scored.recalls(predicted).items()})
+        if arm.startswith("timing+meg-context"):
+            for in_50 in (True, False):
+                LOG.info(
+                    "%s confusion, in-50 %s:\n%s", arm, in_50, scored.confusion(predicted, in_50=in_50).to_string()
+                )
 
 
 if __name__ == "__main__":
