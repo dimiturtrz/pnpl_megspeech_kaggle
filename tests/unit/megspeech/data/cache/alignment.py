@@ -1,9 +1,13 @@
 import dataclasses
+from pathlib import Path
 
+import mne
 import numpy as np
 import torch
 
+from core.paths import DataRoot
 from megspeech.data.cache.alignment import AS_RECORDED, GATE, Alignment, Geometry
+from megspeech.data.raw.fetch import NEUROMAG
 
 GENERATOR = torch.Generator().manual_seed(0)
 CHANNELS = 4
@@ -55,6 +59,18 @@ def test_rank() -> None:
     assert full.rank == CHANNELS
     assert leading.rank == 1
     assert torch.allclose(leading.basis, full.basis[:1], atol=1e-5)
+
+
+def test_selection(tmp_path: Path) -> None:
+    root = DataRoot(tmp_path)
+    NEUROMAG.home(root).parent.mkdir(parents=True)
+    info = mne.create_info(["MEG 0111", "MEG 0121", "MEG 0131", "MEG 2041"], 100.0, "mag")
+    mne.io.RawArray(np.zeros((CHANNELS, 10)), info, verbose=False).save(NEUROMAG.home(root), verbose=False)
+    alignment = reference()[0]
+    selection = alignment.selection(("Left-temporal",), root)
+    assert torch.equal(selection.basis, torch.eye(CHANNELS)[[0, 2]])
+    assert torch.equal(selection.median, alignment.median)
+    assert alignment.selection((), root).rank == 0
 
 
 def test_projection_project() -> None:

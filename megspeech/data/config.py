@@ -13,7 +13,7 @@ import torch
 from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.batching.windows import Windows
-from megspeech.data.cache.alignment import AS_RECORDED, EVERY, UNALIGNED, Alignment, Geometry
+from megspeech.data.cache.alignment import AS_RECORDED, EVERY, UNALIGNED, Alignment, Geometry, Projection
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
@@ -107,10 +107,21 @@ class DataConfig:
     components: int = 0
     """The leading components of that subspace a `subspace` recording keeps, largest variance first; 0 keeps every
     one. Fewer inputs than the signal's rank cut the input capacity a small corpus must fit (99% of variance in ~57)."""
+    regions: tuple[str, ...] = ()
+    """MNE's Vectorview selections (`Left-temporal`, ...) whose sensors alone every recording keeps, in subject 0's
+    units; empty keeps all 306. The early (50-150 ms) word-locked field peaks over the temporal lobes: 14 of its top
+    20 sensors against 5.1 by chance (n=765256 onsets, megspeech-7gf.77), the acoustic expert's spatial prior."""
 
     def __post_init__(self) -> None:
         if not 0 <= self.fold < self.folds:
             raise ValueError(f"fold {self.fold} is not one of the {self.folds} folds")
+        if self.subspace and self.regions:
+            raise ValueError("a recording keeps either subspace components or region sensors, not both")
+
+    @property
+    def projected(self) -> bool:
+        """Whether recordings load as something other than the 306 sensors: subspace components or region sensors."""
+        return self.subspace or bool(self.regions)
 
     @classmethod
     def saved(cls, directory: Path) -> "DataConfig":
@@ -169,13 +180,18 @@ class DataConfig:
 
     def geometry(self, root: DataRoot, device: torch.device | str, *, aligned: bool = False) -> Geometry:
         """The `Geometry` recordings load in: re-coloured to subject 0's `alignment` when `recoloured` (or `aligned`
-        asks for it), kept in its `Projection` when `subspace`; the reference left unbuilt when neither reads it."""
+        asks for it), kept in its `Projection` when `projected`; the reference left unbuilt when neither reads it."""
         recolour = aligned or self.recoloured
-        if not (recolour or self.subspace):
+        if not (recolour or self.projected):
             return AS_RECORDED
         alignment = self.alignment(root, device)
-        projection = alignment.projection(self.components) if self.subspace else None
-        return Geometry(alignment if recolour else None, projection)
+        return Geometry(alignment if recolour else None, self.projection(alignment, root))
+
+    def projection(self, alignment: Alignment, root: DataRoot) -> Projection | None:
+        """The `Projection` recordings are kept in: `regions`' sensors, `subspace`'s components, or none."""
+        if self.regions:
+            return alignment.selection(self.regions, root)
+        return alignment.projection(self.components) if self.subspace else None
 
     def alignment(self, root: DataRoot, device: torch.device | str) -> Alignment:
         """Subject 0's sensor reference in this config's cache, from every `EVERY`th of its training runs: every

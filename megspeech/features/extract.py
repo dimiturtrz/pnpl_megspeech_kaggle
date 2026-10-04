@@ -223,10 +223,7 @@ class Export:
 
     @classmethod  # devtools-ignore: test-mirror
     def of(cls, data: DataConfig, root: DataRoot, name: str, device: torch.device) -> Self:
-        """The splits `data` reads, their MEG rather than any features it names: every sensor, which a `subspace`
-        config no longer holds."""
-        if data.subspace:
-            raise ValueError("features are extracted from the 306 sensors; a subspace config keeps its components")
+        """The splits `data` reads, their MEG rather than any features it names, in `data`'s own geometry."""
         meg = replace(data, features="")
         track = Track.DEEP
         kaggle = Split.from_kaggle(track.kaggle(root.raw()), Corpus.kaggle(root, meg, track, device))
@@ -254,6 +251,8 @@ def main() -> None:
     tree.arguments(parser)
     args = parser.parse_args()
     config = tree.parse(args)
+    if config.data.projected:
+        parser.error("MEG-XL reads the 306 sensors; a projected config keeps fewer")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), torch.device("cuda")
     export = Export.of(config.data, root, args.name, device)

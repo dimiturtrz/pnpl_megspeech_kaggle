@@ -2,6 +2,7 @@ import dataclasses
 import json
 from pathlib import Path
 
+import mne
 import numpy as np
 import pytest
 import torch
@@ -11,6 +12,7 @@ from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.config import METRICS, READING, DataConfig
 from megspeech.data.constants import RATE
+from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import Grouping
 
@@ -305,6 +307,7 @@ def test_shared(tmp_path: Path) -> None:
         ("tasks", ["Sherlock1"]),
         ("subspace", True),
         ("delay", 0.2),
+        ("regions", ["Left-temporal"]),
     ],
 )
 def test_shared_reading(tmp_path: Path, field: str, value: object) -> None:
@@ -332,6 +335,33 @@ def test_fold_range() -> None:
     for fold in (-1, 3):
         with pytest.raises(ValueError, match="is not one of the 3 folds"):
             DataConfig(folds=3, fold=fold)
+    with pytest.raises(ValueError, match="not both"):
+        DataConfig(subspace=True, regions=("Left-temporal",))
+
+
+def test_projected() -> None:
+    assert not DataConfig().projected
+    assert DataConfig(subspace=True).projected
+    assert DataConfig(regions=("Left-temporal",)).projected
+
+
+def helmet(root: DataRoot) -> None:
+    """MNE's test recording reduced to three magnetometers, the first and last of them left-temporal."""
+    path = NEUROMAG.home(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    info = mne.create_info(["MEG 0111", "MEG 0121", "MEG 0131"], RATE, "mag")
+    mne.io.RawArray(np.zeros((3, 10)), info, verbose=False).save(path, verbose=False)
+
+
+def test_projection(tmp_path: Path) -> None:
+    root = cached(tmp_path)
+    helmet(root)
+    alignment = DataConfig().alignment(root, "cpu")
+    assert DataConfig().projection(alignment, root) is None
+    regions = DataConfig(regions=("Left-temporal",)).projection(alignment, root)
+    assert regions is not None
+    assert torch.equal(regions.basis, torch.eye(3)[[0, 2]])
+    assert DataConfig(regions=("Left-temporal",)).geometry(root, "cpu").rows(3) == 2
 
 
 def test_weight(tmp_path: Path) -> None:

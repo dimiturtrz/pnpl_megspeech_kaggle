@@ -7,19 +7,19 @@ over the temporal lobes, as the acoustic expert's spatial prior assumes (megspee
 import logging
 import math
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Self
 
-import mne
 import numpy as np
 import torch
-from jaxtyping import Bool, Float
+from jaxtyping import Float
 from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
 from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
+from megspeech.data.raw.fetch import NEUROMAG
+from megspeech.data.raw.masc import Neuromag
 
 LOG = logging.getLogger(__name__)
 
@@ -30,8 +30,6 @@ EARLY = (0.05, 0.15)
 CHUNK = 4096
 TOP = 20
 STEP = 0.02
-HELMET = Path("mne") / "test_raw.fif"
-"""MNE's Neuromag Vectorview test recording: the helmet's 306 sensor positions in the device frame."""
 TEMPORAL = ("Left-temporal", "Right-temporal")
 
 
@@ -60,39 +58,14 @@ class Evoked:
         return self.t()[:, start:stop].abs().amax(1)
 
 
-@dataclass(frozen=True)
-class Helmet:
-    """The sensors in the recordings' sorted channel order, each with its device-frame position."""
-
-    names: tuple[str, ...]
-    positions: Float[np.ndarray, "c 3"]
-
-    @classmethod
-    def read(cls, path: Path) -> Self:
-        info = mne.io.read_info(path, verbose=False)
-        channels = sorted(
-            (info["chs"][i] for i in mne.pick_types(info, meg=True)), key=lambda ch: cls.compact(ch["ch_name"])
-        )
-        return cls(tuple(cls.compact(ch["ch_name"]) for ch in channels), np.array([ch["loc"][:3] for ch in channels]))
-
-    def within(self, selections: tuple[str, ...]) -> Bool[np.ndarray, " c"]:
-        """Whether each sensor lies in any of MNE's Vectorview `selections`."""
-        chosen = {Helmet.compact(name) for selection in selections for name in mne.read_vectorview_selection(selection)}
-        return np.array([name in chosen for name in self.names])
-
-    @staticmethod
-    def compact(name: str) -> str:
-        """`name` without spaces, as the recordings and MNE's layouts both spell it."""
-        return name.replace(" ", "")
-
-
 def main() -> None:
     """Log the sensors with the strongest early evoked peak, the temporal share of them against chance, and the
     field's strength over time."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
     train = Corpus.load(READING, root, torch.device("cuda")).train
-    evoked, helmet = Evoked.of(train.windows), Helmet.read(root.raw(str(HELMET.parent)) / HELMET.name)
+    evoked, helmet = Evoked.of(train.windows), Neuromag.of(NEUROMAG.home(root))
+    positions = helmet.positions
     onset = READING.to_samples(READING.lead)
     peaks = evoked.peaks(*(onset + READING.to_samples(edge) for edge in EARLY)).cpu().numpy()
     temporal, order = helmet.within(TEMPORAL), np.argsort(-peaks)
@@ -102,9 +75,9 @@ def main() -> None:
             helmet.names[i],
             "mag" if helmet.names[i].endswith("1") else "grad",
             peaks[i],
-            np.round(helmet.positions[i], 3),
+            np.round(positions[i], 3),
         )
-    left = helmet.positions[:, 0] < 0
+    left = positions[:, 0] < 0
     LOG.info(
         "temporal %d of top %d vs %.1f by chance (%d of %d sensors); left %d right %d; n=%d words",
         temporal[order[:TOP]].sum(),

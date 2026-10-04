@@ -23,7 +23,7 @@ import h5py
 import mne
 import numpy as np
 import pandas as pd
-from jaxtyping import Float
+from jaxtyping import Bool, Float
 from mne.forward._field_interpolation import _map_meg_or_eeg_channels
 
 from core.paths import DataRoot
@@ -70,6 +70,17 @@ class Neuromag:
     def names(self) -> list[str]:
         """The channel names as LibriBrain spells them, `MEG0111`."""
         return [name.replace(" ", "") for name in self.info["ch_names"]]
+
+    @property
+    def positions(self) -> Float[np.ndarray, "c 3"]:
+        """Each channel's device-frame position in metres."""
+        return np.array([channel["loc"][:3] for channel in self.info["chs"]])
+
+    def within(self, selections: tuple[str, ...]) -> Bool[np.ndarray, " c"]:
+        """Whether each channel lies in any of MNE's Vectorview `selections`."""
+        listed = (name for selection in selections for name in mne.read_vectorview_selection(selection))
+        chosen = {name.replace(" ", "") for name in listed}
+        return np.array([name in chosen for name in self.names])
 
     @property
     def types(self) -> list[str]:

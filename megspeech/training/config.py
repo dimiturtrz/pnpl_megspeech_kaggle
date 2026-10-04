@@ -100,10 +100,10 @@ class RunConfig:
     selection: SelectionConfig = SelectionConfig()
 
     def __post_init__(self) -> None:
-        if self.data.subspace and (self.context.encoder.cached or self.context.conv.merger):
+        if self.data.projected and (self.context.encoder.cached or self.context.conv.merger):
             raise ValueError(
                 f"encoder {self.context.encoder} with merger {self.context.conv.merger} reads the 306 sensors, which "
-                "a subspace config does not keep"
+                "a projected config does not keep"
             )
 
     def selected(self, history: list[Epoch]) -> Epoch:

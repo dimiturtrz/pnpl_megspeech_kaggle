@@ -86,6 +86,17 @@ def test_names(target: Neuromag) -> None:
     assert target.names == ["MEG0111", "MEG0121", "MEG0131"]
 
 
+def test_positions(target: Neuromag) -> None:
+    target.info["chs"][1]["loc"][:3] = [0.1, -0.2, 0.3]
+    assert target.positions.shape == (3, 3)
+    assert target.positions[1].tolist() == pytest.approx([0.1, -0.2, 0.3])
+
+
+def test_within(target: Neuromag) -> None:
+    assert target.within(("Left-temporal",)).tolist() == [True, False, True]
+    assert target.within(()).tolist() == [False, False, False]
+
+
 def test_types(target: Neuromag) -> None:
     assert target.types == ["mag"] * 3
 

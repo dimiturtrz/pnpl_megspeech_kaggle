@@ -12,6 +12,10 @@ import torch
 from jaxtyping import Float
 from torch import Tensor
 
+from core.paths import DataRoot
+from megspeech.data.raw.fetch import NEUROMAG
+from megspeech.data.raw.masc import Neuromag
+
 GATE = 8.0
 """Interquartile ranges from its median at which a sample on any channel is an artifact the covariance leaves out:
 subject 0's training runs reach 35-40 at the 99.9th percentile, the other subjects' runs and every Kaggle test
@@ -107,6 +111,12 @@ class Alignment:
         kept = values > values.max() * FLOOR
         basis = vectors[:, kept].flip(1).T[: components or None]
         return Projection(self.median, self.spread, basis.float().contiguous())
+
+    def selection(self, regions: tuple[str, ...], root: DataRoot) -> Projection:
+        """The sensors in MNE's Vectorview `regions` alone, in their order, as a `Projection` in subject 0's units."""
+        kept = Neuromag.of(NEUROMAG.home(root)).within(regions)
+        rows = torch.from_numpy(np.flatnonzero(kept)).to(self.root.device)
+        return Projection(self.median, self.spread, torch.eye(len(kept), device=self.root.device)[rows])
 
     def applies(self, name: str) -> bool:
         """Whether run `name` is re-coloured: every run but the `exempt`."""

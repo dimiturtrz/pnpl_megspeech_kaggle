@@ -38,8 +38,9 @@ def test_selected() -> None:
 
 
 @pytest.mark.parametrize("context", [ContextConfig(encoder=Encoder.CACHED), ContextConfig(conv=ConvConfig(merger=270))])
-def test_subspace_needs_sensor_free_encoder(context: ContextConfig) -> None:
+def test_projected_needs_sensor_free_encoder(context: ContextConfig) -> None:
     assert RunConfig(context=context).context is context
-    with pytest.raises(ValueError, match="306 sensors"):
-        RunConfig(data=DataConfig(subspace=True), context=context)
-    assert RunConfig(data=DataConfig(subspace=True)).data.subspace
+    for data in (DataConfig(subspace=True), DataConfig(regions=("Left-temporal",))):
+        with pytest.raises(ValueError, match="306 sensors"):
+            RunConfig(data=data, context=context)
+        assert RunConfig(data=data).data.projected

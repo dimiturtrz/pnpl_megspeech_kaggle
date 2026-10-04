@@ -1,15 +1,14 @@
 import json
+import sys
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 import torch
 
-from core.paths import DataRoot
 from megspeech.data.batching.split import KAGGLE_FEATURES, TRAIN, Features, Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.kaggle import Track
-from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
 from megspeech.data.spans.spans import PAD
 from megspeech.features.extract import (
@@ -23,6 +22,7 @@ from megspeech.features.extract import (
     Resolved,
     Segments,
     Windowed,
+    main,
 )
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.words.trunk import DOWNSAMPLING, LATENT
@@ -66,9 +66,11 @@ def test_splits(tmp_path: Path):
     assert [len(s.index) for s in splits.values()] == [1, 2, 3]
 
 
-def test_of_refuses_subspace(tmp_path: Path):
-    with pytest.raises(ValueError, match="306 sensors"):
-        Export.of(DataConfig(subspace=True), DataRoot(tmp_path), "name", torch.device("cpu"))
+@pytest.mark.parametrize("flags", [["--data.subspace"], ["--data.regions", "Left-temporal"]])
+def test_main_refuses_projected(monkeypatch: pytest.MonkeyPatch, flags: list[str]):
+    monkeypatch.setattr(sys, "argv", ["extract", "--name", "name", *flags])
+    with pytest.raises(SystemExit):
+        main()
 
 
 def test_save(tmp_path: Path):
