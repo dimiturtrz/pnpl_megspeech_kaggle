@@ -102,6 +102,9 @@ class DataConfig:
     subspace: bool = False
     """Every recording kept as its coordinates in subject 0's Maxwell signal subspace (`Projection`, ~75 components
     of 306 sensors): the same signal in a quarter of the device cache, the model reading as many channels."""
+    components: int = 0
+    """The leading components of that subspace a `subspace` recording keeps, largest variance first; 0 keeps every
+    one. Fewer inputs than the signal's rank cut the input capacity a small corpus must fit (99% of variance in ~57)."""
 
     def __post_init__(self) -> None:
         if not 0 <= self.fold < self.folds:
@@ -163,7 +166,8 @@ class DataConfig:
         if not (recolour or self.subspace):
             return AS_RECORDED
         alignment = self.alignment(root, device)
-        return Geometry(alignment if recolour else None, alignment.projection() if self.subspace else None)
+        projection = alignment.projection(self.components) if self.subspace else None
+        return Geometry(alignment if recolour else None, projection)
 
     def alignment(self, root: DataRoot, device: torch.device | str) -> Alignment:
         """Subject 0's sensor reference in this config's cache, from every `EVERY`th of its training runs: every

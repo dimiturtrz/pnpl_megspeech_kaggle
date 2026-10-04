@@ -100,11 +100,13 @@ class Alignment:
         scaled = torch.where(kept, values.clamp_min(values.max() * FLOOR) ** exponent, torch.zeros_like(values))
         return (vectors * scaled) @ vectors.T
 
-    def projection(self) -> Projection:
-        """The span of `root` — subject 0's covariance above `FLOOR` of its largest eigenvalue — as a `Projection`."""
+    def projection(self, components: int = 0) -> Projection:
+        """The span of `root` — subject 0's covariance above `FLOOR` of its largest eigenvalue — as a `Projection`, its
+        leading `components` alone when given (0 keeps the whole span)."""
         values, vectors = torch.linalg.eigh(self.root)
         kept = values > values.max() * FLOOR
-        return Projection(self.median, self.spread, vectors[:, kept].flip(1).T.float().contiguous())
+        basis = vectors[:, kept].flip(1).T[: components or None]
+        return Projection(self.median, self.spread, basis.float().contiguous())
 
     def applies(self, name: str) -> bool:
         """Whether run `name` is re-coloured: every run but the `exempt`."""

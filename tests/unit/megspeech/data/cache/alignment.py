@@ -50,7 +50,11 @@ def test_projection() -> None:
 
 def test_rank() -> None:
     assert deficient()[0].projection().rank == 2
-    assert reference()[0].projection().rank == CHANNELS
+    alignment = reference()[0]
+    full, leading = alignment.projection(), alignment.projection(1)
+    assert full.rank == CHANNELS
+    assert leading.rank == 1
+    assert torch.allclose(leading.basis, full.basis[:1], atol=1e-5)
 
 
 def test_projection_project() -> None:
