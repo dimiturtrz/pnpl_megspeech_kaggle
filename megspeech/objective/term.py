@@ -88,6 +88,8 @@ class DistilledTerm(ContextTerm):
     y: Int[Tensor, " n"] = field(kw_only=True)
     share: float = field(kw_only=True)
     temperature: float = field(default=1.0, kw_only=True)
+    unlabelled: bool = field(default=False, kw_only=True)
+    """Also match the teacher on the words outside the 50, which carry no label but do carry its distribution."""
 
     @override
     def labels(self, split: Split) -> Int[Tensor, " n"]:
@@ -102,7 +104,7 @@ class DistilledTerm(ContextTerm):
         rows = target.clamp(min=0)
         y = torch.where(target == IGNORE, IGNORE, self.y[rows])
         hard = super().unweighted(head, output, y)
-        keep = (y != IGNORE).float()
+        keep = (target != IGNORE if self.unlabelled else y != IGNORE).float()
         teacher = (self.taught[rows].float() / self.temperature).log_softmax(-1)
         student = (output.float() / self.temperature).log_softmax(-1)
         kl = (teacher.exp() * (teacher - student)).sum(-1) * self.temperature**2

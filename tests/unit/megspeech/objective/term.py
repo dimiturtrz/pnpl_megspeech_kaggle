@@ -118,6 +118,18 @@ def test_distilled_term_temperature() -> None:
     assert not torch.allclose(warm.unweighted(nn.Identity(), logits(), rows), cold)
 
 
+def test_distilled_term_unlabelled() -> None:
+    """Only with `unlabelled` does a word without a label, where the teacher disagrees, add to the KL."""
+    rows = torch.tensor([[0, 1], [IGNORE, 2]])
+    taught = logits()[[0, 0, 1], [0, 1, 1]].log_softmax(-1)
+    taught[2] = 0.0
+    y = torch.tensor([3, 7, IGNORE])
+    labelled = DistilledTerm(0.0, None, taught=taught, y=y, share=1.0)
+    everywhere = DistilledTerm(0.0, None, taught=taught, y=y, share=1.0, unlabelled=True)
+    assert torch.allclose(labelled.unweighted(nn.Identity(), logits(), rows), torch.zeros(()), atol=1e-6)
+    assert everywhere.unweighted(nn.Identity(), logits(), rows) > 1.0
+
+
 def test_word_term_unweighted() -> None:
     """The word term is the plain softmax over every span position."""
     word = WordTerm(0.1, None).unweighted(nn.Identity(), logits(), Y)

@@ -76,6 +76,9 @@ class OptimConfig:
     temperature: float = 1.0
     """Temperature both the teacher's and the student's distributions are softened by in the KL; read only with a
     teacher."""
+    unlabelled: bool = False
+    """Distil on every training word in a span, the ~60% outside the 50 too, not only the labelled; read only with a
+    teacher."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
     pretrained: float = 0.1
