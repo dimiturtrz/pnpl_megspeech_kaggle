@@ -186,6 +186,8 @@ def test_reading() -> None:
     at = torch.tensor([0])
     windows = DataConfig(window=2.0, lead=0.1, baseline=0.5).reading(Windows(torch.zeros(1, 10), at, at))
     assert (windows.length, windows.offset, windows.baseline) == (2 * RATE + 5, -5, round(0.5 * RATE))
+    delayed = DataConfig(window=0.2, delay=0.2).reading(Windows(torch.zeros(1, 10), at, at))
+    assert (delayed.length, delayed.offset) == (round(0.2 * RATE), round(0.2 * RATE))
 
 
 def test_rate() -> None:
@@ -280,7 +282,7 @@ def test_shared(tmp_path: Path) -> None:
     assert DataConfig.shared([record(tmp_path / "fast", {"data": {"decimate": 2}})], Grouping.SENTENCE).decimate == 2
     led = record(tmp_path / "led", {"data": {"lead": 0.1}})
     assert DataConfig.shared([led], Grouping.SENTENCE).lead == 0.1
-    differing = r"False, 1.0, False, 0, 0.0, False, 0.0, 0.0, 5, .*False, 2.0, "
+    differing = r"False, 1.0, False, 0, 0.0, False, 0.0, 0.0, 0.0, 5, .*False, 2.0, "
     with pytest.raises(ValueError, match=differing):
         DataConfig.shared([one, two], Grouping.SENTENCE)
     with pytest.raises(ValueError, match="an ensemble needs one"):
@@ -297,6 +299,7 @@ def test_shared(tmp_path: Path) -> None:
         ("repeat_power", 0.5),
         ("tasks", ["Sherlock1"]),
         ("subspace", True),
+        ("delay", 0.2),
     ],
 )
 def test_shared_reading(tmp_path: Path, field: str, value: object) -> None:

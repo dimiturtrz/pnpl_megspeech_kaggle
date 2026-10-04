@@ -79,6 +79,8 @@ class DataConfig:
     lead: float = 0.0
     """Seconds of MEG before each word's onset, read ahead of its `window`: never before its sentence's first onset,
     as a Kaggle test sentence epoch starts there."""
+    delay: float = 0.0
+    """Seconds after each word's onset its `window` starts: 0.2 reads the recognition stage past the acoustic one."""
     decimate: int = DECIMATE
     """The 250 Hz recordings' decimation factor: which continuous cache training reads (`RunCache.under`)."""
     folds: int = 1
@@ -144,10 +146,11 @@ class DataConfig:
         return self.to_samples(self.window)
 
     def reading(self, windows: Windows) -> Windows:
-        """`windows` cut as this config reads them: `lead` before each onset, `window` after it, centred on
-        `baseline` (0 centres on the whole window)."""
+        """`windows` cut as this config reads them: `lead` before each onset, `window` from `delay` after it, centred
+        on `baseline` (0 centres on the whole window)."""
         lead = self.to_samples(self.lead)
-        return replace(windows, length=self.samples + lead, offset=-lead, baseline=self.to_samples(self.baseline))
+        offset = self.to_samples(self.delay) - lead
+        return replace(windows, length=self.samples + lead, offset=offset, baseline=self.to_samples(self.baseline))
 
     @property
     def recoloured(self) -> bool:
