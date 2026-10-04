@@ -25,9 +25,12 @@ LOG = logging.getLogger(__name__)
 def main() -> None:
     """Train, write metrics + checkpoint + holdout submission under models/pnpl_libribrain/<name>."""
     origin = argparse.ArgumentParser(add_help=False)
-    origin.add_argument("--origin", help="a run whose recorded config the flags start from")
-    known, _ = origin.parse_known_args()
-    saved = RunConfig.saved(DataRoot.from_config().models() / known.origin) if known.origin else None
+    origin.add_argument("--origin", help="a run whose recorded config the flags start from (default: the warm run)")
+    warm = argparse.ArgumentParser(add_help=False, parents=[origin])
+    warm.add_argument("--optim.warm", dest="warm", default="")
+    known, _ = warm.parse_known_args()
+    start = known.origin or known.warm
+    saved = RunConfig.saved(DataRoot.from_config().models() / start) if start else None
     tree = Tree(RunConfig, saved)
     parser = argparse.ArgumentParser(description=__doc__, parents=[origin])
     parser.add_argument("--name", required=True)

@@ -43,6 +43,14 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert (out / "model.pt").is_file()
     assert (out / "hits.pt").is_file()
     assert written == [out / "submission.csv"]
+    narrow = ["--context.width", "32", "--context.conv.hidden", "32"]
+    monkeypatch.setattr(sys, "argv", [*argv[:2], "base", *argv[3:], *narrow])
+    main()
+    monkeypatch.setattr(sys, "argv", [*argv[:2], "tuned", *argv[3:], "--optim.warm", "base"])
+    main()
+    tuned = json.loads((DataRoot(tmp_path).models() / "tuned" / METRICS).read_text())["config"]
+    assert tuned["context"]["width"] == 32
+    assert tuned["optim"]["warm"] == "base"
     monkeypatch.setattr(sys, "argv", ["train", "--help"])
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: pytest.fail("help read paths.yaml")))
     with pytest.raises(SystemExit):
