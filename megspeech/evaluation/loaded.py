@@ -1,26 +1,22 @@
 """A trained model, or several averaged as one, loaded to score as their training scored them."""
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields
 
 import numpy as np
-import pandas as pd
 import torch
 from jaxtyping import Float
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.data.batching.split import Features, Split
-from megspeech.data.cache.alignment import AS_RECORDED, Geometry
-from megspeech.data.cache.run_cache import DeviceRecording
+from megspeech.data.batching.split import Split
 from megspeech.data.config import DataConfig
-from megspeech.data.corpus import Corpus
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import Grouping
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.metric.ruler import Graded
+from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Epoch, Head, Score, SelectionConfig
-from megspeech.evaluation.text import RULER, Text
 from megspeech.model.ensemble import Ensemble
 from megspeech.model.input.lowpass import LowPass
 from megspeech.model.input.subjects import AS_TRAINED, Fallback, Reading, SubjectLayer
@@ -53,20 +49,14 @@ class Scoring:
     selected on, so a split model reads on the same scale as they did (megspeech-7gf.81)."""
 
 
-@dataclass(frozen=True)
-class LoadedModel:
+@dataclass(frozen=True, kw_only=True)
+class LoadedModel(Reader):
     """Trained runs averaged as one model, with the prior and evaluator their training scored them by."""
 
-    root: DataRoot
     model: nn.Module
-    data: DataConfig
     evaluator: Evaluator
     log_prior: Float[Tensor, " v"]
-    reading: Reading = Reading.OWN
     names: tuple[str, ...] = ()
-    geometry: Geometry = AS_RECORDED
-    partition: Partition = Partition.VALIDATION
-    official: bool = False
 
     @classmethod
     def of(cls, root: DataRoot, names: list[str], scoring: Scoring, device: torch.device) -> "LoadedModel":
@@ -79,57 +69,24 @@ class LoadedModel:
             layer.shrink(scoring.fallback.keep, scoring.fallback.unseen)
         data = DataConfig.shared(directories, scoring.grouping)
         model = LowPass(model, data.rate, scoring.lowpass) if scoring.lowpass else model
-        heard = Corpus.heard(data.run_cache(root), Run.everywhere(root), data)
+        geometry = data.geometry(root, device, aligned=scoring.aligned)
+        reader = Reader(root, data, device, scoring.reading, geometry, scoring.partition, scoring.official)
+        sequences, prior = reader.heard()
         evaluator = Evaluator(
             device,
-            Corpus.sequences(heard, scoring.grouping),
+            sequences,
             SelectionConfig.shared(directories).min_novel,
             balance=scoring.balance,
             shifts=scoring.shifts,
             adapted=scoring.adapted,
         )
-        prior = Corpus.prior(heard, data).to(device)
-        geometry = data.geometry(root, device, aligned=scoring.aligned)
-        named = tuple(d.name for d in directories)
         return cls(
-            root, model, data, evaluator, prior, scoring.reading, named, geometry, scoring.partition, scoring.official
+            **{field.name: getattr(reader, field.name) for field in fields(Reader)},
+            model=model,
+            evaluator=evaluator,
+            log_prior=prior,
+            names=tuple(d.name for d in directories),
         )
-
-    def load(self, runs: list[Run]) -> tuple[DeviceRecording, pd.DataFrame]:
-        """`runs` on the device, and their words keyed by `Text` and cut as the model's grouping cuts them."""
-        cache = self.data.run_cache(self.root)
-        names = [run.name for run in runs]
-        source = DeviceRecording.load(
-            cache, self.evaluator.device, names, standardised=self.data.standardised, geometry=self.geometry
-        )
-        return source, Corpus.words(Text.of(source.words).words, self.data.grouping, self.data.rate)
-
-    @property
-    def features(self) -> Features:
-        """What the model reads in place of MEG windows, if it trained on saved features."""
-        return Features.under(self.root, self.data.features)
-
-    def read(self, name: str, split: Split) -> Split:
-        """`split` as the model reads it: `name`'s saved features if it trained on them, each word presented as
-        `reading`'s subject."""
-        split = self.features.split(name, split)
-        return replace(split, subject=self.reading.subjects(split.subject))
-
-    def splits(self, runs: list[Run]) -> dict[Run, tuple[pd.DataFrame, Split]]:
-        """Each of `runs`, loaded together: its words and its split as the model reads it."""
-        source, words = self.load(runs)
-        rows = {run: words[words["run"] == run.name] for run in runs}
-        return {
-            run: (part, self.read(run.name, Corpus.split(source, part, self.data, np.ones(len(part)))))
-            for run, part in rows.items()
-        }
-
-    def domains(self, held: dict[str, list[Run]]) -> tuple[dict[str, Split], pd.DataFrame]:
-        """Subject 0's validation domains as the model reads them, and the ruler domain's words in its split's order."""
-        source, words = self.load([run for group in held.values() for run in group])
-        ruler = words[words["run"].isin([run.name for run in held.get(RULER, [])])]
-        domains = Corpus.domains(source, words, held, self.data)
-        return {name: self.read(name, split) for name, split in domains.items()}, ruler
 
     def context(self, split: Split) -> Float[Tensor, "n v"]:
         return self.evaluator.logits(self.model, split)[Head.CONTEXT]
@@ -143,11 +100,6 @@ class LoadedModel:
         """The context head on `run`'s unseen-span words, read from its own MEG."""
         _, split = self.splits([run])[run]
         return self.evaluator.unseen(self.context(split), split, self.log_prior)
-
-    def ruled(self, runs: list[Run]) -> dict[str, list[Run]]:
-        """The domains of `runs` scored: the partition's, under the split the model trained on or the official one."""
-        data = self.data.official_split if self.official else self.data
-        return data.ruled(runs, self.partition)
 
     def report(self, runs: list[Run]) -> Epoch:
         """Every domain of `runs` in the scored partition, scored alone, and the macro that selects."""

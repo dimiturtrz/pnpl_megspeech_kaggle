@@ -60,7 +60,15 @@ def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(KaggleCache, "of", Cache.of)
     monkeypatch.setattr(module, "write_submission", lambda path, _, p, s: written.update(p=p, s=s) or path)
     data = DataConfig(window=2.0, standardised=True)
-    loaded = LoadedModel(DataRoot(tmp_path), Favourite(), data, Evaluator(CPU), torch.zeros(VOCAB_SIZE), Reading.UNSEEN)
+    loaded = LoadedModel(
+        DataRoot(tmp_path),
+        data,
+        CPU,
+        Reading.UNSEEN,
+        model=Favourite(),
+        evaluator=Evaluator(CPU),
+        log_prior=torch.zeros(VOCAB_SIZE),
+    )
     assert KaggleWriter(Track.BROAD).write(loaded, 0.5, tmp_path / "s.csv") == tmp_path / "s.csv"
     assert (tracks, Cache.standardised, Cache.geometry) == ([Track.BROAD], [True], [AS_RECORDED])
     assert written["p"].shape == (3, VOCAB_SIZE)

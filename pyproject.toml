@@ -25,6 +25,7 @@ dependencies = [
     "osfclient>=0.0.5",
     "spacy>=3.8.16",
     "en-core-web-sm",
+    "scikit-learn>=1.9.1",
 ]
 
 [project.optional-dependencies]

@@ -53,7 +53,15 @@ def main() -> None:
     LOG.info("best %s", best)
     evaluator = trainer.evaluator
     evaluator.graded(model, validation, log_prior, best.tau).save(out / "hits.pt")
-    loaded = LoadedModel(root, model, config.data, evaluator, log_prior, geometry=corpus.geometry)
+    loaded = LoadedModel(
+        root,
+        config.data,
+        evaluator.device,
+        geometry=corpus.geometry,
+        model=model,
+        evaluator=evaluator,
+        log_prior=log_prior,
+    )
     KaggleWriter(Track.DEEP).write(loaded, best.tau, out / "submission.csv")
 
 

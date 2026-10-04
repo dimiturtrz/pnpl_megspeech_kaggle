@@ -86,7 +86,7 @@ class AlignedSubjects:
         pooled = Run.pooled(runs)
         trained = {run.subject: run for run in runs if run.key == RELIABILITY_RUN}
         aligned = [cls.aligned(loaded, reference, run, trained[run.subject]) for run in pooled]
-        reliability = torch.tensor([bacc for *_, bacc in aligned], device=loaded.evaluator.device)
+        reliability = torch.tensor([bacc for *_, bacc in aligned], device=loaded.device)
         LOG.info(
             "reliability %s", {run.subject: round(float(r), 4) for run, r in zip(pooled, reliability, strict=True)}
         )

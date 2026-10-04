@@ -7,11 +7,9 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
-from pnpl.competition.holdout import N_SUBJECTS
 from torch import nn
 
 from core.paths import DataRoot
-from megspeech.data.batching.split import FEATURES
 from megspeech.data.cache.run_cache import WORD_TABLE as TABLE
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.constants import CHANNELS
@@ -19,6 +17,7 @@ from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation import loaded as module
+from megspeech.evaluation import reader as reader_module
 from megspeech.evaluation.loaded import LoadedModel, Scoring
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.metric.ruler import Ruler
@@ -65,7 +64,15 @@ def runs(tmp_path: Path) -> list[Run]:
 
 def loaded(tmp_path: Path, reading: Reading = Reading.OWN) -> LoadedModel:
     evaluator = Evaluator(CPU, min_novel=1)
-    return LoadedModel(DataRoot(tmp_path), Favourite(), DataConfig(), evaluator, torch.zeros(VOCAB_SIZE), reading)
+    return LoadedModel(
+        DataRoot(tmp_path),
+        DataConfig(),
+        CPU,
+        reading,
+        model=Favourite(),
+        evaluator=evaluator,
+        log_prior=torch.zeros(VOCAB_SIZE),
+    )
 
 
 def members(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selections: dict[str, int]) -> None:
@@ -73,8 +80,8 @@ def members(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selections: dict[st
     heard = pd.DataFrame(
         {"run": "r", "sentence": 0, "onset": [0.0, 0.1], "target": [0, 1], "token": [7, 8], "weight": 1.0}
     )
-    monkeypatch.setattr(module.Corpus, "heard", classmethod(lambda *_: heard))
-    monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: []))
+    monkeypatch.setattr(reader_module.Corpus, "heard", classmethod(lambda *_: heard))
+    monkeypatch.setattr(reader_module.Run, "discover", classmethod(lambda *_: []))
     monkeypatch.setattr(module.Ensemble, "load", classmethod(lambda *_: Favourite()))
     for name, min_novel in selections.items():
         directory = DataRoot(tmp_path).models() / name
@@ -99,48 +106,6 @@ def test_loaded_model_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         LoadedModel.of(DataRoot(tmp_path), ["b", "c"], scoring, CPU)
 
 
-def test_load(tmp_path: Path) -> None:
-    source, words = loaded(tmp_path).load(runs(tmp_path)[POOLED:TESTED])
-    assert source.names == NAMES[POOLED:TESTED]
-    assert words["position"].tolist() == [0, 1, 2, 0, 1, 2] * 2
-
-
-def test_features(tmp_path: Path) -> None:
-    assert loaded(tmp_path).features.directory is None
-    frozen = replace(loaded(tmp_path), data=DataConfig(features="frozen"))
-    assert frozen.features.directory == DataRoot(tmp_path).kind("models") / FEATURES / "frozen"
-
-
-def test_splits(tmp_path: Path) -> None:
-    every = runs(tmp_path)
-    splits = loaded(tmp_path, Reading.UNSEEN).splits(every[POOLED:TESTED])
-    assert list(splits) == every[POOLED:TESTED]
-    rows, split = splits[every[POOLED]]
-    assert (rows["run"] == NAMES[POOLED]).all()
-    assert split.subject.tolist() == [N_SUBJECTS] * len(SPOKEN)
-
-
-def test_read(tmp_path: Path) -> None:
-    """A run reads its MEG windows as `reading`'s subject, or fails loudly where a features model has none saved."""
-    every = runs(tmp_path)
-    (_, split), *_ = loaded(tmp_path).splits(every[POOLED : POOLED + 1]).values()
-    assert loaded(tmp_path).read(NAMES[POOLED], split).subject.tolist() == [1] * len(SPOKEN)
-    assert loaded(tmp_path, Reading.UNSEEN).read(NAMES[POOLED], split).subject.tolist() == [N_SUBJECTS] * len(SPOKEN)
-    with pytest.raises(FileNotFoundError):
-        replace(loaded(tmp_path), data=DataConfig(features="frozen")).read(NAMES[POOLED], split)
-
-
-def test_domains(tmp_path: Path) -> None:
-    every = runs(tmp_path)
-    domains, reference = loaded(tmp_path).domains({RULER: every[:1], "TheMoth": every[1:2]})
-    assert set(domains) == {RULER, "TheMoth"}
-    assert (reference["run"] == NAMES[0]).all()
-    assert len(reference) == len(domains[RULER].y)
-    unruled, empty = loaded(tmp_path).domains({"TheMoth": every[1:2]})
-    assert set(unruled) == {"TheMoth"}
-    assert empty.empty
-
-
 def test_context(tmp_path: Path) -> None:
     domains, _ = loaded(tmp_path).domains({RULER: runs(tmp_path)[:1]})
     assert loaded(tmp_path).context(domains[RULER]).argmax(dim=1).tolist() == [0] * len(SPOKEN)
@@ -157,13 +122,6 @@ def test_unseen(tmp_path: Path) -> None:
     """Every word of the pooled run is novel to a model that saw no orders."""
     score = loaded(tmp_path).unseen(runs(tmp_path)[POOLED])
     assert (score.n, score.bacc10) == (len(SPOKEN), pytest.approx(0.0))
-
-
-def test_ruled(tmp_path: Path) -> None:
-    """A split model scores its own split's domains, or the official partition's when `official`."""
-    every, split = runs(tmp_path), replace(loaded(tmp_path), data=DataConfig(share=0.1))
-    assert split.ruled(every) == DataConfig(share=0.1).ruled(every, Partition.VALIDATION)
-    assert replace(split, official=True).ruled(every) == DataConfig().ruled(every, Partition.VALIDATION)
 
 
 def test_report(tmp_path: Path) -> None:
