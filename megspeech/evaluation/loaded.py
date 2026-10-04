@@ -48,6 +48,9 @@ class Scoring:
     partition: Partition = Partition.VALIDATION
     """The labelled partition scored (`DataConfig.ruled`): validation selects; test only reports, once, on a model
     already chosen (megspeech-7gf.81)."""
+    official: bool = False
+    """Score only the official partition's runs (`share` 0): the ruler every model before the 80/10/10 split was
+    selected on, so a split model reads on the same scale as they did (megspeech-7gf.81)."""
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,7 @@ class LoadedModel:
     names: tuple[str, ...] = ()
     geometry: Geometry = AS_RECORDED
     partition: Partition = Partition.VALIDATION
+    official: bool = False
 
     @classmethod
     def of(cls, root: DataRoot, names: list[str], scoring: Scoring, device: torch.device) -> "LoadedModel":
@@ -87,7 +91,9 @@ class LoadedModel:
         prior = Corpus.prior(heard, data).to(device)
         geometry = data.geometry(root, device, aligned=scoring.aligned)
         named = tuple(d.name for d in directories)
-        return cls(root, model, data, evaluator, prior, scoring.reading, named, geometry, scoring.partition)
+        return cls(
+            root, model, data, evaluator, prior, scoring.reading, named, geometry, scoring.partition, scoring.official
+        )
 
     def load(self, runs: list[Run]) -> tuple[DeviceRecording, pd.DataFrame]:
         """`runs` on the device, and their words keyed by `Text` and cut as the model's grouping cuts them."""
@@ -138,14 +144,19 @@ class LoadedModel:
         _, split = self.splits([run])[run]
         return self.evaluator.unseen(self.context(split), split, self.log_prior)
 
+    def ruled(self, runs: list[Run]) -> dict[str, list[Run]]:
+        """The domains of `runs` scored: the partition's, under the split the model trained on or the official one."""
+        data = replace(self.data, share=0.0) if self.official else self.data
+        return data.ruled(runs, self.partition)
+
     def report(self, runs: list[Run]) -> Epoch:
         """Every domain of `runs` in the scored partition, scored alone, and the macro that selects."""
-        domains, _ = self.domains(self.data.ruled(runs, self.partition))
+        domains, _ = self.domains(self.ruled(runs))
         return self.evaluator.report(self.model, domains, self.log_prior, 0, 0.0)
 
     def graded(self, runs: list[Run], tau: float) -> Graded:
         """Every counted domain of `runs` in the scored partition: its unseen-span words' hits at `tau`."""
-        domains, _ = self.domains(self.data.ruled(runs, self.partition))
+        domains, _ = self.domains(self.ruled(runs))
         return self.evaluator.graded(self.model, domains, self.log_prior, tau)
 
     def probabilities(self, split: Split, tau: float) -> Float[np.ndarray, "n v"]:

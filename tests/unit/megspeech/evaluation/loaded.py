@@ -159,6 +159,13 @@ def test_unseen(tmp_path: Path) -> None:
     assert (score.n, score.bacc10) == (len(SPOKEN), pytest.approx(0.0))
 
 
+def test_ruled(tmp_path: Path) -> None:
+    """A split model scores its own split's domains, or the official partition's when `official`."""
+    every, split = runs(tmp_path), replace(loaded(tmp_path), data=DataConfig(share=0.1))
+    assert split.ruled(every) == DataConfig(share=0.1).ruled(every, Partition.VALIDATION)
+    assert replace(split, official=True).ruled(every) == DataConfig().ruled(every, Partition.VALIDATION)
+
+
 def test_report(tmp_path: Path) -> None:
     report = loaded(tmp_path).report(runs(tmp_path))
     assert RULER in report.domains
