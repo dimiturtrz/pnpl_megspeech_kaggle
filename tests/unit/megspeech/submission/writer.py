@@ -6,10 +6,9 @@ import pytest
 import torch
 
 from core.paths import DataRoot
-from megspeech.data import config as data_config
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.alignment import AS_RECORDED
-from megspeech.data.cache.kaggle import Track
+from megspeech.data.cache.kaggle import KaggleCache, Track
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import SECONDARY, VOCAB_SIZE
@@ -58,7 +57,7 @@ def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tracks: list[Track] = []
     written: dict[str, np.ndarray] = {}
     monkeypatch.setattr(module.Track, "kaggle", lambda track, _: tracks.append(track) or Kaggle())
-    monkeypatch.setattr(data_config, "KaggleCache", Cache)
+    monkeypatch.setattr(KaggleCache, "of", Cache.of)
     monkeypatch.setattr(module, "write_submission", lambda path, _, p, s: written.update(p=p, s=s) or path)
     data = DataConfig(window=2.0, standardised=True)
     loaded = LoadedModel(DataRoot(tmp_path), Favourite(), data, Evaluator(CPU), torch.zeros(VOCAB_SIZE), Reading.UNSEEN)

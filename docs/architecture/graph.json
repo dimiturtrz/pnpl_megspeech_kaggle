@@ -153,12 +153,6 @@
     {
       "kind": "import",
       "source": "megspeech.data.config",
-      "target": "megspeech.data.cache.kaggle",
-      "weight": 1
-    },
-    {
-      "kind": "import",
-      "source": "megspeech.data.config",
       "target": "megspeech.data.cache.run_cache",
       "weight": 1
     },
@@ -178,6 +172,12 @@
       "kind": "import",
       "source": "megspeech.data.config",
       "target": "megspeech.data.spans.spans",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.config",
+      "target": "megspeech.data.stratify",
       "weight": 1
     },
     {
@@ -202,6 +202,12 @@
       "kind": "import",
       "source": "megspeech.data.corpus",
       "target": "megspeech.data.cache.alignment",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.corpus",
+      "target": "megspeech.data.cache.kaggle",
       "weight": 1
     },
     {
@@ -298,6 +304,24 @@
       "kind": "import",
       "source": "megspeech.data.spans.spans",
       "target": "megspeech.data.labels.vocabulary",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.stratify",
+      "target": "megspeech.data.cache.run_cache",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.stratify",
+      "target": "megspeech.data.labels.vocabulary",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.stratify",
+      "target": "megspeech.data.raw.runs",
       "weight": 1
     },
     {
@@ -1288,6 +1312,12 @@
       "kind": "import",
       "source": "megspeech.submission.writer",
       "target": "megspeech.data.cache.kaggle",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.submission.writer",
+      "target": "megspeech.data.corpus",
       "weight": 1
     },
     {
@@ -2469,12 +2499,6 @@
     {
       "kind": "references",
       "source": "megspeech.data.config.DataConfig",
-      "target": "megspeech.data.cache.kaggle.Track",
-      "weight": 1
-    },
-    {
-      "kind": "references",
-      "source": "megspeech.data.config.DataConfig",
       "target": "megspeech.data.cache.run_cache.RunCache",
       "weight": 1
     },
@@ -2534,12 +2558,6 @@
     },
     {
       "kind": "calls",
-      "source": "megspeech.data.config.DataConfig.dealt",
-      "target": "megspeech.data.config.DataConfig.source",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
       "source": "megspeech.data.config.DataConfig.domain",
       "target": "megspeech.data.config.DataConfig.stratum",
       "weight": 1
@@ -2582,18 +2600,6 @@
     },
     {
       "kind": "calls",
-      "source": "megspeech.data.config.DataConfig.kaggle",
-      "target": "megspeech.data.cache.kaggle.KaggleCache.of",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.data.config.DataConfig.kaggle",
-      "target": "megspeech.data.config.DataConfig.reading",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
       "source": "megspeech.data.config.DataConfig.reading",
       "target": "megspeech.data.config.DataConfig.to_samples",
       "weight": 1
@@ -2631,19 +2637,25 @@
     {
       "kind": "calls",
       "source": "megspeech.data.config.DataConfig.scored",
-      "target": "megspeech.data.config.DataConfig.dealt",
+      "target": "megspeech.data.config.DataConfig.domain",
       "weight": 1
     },
     {
       "kind": "calls",
       "source": "megspeech.data.config.DataConfig.scored",
-      "target": "megspeech.data.config.DataConfig.domain",
+      "target": "megspeech.data.config.DataConfig.split",
       "weight": 1
     },
     {
       "kind": "calls",
       "source": "megspeech.data.config.DataConfig.source",
       "target": "megspeech.data.config.DataConfig.stratum",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.config.DataConfig.split",
+      "target": "megspeech.data.config.DataConfig.source",
       "weight": 1
     },
     {
@@ -2655,13 +2667,13 @@
     {
       "kind": "calls",
       "source": "megspeech.data.config.DataConfig.trained",
-      "target": "megspeech.data.config.DataConfig.dealt",
+      "target": "megspeech.data.config.DataConfig.extras",
       "weight": 1
     },
     {
       "kind": "calls",
       "source": "megspeech.data.config.DataConfig.trained",
-      "target": "megspeech.data.config.DataConfig.extras",
+      "target": "megspeech.data.config.DataConfig.split",
       "weight": 1
     },
     {
@@ -2689,9 +2701,21 @@
       "weight": 1
     },
     {
+      "kind": "references",
+      "source": "megspeech.data.corpus.Corpus",
+      "target": "megspeech.data.batching.windows.Windows",
+      "weight": 1
+    },
+    {
       "kind": "holds",
       "source": "megspeech.data.corpus.Corpus",
       "target": "megspeech.data.cache.alignment.Geometry",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.data.corpus.Corpus",
+      "target": "megspeech.data.cache.kaggle.Track",
       "weight": 1
     },
     {
@@ -2746,6 +2770,18 @@
       "kind": "calls",
       "source": "megspeech.data.corpus.Corpus.heard",
       "target": "megspeech.data.config.DataConfig.weight",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.corpus.Corpus.kaggle",
+      "target": "megspeech.data.cache.kaggle.KaggleCache.of",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.corpus.Corpus.kaggle",
+      "target": "megspeech.data.config.DataConfig.reading",
       "weight": 1
     },
     {
@@ -3205,6 +3241,18 @@
       "weight": 1
     },
     {
+      "kind": "references",
+      "source": "megspeech.data.stratify.Stratify",
+      "target": "megspeech.data.raw.runs.Run",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.stratify.Stratify.profile",
+      "target": "megspeech.data.cache.run_cache.RunCache.words",
+      "weight": 1
+    },
+    {
       "kind": "holds",
       "source": "megspeech.evaluation.loaded.LoadedModel",
       "target": "core.paths.DataRoot",
@@ -3327,13 +3375,13 @@
     {
       "kind": "calls",
       "source": "megspeech.evaluation.loaded.LoadedModel.graded",
-      "target": "megspeech.data.config.DataConfig.ruled",
+      "target": "megspeech.evaluation.loaded.LoadedModel.domains",
       "weight": 1
     },
     {
       "kind": "calls",
       "source": "megspeech.evaluation.loaded.LoadedModel.graded",
-      "target": "megspeech.evaluation.loaded.LoadedModel.domains",
+      "target": "megspeech.evaluation.loaded.LoadedModel.ruled",
       "weight": 1
     },
     {
@@ -3477,13 +3525,13 @@
     {
       "kind": "calls",
       "source": "megspeech.evaluation.loaded.LoadedModel.report",
-      "target": "megspeech.data.config.DataConfig.ruled",
+      "target": "megspeech.evaluation.loaded.LoadedModel.domains",
       "weight": 1
     },
     {
       "kind": "calls",
       "source": "megspeech.evaluation.loaded.LoadedModel.report",
-      "target": "megspeech.evaluation.loaded.LoadedModel.domains",
+      "target": "megspeech.evaluation.loaded.LoadedModel.ruled",
       "weight": 1
     },
     {
@@ -4540,6 +4588,12 @@
       "kind": "calls",
       "source": "megspeech.features.extract.Export.of",
       "target": "megspeech.data.batching.split.Split.from_kaggle",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.features.extract.Export.of",
+      "target": "megspeech.data.corpus.Corpus.kaggle",
       "weight": 1
     },
     {
@@ -5991,6 +6045,12 @@
     {
       "kind": "calls",
       "source": "megspeech.submission.writer.KaggleWriter.write",
+      "target": "megspeech.data.corpus.Corpus.kaggle",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.submission.writer.KaggleWriter.write",
       "target": "megspeech.evaluation.loaded.LoadedModel.probabilities",
       "weight": 1
     },
@@ -6959,7 +7019,7 @@
       "role": null
     },
     {
-      "descendants": 100,
+      "descendants": 101,
       "id": "megspeech",
       "label": "megspeech",
       "level": "module",
@@ -6967,7 +7027,7 @@
       "role": null
     },
     {
-      "descendants": 20,
+      "descendants": 21,
       "id": "megspeech.data",
       "label": "data",
       "level": "module",
@@ -7132,6 +7192,14 @@
       "label": "spans",
       "level": "module",
       "parent": "megspeech.data.spans",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.stratify",
+      "label": "stratify",
+      "level": "module",
+      "parent": "megspeech.data",
       "role": null
     },
     {
@@ -8085,6 +8153,14 @@
       "level": "class",
       "parent": "megspeech.data.spans.spans",
       "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.stratify.Stratify",
+      "label": "Stratify",
+      "level": "class",
+      "parent": "megspeech.data.stratify",
+      "role": "primary"
     },
     {
       "descendants": 0,
@@ -9960,14 +10036,6 @@
     },
     {
       "descendants": 0,
-      "id": "megspeech.data.config.DataConfig.dealt",
-      "label": "dealt",
-      "level": "method",
-      "parent": "megspeech.data.config.DataConfig",
-      "role": null
-    },
-    {
-      "descendants": 0,
       "id": "megspeech.data.config.DataConfig.domain",
       "label": "domain",
       "level": "method",
@@ -9994,14 +10062,6 @@
       "descendants": 0,
       "id": "megspeech.data.config.DataConfig.held",
       "label": "held",
-      "level": "method",
-      "parent": "megspeech.data.config.DataConfig",
-      "role": null
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.data.config.DataConfig.kaggle",
-      "label": "kaggle",
       "level": "method",
       "parent": "megspeech.data.config.DataConfig",
       "role": null
@@ -10088,8 +10148,24 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.config.DataConfig.split",
+      "label": "split",
+      "level": "method",
+      "parent": "megspeech.data.config.DataConfig",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.data.config.DataConfig.stratum",
       "label": "stratum",
+      "level": "method",
+      "parent": "megspeech.data.config.DataConfig",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.config.DataConfig.strided",
+      "label": "strided",
       "level": "method",
       "parent": "megspeech.data.config.DataConfig",
       "role": null
@@ -10146,6 +10222,14 @@
       "descendants": 0,
       "id": "megspeech.data.corpus.Corpus.heard",
       "label": "heard",
+      "level": "method",
+      "parent": "megspeech.data.corpus.Corpus",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.corpus.Corpus.kaggle",
+      "label": "kaggle",
       "level": "method",
       "parent": "megspeech.data.corpus.Corpus",
       "role": null
@@ -10704,6 +10788,54 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.stratify.Stratify.cost",
+      "label": "cost",
+      "level": "method",
+      "parent": "megspeech.data.stratify.Stratify",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.stratify.Stratify.gaps",
+      "label": "gaps",
+      "level": "method",
+      "parent": "megspeech.data.stratify.Stratify",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.stratify.Stratify.profile",
+      "label": "profile",
+      "level": "method",
+      "parent": "megspeech.data.stratify.Stratify",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.stratify.Stratify.search",
+      "label": "search",
+      "level": "method",
+      "parent": "megspeech.data.stratify.Stratify",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.stratify.Stratify.split",
+      "label": "split",
+      "level": "method",
+      "parent": "megspeech.data.stratify.Stratify",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.stratify.Stratify.totals",
+      "label": "totals",
+      "level": "method",
+      "parent": "megspeech.data.stratify.Stratify",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.evaluation.loaded.LoadedModel.context",
       "label": "context",
       "level": "method",
@@ -10778,6 +10910,14 @@
       "descendants": 0,
       "id": "megspeech.evaluation.loaded.LoadedModel.report",
       "label": "report",
+      "level": "method",
+      "parent": "megspeech.evaluation.loaded.LoadedModel",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.evaluation.loaded.LoadedModel.ruled",
+      "label": "ruled",
       "level": "method",
       "parent": "megspeech.evaluation.loaded.LoadedModel",
       "role": null

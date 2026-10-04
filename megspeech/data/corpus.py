@@ -15,6 +15,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import TRAIN, Features, SpanText, Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.alignment import AS_RECORDED, Geometry
+from megspeech.data.cache.kaggle import KaggleCache, Track
 from megspeech.data.cache.run_cache import DeviceRecording, RunCache
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import RATE
@@ -64,6 +65,16 @@ class Corpus:
         if len(positions) != len(train.y):
             raise ValueError(f"{len(positions)} train positions against {len(train.y)} train words")
         return cls(train, validation, cls.sequences(heard, data.grouping), positions, geometry)
+
+    @staticmethod
+    def kaggle(
+        root: DataRoot, data: DataConfig, track: Track, device: torch.device | str, geometry: Geometry = AS_RECORDED
+    ) -> Windows:
+        """`track`'s Kaggle test windows as `data` reads them, its cache built first if missing, every archive loaded
+        in `geometry`."""
+        cache = KaggleCache.of(root, data.decimate, track, data.cleaning)
+        cache.build()
+        return data.reading(cache.windows(device, data.samples, standardised=data.standardised, geometry=geometry))
 
     @staticmethod
     def words(table: pd.DataFrame, grouping: Grouping, rate: float = RATE) -> pd.DataFrame:

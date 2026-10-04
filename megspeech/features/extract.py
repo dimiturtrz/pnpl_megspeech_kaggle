@@ -229,7 +229,7 @@ class Export:
             raise ValueError("features are extracted from the 306 sensors; a subspace config keeps its components")
         meg = replace(data, features="")
         track = Track.DEEP
-        kaggle = Split.from_kaggle(track.kaggle(root.raw()), meg.kaggle(root, track, device))
+        kaggle = Split.from_kaggle(track.kaggle(root.raw()), Corpus.kaggle(root, meg, track, device))
         return cls(Corpus.load(meg, root, device), kaggle, Features.under(root, name))
 
     def splits(self) -> dict[str, Split]:

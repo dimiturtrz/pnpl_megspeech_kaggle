@@ -6,7 +6,8 @@ import pandas as pd
 import pytest
 import torch
 
-from core.paths import DataRoot
+from core.paths import ENV_OVERRIDE, DataRoot
+from megspeech.data.cache.kaggle import Track
 from megspeech.data.cache.run_cache import DIRECTORY, WORD_TABLE, DeviceRecording
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import CHANNELS, RATE
@@ -14,6 +15,7 @@ from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import IGNORE, PRIMARY
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import Grouping
+from tests.unit.megspeech.data.cache.kaggle import ONSETS, WORD_EPOCHS, kaggle
 from tests.unit.megspeech.data.config import HELD, OTHER, TRAIN
 
 SECONDS = 4
@@ -166,3 +168,12 @@ def test_load(tmp_path: Path) -> None:
     pooled = Corpus.load(DataConfig(subjects=(0, 3)), corpus_root(tmp_path / "pooled"), CPU)
     assert pooled.train.y.tolist() == [THE, IGNORE, A]
     assert set(pooled.validation) == {"Sherlock1"}
+
+
+def test_kaggle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
+    root = DataRoot.from_config()
+    kaggle(root.raw())
+    windows = Corpus.kaggle(root, DataConfig(lead=0.1, baseline=0.5), Track.DEEP, "cpu")
+    assert len(windows) == 1 + len(ONSETS) + WORD_EPOCHS
+    assert (windows.length, windows.offset, windows.baseline) == (RATE + 5, -5, round(0.5 * RATE))

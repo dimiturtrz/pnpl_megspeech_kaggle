@@ -6,15 +6,13 @@ import numpy as np
 import pytest
 import torch
 
-from core.paths import ENV_OVERRIDE, DataRoot
+from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.cleaning import Cleaning
-from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS, READING, DataConfig
 from megspeech.data.constants import RATE
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import Grouping
-from tests.unit.megspeech.data.cache.kaggle import ONSETS, WORD_EPOCHS, kaggle
 
 TRAIN = "sub-0_ses-1_task-Sherlock1_run-1_meg.h5"
 HELD = "sub-0_ses-11_task-Sherlock1_run-2_meg.h5"
@@ -72,19 +70,27 @@ def test_source(tmp_path: Path) -> None:
     assert DataConfig().source(Run(tmp_path / TRAIN)) == ("Sherlock", ("Sherlock1", 1, 1))
 
 
-def test_dealt(tmp_path: Path) -> None:
-    """Each source deals one session per stride to each partition; a source too small for one deals none."""
-    dealt = {p.value: [r.key for r in chosen] for p, chosen in DataConfig(share=0.4).dealt(runs(tmp_path)).items()}
-    assert dealt == {
+def test_split(tmp_path: Path) -> None:
+    """Each source holds out one session per stride for each partition; a source too small for one holds out none."""
+    held_out = {p.value: [r.key for r in chosen] for p, chosen in DataConfig(share=0.4).split(runs(tmp_path)).items()}
+    assert held_out == {
         "validation": [("Sherlock1", 1, 1), ("Sherlock2", 1, 1), ("TheMoth", 1, 1)],
         "test": [("Sherlock1", 2, 1), ("Sherlock2", 2, 1), ("TheMoth", 2, 1)],
     }
-    assert DataConfig(share=0.4).dealt(subjects(tmp_path)) == DataConfig(share=0.4).dealt(runs(tmp_path))
-    assert not any(DataConfig().dealt(runs(tmp_path)).values())
+    assert DataConfig(share=0.4).split(subjects(tmp_path)) == DataConfig(share=0.4).split(runs(tmp_path))
+    assert not any(DataConfig().split(runs(tmp_path)).values())
 
 
-def test_trained_dealt(tmp_path: Path) -> None:
-    """Dealt sessions never train; refitting takes the validation ones back, never the test ones."""
+def test_strided(tmp_path: Path) -> None:
+    """One session per stride, validation a quarter in, test three quarters in."""
+    source = tuple(Run(tmp_path / f"sub-0_ses-{s}_task-Sherlock1_run-1_meg.h5") for s in range(1, 9))
+    val, test = DataConfig.strided(source, 2)
+    assert ([r.key[1] for r in val], [r.key[1] for r in test]) == ([2, 6], [4, 8])
+    assert DataConfig.strided(source, 0) == ([], [])
+
+
+def test_trained_split(tmp_path: Path) -> None:
+    """Held-out sessions never train; refitting takes the validation ones back, never the test ones."""
     every = runs(tmp_path)
     assert {r.key for r in DataConfig(share=0.4).trained(every)} == {("Sherlock1", 3, 1), ("TIMIT", 1, 1)}
     refit = {r.key for r in DataConfig(share=0.4, refit=True).trained(every)}
@@ -96,7 +102,7 @@ def test_domain(tmp_path: Path) -> None:
 
 
 def test_scored(tmp_path: Path) -> None:
-    """Under a share, the official runs join their source's dealt sessions; other subjects' test runs never count."""
+    """Under a share, the official runs join their source's held-out sessions; other subjects' test runs never count."""
     assert keyed(DataConfig(share=0.4).scored(runs(tmp_path), Partition.VALIDATION)) == {
         "Sherlock": [("Sherlock1", 11, 2), ("Sherlock1", 1, 1), ("Sherlock2", 1, 1)],
         "TheMoth": [("TheMoth", 29, 1), ("TheMoth", 1, 1)],
@@ -202,15 +208,6 @@ def test_run_cache(tmp_path: Path) -> None:
     assert (cleaned.cache.name, cleaned.cleaning) == ("continuous50-ica", Cleaning.ICA)
 
 
-def test_kaggle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
-    root = DataRoot.from_config()
-    kaggle(root.raw())
-    windows = DataConfig(lead=0.1, baseline=0.5).kaggle(root, Track.DEEP, "cpu")
-    assert len(windows) == 1 + len(ONSETS) + WORD_EPOCHS
-    assert (windows.length, windows.offset, windows.baseline) == (RATE + 5, -5, round(0.5 * RATE))
-
-
 def cached(tmp_path: Path) -> DataRoot:
     """Subject 0's runs and another subject's, three channels each, cached."""
     root = DataRoot(tmp_path)
@@ -274,7 +271,7 @@ def test_shared(tmp_path: Path) -> None:
     assert DataConfig.shared([record(tmp_path / "fast", {"data": {"decimate": 2}})], Grouping.SENTENCE).decimate == 2
     led = record(tmp_path / "led", {"data": {"lead": 0.1}})
     assert DataConfig.shared([led], Grouping.SENTENCE).lead == 0.1
-    differing = r"False, 1.0, False, 0, 0.0, 0.0, 0.0, 5, .*False, 2.0, False, 0, 0.0, 0.0, 0.0, 5, "
+    differing = r"False, 1.0, False, 0, 0.0, False, 0.0, 0.0, 5, .*False, 2.0, "
     with pytest.raises(ValueError, match=differing):
         DataConfig.shared([one, two], Grouping.SENTENCE)
     with pytest.raises(ValueError, match="an ensemble needs one"):
