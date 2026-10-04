@@ -44,9 +44,9 @@ def test_features() -> None:
 def test_scores() -> None:
     probed = Probed(np.array([0, 1, 1, 2]), np.array([True, True, False, False]), np.array(["x", "x", "y", "y"]))
     scores = probed.scores(np.array([0, 1, 0, 2]))
-    assert scores["all"] == (pytest.approx((1 + 0.5 + 1) / 3), 4)
-    assert scores["in-50"] == (1.0, 2)
-    assert scores["outside"] == (0.5, 2)
+    assert scores["all"] == (pytest.approx((1 + 0.5 + 1) / 3), 0.75, 4)
+    assert scores["in-50"] == (1.0, 1.0, 2)
+    assert scores["outside"] == (0.5, 0.5, 2)
     assert set(scores) == {"all", "in-50", "outside", "x", "y"}
 
 
@@ -77,8 +77,17 @@ def test_predicted() -> None:
     assert probe.predicted(("timing", "meg-word"), probed).shape == (120,)
 
 
+def test_recalls() -> None:
+    probed = Probed(np.array([0, 1, 1, 2]), np.ones(4, bool), np.array(["x"] * 4))
+    assert probed.recalls(np.array([0, 1, 0, 0])) == {"ADJ": (1.0, 1), "ADP": (0.5, 2), "ADV": (0.0, 1)}
+
+
+def test_majority() -> None:
+    assert Probed(np.array([0, 1, 1, 2]), np.ones(4, bool), np.array(["x"] * 4)).majority() == 0.5
+
+
 def test_report() -> None:
-    report = Probe(table(0), table(1)).report()
+    probe = Probe(table(0), table(1))
+    report = probe.report()
     assert set(report) == {"timing", "meg-word", "meg-context", "timing+meg-word", "timing+meg-context"}
-    assert report["timing"]["all"][0] > report["meg-word"]["all"][0]
-    assert report["timing"]["x"][1] == 60
+    assert (report["timing"] == probe.valid.tags).mean() > (report["meg-word"] == probe.valid.tags).mean()

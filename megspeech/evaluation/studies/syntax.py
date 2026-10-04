@@ -27,7 +27,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import EVAL_SPANS, Split
 from megspeech.data.config import DataConfig
 from megspeech.data.labels.phonemes import UNKNOWN
-from megspeech.data.labels.syntax import PartsOfSpeech
+from megspeech.data.labels.syntax import TAGS, PartsOfSpeech
 from megspeech.data.raw.runs import DEEP, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.reader import Reader
@@ -102,16 +102,31 @@ class Probed:
     vocabulary: np.ndarray
     domain: np.ndarray
 
-    def scores(self, predicted: Int[np.ndarray, " n"]) -> dict[str, tuple[float, int]]:
-        """Balanced accuracy over the tags present and its denominator: every word, the 50's, the rest, and per
-        domain."""
+    def scores(self, predicted: Int[np.ndarray, " n"]) -> dict[str, tuple[float, float, int]]:
+        """Balanced accuracy over the tags present, accuracy and their denominator: every word, the 50's, the rest,
+        and per domain."""
         subsets = {"all": np.ones(len(self.tags), bool), "in-50": self.vocabulary, "outside": ~self.vocabulary}
         subsets |= {str(name): self.domain == name for name in np.unique(self.domain)}
         return {
-            name: (float(balanced_accuracy_score(self.tags[chosen], predicted[chosen])), int(chosen.sum()))
+            name: (
+                float(balanced_accuracy_score(self.tags[chosen], predicted[chosen])),
+                float((self.tags[chosen] == predicted[chosen]).mean()),
+                int(chosen.sum()),
+            )
             for name, chosen in subsets.items()
             if chosen.any()
         }
+
+    def recalls(self, predicted: Int[np.ndarray, " n"]) -> dict[str, tuple[float, int]]:
+        """Each present tag's recall and its count of words."""
+        return {
+            TAGS[tag]: (float((predicted[self.tags == tag] == tag).mean()), int((self.tags == tag).sum()))
+            for tag in np.unique(self.tags)
+        }
+
+    def majority(self) -> float:
+        """The accuracy of always predicting the most frequent tag."""
+        return float(np.bincount(self.tags).max() / len(self.tags))
 
 
 @dataclass(frozen=True)
@@ -187,11 +202,11 @@ class Probe:
         stacker = LogisticRegression(max_iter=500).fit(np.hstack(inputs), self.train.tags)
         return stacker.predict(np.hstack(outputs))
 
-    def report(self) -> dict[str, dict[str, tuple[float, int]]]:
-        scored = Probed(self.valid.tags, self.valid.vocabulary, self.valid.domain)
+    def report(self) -> dict[str, Int[np.ndarray, " n"]]:
+        """Each arm's predicted validation tags."""
         probed = {name: self.probabilities(name) for name in self.train.features}
         arms = (("timing",), ("meg-word",), ("meg-context",), ("timing", "meg-word"), ("timing", "meg-context"))
-        return {"+".join(arm): scored.scores(self.predicted(arm, probed)) for arm in arms}
+        return {"+".join(arm): self.predicted(arm, probed) for arm in arms}
 
 
 def main() -> None:
@@ -211,8 +226,15 @@ def main() -> None:
     train = Table.of(reader, embedded, {"train": trained}, parts)
     valid = Table.of(reader, embedded, reader.ruled(runs), parts)
     LOG.info("probing on %d words of %d runs, scoring %d words", len(train.tags), len(trained), len(valid.tags))
-    for arm, scores in Probe(train, valid).report().items():
-        LOG.info("%s %s", arm, {name: (round(score, 4), n) for name, (score, n) in scores.items()})
+    scored = Probed(valid.tags, valid.vocabulary, valid.domain)
+    LOG.info("majority-tag accuracy %.4f", scored.majority())
+    for arm, predicted in Probe(train, valid).report().items():
+        LOG.info(
+            "%s (bacc, acc, n) %s",
+            arm,
+            {k: (round(b, 4), round(a, 4), n) for k, (b, a, n) in scored.scores(predicted).items()},
+        )
+        LOG.info("%s recall %s", arm, {k: (round(r, 3), n) for k, (r, n) in scored.recalls(predicted).items()})
 
 
 if __name__ == "__main__":
