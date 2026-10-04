@@ -29,6 +29,7 @@ from megspeech.training.config import RunConfig
 from megspeech.training.hook import Scheduled, StepHook
 from megspeech.training.loop.ema import Ema
 from megspeech.training.regularise.anchor import Anchor
+from megspeech.training.regularise.regional import Regional
 from megspeech.training.sampling.curriculum import Annealed, Curriculum, Natural, Robust
 from megspeech.training.teacher import Teacher, Untaught
 
@@ -59,6 +60,7 @@ class Trainer:
     auxiliary: Auxiliary = field(default_factory=NoAuxiliary)
     initial: dict[str, Tensor] = field(default_factory=dict)
     teacher: Teacher = field(default_factory=Untaught)
+    regional: Regional = field(default_factory=Regional.off)
 
     @classmethod
     def of(cls, corpus: Corpus, config: RunConfig, root: DataRoot) -> "Trainer":
@@ -71,7 +73,8 @@ class Trainer:
         warm = config.optim.warm
         initial = torch.load(root.models() / warm / "model.pt", map_location=device, weights_only=True) if warm else {}
         auxiliary = Auxiliary.of(config.optim, root, device, corpus.positions)
-        return cls(config, evaluator, prototypes, auxiliary, initial, Teacher.of(config.optim, root))
+        regional = Regional.of(config.augment.spatial, root, device)
+        return cls(config, evaluator, prototypes, auxiliary, initial, Teacher.of(config.optim, root), regional)
 
     def model(self, train: Split) -> SentenceNet:
         """A fresh model, or the warm start's weights when there is one."""
@@ -110,7 +113,7 @@ class Trainer:
         """One optimiser step on the words of `spans`; returns the loss without syncing it to the host."""
         batch = train.batch(spans, state.rows, self.config.augment.jitter)
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            outputs = state.model(self.config.augment(batch.x), batch.onset, batch.slot, batch.subject)
+            outputs = state.model(self.regional(self.config.augment(batch.x)), batch.onset, batch.slot, batch.subject)
             parts = zip(state.terms, state.readouts, outputs, strict=True)
             losses = (term.loss(head, output, batch.target(term.labels(train))) for term, head, output in parts)
             value = functools.reduce(operator.add, losses)

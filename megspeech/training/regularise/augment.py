@@ -23,6 +23,8 @@ class Augment:
     """Frequency bins of one band per window, at a uniform lowest bin, zeroed on every sensor."""
     noise: float = 0.0
     """Gaussian noise added to each sensor, as a share of that sensor's spread over the window."""
+    spatial: float = 0.0
+    """Radius of the sensor patch each window loses (`Regional`), as a share of the array's widest extent."""
 
     def __call__(self, x: Float[Tensor, "n c t"]) -> Float[Tensor, "n c t"]:
         """The perturbed windows in float32: the half-precision cache's largest values sit near its overflow."""
