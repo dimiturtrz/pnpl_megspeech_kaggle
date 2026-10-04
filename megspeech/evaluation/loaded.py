@@ -64,6 +64,9 @@ class Scoring:
     aligned: bool = False
     """Re-colour every other subject's recording to subject 0's sensor covariance (`Alignment`) before the model
     reads it: +0.040 on the Broad ruler for a subject-0 model (0.499 -> 0.539, n=25322, megspeech-7gf.56)."""
+    adapted: bool = False
+    """Re-estimate batch-norm statistics on each scored split (`Evaluator.adapt`); the holdout's would read its own
+    MEG, so a submission written this way needs a rules decision (megspeech-7gf.61)."""
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,7 @@ class LoadedModel:
             SelectionConfig.shared(directories).min_novel,
             balance=scoring.balance,
             shifts=scoring.shifts,
+            adapted=scoring.adapted,
         )
         prior = Corpus.prior(heard, data).to(device)
         alignment = data.alignment(root, device) if scoring.aligned or data.recoloured else None

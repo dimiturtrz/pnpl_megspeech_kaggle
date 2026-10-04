@@ -12,6 +12,7 @@ from megspeech.data.spans.spans import Spans
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import ADJUSTMENTS, Head, Score
+from megspeech.model.words.layers.norm import MaskedBatchNorm1d
 
 SAMPLES = 50
 CPU = torch.device("cpu")
@@ -42,6 +43,40 @@ def test_logits() -> None:
     assert torch.allclose(out[Head.WORD].logsumexp(-1), torch.zeros(12), atol=1e-5)
     shifted = Evaluator(CPU, shifts=(-1, 0, 1)).logits(Constant(), split())
     assert torch.allclose(shifted[Head.CONTEXT], out[Head.CONTEXT], atol=1e-5)
+
+
+class Normed(Constant):
+    def __init__(self) -> None:
+        super().__init__()
+        self.norm = MaskedBatchNorm1d(CHANNELS)
+
+    @override
+    def forward(
+        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self.norm(x)
+        return super().forward(x, onset, slot, subject)
+
+
+def test_adapt() -> None:
+    model = Normed()
+    adapted = Evaluator(CPU).adapt(model, split())
+    assert isinstance(adapted, Normed)
+    assert not adapted.training
+    assert int(adapted.norm.num_batches_tracked) > 0
+    assert not torch.equal(adapted.norm.running_mean, torch.zeros(CHANNELS))
+    assert int(model.norm.num_batches_tracked) == 0
+    assert torch.equal(model.norm.running_mean, torch.zeros(CHANNELS))
+    out = Evaluator(CPU, adapted=True).logits(model, split())
+    assert torch.all(out[Head.CONTEXT].argmax(dim=1) == 0)
+
+
+def test_sweep() -> None:
+    model = Normed().train()
+    out = Evaluator(CPU).sweep(model, split())
+    assert model.training
+    assert int(model.norm.num_batches_tracked) > 0
+    assert out[Head.WORD].shape == (12, VOCAB_SIZE)
 
 
 def test_read() -> None:

@@ -27,6 +27,16 @@ class MaskedBatchNorm1d(nn.Module):
         self.register_buffer("running_mean", torch.zeros(width))
         self.register_buffer("running_var", torch.ones(width))
         self.register_buffer("num_batches_tracked", torch.tensor(0, dtype=torch.long))
+        self.momentum: float | None = MOMENTUM
+        """The running statistics' step; None averages every tracked batch equally, as `nn.BatchNorm1d` does."""
+
+    def restart(self) -> None:
+        """Forget the running statistics and re-estimate them as an equal average over the batches that follow: the
+        target-domain statistics of AdaBN (Li et al. 2016)."""
+        self.running_mean.zero_()
+        self.running_var.fill_(1)
+        self.num_batches_tracked.zero_()
+        self.momentum = None
 
     @override
     def forward(self, x: Float[Tensor, "b h t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b h t"]:
@@ -48,8 +58,9 @@ class MaskedBatchNorm1d(nn.Module):
         they were, decided on the device without a host sync."""
         with torch.no_grad():
             kept = count > 1
-            mean_step = self.running_mean.lerp(mean, MOMENTUM)
-            var_step = self.running_var.lerp(var * count / (count - 1), MOMENTUM)
+            step = (1 / (self.num_batches_tracked + 1)).to(mean) if self.momentum is None else self.momentum
+            mean_step = self.running_mean.lerp(mean, step)
+            var_step = self.running_var.lerp(var * count / (count - 1), step)
             self.running_mean.copy_(torch.where(kept, mean_step, self.running_mean))
             self.running_var.copy_(torch.where(kept, var_step, self.running_var))
             self.num_batches_tracked.add_(kept.long())

@@ -5,6 +5,7 @@ Balanced accuracy rewards rare words as much as frequent ones, so scores are rea
 p(MEG | word), the Bayes rule for a balanced metric.
 """
 
+import copy
 from dataclasses import dataclass, replace
 
 import torch
@@ -17,6 +18,7 @@ from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.metric.ruler import Coverage, Graded, Ruler
 from megspeech.evaluation.scoring.score import ADJUSTMENTS, MIN_NOVEL, Epoch, Head, Report, Score
+from megspeech.model.words.layers.norm import MaskedBatchNorm1d
 
 
 @dataclass(frozen=True)
@@ -31,18 +33,35 @@ class Evaluator:
     balance: Sinkhorn = Sinkhorn()
     shifts: tuple[int, ...] = (0,)
     """Samples every window is read moved by; the reads' log-probabilities are averaged (test-time augmentation)."""
+    adapted: bool = False
+    """Read every split through a copy of the model whose batch-norm statistics are the split's own (`adapt`)."""
 
     def logits(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
         """Both heads' log-probabilities for every word of `split`, averaged over the `shifts`, in word order."""
+        model = self.adapt(model, split) if self.adapted else model
         reads = [self.read(model, replace(split, windows=split.windows.shifted(shift))) for shift in self.shifts]
         return {head: torch.stack([read[head].log_softmax(-1) for read in reads]).mean(0) for head in Head}
 
+    def adapt(self, model: nn.Module, split: Split) -> nn.Module:
+        """A copy of `model` whose batch-norm statistics are re-estimated on `split`'s unlabelled windows, every
+        other layer left in evaluation: AdaBN (Li et al. 2016) against the session shift."""
+        adapted = copy.deepcopy(model).eval()
+        for norm in (module for module in adapted.modules() if isinstance(module, MaskedBatchNorm1d)):
+            norm.restart()
+            norm.train()
+        self.sweep(adapted, split)
+        return adapted.eval()
+
     def read(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
-        """Both heads' logits for every word of `split`, in the split's word order.
+        """Both heads' logits for every word of `split`, in the split's word order."""
+        model.eval()
+        return self.sweep(model, split)
+
+    def sweep(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
+        """`read` in whatever mode `model` is in.
 
         Every batch reserves room for full spans, so a compiled model sees one shape (and the last batch's).
         """
-        model.eval()
         words, rows = len(split.y), EVAL_SPANS * split.index.shape[1]
         out = {head: torch.zeros(words + 1, VOCAB_SIZE, device=self.device) for head in Head}
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):

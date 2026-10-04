@@ -30,6 +30,19 @@ def test_track() -> None:
     assert torch.allclose(fresh.running_var, torch.full((4,), 1.1))
 
 
+def test_restart() -> None:
+    masked, _, x = pair()
+    masked.forward(x)
+    masked.restart()
+    assert int(masked.num_batches_tracked) == 0
+    assert masked.momentum is None
+    first, second = x, torch.randn(5, 4, 7, generator=GENERATOR) + 3
+    masked.forward(first)
+    masked.forward(second)
+    expected = (first.mean(dim=(0, 2)) + second.mean(dim=(0, 2))) / 2
+    assert torch.allclose(masked.running_mean, expected, atol=1e-5)
+
+
 def test_track_skips_empty() -> None:
     fresh = MaskedBatchNorm1d(4)
     for count in (0.0, 1.0):
