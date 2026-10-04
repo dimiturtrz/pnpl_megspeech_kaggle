@@ -3,9 +3,10 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.linear_model import LogisticRegression
 
 from megspeech.data.labels.phonemes import UNKNOWN
-from megspeech.evaluation.studies.syntax import Grammar, Probe, Probed, Table, Timing
+from megspeech.evaluation.studies.syntax import Grammar, Probe, Probed, Table, Timing, TorchLogistic
 
 WORDS = pd.DataFrame(
     {
@@ -95,7 +96,7 @@ def test_rows() -> None:
 
 def test_model() -> None:
     assert type(Probe.model("timing")).__name__ == "HistGradientBoostingClassifier"
-    assert type(Probe.model("meg-word")).__name__ == "Pipeline"
+    assert type(Probe.model("meg-word")).__name__ == "TorchLogistic"
 
 
 def test_probabilities() -> None:
@@ -172,3 +173,41 @@ def test_report() -> None:
         "timing+meg-context+grammar",
     }
     assert (report["timing"] == probe.valid.tags).mean() > (report["meg-word"] == probe.valid.tags).mean()
+
+
+def overlapping(n: int = 600) -> tuple[np.ndarray, np.ndarray]:
+    generator = np.random.default_rng(0)
+    tags = np.array([5, 7, 9])[np.arange(n) % 3]
+    centres = generator.standard_normal((3, 4)) * 1.5
+    return centres[np.arange(n) % 3] + generator.standard_normal((n, 4)), tags
+
+
+def test_fit() -> None:
+    x, y = overlapping()
+    fitted = TorchLogistic(c=0.1).fit(x, y)
+    assert fitted.classes_.tolist() == [5, 7, 9]
+    assert fitted.weight_.shape == (4, 3)
+    reference = LogisticRegression(C=0.1, max_iter=1000).fit((x - x.mean(0)) / x.std(0), y)
+    assert np.allclose(fitted.weight_.cpu().numpy().T, reference.coef_, atol=2e-2)
+
+
+def test_predict_log_proba() -> None:
+    x, y = overlapping()
+    reference = LogisticRegression(C=0.1, max_iter=1000).fit((x - x.mean(0)) / x.std(0), y)
+    log_proba = TorchLogistic(c=0.1).fit(x, y).predict_log_proba(x)
+    assert np.abs(log_proba - reference.predict_log_proba((x - x.mean(0)) / x.std(0))).max() < 2e-2
+    assert np.allclose(np.exp(log_proba).sum(1), 1, atol=1e-5)
+
+
+def test_predict_proba() -> None:
+    x, y = overlapping()
+    fitted = TorchLogistic().fit(x, y)
+    assert np.allclose(fitted.predict_proba(x), np.exp(fitted.predict_log_proba(x)))
+
+
+def test_predict() -> None:
+    x, y = overlapping()
+    reference = LogisticRegression(C=0.1, max_iter=1000).fit((x - x.mean(0)) / x.std(0), y)
+    predicted = TorchLogistic(c=0.1).fit(x, y).predict(x)
+    assert set(predicted) <= {5, 7, 9}
+    assert (predicted == reference.predict((x - x.mean(0)) / x.std(0))).mean() > 0.99
