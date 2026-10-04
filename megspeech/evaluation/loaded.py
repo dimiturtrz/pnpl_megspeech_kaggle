@@ -23,6 +23,7 @@ from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Epoch, Head, Score, SelectionConfig
 from megspeech.model.ensemble import Ensemble
+from megspeech.model.input.lowpass import LowPass
 from megspeech.model.input.subjects import AS_TRAINED, Fallback, Reading, SubjectLayer
 
 RULER = "Sherlock1"
@@ -67,6 +68,9 @@ class Scoring:
     adapted: bool = False
     """Re-estimate batch-norm statistics on each scored split (`Evaluator.adapt`); the holdout's would read its own
     MEG, so a submission written this way needs a rules decision (megspeech-7gf.61)."""
+    lowpass: float = 0.0
+    """Hz above which every window read is zeroed (`LowPass`); 0 reads the full band. ema9998-s0 at 25/18/12/8/4 Hz:
+    0.6445/0.6468/0.6389/0.6248/0.5924 (n=2512): the 12-25 Hz top of the 50 Hz cache carries ~0.006 (4te.5)."""
 
 
 @dataclass(frozen=True)
@@ -92,6 +96,7 @@ class LoadedModel:
         for layer in (module for module in model.modules() if isinstance(module, SubjectLayer)):
             layer.shrink(scoring.fallback.keep, scoring.fallback.unseen)
         data = DataConfig.shared(directories, scoring.grouping)
+        model = LowPass(model, data.rate, scoring.lowpass) if scoring.lowpass else model
         heard = Corpus.heard(data.run_cache(root), Run.everywhere(root), data)
         evaluator = Evaluator(
             device,
