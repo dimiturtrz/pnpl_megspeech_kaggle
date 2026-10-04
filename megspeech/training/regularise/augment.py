@@ -23,6 +23,9 @@ class Augment:
     """Frequency bins of one band per window, at a uniform lowest bin, zeroed on every sensor."""
     noise: float = 0.0
     """Gaussian noise added to each sensor, as a share of that sensor's spread over the window."""
+    mix: float = 0.0
+    """Largest share of another window, circularly shifted off its own onsets, added as background (BGMix without its
+    label); each window draws its share uniformly up to it. Real MEG, so it stays in the field's own subspace."""
     spatial: float = 0.0
     """Radius of the sensor patch each window loses (`Regional`), as a share of the array's widest extent."""
 
@@ -40,7 +43,18 @@ class Augment:
         if self.noise:
             spread = x.std(dim=-1, keepdim=True)
             x = x + self.noise * spread * torch.randn_like(x) * (x != 0)
-        return x
+        return self.mixed(x)
+
+    def mixed(self, x: Float[Tensor, "n c t"]) -> Float[Tensor, "n c t"]:
+        """`x` plus a uniform share up to `mix` of a shuffled window, rolled by a uniform shift; padding stays zero."""
+        if not self.mix:
+            return x
+        other = x[torch.randperm(x.shape[0], device=x.device)]
+        shift = torch.randint(0, x.shape[-1], (x.shape[0], 1, 1), device=x.device)
+        index = (torch.arange(x.shape[-1], device=x.device) + shift) % x.shape[-1]
+        background = other.gather(-1, index.expand_as(other))
+        share = self.mix * torch.rand(x.shape[0], 1, 1, device=x.device)
+        return x + share * background * (x != 0)
 
     @staticmethod
     def masked(x: Float[Tensor, "n c f"], width: int, length: int) -> Float[Tensor, "n c f"]:

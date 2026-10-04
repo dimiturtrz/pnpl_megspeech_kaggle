@@ -56,3 +56,14 @@ def test_masked() -> None:
     x = torch.ones(2, 1, 4)
     assert torch.equal(Augment.masked(x, 0, 4), x)
     assert torch.all(Augment.masked(x, 4, 4) == 0)
+
+
+def test_mixed() -> None:
+    torch.manual_seed(0)
+    x = torch.randn(64, 3, 20)
+    assert torch.equal(Augment().mixed(x), x)
+    added = Augment(mix=0.5).mixed(x) - x
+    assert 0 < added.abs().mean() < x.abs().mean()
+    x[..., 15:] = 0
+    assert torch.all(Augment(mix=0.5).mixed(x)[..., 15:] == 0)
+    assert torch.equal(Augment(mix=0.5)(torch.zeros(4, 2, 5)), torch.zeros(4, 2, 5))
