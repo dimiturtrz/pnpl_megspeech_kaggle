@@ -18,6 +18,13 @@ def test_embed() -> None:
     assert ConvWords(SMALL).embed(x).shape == (3, 2 * SMALL.hidden)
 
 
+def test_channels() -> None:
+    x = torch.randn(3, 5, SAMPLES, generator=GENERATOR)
+    assert ConvWords(SMALL, 5).embed(x).shape == (3, 2 * SMALL.hidden)
+    with pytest.raises(ValueError, match="spatial merger"):
+        ConvWords(ConvConfig(hidden=8, dilations=(1,), merger=5), 5)
+
+
 def test_width() -> None:
     assert SMALL.width == 2 * SMALL.hidden
     assert ConvConfig(hidden=8, segments=3).width == 48

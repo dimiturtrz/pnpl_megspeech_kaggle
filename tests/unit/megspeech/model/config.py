@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 import torch
+from torch import nn
 
 from megspeech.model.config import CONTEXT as DEFAULT
 from megspeech.model.config import FILE, ContextConfig, Encoder, OnsetEncoding
@@ -67,6 +68,11 @@ def test_build() -> None:
     assert Encoder.CACHED.build(config).width == POOLED
     assert Encoder.RESOLVED.build(config).width == RESOLVED
     assert Encoder.TRAINED.build(config).width == config.width
+    narrow = Encoder.CONV.build(config, 5)
+    assert isinstance(narrow, ConvWords)
+    assert isinstance(narrow.spatial, nn.Conv1d)
+    assert narrow.spatial.in_channels == 5
+    assert Encoder.CACHED.build(config, 5).width == POOLED
 
 
 def test_cached() -> None:

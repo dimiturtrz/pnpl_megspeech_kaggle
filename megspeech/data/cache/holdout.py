@@ -27,7 +27,7 @@ from pnpl.competition.holdout import DEEP_SUBJECTS, HOLDOUT_SUBDIR, TRACKS, Libr
 
 from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
-from megspeech.data.cache.alignment import Alignment
+from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.cache.cleaning import UNCHANGED, Cleaner, Cleaning
 from megspeech.data.cache.run_cache import DeviceRecording, RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
@@ -177,12 +177,12 @@ class HoldoutCache:
         length: int,
         *,
         standardised: bool = False,
-        alignment: Alignment | None = None,
+        geometry: Geometry = AS_RECORDED,
     ) -> Windows:
-        """Every holdout row's `length`-sample window, in canonical order, from the built cache, each archive
-        re-coloured by `alignment` and `standardised` on its own if asked."""
+        """Every holdout row's `length`-sample window, in canonical order, from the built cache, each archive loaded
+        in `geometry` and `standardised` on its own if asked."""
         names = [archive.name for archive in self.archives()]
-        recording = DeviceRecording.load(self.cache, device, names, standardised=standardised, alignment=alignment)
+        recording = DeviceRecording.load(self.cache, device, names, standardised=standardised, geometry=geometry)
         return recording.windows(length)
 
 

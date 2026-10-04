@@ -2,11 +2,14 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 import torch
 
+from core.paths import DataRoot
 from megspeech.data.batching.split import HOLDOUT_FEATURES, TRAIN, Features, Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.holdout import Track
+from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
 from megspeech.data.spans.spans import PAD
 from megspeech.features.extract import (
@@ -61,6 +64,11 @@ def test_splits(tmp_path: Path):
     splits = export(tmp_path).splits()
     assert list(splits) == [TRAIN, "Sherlock1", f"{HOLDOUT_FEATURES}-{Track.DEEP}"]
     assert [len(s.index) for s in splits.values()] == [1, 2, 3]
+
+
+def test_of_refuses_subspace(tmp_path: Path):
+    with pytest.raises(ValueError, match="306 sensors"):
+        Export.of(DataConfig(subspace=True), DataRoot(tmp_path), "name", torch.device("cpu"))
 
 
 def test_save(tmp_path: Path):

@@ -13,7 +13,7 @@ import torch
 from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.batching.windows import Windows
-from megspeech.data.cache.alignment import EVERY, UNALIGNED, Alignment
+from megspeech.data.cache.alignment import AS_RECORDED, EVERY, UNALIGNED, Alignment, Geometry
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.holdout import HoldoutCache, Track
 from megspeech.data.cache.run_cache import RunCache
@@ -84,6 +84,9 @@ class DataConfig:
     aligned: bool = False
     """Every recording, subject 0's own included, re-coloured to subject 0's mean sensor covariance (`Alignment`) in
     training, validation and holdout alike: one sensor geometry the model learns in and every subject meets it in."""
+    subspace: bool = False
+    """Every recording kept as its coordinates in subject 0's Maxwell signal subspace (`Projection`, ~75 components
+    of 306 sensors): the same signal in a quarter of the device cache, the model reading as many channels."""
 
     def __post_init__(self) -> None:
         if not 0 <= self.fold < self.folds:
@@ -139,14 +142,23 @@ class DataConfig:
         return RunCache.under(root.processed(), self.decimate, self.cleaning)
 
     def holdout(
-        self, root: DataRoot, track: Track, device: torch.device | str, alignment: Alignment | None = None
+        self, root: DataRoot, track: Track, device: torch.device | str, geometry: Geometry = AS_RECORDED
     ) -> Windows:
-        """`track`'s holdout windows as this config reads them, its cache built first if missing, every other
-        subject's archive re-coloured by `alignment`."""
+        """`track`'s holdout windows as this config reads them, its cache built first if missing, every archive
+        loaded in `geometry`."""
         cache = HoldoutCache.of(root, self.decimate, track, self.cleaning)
         cache.build()
-        windows = cache.windows(device, self.samples, standardised=self.standardised, alignment=alignment)
+        windows = cache.windows(device, self.samples, standardised=self.standardised, geometry=geometry)
         return self.reading(windows)
+
+    def geometry(self, root: DataRoot, device: torch.device | str, *, aligned: bool = False) -> Geometry:
+        """The `Geometry` recordings load in: re-coloured to subject 0's `alignment` when `recoloured` (or `aligned`
+        asks for it), kept in its `Projection` when `subspace`; the reference left unbuilt when neither reads it."""
+        recolour = aligned or self.recoloured
+        if not (recolour or self.subspace):
+            return AS_RECORDED
+        alignment = self.alignment(root, device)
+        return Geometry(alignment if recolour else None, alignment.projection() if self.subspace else None)
 
     def alignment(self, root: DataRoot, device: torch.device | str) -> Alignment:
         """Subject 0's sensor reference in this config's cache, from every `EVERY`th of its training runs: every

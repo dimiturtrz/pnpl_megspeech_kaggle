@@ -62,13 +62,17 @@ CONV = ConvConfig()
 
 
 class ConvWords(WordEncoder):
-    def __init__(self, config: ConvConfig = CONV) -> None:
+    def __init__(self, config: ConvConfig = CONV, channels: int = CHANNELS) -> None:
+        """Words from recordings of `channels` rows; a `SpatialAttention` front end places the 306 sensors, so it
+        reads nothing else."""
+        if config.merger and channels != CHANNELS:
+            raise ValueError(f"a {config.merger}-channel spatial merger lays out {CHANNELS} sensors, not {channels}")
         super().__init__(config.width, instance=config.instance)
         self.pool = AttentionPool(config.hidden, config.queries) if config.queries else MeanMax(config.segments)
         self.spatial = (
             nn.Sequential(SpatialAttention(config.merger), nn.Conv1d(config.merger, config.hidden, 1))
             if config.merger
-            else nn.Conv1d(CHANNELS, config.hidden, 1)
+            else nn.Conv1d(channels, config.hidden, 1)
         )
         self.blocks = nn.ModuleList(
             DilatedBlock(config.hidden, d, config.dropout, config.kernels, gated=config.gated) for d in config.dilations

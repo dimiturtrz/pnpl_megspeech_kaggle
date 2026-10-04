@@ -8,6 +8,7 @@ import pytest
 import torch
 
 from megspeech.data.cache import run_cache as module
+from megspeech.data.cache.alignment import Geometry, Projection
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.run_cache import DIRECTORY, NO_SENTENCE, TAIL, WORD_TABLE, DeviceRecording, RunCache, main
 from megspeech.data.constants import DECIMATE, HALF, RATE, SFREQ
@@ -263,6 +264,29 @@ def test_load(tmp_path: Path) -> None:
         run = scaled[:, begin : begin + SAMPLES]
         assert run.median(dim=1).values.abs().max() < 0.05
         assert torch.allclose(run.quantile(0.75, dim=1) - run.quantile(0.25, dim=1), torch.ones(CHANNELS), atol=0.05)
+
+
+def subspace() -> Projection:
+    basis = torch.linalg.qr(torch.randn(CHANNELS, 2, generator=torch.Generator().manual_seed(0)))[0].T.contiguous()
+    return Projection(torch.full((CHANNELS, 1), 7.0), torch.full((CHANNELS, 1), 4.0), basis)
+
+
+@pytest.mark.parametrize("standardised", [False, True])
+def test_load_projected(tmp_path: Path, *, standardised: bool) -> None:
+    cache = built(tmp_path)
+    projection = subspace()
+    loaded = DeviceRecording.load(cache, "cpu", standardised=standardised, geometry=Geometry(projection=projection))
+    full = DeviceRecording.load(cache, "cpu", standardised=standardised)
+    assert loaded.meg.shape == (projection.rank, 2 * SAMPLES)
+    assert loaded.meg.dtype == torch.float16
+    assert loaded.offsets.tolist() == full.offsets.tolist()
+    assert loaded.words.equals(full.words)
+    for begin, name in zip((0, SAMPLES), NAMES, strict=True):
+        run = torch.from_numpy(np.load(cache.path(name)))
+        if standardised:
+            DeviceRecording.standardise(run)
+        expected = projection.project(run, robust=standardised).half()
+        assert torch.allclose(loaded.meg[:, begin : begin + SAMPLES].float(), expected.float(), atol=1e-2)
 
 
 def test_standardise() -> None:
