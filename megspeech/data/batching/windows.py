@@ -2,9 +2,10 @@
 
 A word's window starts `offset` samples after its onset sample `at` and runs `length` samples, at the signal's
 50 Hz `RATE` (seconds x `RATE`). It stops at the word's exclusive bound `end`: samples from `end` on are zero, so
-a window longer than 1 s never reads past the stretch the holdout would hold for that word. Each window then has
+a window longer than 1 s never reads past the stretch the Kaggle test would hold for that word. Each window then has
 every channel's mean over its valid samples removed, or over the valid ones among its first `baseline`.
-Training, validation and holdout windows all come through here, from signals the same `cache.run_cache.RunCache` cached.
+Training, validation and Kaggle test windows all come through here, from signals one `cache.run_cache.RunCache`
+cached.
 """
 
 from dataclasses import dataclass, replace
@@ -30,7 +31,7 @@ class Windows:
     centred: bool = True
     """False reads windows as they are: features already computed from centred windows, not a signal."""
     begin: Int[Tensor, " n"] | None = None
-    """Each word's first readable sample, its sentence epoch's start: samples before it are zero, as a holdout epoch
+    """Each word's first readable sample, its sentence epoch's start: samples before it are zero, as a Kaggle test epoch
     holds none before its first onset. None bounds only at the signal's start."""
 
     @classmethod

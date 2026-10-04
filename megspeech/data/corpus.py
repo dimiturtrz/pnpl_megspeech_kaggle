@@ -35,7 +35,7 @@ class Corpus:
     positions: pd.DataFrame = field(default_factory=pd.DataFrame)
     """Each train word's `run` and `position` in that run's word table (`RunCache.words`), in train-split order."""
     geometry: Geometry = AS_RECORDED
-    """The sensor geometry every split was loaded in, which the holdout must load in too."""
+    """The sensor geometry every split was loaded in, which the Kaggle test must load in too."""
 
     @classmethod
     def load(cls, data: DataConfig, root: DataRoot, device: torch.device) -> "Corpus":

@@ -1,7 +1,7 @@
 """Whether an external masked language model knows the Deep vocabulary's order beyond what the context model learned
 from training text: each scored word's context logits fused with the masked LM's log-probability of every vocabulary
 word at its slot, the span's other vocabulary words filled with the context head's guesses and every out-of-vocabulary
-word a mask (its identity is unknown on the holdout), on a grid of fusion weights.
+word a mask (its identity is unknown on the Kaggle test), on a grid of fusion weights.
 
 Sherlock1 is public-domain text a pretrained LM may have memorised; TheMoth is the clean read. A submission fused this
 way needs an owner rules decision (megspeech-7gf.60).

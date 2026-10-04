@@ -7,6 +7,6 @@ package on `sys.path[0]`.
 
 ## Data fetch
 
-The holdout ships as `.npz` in HF `pnpl/LibriBrain-Competition-2026` (5.7 GB); training data comes through
+The Kaggle test set ships as `.npz` in HF `pnpl/LibriBrain-Competition-2026` (5.7 GB); training data comes through
 `pnpl` from HF `pnpl/LibriBrain` (preprocessed `.h5` only — never the raw `.fif`). Both land under
 `<data>/raw/pnpl_libribrain/` (see `paths.example.yaml`).

@@ -1,15 +1,15 @@
-"""The holdout as continuous 50 Hz segments, cached and gathered exactly as the training runs are.
+"""The Kaggle test as continuous 50 Hz segments, cached and gathered exactly as the training runs are.
 
-Every holdout epoch (`archive.Archive`) is a segment of continuous MEG, so each goes through `RunCache.decimated` on
+Every Kaggle test epoch (`archive.Archive`) is a segment of continuous MEG, so each goes through `RunCache.decimated` on
 its own — the transform a training run takes whole — and an archive's segments are cached end to end as one run of a
-run cache. A holdout word's window is then gathered by `batching.windows.Windows` from its onset sample, as a
+run cache. A Kaggle test word's window is then gathered by `batching.windows.Windows` from its onset sample, as a
 training word's is. Only an isolated word, whose segment IS its window, still carries the decimation filter's edges:
-the holdout holds nothing either side of it.
+the Kaggle test holds nothing either side of it.
 
 Rows follow the competition's canonical order: subjects ascending, the sentence archive before the word archive,
 epochs in stored order, a sentence's valid words in stored order.
 
-    uv run python -m megspeech.data.cache.holdout     # cache the Deep holdout and report its windows
+    uv run python -m megspeech.data.cache.kaggle     # cache the Deep Kaggle test and report its windows
 """
 
 import argparse
@@ -35,8 +35,9 @@ from megspeech.data.raw.runs import Run
 
 LOG = logging.getLogger(__name__)
 
-HOLDOUT_DIR = "holdout"
-"""The holdout's cache, a directory inside the training cache that `DeviceRecording.load` never globs into."""
+KAGGLE_DIR = "holdout"
+"""The Kaggle test's cache, a directory inside the training cache that `DeviceRecording.load` never globs into; its
+name predates the Kaggle naming, kept for the caches on disk."""
 
 
 class ArchiveKind(StrEnum):
@@ -74,8 +75,8 @@ READERS = {ArchiveKind.SENTENCE: Epochs.sentences, ArchiveKind.WORD: Epochs.word
 
 @dataclass(frozen=True)
 class Archive:
-    """One subject's holdout archive of one kind, `subjXX_<kind>.npz` (laid out in `pnpl.competition.holdout`): 250 Hz
-    epochs, a sentence epoch one continuous stretch of up to nine words, a word epoch one isolated 1 s window."""
+    """One subject's Kaggle test archive of one kind, `subjXX_<kind>.npz` (laid out in `pnpl.competition.holdout`):
+    250 Hz epochs, a sentence epoch one continuous stretch of up to nine words, a word epoch one isolated 1 s window."""
 
     path: Path
 
@@ -121,7 +122,7 @@ class Archive:
 
 
 class Track(StrEnum):
-    """A competition track: the holdout subjects it scores, in canonical order."""
+    """A competition track: the Kaggle test subjects it scores, in canonical order."""
 
     DEEP = "deep"
     BROAD = "broad"
@@ -131,14 +132,14 @@ class Track(StrEnum):
     def subjects(self) -> tuple[int, ...]:
         return TRACKS[self.value]
 
-    def holdout(self, raw: Path) -> LibriBrainCompetitionHoldout:
+    def kaggle(self, raw: Path) -> LibriBrainCompetitionHoldout:
         """The track's rows as the competition indexes them, from the archives under `raw`."""
         return LibriBrainCompetitionHoldout(self.value, data_path=raw, download=False)
 
 
 @dataclass(frozen=True)
-class HoldoutCache:
-    """The holdout archives of `subjects`, cached into `cache` and gathered as one `Windows` in canonical order."""
+class KaggleCache:
+    """The Kaggle test archives of `subjects`, cached into `cache` and gathered as one `Windows` in canonical order."""
 
     raw: Path
     cache: RunCache
@@ -147,11 +148,11 @@ class HoldoutCache:
     @classmethod
     def of(
         cls, root: DataRoot, decimate: int = DECIMATE, track: Track = Track.DEEP, cleaning: Cleaning = Cleaning.NONE
-    ) -> "HoldoutCache":
-        """`track`'s holdout cached inside the training cache at `decimate` after `cleaning`."""
+    ) -> "KaggleCache":
+        """`track`'s Kaggle test cached inside the training cache at `decimate` after `cleaning`."""
         trained = RunCache.under(root.processed(), decimate, cleaning)
-        holdout = RunCache(trained.cache / HOLDOUT_DIR, decimate, cleaning)
-        return cls(root.raw() / HOLDOUT_SUBDIR, holdout, track.subjects)
+        kaggle = RunCache(trained.cache / KAGGLE_DIR, decimate, cleaning)
+        return cls(root.raw() / HOLDOUT_SUBDIR, kaggle, track.subjects)
 
     def archives(self) -> list[Archive]:
         return [
@@ -179,7 +180,7 @@ class HoldoutCache:
         standardised: bool = False,
         geometry: Geometry = AS_RECORDED,
     ) -> Windows:
-        """Every holdout row's `length`-sample window, in canonical order, from the built cache, each archive loaded
+        """Every Kaggle test row's `length`-sample window, in canonical order, from the built cache, each archive loaded
         in `geometry` and `standardised` on its own if asked."""
         names = [archive.name for archive in self.archives()]
         recording = DeviceRecording.load(self.cache, device, names, standardised=standardised, geometry=geometry)
@@ -187,8 +188,8 @@ class HoldoutCache:
 
 
 def main() -> None:
-    """Cache a track's holdout, then report its windows' shape, count against the holdout's rows, finite share, and
-    the share of samples zeroed past their epoch's end."""
+    """Cache a track's Kaggle test, then report its windows' shape, count against its rows, finite share, and the
+    share of samples zeroed past their epoch's end."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--window", type=float, default=1.0, help="window length in seconds")
@@ -198,16 +199,16 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    cache = HoldoutCache.of(root, args.decimate, args.track, args.cleaning)
+    cache = KaggleCache.of(root, args.decimate, args.track, args.cleaning)
     cache.build()
-    rows = len(args.track.holdout(root.raw()))
+    rows = len(args.track.kaggle(root.raw()))
     windows = cache.windows(args.device, round(args.window * cache.cache.rate))
     x = windows(torch.arange(len(windows), device=windows.device))
     finite = float(torch.isfinite(x).float().mean())
     zeroed = float((x == 0).all(dim=1).float().mean())
     shape = tuple(x.shape[1:])
     LOG.info(
-        "%d windows of %s for %d holdout rows, finite %.6f, zeroed %.6f", len(windows), shape, rows, finite, zeroed
+        "%d windows of %s for %d Kaggle test rows, finite %.6f, zeroed %.6f", len(windows), shape, rows, finite, zeroed
     )
 
 

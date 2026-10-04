@@ -1,6 +1,6 @@
 """The recording constants every cut shares.
 
-The recordings, training and holdout alike, are 250 Hz MEG already band-passed 0.1–125 Hz, and a word's window is
+The recordings, training and Kaggle test alike, are 250 Hz MEG already band-passed 0.1–125 Hz, and a word's window is
 1 s from its onset. Every signal is decimated by `DECIMATE` into the run cache (`cache.run_cache.RunCache`) and
 every window gathered from it (`batching.windows.Windows`).
 """

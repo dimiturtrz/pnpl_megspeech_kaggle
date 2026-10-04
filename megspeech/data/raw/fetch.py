@@ -4,7 +4,7 @@
 root lets its loaders find the files instead of re-fetching them. Only subject 0's preprocessed `.h5` and
 events `.tsv` are pulled; the raw `.fif` (hundreds of GB) is never needed.
 
-    uv run python -m megspeech.data.raw.fetch            # holdout, then LibriBrain, then LibriBrain2
+    uv run python -m megspeech.data.raw.fetch            # Kaggle test, then LibriBrain, then LibriBrain2
     uv run python -m megspeech.data.raw.fetch --others   # subjects 1-32 (~44 min each), for cross-subject training
     uv run python -m megspeech.data.raw.fetch --weights  # pretrained MEG-XL and a GPT-2-class LM, into models/foreign,
                                                      # and MEG-XL's code at its pin, into external/
@@ -162,18 +162,18 @@ class OsfProject:
         return home
 
 
-HOLDOUT = HubRepo("pnpl/LibriBrain-Competition-2026", ("*.npz",))
+KAGGLE = HubRepo("pnpl/LibriBrain-Competition-2026", ("*.npz",))
 SOURCES = (
-    HOLDOUT,
+    KAGGLE,
     HubRepo("pnpl/LibriBrain", SUBJECT0),
     HubRepo("pnpl/LibriBrain2", SUBJECT0),
 )
-"""Fetch order: the 5.7 GB holdout first, so submission plumbing can start before the training data lands."""
+"""Fetch order: the 5.7 GB Kaggle test first, so submission plumbing can start before the training data lands."""
 
 OTHERS = HubRepo("pnpl/LibriBrain2", OTHER_SUBJECTS)
 
 SHERLOCK_AUDIO = ("Sherlock*/stimuli/audio/*.wav",)
-"""The audiobook chapters the Sherlock runs played; read speech (MOCHA) and the holdout ship none we use."""
+"""The audiobook chapters the Sherlock runs played; read speech (MOCHA) and the Kaggle test ship none we use."""
 
 STIMULI = (
     HubRepo("pnpl/LibriBrain", SHERLOCK_AUDIO),
@@ -206,10 +206,10 @@ MASC_PARTS = (MASC, OsfProject("h2tzn", MASC.dataset), OsfProject("u5327", MASC.
 
 
 def main() -> None:
-    """Fetch every source, or only the holdout, the other subjects, the pretrained weights, or MEG-MASC."""
+    """Fetch every source, or only the Kaggle test, the other subjects, the pretrained weights, or MEG-MASC."""
     parser = argparse.ArgumentParser(description=__doc__)
     choice = parser.add_mutually_exclusive_group()
-    choice.add_argument("--holdout-only", dest="sources", action="store_const", const=(HOLDOUT,), default=SOURCES)
+    choice.add_argument("--kaggle-only", dest="sources", action="store_const", const=(KAGGLE,), default=SOURCES)
     choice.add_argument("--others", dest="sources", action="store_const", const=(OTHERS,))
     choice.add_argument("--weights", dest="sources", action="store_const", const=(*WEIGHTS, MEGXL, NEUROMAG))
     choice.add_argument("--stimuli", dest="sources", action="store_const", const=STIMULI)

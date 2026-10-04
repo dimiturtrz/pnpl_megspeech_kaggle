@@ -32,7 +32,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     written: list[Path] = []
     monkeypatch.setattr(module.Corpus, "load", classmethod(lambda *_: corpus()))
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))
-    monkeypatch.setattr(module.HoldoutWriter, "write", lambda _self, *args: written.append(args[-1]))
+    monkeypatch.setattr(module.KaggleWriter, "write", lambda _self, *args: written.append(args[-1]))
     argv = ["train", "--name", "run", "--optim.epochs", "1", "--optim.batch", "4", "--selection.min_novel", "1"]
     monkeypatch.setattr(sys, "argv", argv)
     main()

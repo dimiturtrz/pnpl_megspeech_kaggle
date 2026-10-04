@@ -23,7 +23,7 @@ class Shared(nn.Module):
 
 
 class Unseen(StrEnum):
-    """The sensor map a subject the layer has no matrix for is read through — a zero-shot holdout subject."""
+    """The sensor map a subject the layer has no matrix for is read through — a zero-shot Kaggle test subject."""
 
     IDENTITY = "identity"
     """The sensors unmapped, as every subject's matrix started."""
@@ -61,7 +61,7 @@ class Reading(StrEnum):
 
     OWN = "own"
     UNSEEN = "unseen"
-    """A subject past every trained one, as a zero-shot holdout subject is."""
+    """A subject past every trained one, as a zero-shot Kaggle test subject is."""
 
     def subjects(self, subject: Int[Tensor, " n"]) -> Int[Tensor, " n"]:
         return READINGS[self](subject)

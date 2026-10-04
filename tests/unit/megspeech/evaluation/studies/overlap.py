@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from core.paths import DataRoot
-from megspeech.data.cache.holdout import ArchiveKind, Epochs, HoldoutCache
+from megspeech.data.cache.kaggle import ArchiveKind, Epochs, KaggleCache
 from megspeech.data.cache.run_cache import WORD_TABLE, RunCache
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY
 from megspeech.data.raw.runs import Run
@@ -70,7 +70,7 @@ def survey(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Survey:
     pd.concat([table(names[0]), table(names[1], shift=2.0), table(names[2])]).to_csv(
         cache / WORD_TABLE, sep="\t", index=False
     )
-    raw = HoldoutCache.of(root).raw
+    raw = KaggleCache.of(root).raw
     raw.mkdir(parents=True)
     for subject in range(SUBJECTS):
         rows = [[0.0, 0.1 * (subject + 1)], [0.0, 0.5, 0.9]]
@@ -91,8 +91,8 @@ def test_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert (row.subject, row.words, row.total, row.shift) == (1, 4, 4, pytest.approx(2.0))
 
 
-def test_holdout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    matches = survey(tmp_path, monkeypatch).holdout()
+def test_kaggle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    matches = survey(tmp_path, monkeypatch).kaggle()
     assert [(m.subject, m.matched, m.unique) for m in matches] == [(0, 2, 2), (1, 1, 1), (2, 1, 1)]
 
 
@@ -103,4 +103,4 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.Lo
     with caplog.at_level(logging.INFO, logger=module.__name__):
         main()
     assert "text: 1 runs, 4 of 4 words matched" in caplog.text
-    assert "holdout: 2 of 4 subject-0 sentences matched one-to-one across 2 other subjects" in caplog.text
+    assert "Kaggle test: 2 of 4 subject-0 sentences matched one-to-one across 2 other subjects" in caplog.text

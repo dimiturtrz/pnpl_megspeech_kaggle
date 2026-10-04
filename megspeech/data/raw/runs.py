@@ -15,7 +15,7 @@ from core.paths import DataRoot
 from megspeech.data.raw.fetch import MASC
 
 DEEP = 0
-"""The Deep track's subject: the one the official split, the validation domains and the holdout belong to."""
+"""The Deep track's subject: the one the official split, the validation domains and the Kaggle test belong to."""
 
 
 class Partition(StrEnum):

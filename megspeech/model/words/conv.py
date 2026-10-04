@@ -33,7 +33,7 @@ class ConvConfig:
     encoder; with no `dilations` they replace the convolutions."""
     instance: bool = False
     """Z-score each sensor within each window over its recorded samples: MEGConformer (LibriBrain 2025 phoneme
-    winner) found per-window normalisation critical for the shift to the holdout."""
+    winner) found per-window normalisation critical for the shift to the Kaggle test."""
     lora: int = 0
     """Retired: the rank of adapters on an end-to-end MEG-XL trunk, never trained above 0; kept so the configs
     saved with it still load."""

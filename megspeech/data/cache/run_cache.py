@@ -3,8 +3,8 @@
 A continuous copy lets word windows be gathered on the device at any offset and length (`batching.windows.Windows`).
 The recordings are 250 Hz and already low-passed at 125 Hz; d'Ascoli 2025 decode at 50 Hz, and 250 / 50 = 5
 is an integer, so `resample_poly(x, 1, 5)` is a pure polyphase decimation whose FIR filter removes everything
-above the new 25 Hz Nyquist before keeping every fifth sample. The holdout is cached the same way
-(`megspeech.data.cache.holdout`).
+above the new 25 Hz Nyquist before keeping every fifth sample. The Kaggle test is cached the same way
+(`megspeech.data.cache.kaggle`).
 
     uv run python -m megspeech.data.cache.run_cache               # every downloaded run under processed/continuous50
     uv run python -m megspeech.data.cache.run_cache --decimate 2  # the same at 125 Hz, under processed/continuous125
@@ -46,7 +46,7 @@ NO_SENTENCE = -1
 GB = 1e9
 
 TAIL = 1.0
-"""Seconds a holdout sentence epoch runs past its sentence's last word (`sentence_extra_end_s`), measured from the
+"""Seconds a Kaggle test sentence epoch runs past its sentence's last word (`sentence_extra_end_s`), measured from the
 word's end: the epochs' tails after their last onset are never under 1.022 s, though one in nine training sentences
 ends on a vocabulary word whose tail from its onset would be exactly 1 s."""
 
@@ -130,7 +130,7 @@ class RunCache:
     @staticmethod
     def words(run: Run) -> pd.DataFrame:
         """A run's heard words: onset in seconds into the run, the word as spoken, its sentence in the run, and the
-        `end` its window stops at — `TAIL` after its sentence's last word ends, as a holdout sentence epoch does."""
+        `end` its window stops at — `TAIL` after its sentence's last word ends, as a Kaggle test sentence epoch does."""
         events = pd.read_csv(
             run.events,
             sep="\t",

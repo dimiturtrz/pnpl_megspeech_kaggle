@@ -8,7 +8,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 ## Now
 
 - [x] Scaffold generated (sdlc-scaffold v1.28.0) + beads.
-- [ ] Pull subj0 preprocessed `.h5` (~60 GB) + competition holdout (5.7 GB).
+- [ ] Pull subj0 preprocessed `.h5` (~60 GB) + Kaggle test set (5.7 GB).
 - [ ] Reproduce the Deep reference (73.23% BAcc@10) on the official splits.
 
 ## Next

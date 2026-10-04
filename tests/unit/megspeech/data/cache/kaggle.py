@@ -1,5 +1,5 @@
-"""The holdout's windows against the training path's: one 250 Hz stretch, cached as a training run and as a holdout
-sentence, gathers bit-identical windows at the same words."""
+"""The Kaggle test's windows against the training path's: one 250 Hz stretch, cached as a training run and as a
+Kaggle test sentence, gathers bit-identical windows at the same words."""
 
 import logging
 import sys
@@ -15,7 +15,7 @@ from pnpl.competition.holdout import HOLDOUT_SUBDIR, LibriBrainCompetitionHoldou
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.cache.alignment import Alignment, Geometry, Projection
 from megspeech.data.cache.cleaning import Cleaning
-from megspeech.data.cache.holdout import HOLDOUT_DIR, Archive, ArchiveKind, Epochs, HoldoutCache, Track, main
+from megspeech.data.cache.kaggle import KAGGLE_DIR, Archive, ArchiveKind, Epochs, KaggleCache, Track, main
 from megspeech.data.cache.run_cache import DIRECTORY, TAIL, WORD_TABLE, DeviceRecording, RunCache
 from megspeech.data.constants import RATE, SFREQ, WINDOW
 from megspeech.data.raw.runs import Run
@@ -62,18 +62,18 @@ def word_archive(raw: Path, subject: int = 0) -> Path:
     return path
 
 
-def holdout(raw: Path) -> HoldoutCache:
+def kaggle(raw: Path) -> KaggleCache:
     """Both archives of subject 0 where the competition lays them out under the `raw` root."""
     archives = raw / HOLDOUT_SUBDIR
     archives.mkdir(parents=True, exist_ok=True)
     sentence_archive(archives)
     word_archive(archives)
-    return HoldoutCache(archives, RunCache(raw.parent / HOLDOUT_DIR))
+    return KaggleCache(archives, RunCache(raw.parent / KAGGLE_DIR))
 
 
 def training(root: Path) -> Run:
     """The stretch as a training run whose events put a word at each of `ONSETS`, the last ending `TAIL` before the
-    stretch does, as the holdout's sentence epoch ends `TAIL` after its sentence's last word."""
+    stretch does, as the Kaggle test's sentence epoch ends `TAIL` after its sentence's last word."""
     run = Run(root / "derivatives" / "serialised" / "sub-0_ses-1_task-Sherlock1_run-1_meg.h5")
     run.meg.parent.mkdir(parents=True, exist_ok=True)
     with h5py.File(run.meg, "w") as stored:
@@ -86,14 +86,14 @@ def training(root: Path) -> Run:
     return run
 
 
-def test_train_and_holdout_windows_match(tmp_path: Path) -> None:
+def test_train_and_kaggle_windows_match(tmp_path: Path) -> None:
     trained = RunCache(tmp_path / "train")
     trained.ready()
     run = training(tmp_path)
     trained.cache_run(run)
     trained.publish(RunCache.words(run))
     source = DeviceRecording.load(trained, "cpu")
-    cache = holdout(tmp_path / "raw")
+    cache = kaggle(tmp_path / "raw")
     cache.build()
     every = torch.arange(len(ONSETS))
     stretch_rows = 1 + every
@@ -107,7 +107,7 @@ def test_train_and_holdout_windows_match(tmp_path: Path) -> None:
     assert tail[..., :past].ne(0).any(dim=-1).all()
 
 
-def test_train_and_holdout_project_alike(tmp_path: Path) -> None:
+def test_train_and_kaggle_project_alike(tmp_path: Path) -> None:
     trained = RunCache(tmp_path / "train")
     trained.ready()
     run = training(tmp_path)
@@ -117,7 +117,7 @@ def test_train_and_holdout_project_alike(tmp_path: Path) -> None:
     basis = torch.linalg.qr(torch.randn(CHANNELS, 2, generator=torch.Generator().manual_seed(0)))[0].T.contiguous()
     geometry = Geometry(projection=Projection(median, spread, basis))
     source = DeviceRecording.load(trained, "cpu", geometry=geometry)
-    cache = holdout(tmp_path / "raw")
+    cache = kaggle(tmp_path / "raw")
     cache.build()
     every = torch.arange(len(ONSETS))
     held = cache.windows("cpu", RATE, geometry=geometry)(1 + every)
@@ -126,7 +126,7 @@ def test_train_and_holdout_project_alike(tmp_path: Path) -> None:
 
 
 def test_rows_follow_competition_order(tmp_path: Path) -> None:
-    cache = holdout(tmp_path / "raw")
+    cache = kaggle(tmp_path / "raw")
     table = cache.build()
     frame = LibriBrainCompetitionHoldout(subjects=[0], data_path=tmp_path / "raw", download=False).metadata_frame()
     assert len(table) == len(frame) == len(cache.windows("cpu", RATE))
@@ -138,19 +138,19 @@ def test_rows_follow_competition_order(tmp_path: Path) -> None:
 
 def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
-    cache = HoldoutCache.of(DataRoot.from_config())
+    cache = KaggleCache.of(DataRoot.from_config())
     assert cache.raw.name == HOLDOUT_SUBDIR
-    assert cache.cache.cache.parts[-2:] == (DIRECTORY.format(rate=RATE), HOLDOUT_DIR)
-    fast = HoldoutCache.of(DataRoot.from_config(), 2).cache
-    assert (fast.cache.parts[-2:], fast.rate) == (("continuous125", HOLDOUT_DIR), SFREQ / 2)
-    assert HoldoutCache.of(DataRoot.from_config(), track=Track.BROAD).subjects == tuple(range(1, 40))
-    cleaned = HoldoutCache.of(DataRoot.from_config(), cleaning=Cleaning.ICA).cache
-    assert (cleaned.cache.parts[-2:], cleaned.cleaning) == (("continuous50-ica", HOLDOUT_DIR), Cleaning.ICA)
+    assert cache.cache.cache.parts[-2:] == (DIRECTORY.format(rate=RATE), KAGGLE_DIR)
+    fast = KaggleCache.of(DataRoot.from_config(), 2).cache
+    assert (fast.cache.parts[-2:], fast.rate) == (("continuous125", KAGGLE_DIR), SFREQ / 2)
+    assert KaggleCache.of(DataRoot.from_config(), track=Track.BROAD).subjects == tuple(range(1, 40))
+    cleaned = KaggleCache.of(DataRoot.from_config(), cleaning=Cleaning.ICA).cache
+    assert (cleaned.cache.parts[-2:], cleaned.cleaning) == (("continuous50-ica", KAGGLE_DIR), Cleaning.ICA)
 
 
 def test_layout(tmp_path: Path) -> None:
     run = recording(tmp_path)
-    assert HoldoutCache(tmp_path / HOLDOUT_SUBDIR, RunCache(tmp_path)).layout() == run.meg
+    assert KaggleCache(tmp_path / HOLDOUT_SUBDIR, RunCache(tmp_path)).layout() == run.meg
 
 
 def test_subjects() -> None:
@@ -158,13 +158,13 @@ def test_subjects() -> None:
     assert Track.BROAD.subjects == tuple(range(1, 40))
 
 
-def test_holdout(tmp_path: Path) -> None:
-    holdout(tmp_path)
-    assert len(Track.DEEP.holdout(tmp_path)) == 1 + len(ONSETS) + WORD_EPOCHS
+def test_kaggle(tmp_path: Path) -> None:
+    kaggle(tmp_path)
+    assert len(Track.DEEP.kaggle(tmp_path)) == 1 + len(ONSETS) + WORD_EPOCHS
 
 
 def test_archives(tmp_path: Path) -> None:
-    names = [archive.name for archive in HoldoutCache(tmp_path, RunCache(tmp_path), (1, 0)).archives()]
+    names = [archive.name for archive in KaggleCache(tmp_path, RunCache(tmp_path), (1, 0)).archives()]
     assert names == [
         f"subj01_{ArchiveKind.SENTENCE}",
         f"subj01_{ArchiveKind.WORD}",
@@ -174,7 +174,7 @@ def test_archives(tmp_path: Path) -> None:
 
 
 def test_build(tmp_path: Path) -> None:
-    cache = holdout(tmp_path / "raw")
+    cache = kaggle(tmp_path / "raw")
     table = cache.build()
     assert len(table) == 1 + len(ONSETS) + WORD_EPOCHS
     assert (cache.cache.cache / WORD_TABLE).exists()
@@ -184,7 +184,7 @@ def test_build(tmp_path: Path) -> None:
 
 
 def test_windows(tmp_path: Path) -> None:
-    cache = holdout(tmp_path / "raw")
+    cache = kaggle(tmp_path / "raw")
     cache.build()
     windows = cache.windows("cpu", RATE)
     assert len(windows) == 1 + len(ONSETS) + WORD_EPOCHS
@@ -198,19 +198,19 @@ def test_windows(tmp_path: Path) -> None:
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
     root = DataRoot.from_config()
-    holdout(root.raw())
-    monkeypatch.setattr(sys, "argv", ["holdout"])
+    kaggle(root.raw())
+    monkeypatch.setattr(sys, "argv", ["kaggle"])
     with caplog.at_level(logging.INFO):
         main()
     rows = 1 + len(ONSETS) + WORD_EPOCHS
     assert (
-        f"{rows} windows of ({CHANNELS}, {RATE}) for {rows} holdout rows, finite 1.000000, zeroed 0.000000"
+        f"{rows} windows of ({CHANNELS}, {RATE}) for {rows} Kaggle test rows, finite 1.000000, zeroed 0.000000"
         in caplog.text
     )
-    monkeypatch.setattr(sys, "argv", ["holdout", "--window", "2"])
+    monkeypatch.setattr(sys, "argv", ["kaggle", "--window", "2"])
     with caplog.at_level(logging.INFO):
         main()
-    assert f"{rows} windows of ({CHANNELS}, {2 * RATE}) for {rows} holdout rows" in caplog.text
+    assert f"{rows} windows of ({CHANNELS}, {2 * RATE}) for {rows} Kaggle test rows" in caplog.text
 
 
 def test_sentences(tmp_path: Path) -> None:

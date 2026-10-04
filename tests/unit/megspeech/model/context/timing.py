@@ -2,10 +2,10 @@ import math
 
 import torch
 
-from megspeech.model.context.timing import FEATURES, HOLDOUT_GAP, Clock, Intervals, TimingHead
+from megspeech.model.context.timing import FEATURES, KAGGLE_GAP, Clock, Intervals, TimingHead
 
 MASK = torch.tensor([[True, True, True, False]])
-ONSET = torch.tensor([[0.0, HOLDOUT_GAP, 3 * HOLDOUT_GAP, 0.0]])
+ONSET = torch.tensor([[0.0, KAGGLE_GAP, 3 * KAGGLE_GAP, 0.0]])
 
 
 def test_width() -> None:
@@ -25,7 +25,7 @@ def test_times() -> None:
     onset = torch.tensor([[0.0, 0.5, 0.0]])
     mask = torch.tensor([[True, True, False]])
     assert torch.equal(Clock.ONSET.times(onset, mask), onset)
-    assert torch.allclose(Clock.ORDER.times(onset, mask)[0, :2], torch.tensor([0.0, HOLDOUT_GAP]))
+    assert torch.allclose(Clock.ORDER.times(onset, mask)[0, :2], torch.tensor([0.0, KAGGLE_GAP]))
 
 
 def test_neighbour() -> None:

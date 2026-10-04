@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from core.paths import ENV_OVERRIDE
-from megspeech.data.cache.holdout import Track
+from megspeech.data.cache.kaggle import Track
 from megspeech.submission import prior as module
 from megspeech.submission.prior import COMPETITION, FrequencyPrior, main
 
@@ -14,7 +14,7 @@ VOCABULARY = ["the", "it’s", "a"]
 ROWS = 4
 
 
-class FakeHoldout:
+class FakeKaggle:
     def __init__(self, *_: object, **__: object) -> None:
         self.indices = np.arange(ROWS)
 
@@ -48,7 +48,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     events(raw / "sub-0_ses-1_events.tsv", ["the"])
     (raw / "sub-0_ses-2_events.tsv").touch()
     uploads: list[tuple[Path, str]] = []
-    monkeypatch.setattr(module.Track, "holdout", lambda *_: FakeHoldout())
+    monkeypatch.setattr(module.Track, "kaggle", lambda *_: FakeKaggle())
     monkeypatch.setattr(module, "submit_to_kaggle", lambda csv, competition, **_: uploads.append((csv, competition)))
     monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
     out = tmp_path / "prior.csv"

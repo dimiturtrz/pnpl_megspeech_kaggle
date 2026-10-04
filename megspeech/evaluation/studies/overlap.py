@@ -1,8 +1,8 @@
 """Whether other subjects heard subject 0's stimuli: the ruler's Sherlock1 text in their pooled runs, and the
-holdout's sentences in their archives.
+Kaggle test's sentences in their archives.
 
 A run's words are matched by `Text`; if two runs are one recording of one text, the onsets of matched words differ
-by one constant shift. A holdout sentence is keyed by its word-onset vector: two archives holding one sentence hold
+by one constant shift. A Kaggle test sentence is keyed by its word-onset vector: two archives holding one sentence hold
 the same onsets.
 
     uv run python -m megspeech.evaluation.studies.overlap
@@ -18,7 +18,7 @@ from jaxtyping import Bool, Float
 from pnpl.competition.holdout import N_SUBJECTS
 
 from core.paths import DataRoot
-from megspeech.data.cache.holdout import ArchiveKind, Epochs, HoldoutCache
+from megspeech.data.cache.kaggle import ArchiveKind, Epochs, KaggleCache
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY
 from megspeech.data.raw.runs import DEEP, Partition, Run
@@ -27,7 +27,7 @@ from megspeech.evaluation.text import RULER, Text
 LOG = logging.getLogger(__name__)
 
 TOLERANCE = 1e-3
-"""Seconds two holdout onsets may differ by and still be one word; the archives store onsets in 10 ms steps."""
+"""Seconds two Kaggle test onsets may differ by and still be one word; the archives store onsets in 10 ms steps."""
 
 
 @dataclass(frozen=True)
@@ -102,7 +102,7 @@ class Onsets:
 
 @dataclass(frozen=True)
 class Survey:
-    """The overlap check over a data root: subject 0's ruler run against every pooled run, and subject 0's holdout
+    """The overlap check over a data root: subject 0's ruler run against every pooled run, and subject 0's Kaggle test
     sentences against every subject's."""
 
     root: DataRoot
@@ -117,8 +117,8 @@ class Survey:
         texts = {run.name: Text.of(table[table["run"] == run.name]) for run in [reference, *pooled]}
         return [Overlap.of(texts[reference.name], texts[run.name], run.subject) for run in pooled]
 
-    def holdout(self) -> list[SentenceMatch]:
-        cache = replace(HoldoutCache.of(self.root), subjects=tuple(range(N_SUBJECTS)))
+    def kaggle(self) -> list[SentenceMatch]:
+        cache = replace(KaggleCache.of(self.root), subjects=tuple(range(N_SUBJECTS)))
         sentences = [Onsets(a.epochs()) for a in cache.archives() if a.name.endswith(ArchiveKind.SENTENCE)]
         onsets = dict(zip(cache.subjects, sentences, strict=True))
         return [onsets[DEEP].match(other, subject) for subject, other in onsets.items()]
@@ -126,7 +126,7 @@ class Survey:
 
 def main() -> None:
     """Log, per subject, how much of subject 0's ruler text its pooled run repeats and how many of subject 0's
-    holdout sentences its holdout archive holds, with the totals."""
+    Kaggle test sentences its Kaggle test archive holds, with the totals."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -141,12 +141,12 @@ def main() -> None:
         sum(r.total for r in text),
         sum(r.labelled for r in text),
     )
-    matches = survey.holdout()
+    matches = survey.kaggle()
     for match in matches:
-        LOG.info("holdout %s", match)
+        LOG.info("Kaggle test %s", match)
     others = [match for match in matches if match.subject != DEEP]
     LOG.info(
-        "holdout: %d of %d subject-0 sentences matched one-to-one across %d other subjects",
+        "Kaggle test: %d of %d subject-0 sentences matched one-to-one across %d other subjects",
         sum(e.unique for e in others),
         sum(e.total for e in others),
         len(others),

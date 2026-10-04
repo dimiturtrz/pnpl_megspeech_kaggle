@@ -3,7 +3,7 @@
 Each run's events list the phonemes of every word (`kind == "phoneme"`, labelled `ah_B`: ARPAbet without stress,
 then the position in the word), joined to their word by `sentenceidx` and `wordidx` and ordered by `phonemeidx`.
 The alignment comes from a pronunciation lexicon, so a word's spelling is a property of its text: of 23,129
-distinct words, 165 begin on more than one phoneme, and each is kept at its most frequent spelling. The holdout
+distinct words, 165 begin on more than one phoneme, and each is kept at its most frequent spelling. The Kaggle test
 carries MEG alone, so the table can only be a training target.
 
     uv run python -m megspeech.data.labels.phonemes   # every downloaded events file's words, under processed/phonemes

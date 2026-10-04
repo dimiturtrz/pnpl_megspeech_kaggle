@@ -1,6 +1,6 @@
 """The frequency-prior submission for a track (Deep or Broad).
 
-The first predictor is the training-set word-frequency prior: one constant row for every holdout window. Under
+The first predictor is the training-set word-frequency prior: one constant row for every Kaggle test window. Under
 BAcc@10 a constant row ranks the same ten words first for every class, so it must score exactly chance (20%) —
 the floor that proves the CSV, the vocabulary order and the scorer agree before any model is spent.
 
@@ -20,7 +20,7 @@ from jaxtyping import Float
 from pnpl.competition import PRIMARY_VOCAB, SECONDARY_VOCAB, submit_to_kaggle, write_submission
 
 from core.paths import DataRoot
-from megspeech.data.cache.holdout import Track
+from megspeech.data.cache.kaggle import Track
 from megspeech.data.constants import MISSING
 from megspeech.data.labels.vocabulary import Vocabulary
 
@@ -63,10 +63,10 @@ def main() -> None:
     events = [path for path in sorted(raw.rglob("*sub-0_*_events.tsv")) if path.stat().st_size]
     prior = FrequencyPrior.from_events(events)
     LOG.info("prior from %d heard words", sum(prior.counts.values()))
-    holdout = args.track.holdout(raw)
+    kaggle = args.track.kaggle(raw)
     primary, secondary = prior.probabilities(PRIMARY_VOCAB), prior.probabilities(SECONDARY_VOCAB)
-    rows = (len(holdout), 1)
-    csv = write_submission(args.out, holdout.indices, np.tile(primary, rows), np.tile(secondary, rows))
+    rows = (len(kaggle), 1)
+    csv = write_submission(args.out, kaggle.indices, np.tile(primary, rows), np.tile(secondary, rows))
     if args.submit:
         submit_to_kaggle(csv, competition=COMPETITION.format(track=args.track), message=args.submit)
 

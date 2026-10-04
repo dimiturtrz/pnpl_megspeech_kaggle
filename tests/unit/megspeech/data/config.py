@@ -9,12 +9,12 @@ import torch
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.cleaning import Cleaning
-from megspeech.data.cache.holdout import Track
+from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS, READING, DataConfig
 from megspeech.data.constants import RATE
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import Grouping
-from tests.unit.megspeech.data.cache.holdout import ONSETS, WORD_EPOCHS, holdout
+from tests.unit.megspeech.data.cache.kaggle import ONSETS, WORD_EPOCHS, kaggle
 
 TRAIN = "sub-0_ses-1_task-Sherlock1_run-1_meg.h5"
 HELD = "sub-0_ses-11_task-Sherlock1_run-2_meg.h5"
@@ -202,11 +202,11 @@ def test_run_cache(tmp_path: Path) -> None:
     assert (cleaned.cache.name, cleaned.cleaning) == ("continuous50-ica", Cleaning.ICA)
 
 
-def test_holdout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_kaggle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
     root = DataRoot.from_config()
-    holdout(root.raw())
-    windows = DataConfig(lead=0.1, baseline=0.5).holdout(root, Track.DEEP, "cpu")
+    kaggle(root.raw())
+    windows = DataConfig(lead=0.1, baseline=0.5).kaggle(root, Track.DEEP, "cpu")
     assert len(windows) == 1 + len(ONSETS) + WORD_EPOCHS
     assert (windows.length, windows.offset, windows.baseline) == (RATE + 5, -5, round(0.5 * RATE))
 

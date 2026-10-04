@@ -73,7 +73,7 @@ class Score:
 
 @dataclass(frozen=True)
 class Report:
-    """One validation domain: both heads, the context head on holdout-like and on unseen spans, and — on the unseen
+    """One validation domain: both heads, the context head on Kaggle-test-like and on unseen spans, and — on the unseen
     spans, by logit adjustment — its balanced top-1 (the competition's tiebreak) and the bits its top-1 carries."""
 
     context: Score

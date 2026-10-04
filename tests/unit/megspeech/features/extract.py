@@ -6,9 +6,9 @@ import pytest
 import torch
 
 from core.paths import DataRoot
-from megspeech.data.batching.split import HOLDOUT_FEATURES, TRAIN, Features, Split
+from megspeech.data.batching.split import KAGGLE_FEATURES, TRAIN, Features, Split
 from megspeech.data.batching.windows import Windows
-from megspeech.data.cache.holdout import Track
+from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
 from megspeech.data.spans.spans import PAD
@@ -62,7 +62,7 @@ def export(directory: Path) -> Export:
 
 def test_splits(tmp_path: Path):
     splits = export(tmp_path).splits()
-    assert list(splits) == [TRAIN, "Sherlock1", f"{HOLDOUT_FEATURES}-{Track.DEEP}"]
+    assert list(splits) == [TRAIN, "Sherlock1", f"{KAGGLE_FEATURES}-{Track.DEEP}"]
     assert [len(s.index) for s in splits.values()] == [1, 2, 3]
 
 

@@ -15,7 +15,7 @@ from core.tree import Tree
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.alignment import AS_RECORDED, EVERY, UNALIGNED, Alignment, Geometry
 from megspeech.data.cache.cleaning import Cleaning
-from megspeech.data.cache.holdout import HoldoutCache, Track
+from megspeech.data.cache.kaggle import KaggleCache, Track
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
 from megspeech.data.raw.runs import DEEP, Partition, Run
@@ -25,7 +25,7 @@ METRICS = "metrics.json"
 """The record a finished run leaves in its directory, its config under `config`."""
 
 READ = frozenset({"TIMIT", "MOCHATIMIT"})
-"""Tasks of read sentences, the holdout's domain; the rest is narrative (Sherlock, TheMoth)."""
+"""Tasks of read sentences, the Kaggle test's domain; the rest is narrative (Sherlock, TheMoth)."""
 
 NARRATIVE = ("Sherlock", "TheMoth")
 """The strata the ruler scores: Sherlock's nine books are one, TheMoth's stories another."""
@@ -42,10 +42,11 @@ class DataConfig:
     tasks: tuple[str, ...] = ()
     """Training restricted to these tasks' runs; empty trains on every task."""
     read_weight: float = 1.0
-    """Sampling weight of read-sentence runs (TIMIT, MOCHA-TIMIT) — the holdout's domain — against narrative ones."""
+    """Sampling weight of read-sentence runs (TIMIT, MOCHA-TIMIT) — the Kaggle test's domain — against narrative
+    ones."""
     narrator_weight: float = 1.0
     """Sampling weight of runs in `NARRATOR`'s one voice (112 of sub-0's 156 training runs) against the
-    multi-speaker rest: TheMoth validation is a voice training never heard, as are the holdout's read sentences."""
+    multi-speaker rest: TheMoth validation is a voice training never heard, as are the Kaggle test's read sentences."""
     repeat_power: float = 0.0
     """A span heard `k` times in training is drawn with weight `k ** -repeat_power`; 1 draws each sentence once."""
     grouping: Grouping = Grouping.SENTENCE
@@ -56,9 +57,9 @@ class DataConfig:
     window: float = 1.0
     """Seconds of MEG from each word's onset; a model is scored and submitted at the window it trained on."""
     standardised: bool = False
-    """Each recording — training or validation run, holdout archive — robust-scaled per channel by its own median and
-    IQR before the model's scaler. Across the 162 runs a channel's IQR over its median run spans 0.78-1.28 (p5-p95);
-    the holdout sentence archive's sits at 0.90."""
+    """Each recording — training or validation run, Kaggle test archive — robust-scaled per channel by its own median
+    and IQR before the model's scaler. Across the 162 runs a channel's IQR over its median run spans 0.78-1.28 (p5-p95);
+    the Kaggle test sentence archive's sits at 0.90."""
     extra: int = 0
     """Whole training sessions per narrative stratum held out as one more validation domain, `<stratum>+`, beside
     the official run: each book's or story's last session first. One official run per stratum leaves the macro's
@@ -74,7 +75,7 @@ class DataConfig:
     reference pipeline baselines on 0-0.5 s, the pre-response stretch, so the word's evoked field is kept whole."""
     lead: float = 0.0
     """Seconds of MEG before each word's onset, read ahead of its `window`: never before its sentence's first onset,
-    as a holdout sentence epoch starts there."""
+    as a Kaggle test sentence epoch starts there."""
     decimate: int = DECIMATE
     """The 250 Hz recordings' decimation factor: which continuous cache training reads (`RunCache.under`)."""
     folds: int = 1
@@ -88,10 +89,11 @@ class DataConfig:
     place of every split's MEG; empty reads the MEG."""
     cleaning: Cleaning = Cleaning.NONE
     """Artifacts removed from every recording before it is cached (`megspeech.data.cache.cleaning`): which cache
-    training and the holdout read."""
+    training and the Kaggle test read."""
     aligned: bool = False
     """Every recording, subject 0's own included, re-coloured to subject 0's mean sensor covariance (`Alignment`) in
-    training, validation and holdout alike: one sensor geometry the model learns in and every subject meets it in."""
+    training, validation and Kaggle test alike: one sensor geometry the model learns in and every subject meets it
+    in."""
     subspace: bool = False
     """Every recording kept as its coordinates in subject 0's Maxwell signal subspace (`Projection`, ~75 components
     of 306 sensors): the same signal in a quarter of the device cache, the model reading as many channels."""
@@ -109,7 +111,7 @@ class DataConfig:
     @classmethod
     def shared(cls, directories: Sequence[Path], grouping: Grouping) -> "DataConfig":
         """The `READING` every run in `directories` trained at, spans cut by `grouping`: members that read MEG
-        differently cannot share one set of holdout windows, nor members trained on different runs one prior. Bagged
+        differently cannot share one set of Kaggle test windows, nor members trained on different runs one prior. Bagged
         members leaving out different folds together trained on every run, so they share an unbagged config."""
         saved = [cls.saved(directory) for directory in directories]
         readings = {tuple(getattr(config, name) for name in READING) for config in saved}
@@ -149,12 +151,12 @@ class DataConfig:
         """The run cache training reads, at `decimate`."""
         return RunCache.under(root.processed(), self.decimate, self.cleaning)
 
-    def holdout(
+    def kaggle(
         self, root: DataRoot, track: Track, device: torch.device | str, geometry: Geometry = AS_RECORDED
     ) -> Windows:
-        """`track`'s holdout windows as this config reads them, its cache built first if missing, every archive
+        """`track`'s Kaggle test windows as this config reads them, its cache built first if missing, every archive
         loaded in `geometry`."""
-        cache = HoldoutCache.of(root, self.decimate, track, self.cleaning)
+        cache = KaggleCache.of(root, self.decimate, track, self.cleaning)
         cache.build()
         windows = cache.windows(device, self.samples, standardised=self.standardised, geometry=geometry)
         return self.reading(windows)

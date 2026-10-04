@@ -23,7 +23,7 @@ from megspeech.data.spans.spans import PAD, Spans
 EVAL_SPANS = 256
 
 DENSE = 4
-"""Validation spans this long or longer look like holdout sentences (94% of which carry 4-9 words)."""
+"""Validation spans this long or longer look like Kaggle test sentences (94% of which carry 4-9 words)."""
 
 SIGMAS = 6
 """Word rows a training batch reserves above its expected word count, in standard deviations of that count: a
@@ -85,8 +85,8 @@ class SpanText:
         return rows[rows != PAD]
 
 
-class Holdout(Protocol):
-    """What a split needs of the holdout: its row metadata, in canonical row order."""
+class Kaggle(Protocol):
+    """What a split needs of the Kaggle test: its row metadata, in canonical row order."""
 
     def metadata_frame(self) -> pd.DataFrame: ...
 
@@ -136,11 +136,12 @@ class Split:
         )
 
     @classmethod
-    def from_holdout(cls, holdout: Holdout, windows: Windows) -> "Split":
-        """Every holdout row, its window the same row of `windows`, grouped by sentence; a lone word is its own span."""
-        frame = holdout.metadata_frame()
+    def from_kaggle(cls, kaggle: Kaggle, windows: Windows) -> "Split":
+        """Every Kaggle test row, its window the same row of `windows`, grouped by sentence; a lone word is its own
+        span."""
+        frame = kaggle.metadata_frame()
         if len(frame) != len(windows):
-            raise ValueError(f"{len(windows)} holdout windows for {len(frame)} holdout rows")
+            raise ValueError(f"{len(windows)} Kaggle test windows for {len(frame)} Kaggle test rows")
         sentence = frame["source"] == "sentence"
         group = np.where(sentence, frame["epoch"], -1 - frame["index"])
         keys = frame.assign(group=group)[["subject", "source", "group"]]
@@ -162,7 +163,7 @@ class Split:
         return torch.nonzero(self.y != IGNORE).flatten()
 
     def lone(self) -> Bool[Tensor, " n"]:
-        """Words alone in their span, as the holdout's isolated-word rows are: no context reaches them."""
+        """Words alone in their span, as the Kaggle test's isolated-word rows are: no context reaches them."""
         alone = (self.index != PAD).sum(dim=1) == 1
         mask = torch.zeros(len(self.y), dtype=torch.bool, device=self.y.device)
         mask[self.index[alone, 0]] = True
@@ -204,7 +205,7 @@ class Split:
     def novel(self, seen: frozenset[tuple[int, ...]]) -> Int[Tensor, " k"]:
         """Labelled words in multi-word spans whose text training never heard.
 
-        The holdout's sentences are new stimuli, so a span recited from training measures memorised word order. Text,
+        Kaggle test sentences are new stimuli, so a span recited from training measures memorised word order. Text,
         not labels: under sentence spans every out-of-vocabulary word labels alike, so distinct sentences would collide.
         """
         novel = self.text.novel(seen)
@@ -215,8 +216,8 @@ class Split:
         scale = self.text.repeats(power)
         return replace(self, weight=self.weight * torch.from_numpy(scale).float().to(self.weight.device))
 
-    def holdout_like(self) -> Int[Tensor, " d"]:
-        """Labelled words in spans at least `DENSE` long — the holdout-like subset."""
+    def kaggle_like(self) -> Int[Tensor, " d"]:
+        """Labelled words in spans at least `DENSE` long — the Kaggle-test-like subset."""
         long = self.index[(self.index != PAD).sum(dim=1) >= DENSE]
         words = long[long != PAD]
         return words[self.y[words] != IGNORE]
@@ -224,8 +225,8 @@ class Split:
 
 FEATURES = "features"
 TRAIN = "train"
-HOLDOUT_FEATURES = "holdout"
-"""The names of the training split's features and the prefix of a track's holdout's, `holdout-<track>`; a
+KAGGLE_FEATURES = "holdout"
+"""The names of the training split's features and the prefix of a track's Kaggle test's, `holdout-<track>`; a
 validation domain's are its own name."""
 
 

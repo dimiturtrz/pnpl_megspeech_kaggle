@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from megspeech.data.labels.vocabulary import IGNORE
-from megspeech.data.spans.spans import HOLDOUT_WORDS, MAX_WORDS, PAD, Grouping, Sentences, Spans
+from megspeech.data.spans.spans import KAGGLE_WORDS, MAX_WORDS, PAD, Grouping, Sentences, Spans
 
 
 def test_by_gap() -> None:
@@ -29,11 +29,11 @@ def test_by_sentence() -> None:
 
 
 def test_by_sentence_aims_at_words() -> None:
-    """Aiming at the holdout's length cuts a nine-word sentence in two and a 17-word one in three, but leaves a
+    """Aiming at the Kaggle test's length cuts a nine-word sentence in two and a 17-word one in three, but leaves a
     seven-word one whole; aiming at nine is the fewest-pieces cut."""
     group = np.r_[[0] * 9, [1] * 7, [2] * 17]
     onset = np.arange(len(group)) * 0.5
-    assert Spans.by_sentence(group, onset, HOLDOUT_WORDS).lengths.tolist() == [5, 4, 7, 6, 6, 5]
+    assert Spans.by_sentence(group, onset, KAGGLE_WORDS).lengths.tolist() == [5, 4, 7, 6, 6, 5]
     assert Spans.by_sentence(group, onset, MAX_WORDS).lengths.tolist() == [9, 7, 9, 8]
 
 
@@ -73,14 +73,14 @@ def test_spans() -> None:
     assert Grouping.SENTENCE.spans(WORDS).index[:, :2].tolist() == [[0, 1], [2, PAD], [3, PAD]]
     assert Grouping.GAP.spans(WORDS).index[:, :3].tolist() == [[0, 1, 2], [3, PAD, PAD]]
     nine = pd.DataFrame({"run": ["a"] * 9, "sentence": [0] * 9, "onset": np.arange(9) * 0.3})
-    assert Grouping.HOLDOUT.spans(nine).lengths.tolist() == [5, 4]
+    assert Grouping.KAGGLE.spans(nine).lengths.tolist() == [5, 4]
     assert Grouping.SENTENCE.spans(nine).lengths.tolist() == [9]
 
 
 def test_sentences() -> None:
     """A sentence cut keys sentences by run too: the same sentence number in two runs is two spans."""
     assert Sentences()(WORDS).lengths.tolist() == [2, 1, 1]
-    assert Sentences(HOLDOUT_WORDS).words == HOLDOUT_WORDS
+    assert Sentences(KAGGLE_WORDS).words == KAGGLE_WORDS
 
 
 def test_bound() -> None:

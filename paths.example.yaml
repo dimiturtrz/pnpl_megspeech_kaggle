@@ -2,7 +2,7 @@
 #   cp paths.example.yaml paths.yaml   # then set the one path below
 #
 # ONE data root. Everything else is derived:
-#   <data>/raw/pnpl_libribrain/        HF downloads (LibriBrain .h5/.tsv, competition holdout .npz), never written to
+#   <data>/raw/pnpl_libribrain/        HF downloads (LibriBrain .h5/.tsv, Kaggle test .npz), never written to
 #   <data>/processed/pnpl_libribrain/  caches, splits, embeddings — created automatically
 #
 # Env MEGSPEECH_DATA overrides this file (CI points it at an empty dir so data-gated tests skip).

@@ -58,7 +58,7 @@ class ContextConfig:
     dropout: float = 0.1
     shortest: float = 0.04
     longest: float = 8.0
-    """Onset periods span two 50 Hz samples up to a nine-word span at the holdout's widest gap."""
+    """Onset periods span two 50 Hz samples up to a nine-word span at the Kaggle test's widest gap."""
     timescales: int = 16
     clock: Clock = Clock.ONSET
     intervals: Intervals = Intervals.NONE
@@ -71,7 +71,7 @@ class ContextConfig:
     `dropout`."""
     mixing: int = 0
     """Depthwise kernel, in words, of a convolution module after each transformer layer (`span.SpanConformer`); 0
-    keeps the plain transformer. Holdout sentences run 1-9 words, so 3 mixes each word with its neighbours."""
+    keeps the plain transformer. Kaggle test sentences run 1-9 words, so 3 mixes each word with its neighbours."""
     subjects: int = 0
     final_norm: bool = False
     """A LayerNorm after the pre-norm transformer's last layer, before the context head (plain transformer only)."""

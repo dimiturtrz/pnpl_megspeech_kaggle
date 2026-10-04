@@ -25,7 +25,7 @@ def split(n: int = 12, seed: int = 0) -> Split:
     return Split.from_arrays(x, y, Spans.by_gap(onset), CPU)
 
 
-class Holdout:
+class Kaggle:
     def metadata_frame(self) -> pd.DataFrame:
         return pd.DataFrame(
             {
@@ -128,20 +128,20 @@ def test_capacity() -> None:
     assert s.capacity(100, longest.float()) > s.capacity(100, natural)
 
 
-def test_holdout_like() -> None:
-    assert split().holdout_like().tolist() == list(range(DENSE))
+def test_kaggle_like() -> None:
+    assert split().kaggle_like().tolist() == list(range(DENSE))
     unknown = dataclasses.replace(split(), y=torch.where(torch.arange(12) == 0, IGNORE, split().y))
-    assert unknown.holdout_like().tolist() == list(range(1, DENSE))
+    assert unknown.kaggle_like().tolist() == list(range(1, DENSE))
 
 
-def test_from_holdout() -> None:
+def test_from_kaggle() -> None:
     windows = Windows.stacked(torch.zeros(3, CHANNELS, SAMPLES))
-    held = Split.from_holdout(Holdout(), windows)
+    held = Split.from_kaggle(Kaggle(), windows)
     assert held.windows is windows
     assert held.index[:, :2].tolist() == [[0, 1], [2, -1]]
     assert held.onset[0, :2].tolist() == pytest.approx([0.0, 0.3])
-    with pytest.raises(ValueError, match="2 holdout windows for 3"):
-        Split.from_holdout(Holdout(), Windows.stacked(torch.zeros(2, CHANNELS, SAMPLES)))
+    with pytest.raises(ValueError, match="2 Kaggle test windows for 3"):
+        Split.from_kaggle(Kaggle(), Windows.stacked(torch.zeros(2, CHANNELS, SAMPLES)))
 
 
 def test_target() -> None:

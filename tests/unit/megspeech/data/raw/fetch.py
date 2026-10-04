@@ -10,7 +10,7 @@ import pytest
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.raw import fetch as module
 from megspeech.data.raw.fetch import (
-    HOLDOUT,
+    KAGGLE,
     MASC,
     MASC_PARTS,
     MEGXL,
@@ -62,20 +62,20 @@ def test_sources_never_pull_raw_fif():
     assert all(".fif" not in pattern for source in SOURCES for pattern in source.patterns)
 
 
-def test_main_fetches_the_holdout_first(calls: Calls, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_main_fetches_kaggle_first(calls: Calls, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
     monkeypatch.setattr(sys, "argv", ["fetch"])
     main()
     assert [call["repo_id"] for call in calls] == [source.repo for source in SOURCES]
-    assert calls[0]["repo_id"] == HOLDOUT.repo
+    assert calls[0]["repo_id"] == KAGGLE.repo
     assert calls[0]["local_dir"] == tmp_path / "raw" / "pnpl_libribrain"
 
 
-def test_main_holdout_only(calls: Calls, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_main_kaggle_only(calls: Calls, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
-    monkeypatch.setattr(sys, "argv", ["fetch", "--holdout-only"])
+    monkeypatch.setattr(sys, "argv", ["fetch", "--kaggle-only"])
     main()
-    assert [call["repo_id"] for call in calls] == [HOLDOUT.repo]
+    assert [call["repo_id"] for call in calls] == [KAGGLE.repo]
 
 
 def test_main_others(calls: Calls, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

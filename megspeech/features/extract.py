@@ -27,9 +27,9 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from core.tree import Tree
-from megspeech.data.batching.split import HOLDOUT_FEATURES, TRAIN, Features, Split
+from megspeech.data.batching.split import KAGGLE_FEATURES, TRAIN, Features, Split
 from megspeech.data.batching.windows import Windows
-from megspeech.data.cache.holdout import Track
+from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import CHANNELS, RATE
 from megspeech.data.corpus import Corpus
@@ -48,8 +48,8 @@ BASIS_SAMPLE = 2048
 BASIS_SPANS = 256
 """Spans whose words fit the spanned read's components: ~1.7k words, 535k channel vectors for 16 axes of 512."""
 SEGMENT = 37 * DOWNSAMPLING
-"""Samples of a span's segment: the longest holdout sentence epoch can run 8 onset gaps of 0.92 s plus a 1.36 s tail,
-8.7 s, rounded up to whole tokens."""
+"""Samples of a span's segment: the longest Kaggle test sentence epoch can run 8 onset gaps of 0.92 s plus a 1.36 s
+tail, 8.7 s, rounded up to whole tokens."""
 WORD = RATE // 2
 """Samples after its onset whose tokens make a word's feature: MEG-XL's own word read."""
 SEGMENT_CHUNK = CHUNK * RATE // SEGMENT
@@ -214,11 +214,11 @@ class Read(StrEnum):
 
 @dataclass
 class Export:
-    """The MEG of the training split, every validation domain and the Deep holdout, whose extracted features are
+    """The MEG of the training split, every validation domain and the Deep Kaggle test, whose extracted features are
     saved under models/features/<name>, one file per split, beside the settings that made them."""
 
     corpus: Corpus
-    holdout: Split
+    kaggle: Split
     features: Features
 
     @classmethod  # devtools-ignore: test-mirror
@@ -229,13 +229,13 @@ class Export:
             raise ValueError("features are extracted from the 306 sensors; a subspace config keeps its components")
         meg = replace(data, features="")
         track = Track.DEEP
-        holdout = Split.from_holdout(track.holdout(root.raw()), meg.holdout(root, track, device))
-        return cls(Corpus.load(meg, root, device), holdout, Features.under(root, name))
+        kaggle = Split.from_kaggle(track.kaggle(root.raw()), meg.kaggle(root, track, device))
+        return cls(Corpus.load(meg, root, device), kaggle, Features.under(root, name))
 
     def splits(self) -> dict[str, Split]:
         """Every split by the name its features are saved and read under."""
-        holdout = {f"{HOLDOUT_FEATURES}-{Track.DEEP}": self.holdout}
-        return {TRAIN: self.corpus.train} | self.corpus.validation | holdout
+        kaggle = {f"{KAGGLE_FEATURES}-{Track.DEEP}": self.kaggle}
+        return {TRAIN: self.corpus.train} | self.corpus.validation | kaggle
 
     def save(self, extract: Extraction, settings: dict[str, object]) -> None:
         for name, split in self.splits().items():
@@ -246,7 +246,7 @@ class Export:
 
 
 def main() -> None:
-    """Save the features of the training split, validation domains and Deep holdout under models/features/<name>."""
+    """Save the features of the training split, validation domains and Deep Kaggle test under models/features/<name>."""
     tree = Tree(RunConfig)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--name", required=True)

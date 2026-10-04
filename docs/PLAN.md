@@ -15,7 +15,7 @@ Two tracks, one repo — **Deep** builds the base pipeline, **Broad** reuses its
 
 Rules that shape the work: any external data / pretrained model allowed; prize requires beating the
 reference baseline; top 3 per track, a team wins at most once; winners provide checkpoints (maybe code);
-holdout split into public + final partitions. Site: libribrain.com/editions/2026 · paper arXiv 2609.03231.
+Kaggle test split into public + final partitions. Site: libribrain.com/editions/2026 · paper arXiv 2609.03231.
 
 ## Headline metrics
 
@@ -23,12 +23,12 @@ BAcc@10 (balanced top-10 accuracy over the 50 words, chance 20%); tiebreak BAcc@
 Kaggle lists the metric as `Balanced-Acccuracy` (sic); `pnpl`'s `write_submission` docstring says "argmax",
 which contradicts the FAQ's BAcc@10. Which one the live scorer computes is unverified, so we report both.
 
-| track | reference | paper BAcc@10 (own test split) | holdout BAcc@10 (3rd-party rerun) | LB top (2026-10-01) | ours |
+| track | reference | paper BAcc@10 (own test split) | Kaggle test BAcc@10 (3rd-party rerun) | LB top (2026-10-01) | ours |
 |---|---|---|---|---|---|
 | Deep | d'Ascoli 2025 | 73.23% (BAcc@1 25.60%) | 46.7% | 76.5% (63 teams) | — |
 | Broad | MEG-XL | 42.96% | 30.8% | 72.9% (28 teams) | — |
 
-The paper numbers are NOT the holdout ruler. The holdout rerun is from gereonelvers/2026-pnpl-competition-baselines,
+The paper numbers are NOT the Kaggle test ruler. The Kaggle test rerun is from gereonelvers/2026-pnpl-competition-baselines,
 which has no license. It found both baselines need sentence context: d'Ascoli's CNN branch alone scores below
 chance on isolated words. The leaderboard is far above the references, so a faithful replication buys
 eligibility, not rank.
@@ -57,7 +57,7 @@ All CC-BY-NC-4.0, on HuggingFace under `pnpl/`. Sizes measured from the HF tree 
 |---|---|---|
 | `LibriBrain` Sherlock1–7 (subj0) | preprocessed `.h5` + events `.tsv` | **~60 GB** |
 | same | raw `.fif` (BIDS) | ~484 GB — **not needed** |
-| `LibriBrain-Competition-2026` | holdout `.npz` | 5.7 GB |
+| `LibriBrain-Competition-2026` | Kaggle test `.npz` | 5.7 GB |
 | `LibriBrain2` sub-0 | Sherlock8–9, TIMIT, MOCHATIMIT, TheMoth (= Podcasts) `.h5` + `.tsv` | **~36 GB** |
 | `LibriBrain2` subj 1–32 | Sherlock1 ses-11/12 `.h5` (0.1–0.5 GB each) | ~20 GB |
 | `LibriBrain2` | everything incl. raw `.fif` | 239 GB — never pulled whole |
@@ -86,23 +86,23 @@ raises.
   vocabulary ourselves.
 - Standardisation is a z-score clipped at ±10, with stats pooled over the dataset's own runs. Each partition
   computes its own stats unless `channel_means`/`channel_stds` are passed in. Train stats must be carried
-  to val/test/holdout.
-- The default window is 0–0.5 s; the holdout gives 1 s.
+  to val/test/Kaggle test.
+- The default window is 0–0.5 s; the Kaggle test gives 1 s.
 
 **Preprocessing is fixed**, train and test alike (file names: `proc-bads+headpos+sss+notch+lfreq01+hfreq125+sfreq250`):
 bad-channel marking → cHPI head-position → SSS/Maxwell with movement compensation → line-noise notch →
-0.1–125 Hz band-pass → 250 Hz. No raw holdout exists, so anything we do must be a transform of THAT
+0.1–125 Hz band-pass → 250 Hz. No raw Kaggle test exists, so anything we do must be a transform of THAT
 signal applicable at test time (re-filtering inside the band, spatial projections, alignment,
 normalization). Raw `.fif` is at most a pretraining source.
 
-**Holdout format** (`.npz` headers read 2026-10-01; 80 files = 40 subjects × 2):
+**Kaggle test format** (`.npz` headers read 2026-10-01; 80 files = 40 subjects × 2):
 
 | file | arrays |
 |---|---|
 | `subjXX_holdout2_word.npz` | `meg` (92, 306, 250) f32 — 1 s windows, `tmin` 0, `tmax` 1; `sfreq` 250 |
 | `subjXX_holdout01_sentence.npz` | `meg` (156, 306, 1030) f32 + `sentence_sample_mask`, `sentence_n_times`; `word_onsets_s` / `word_mask` (156, 9); `sentence_extra_end_s` 1.0 |
 
-The sentence holdout carries every word's onset with its surrounding MEG — the only place cross-word
+The Kaggle test sentence archive carries every word's onset with its surrounding MEG — the only place cross-word
 context is available at test time.
 
 **Layout** (root `D:/data/neural`, shared with mindscape; `core/paths.py`): `raw/pnpl_libribrain/`,
@@ -129,10 +129,10 @@ SOTA gather → replicate → build past it.
      0–0.5 s; clamp ±5.
    - Training: AdamW lr 1e-4, wd 0, cosine over 50 epochs, patience 10, batch 128. Early-stop on val
      BAcc@10 (macro, 50-word vocab).
-   - Check: the holdout gives each word only 1 s plus sentence context (`sentence_extra_end_s` 1.0), not 3 s.
-     How the 3 s window maps onto the sentence holdout is the first thing to read in their code.
+   - Check: the Kaggle test gives each word only 1 s plus sentence context (`sentence_extra_end_s` 1.0), not 3 s.
+     How the 3 s window maps onto the Kaggle test sentence archive is the first thing to read in their code.
 2. **Levers** (ranked by plausible size): contrastive alignment to pretrained speech/word embeddings
-   (Défossez 2023 recipe), MEG-XL fine-tune, sentence context on the sentence holdout (neighbouring
+   (Défossez 2023 recipe), MEG-XL fine-tune, sentence context on the Kaggle test sentences (neighbouring
    words' MEG + a language prior over the 50-word vocabulary).
 3. **Broad**: Deep backbone + per-subject alignment (Euclidean/Riemannian) or subject layer; report the
    minutes-vs-accuracy curve.

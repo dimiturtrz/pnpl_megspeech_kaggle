@@ -1,4 +1,4 @@
-"""Train the sentence-context word classifier on the official train split, select on validation, predict the holdout.
+"""Train the sentence-context word classifier on the official train split, select on val, predict the Kaggle test.
 
 uv run python -m megspeech.training.cli.train --name context-v0
 """
@@ -12,10 +12,10 @@ import torch
 
 from core.paths import DataRoot
 from core.tree import Tree
-from megspeech.data.cache.holdout import Track
+from megspeech.data.cache.kaggle import Track
 from megspeech.data.corpus import Corpus
 from megspeech.evaluation.loaded import LoadedModel
-from megspeech.submission.writer import HoldoutWriter
+from megspeech.submission.writer import KaggleWriter
 from megspeech.training.config import METRICS, RunConfig
 from megspeech.training.loop.trainer import Trainer
 
@@ -23,7 +23,7 @@ LOG = logging.getLogger(__name__)
 
 
 def main() -> None:
-    """Train, write metrics + checkpoint + holdout submission under models/pnpl_libribrain/<name>."""
+    """Train, write metrics + checkpoint + Kaggle test submission under models/pnpl_libribrain/<name>."""
     origin = argparse.ArgumentParser(add_help=False)
     origin.add_argument("--origin", help="a run whose recorded config the flags start from (default: the warm run)")
     warm = argparse.ArgumentParser(add_help=False, parents=[origin])
@@ -54,7 +54,7 @@ def main() -> None:
     evaluator = trainer.evaluator
     evaluator.graded(model, validation, log_prior, best.tau).save(out / "hits.pt")
     loaded = LoadedModel(root, model, config.data, evaluator, log_prior, geometry=corpus.geometry)
-    HoldoutWriter(Track.DEEP).write(loaded, best.tau, out / "submission.csv")
+    KaggleWriter(Track.DEEP).write(loaded, best.tau, out / "submission.csv")
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ so it is novel text in every subject's own MEG. A subject's score is balanced to
 as the Deep ruler scores a domain; the ruler is the unweighted mean over subjects at one adjustment for all, over the
 subjects with the unseen-span words a Deep domain needs to count (`Evaluator.min_novel`).
 
-`--reading unseen` reads every subject as the holdout's zero-shot subjects 33-39 are read — through the
+`--reading unseen` reads every subject as the Kaggle test's zero-shot subjects 33-39 are read — through the
 `--fallback.unseen` matrix instead of its own — so the fallbacks can be compared where the answers are known.
 """
 

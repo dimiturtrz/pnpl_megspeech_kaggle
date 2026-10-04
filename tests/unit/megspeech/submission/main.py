@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from core.paths import DataRoot
-from megspeech.data.cache.holdout import Track
+from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
 from megspeech.evaluation.loaded import LoadedModel, Scoring
 from megspeech.model.input.subjects import Reading, Unseen
@@ -17,7 +17,7 @@ from tests.unit.megspeech.evaluation.loaded import loaded, runs
 
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
-    """Each track's ruler selects the adjustment its holdout rows are written at, under models/<out>."""
+    """Each track's ruler selects the adjustment its Kaggle test rows are written at, under models/<out>."""
     every = runs(tmp_path)
     scorings: list[Scoring] = []
     written: list[tuple[Track, float, Path]] = []
@@ -30,7 +30,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.Lo
     monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: every))
     monkeypatch.setattr(module.LoadedModel, "of", classmethod(of))
     monkeypatch.setattr(
-        module.HoldoutWriter, "write", lambda self, _, tau, path: written.append((self.track, tau, path)) or path
+        module.KaggleWriter, "write", lambda self, _, tau, path: written.append((self.track, tau, path)) or path
     )
     for track in Track:
         monkeypatch.setattr(

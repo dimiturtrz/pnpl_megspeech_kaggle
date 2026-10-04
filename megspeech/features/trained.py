@@ -37,7 +37,7 @@ class Trained:
 
 
 def main() -> None:
-    """Save `--run`'s embeddings of the training split, validation domains and Deep holdout under
+    """Save `--run`'s embeddings of the training split, validation domains and Deep Kaggle test under
     models/features/<name>, the run's own data settings choosing the words."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True)

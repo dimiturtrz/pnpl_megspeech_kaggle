@@ -14,7 +14,8 @@ from torch import Tensor
 
 GATE = 8.0
 """Interquartile ranges from its median at which a sample on any channel is an artifact the covariance leaves out:
-subject 0's training runs reach 35-40 at the 99.9th percentile, the other subjects' runs and every holdout 3-4."""
+subject 0's training runs reach 35-40 at the 99.9th percentile, the other subjects' runs and every Kaggle test
+archive 3-4."""
 FLOOR = 1e-4
 """Eigenvalues below this fraction of the largest are the Maxwell filter's null space (rank ~75 of 306): projected
 out, never inverted."""
@@ -24,7 +25,7 @@ EVERY = 4
 """Every how many of subject 0's training runs the reference reads: 39 of 156 still span every book and session."""
 QUANTILE_SAMPLE = 20000
 REFERENCE = "sub-0_"
-"""The prefix of subject 0's run names in both the training cache and the holdout cache (`subj00_`)."""
+"""The prefix of subject 0's run names in both the training cache and the Kaggle test cache (`subj00_`)."""
 UNALIGNED = (REFERENCE, "subj00_")
 
 

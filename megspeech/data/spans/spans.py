@@ -1,6 +1,6 @@
 """Spans of words heard together: the unit the context model reads.
 
-A holdout sentence carries every word's onset, out-of-vocabulary ones included — onset gaps p50 0.20 s, at most
+A Kaggle test sentence carries every word's onset, out-of-vocabulary ones included — onset gaps p50 0.20 s, at most
 nine words (`word_onsets_s` is `(N_sent, 9)` in `pnpl.competition.holdout`). Training spans are cut one of two
 ways: by sentence, every word of one PNPL sentence (`sentenceidx`, as pnpl's `LibriBrainSentence` groups them), a
 sentence longer than nine split into the fewest near-equal pieces; or, the older gap rule, consecutive vocabulary
@@ -18,13 +18,13 @@ from jaxtyping import Bool, Float, Int
 from megspeech.data.labels.vocabulary import IGNORE
 
 MAX_WORDS = 9
-"""Width of the holdout's `word_onsets_s`."""
+"""Width of the Kaggle test's `word_onsets_s`."""
 
 MAX_GAP = 0.92
-"""Widest within-sentence onset gap in the Deep holdout (subject 0, 156 sentences)."""
+"""Widest within-sentence onset gap in the Deep Kaggle test (subject 0, 156 sentences)."""
 
-HOLDOUT_WORDS = 5.56
-"""Mean words per Deep holdout sentence epoch (`word_onsets_s` mask, subject 0): pieces this long match its
+KAGGLE_WORDS = 5.56
+"""Mean words per Deep Kaggle test sentence epoch (`word_onsets_s` mask, subject 0): pieces this long match its
 spans, where whole PNPL sentences run 6.8-7.4 words in validation."""
 
 PAD = -1
@@ -81,7 +81,7 @@ class Spans:
 
     @classmethod
     def by_key(cls, keys: pd.DataFrame, onset: Float[np.ndarray, " n"]) -> "Spans":
-        """One span per distinct key row (e.g. a holdout sentence), in the order the words appear."""
+        """One span per distinct key row (e.g. a Kaggle test sentence), in the order the words appear."""
         grouped = keys.groupby(list(keys.columns), sort=False)
         return cls.assemble(grouped.ngroup().to_numpy(), grouped.cumcount().to_numpy(), onset)
 
@@ -101,16 +101,16 @@ class Rule:
 
 
 class Grouping(StrEnum):
-    """`GAP`: vocabulary words only, spans by onset gap. `SENTENCE`: every word, spans by PNPL sentence. `HOLDOUT`:
-    every word, each PNPL sentence cut into pieces of the holdout's length (`HOLDOUT_WORDS`).
+    """`GAP`: vocabulary words only, spans by onset gap. `SENTENCE`: every word, spans by PNPL sentence. `KAGGLE`:
+    every word, each PNPL sentence cut into pieces of the Kaggle test's length (`KAGGLE_WORDS`).
 
-    Under `SENTENCE` and `HOLDOUT` an out-of-vocabulary word still carries its MEG into its span's context,
+    Under `SENTENCE` and `KAGGLE` an out-of-vocabulary word still carries its MEG into its span's context,
     labelled `IGNORE` so no loss or score counts it.
     """
 
     GAP = "gap"
     SENTENCE = "sentence"
-    HOLDOUT = "holdout"
+    KAGGLE = "kaggle"
 
     @property
     def rule(self) -> Rule:
@@ -126,7 +126,7 @@ class Grouping(StrEnum):
 
     def bound(self, words: pd.DataFrame) -> pd.Series:
         """Each of `words`' exclusive end sample in the loaded signal (`DeviceRecording.load`'s columns): its
-        sentence epoch's end under `SENTENCE`, as the holdout cuts it; its run's end under `GAP`."""
+        sentence epoch's end under `SENTENCE`, as the Kaggle test cuts it; its run's end under `GAP`."""
         return words["start"] + words[self.rule.stop]
 
 
@@ -144,5 +144,5 @@ class Sentences:
 RULES = {
     Grouping.GAP: Rule("samples", lambda words: Spans.by_gap(words["onset"].to_numpy()), unlabelled=False),
     Grouping.SENTENCE: Rule("stop", Sentences(), unlabelled=True),
-    Grouping.HOLDOUT: Rule("stop", Sentences(HOLDOUT_WORDS), unlabelled=True),
+    Grouping.KAGGLE: Rule("stop", Sentences(KAGGLE_WORDS), unlabelled=True),
 }

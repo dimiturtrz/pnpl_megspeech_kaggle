@@ -40,7 +40,7 @@ class Scoring:
     """Re-colour every other subject's recording to subject 0's sensor covariance (`Alignment`) before the model
     reads it: +0.040 on the Broad ruler for a subject-0 model (0.499 -> 0.539, n=25322, megspeech-7gf.56)."""
     adapted: bool = False
-    """Re-estimate batch-norm statistics on each scored split (`Evaluator.adapt`); the holdout's would read its own
+    """Re-estimate batch-norm statistics on each scored split (`Evaluator.adapt`); the Kaggle test's would read its own
     MEG, so a submission written this way needs a rules decision (megspeech-7gf.61)."""
     lowpass: float = 0.0
     """Hz above which every window read is zeroed (`LowPass`); 0 reads the full band. ema9998-s0 at 25/18/12/8/4 Hz:
@@ -151,7 +151,7 @@ class LoadedModel:
     def probabilities(self, split: Split, tau: float) -> Float[np.ndarray, "n v"]:
         """Every word of `split`'s probabilities, logit-adjusted by `tau`: the context head's, but the word head's for
         a word alone in its span. The context head on a lone word scores near chance (bAcc@10 0.24 vs the word head's
-        0.39 on Sherlock1, 0.23 vs 0.29 on TheMoth, n=1296/1216), and 92 of the Deep holdout's 960 rows are lone."""
+        0.39 on Sherlock1, 0.23 vs 0.29 on TheMoth, n=1296/1216), and 92 of the Deep Kaggle test's 960 rows are lone."""
         logits = self.evaluator.logits(self.model, split)
         chosen = torch.where(split.lone()[:, None], logits[Head.WORD], logits[Head.CONTEXT])
         adjusted = self.evaluator.adjusted(chosen, self.log_prior, tau)

@@ -100,7 +100,7 @@ class Evaluator:
     def scored(self, logits: dict[Head, Float[Tensor, "n v"]], split: Split, log_prior: Float[Tensor, " v"]) -> Report:
         """One domain's report from its already computed logits: every labelled word scored, out-of-vocabulary
         words only lending their spans context."""
-        labelled, dense, novel = split.labelled(), split.holdout_like(), split.novel(self.seen)
+        labelled, dense, novel = split.labelled(), split.kaggle_like(), split.novel(self.seen)
         context, word, y = logits[Head.CONTEXT][labelled], logits[Head.WORD][labelled], split.y[labelled]
         unseen, novel_y = logits[Head.CONTEXT][novel], split.y[novel]
         adjusted = {tau: self.adjusted(unseen, log_prior, tau) for tau in ADJUSTMENTS}
