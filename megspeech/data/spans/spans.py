@@ -23,6 +23,10 @@ MAX_WORDS = 9
 MAX_GAP = 0.92
 """Widest within-sentence onset gap in the Deep holdout (subject 0, 156 sentences)."""
 
+HOLDOUT_WORDS = 5.56
+"""Mean words per Deep holdout sentence epoch (`word_onsets_s` mask, subject 0): pieces this long match its
+spans, where whole PNPL sentences run 6.8-7.4 words in validation."""
+
 PAD = -1
 
 
@@ -55,8 +59,11 @@ class Spans:
         return cls.assemble(span, position % MAX_WORDS, onset)
 
     @classmethod
-    def by_sentence(cls, group: Int[np.ndarray, " n"], onset: Float[np.ndarray, " n"]) -> "Spans":
-        """One span per run of equal consecutive `group` codes, cut into `ceil(n / MAX_WORDS)` near-equal pieces.
+    def by_sentence(
+        cls, group: Int[np.ndarray, " n"], onset: Float[np.ndarray, " n"], words: float = MAX_WORDS
+    ) -> "Spans":
+        """One span per run of equal consecutive `group` codes, cut into the more of `ceil(n / MAX_WORDS)` and
+        `round(n / words)` near-equal pieces: `words` the length a piece aims at, at `MAX_WORDS` the fewest.
 
         Equal pieces rather than nines-then-a-remainder: a 10-word sentence is 5 + 5, not 9 + 1, so no span
         loses its context to a cut.
@@ -65,7 +72,7 @@ class Spans:
         sentence = np.cumsum(new) - 1
         first = np.flatnonzero(new)
         sizes = np.diff(np.r_[first, len(group)])
-        cuts = -(-sizes // MAX_WORDS)
+        cuts = np.maximum(-(-sizes // MAX_WORDS), np.round(sizes / words).astype(np.int64))
         size, pieces = sizes[sentence], cuts[sentence]
         position = np.arange(len(group)) - first[sentence]
         piece = position * pieces // size
@@ -94,14 +101,16 @@ class Rule:
 
 
 class Grouping(StrEnum):
-    """`GAP`: vocabulary words only, spans by onset gap. `SENTENCE`: every word, spans by PNPL sentence.
+    """`GAP`: vocabulary words only, spans by onset gap. `SENTENCE`: every word, spans by PNPL sentence. `HOLDOUT`:
+    every word, each PNPL sentence cut into pieces of the holdout's length (`HOLDOUT_WORDS`).
 
-    Under `SENTENCE` an out-of-vocabulary word still carries its MEG into its span's context, labelled `IGNORE`
-    so no loss or score counts it.
+    Under `SENTENCE` and `HOLDOUT` an out-of-vocabulary word still carries its MEG into its span's context,
+    labelled `IGNORE` so no loss or score counts it.
     """
 
     GAP = "gap"
     SENTENCE = "sentence"
+    HOLDOUT = "holdout"
 
     @property
     def rule(self) -> Rule:
@@ -121,13 +130,19 @@ class Grouping(StrEnum):
         return words["start"] + words[self.rule.stop]
 
 
+class Sentences:
+    """The sentence cut, pieces aiming at `words` long."""
+
+    def __init__(self, words: float = MAX_WORDS) -> None:
+        self.words = words
+
+    def __call__(self, table: pd.DataFrame) -> Spans:
+        group = table.groupby(["run", "sentence"], sort=False).ngroup().to_numpy()
+        return Spans.by_sentence(group, table["onset"].to_numpy(), self.words)
+
+
 RULES = {
     Grouping.GAP: Rule("samples", lambda words: Spans.by_gap(words["onset"].to_numpy()), unlabelled=False),
-    Grouping.SENTENCE: Rule(
-        "stop",
-        lambda words: Spans.by_sentence(
-            words.groupby(["run", "sentence"], sort=False).ngroup().to_numpy(), words["onset"].to_numpy()
-        ),
-        unlabelled=True,
-    ),
+    Grouping.SENTENCE: Rule("stop", Sentences(), unlabelled=True),
+    Grouping.HOLDOUT: Rule("stop", Sentences(HOLDOUT_WORDS), unlabelled=True),
 }
