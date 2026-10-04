@@ -101,6 +101,21 @@ def test_distilled_term_unweighted() -> None:
     assert torch.allclose(distilled(1.0, agreeing).unweighted(nn.Identity(), logits(), rows), torch.zeros(()))
     uniform = torch.full((3, VOCAB_SIZE), -math.log(VOCAB_SIZE))
     assert distilled(1.0, uniform).unweighted(nn.Identity(), logits(), rows) > 1.0
+    shifted = distilled(1.0, agreeing - 2.0).unweighted(nn.Identity(), logits(), rows)
+    assert torch.allclose(shifted, torch.zeros(()), atol=1e-6)
+
+
+def test_distilled_term_temperature() -> None:
+    """A teacher agreeing with the student costs nothing at any temperature; a disagreeing one's KL, scaled by the
+    square of the temperature, changes with it."""
+    rows = torch.tensor([[0, 1], [IGNORE, 2]])
+    agreeing = logits()[[0, 0, 1], [0, 1, 1]]
+    hot = DistilledTerm(0.0, None, taught=agreeing, y=torch.tensor([3, 7, IGNORE]), share=1.0, temperature=4.0)
+    assert torch.allclose(hot.unweighted(nn.Identity(), logits(), rows), torch.zeros(()), atol=1e-6)
+    uniform = torch.zeros(3, VOCAB_SIZE)
+    cold = distilled(1.0, uniform).unweighted(nn.Identity(), logits(), rows)
+    warm = DistilledTerm(0.0, None, taught=uniform, y=torch.tensor([3, 7, IGNORE]), share=1.0, temperature=4.0)
+    assert not torch.allclose(warm.unweighted(nn.Identity(), logits(), rows), cold)
 
 
 def test_word_term_unweighted() -> None:

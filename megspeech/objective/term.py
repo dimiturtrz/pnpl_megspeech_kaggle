@@ -80,12 +80,14 @@ class ContextTerm(LabelTerm):
 @dataclass(frozen=True)
 class DistilledTerm(ContextTerm):
     """The context head trained toward each word's label and, at `share`, toward a teacher's log-probabilities
-    `taught` of the same word (Hinton et al. 2015): the KL from the teacher's distribution, at temperature 1. Its
-    labels are the split's word rows, so a batch gathers both the label `y` and the teacher's row."""
+    `taught` of the same word (Hinton et al. 2015): the KL between both distributions softened by `temperature`,
+    scaled by its square so its gradient keeps the label's scale. Its labels are the split's word rows, so a batch
+    gathers both the label `y` and the teacher's row."""
 
     taught: Float[Tensor, "n v"] = field(kw_only=True)
     y: Int[Tensor, " n"] = field(kw_only=True)
     share: float = field(kw_only=True)
+    temperature: float = field(default=1.0, kw_only=True)
 
     @override
     def labels(self, split: Split) -> Int[Tensor, " n"]:
@@ -101,8 +103,9 @@ class DistilledTerm(ContextTerm):
         y = torch.where(target == IGNORE, IGNORE, self.y[rows])
         hard = super().unweighted(head, output, y)
         keep = (y != IGNORE).float()
-        teacher = self.taught[rows].float()
-        kl = (teacher.exp() * (teacher - output.float().log_softmax(-1))).sum(-1)
+        teacher = (self.taught[rows].float() / self.temperature).log_softmax(-1)
+        student = (output.float() / self.temperature).log_softmax(-1)
+        kl = (teacher.exp() * (teacher - student)).sum(-1) * self.temperature**2
         soft = (kl * keep).sum() / keep.sum().clamp(min=1)
         return (1 - self.share) * hard + self.share * soft
 

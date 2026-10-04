@@ -29,7 +29,9 @@ def train() -> Split:
 def test_of(tmp_path: Path) -> None:
     root = DataRoot(tmp_path)
     assert isinstance(Teacher.of(OptimConfig(), root), Untaught)
-    assert Teacher.of(OptimConfig(teacher="ens", distil=0.3), root) == Ensembled(root.models(), "ens", 0.3)
+    assert Teacher.of(OptimConfig(teacher="ens", distil=0.3, temperature=2.0), root) == Ensembled(
+        root.models(), "ens", 0.3, 2.0
+    )
 
 
 def test_untaught_taught() -> None:

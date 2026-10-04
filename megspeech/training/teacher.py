@@ -26,7 +26,7 @@ class Teacher(ABC):
     @staticmethod
     def of(optim: OptimConfig, root: DataRoot) -> "Teacher":
         """Nobody without a `teacher` run; that run under `root`'s models otherwise."""
-        return Ensembled(root.models(), optim.teacher, optim.distil) if optim.teacher else Untaught()
+        return Ensembled(root.models(), optim.teacher, optim.distil, optim.temperature) if optim.teacher else Untaught()
 
 
 class Untaught(Teacher):
@@ -45,6 +45,7 @@ class Ensembled(Teacher):
     models: Path
     name: str
     share: float
+    temperature: float = 1.0
 
     @override
     def taught(self, context: ContextTerm, train: Split, evaluator: Evaluator) -> ContextTerm:
@@ -52,4 +53,4 @@ class Ensembled(Teacher):
         model = Ensemble.load(paths).to(evaluator.device)
         with torch.no_grad():
             taught = evaluator.logits(model, train)[Head.CONTEXT]
-        return DistilledTerm(**vars(context), taught=taught, y=train.y, share=self.share)
+        return DistilledTerm(**vars(context), taught=taught, y=train.y, share=self.share, temperature=self.temperature)

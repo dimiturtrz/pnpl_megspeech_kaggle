@@ -73,6 +73,9 @@ class OptimConfig:
     distil: float = 0.5
     """Share of the context loss that is the KL to the `teacher`'s distribution, the rest the label's; read only
     with a teacher."""
+    temperature: float = 1.0
+    """Temperature both the teacher's and the student's distributions are softened by in the KL; read only with a
+    teacher."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
     pretrained: float = 0.1
