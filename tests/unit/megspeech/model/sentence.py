@@ -191,6 +191,10 @@ def test_features_read_each_subject_through_its_layer() -> None:
 def test_mixer() -> None:
     assert isinstance(SentenceNet.mixer(CONTEXT), nn.TransformerEncoder)
     assert isinstance(SentenceNet.mixer(replace(CONTEXT, mixing=3)), SpanConformer)
+    alone = SentenceNet.mixer(replace(CONTEXT, layers=0))
+    h = torch.randn(2, 3, CONTEXT.width, generator=GENERATOR)
+    assert torch.equal(alone(h, src_key_padding_mask=torch.zeros(2, 3, dtype=torch.bool)), h)
+    assert not list(alone.parameters())
     assert cast("nn.TransformerEncoder", SentenceNet.mixer(CONTEXT)).norm is None
     assert isinstance(
         cast("nn.TransformerEncoder", SentenceNet.mixer(replace(CONTEXT, final_norm=True))).norm, nn.LayerNorm
