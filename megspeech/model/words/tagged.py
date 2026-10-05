@@ -22,7 +22,11 @@ class TaggedHead(Tagging):
 
     @override
     def forward(self, x: Float[Tensor, "*b e"]) -> Float[Tensor, "*b v"]:
-        prior = self.tag(x).float().log_softmax(-1)
+        return self.mix(self.tag(x), x)
+
+    def mix(self, tag_logits: Float[Tensor, "*b t"], x: Float[Tensor, "*b e"]) -> Float[Tensor, "*b v"]:
+        """The words `x` scores per tag, mixed by the `tag_logits`' softmax."""
+        prior = tag_logits.float().log_softmax(-1)
         per_tag = self.words(x).float().unflatten(-1, (prior.shape[-1], VOCAB_SIZE))
         return (prior[..., None] + per_tag).logsumexp(-2)
 
@@ -30,3 +34,25 @@ class TaggedHead(Tagging):
     def readout(self) -> nn.Module:
         """The tag head: embeddings in, logits over `CLASSES` out."""
         return self.tag
+
+
+class ContextTaggedHead(TaggedHead):
+    """A `TaggedHead` whose tag reads the span-refined position of the word, not its isolated embedding: the
+    representation a frozen-feature probe reads its tags from (`attach` sizes it)."""
+
+    reads_context = True
+
+    def __init__(self, width: int, dropout: float, tags: int = len(CLASSES)) -> None:
+        super().__init__(width, dropout, tags)
+        self.dropout = dropout
+        self.tags = tags
+
+    def attach(self, context_width: int) -> None:
+        """Have the tag head read `context_width` refined positions."""
+        self.tag = nn.Sequential(nn.Dropout(self.dropout), nn.Linear(context_width, self.tags))
+
+    @override
+    def forward(self, x: Float[Tensor, "*b e"], context: Float[Tensor, "*b h"] | None = None) -> Float[Tensor, "*b v"]:
+        if context is None:
+            raise ValueError("a context-tagged head reads the refined positions too: call it with `context`")
+        return self.mix(self.tag(context), x)

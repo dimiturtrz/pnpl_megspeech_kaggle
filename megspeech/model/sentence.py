@@ -49,6 +49,8 @@ class SentenceNet(nn.Module):
         self.whiten = Whitener(channels, active=context.whiten)
         self.subjects = SubjectLayer.of(context.subjects, channels, unseen)
         self.words = context.encoder.build(context, channels)
+        self.reading = context.conv.head
+        self.reading.attach(self.words.head, context.width)
         self.tokens = context.tokens
         self.project = nn.Linear(self.words.width // self.tokens, context.width)
         self.clock = context.clock
@@ -159,7 +161,7 @@ class SentenceNet(nn.Module):
         self, refined: Float[Tensor, "g w h"], slots: Float[Tensor, "g w e"]
     ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
         """The context head's logits over the `refined` positions, and the word head's over their `slots`."""
-        return self.head(refined), self.words.head(slots)
+        return self.head(refined), self.reading.read(self.words.head, slots, refined)
 
     @property
     def width(self) -> int:

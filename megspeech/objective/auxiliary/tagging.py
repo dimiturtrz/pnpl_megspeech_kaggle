@@ -17,6 +17,9 @@ from megspeech.objective.term import Classified
 class Tagging(nn.Module):
     """A word head that holds a tag head of its own."""
 
+    reads_context: bool = False
+    """Whether the tag head reads the span-refined position rather than the word embedding."""
+
     @abstractmethod
     def readout(self) -> nn.Module:
         """The tag head: embeddings in, logits over `CLASSES` out."""

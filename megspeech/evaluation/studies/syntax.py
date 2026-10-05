@@ -105,10 +105,11 @@ class Embedded:
 
     def tagged(self, split: Split) -> Int[np.ndarray, " n"]:  # devtools-ignore: test-mirror
         """Every word of `split`'s most probable tag by the word head's own tag head (a `TaggedHead`)."""
-        slots = torch.as_tensor(self(split)[Tap.WORD], device=next(self.net.parameters()).device)
         head = self.net.readouts()[1]
         if not isinstance(head, Tagging):
             raise ValueError("the word head has no tag head: train with context.conv.head tagged")
+        tap = {False: Tap.WORD, True: Tap.CONTEXT}[head.reads_context]
+        slots = torch.as_tensor(self(split)[tap], device=next(self.net.parameters()).device)
         with torch.no_grad():
             return head.readout()(slots).argmax(-1).cpu().numpy()
 

@@ -13,4 +13,18 @@ def test_linear_head() -> None:
 
 @pytest.mark.parametrize("kind", list(WordHead))
 def test_build(kind: WordHead) -> None:
-    assert kind.build(WIDTH, 0.0)(torch.zeros(2, WIDTH)).shape == (2, VOCAB_SIZE)
+    assert kind.build(WIDTH, 0.0) is not None
+
+
+@pytest.mark.parametrize("kind", list(WordHead))
+def test_attach(kind: WordHead) -> None:
+    head = kind.build(WIDTH, 0.0)
+    kind.attach(head, WIDTH + 1)
+    assert sum(p.numel() for p in head.parameters()) > 0
+
+
+@pytest.mark.parametrize("kind", list(WordHead))
+def test_read(kind: WordHead) -> None:
+    head = kind.build(WIDTH, 0.0)
+    kind.attach(head, WIDTH)
+    assert kind.read(head, torch.zeros(2, WIDTH), torch.zeros(2, WIDTH)).shape == (2, VOCAB_SIZE)

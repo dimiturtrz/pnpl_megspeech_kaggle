@@ -1,15 +1,16 @@
+import pytest
 import torch
 
 from megspeech.data.labels.context_tags import CLASSES
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.model.words.tagged import TaggedHead
+from megspeech.model.words.tagged import ContextTaggedHead, TaggedHead
 
 WIDTH = 6
 
 GENERATOR = torch.Generator().manual_seed(0)
 
 
-def test_forward() -> None:
+def test_tagged_head_forward() -> None:
     assert TaggedHead(WIDTH, 0.0).forward(torch.randn(2, 3, WIDTH, generator=GENERATOR)).shape == (2, 3, VOCAB_SIZE)
 
 
@@ -32,3 +33,27 @@ def test_forward_follows_the_tag() -> None:
 def test_readout() -> None:
     head = TaggedHead(WIDTH, 0.0)
     assert head.readout()(torch.zeros(5, WIDTH)).shape == (5, len(CLASSES))
+
+
+def test_mix() -> None:
+    head = TaggedHead(WIDTH, 0.0, tags=1)
+    x = torch.randn(4, WIDTH, generator=GENERATOR)
+    assert torch.allclose(head.mix(torch.zeros(4, 1), x), head.words(x), atol=1e-6)
+
+
+CONTEXT_WIDTH = 4
+
+
+def test_attach() -> None:
+    head = ContextTaggedHead(WIDTH, 0.0)
+    head.attach(CONTEXT_WIDTH)
+    assert head.readout()(torch.zeros(5, CONTEXT_WIDTH)).shape == (5, len(CLASSES))
+
+
+def test_context_tagged_head_forward() -> None:
+    head = ContextTaggedHead(WIDTH, 0.0, tags=1)
+    head.attach(CONTEXT_WIDTH)
+    x, context = torch.randn(4, WIDTH, generator=GENERATOR), torch.randn(4, CONTEXT_WIDTH, generator=GENERATOR)
+    assert torch.allclose(head.forward(x, context), head.words(x), atol=1e-6)
+    with pytest.raises(ValueError, match="context"):
+        head.forward(x)
