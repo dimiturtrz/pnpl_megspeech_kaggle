@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.tree import Tree
-from megspeech.data.config import METRICS, DataConfig
+from megspeech.data.config import METRICS, DataConfig, LocalRuler
 from megspeech.evaluation.scoring.score import Epoch, SelectionConfig
 from megspeech.model.auxiliary import Tap
 from megspeech.model.config import CONTEXT, ContextConfig
@@ -145,5 +145,7 @@ class RunConfig:
 
     @classmethod
     def saved(cls, directory: Path) -> "RunConfig":
-        """The config a run in `directory` recorded, flat records from before the tree included."""
-        return Tree(cls).load(json.loads((directory / METRICS).read_text())["config"])
+        """The config a run in `directory` recorded, flat records from before the tree included, its data section
+        under the retired `extra`/`share`/`stratify` fields migrated to `ruler`."""
+        record = json.loads((directory / METRICS).read_text())["config"]
+        return Tree(cls).load({**record, "data": LocalRuler.migrated(record.get("data", {}))})

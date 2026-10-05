@@ -14,6 +14,12 @@ from megspeech.training.config import METRICS, OptimConfig, RunConfig
 from megspeech.training.regularise.augment import Augment
 
 
+def test_saved_retired_data_fields(tmp_path: Path) -> None:
+    """A record still carrying the retired `extra`/`share`/`stratify` loads under its `ruler`."""
+    (tmp_path / METRICS).write_text(json.dumps({"config": {"data": {"extra": 0, "read_weight": 2.0}}}))
+    assert RunConfig.saved(tmp_path).data.read_weight == 2.0
+
+
 def test_saved(tmp_path: Path) -> None:
     flat = {"epochs": 3, "read_weight": 4.0, "min_novel": 7, "augment": {"dropout": 0.1, "gain": 0.0}}
     (tmp_path / METRICS).write_text(json.dumps({"config": {**flat, "context": {"clock": "order"}}}))

@@ -1,5 +1,6 @@
 """What a word is told of when it was heard: its place in the span, and the gaps to its neighbours' onsets."""
 
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import override
 
@@ -47,6 +48,29 @@ class Intervals(StrEnum):
         pad = nn.functional.pad
         known = pair.to(onset.dtype)
         return torch.stack([pad(gap, (0, 1)), pad(known, (0, 1)), pad(gap, (1, 0)), pad(known, (1, 0))], dim=-1)
+
+
+@dataclass(frozen=True)
+class Jitter:
+    """Gaussian error of `sigma` seconds on every word onset, as training noise on what the timing input is told: the
+    labelled onsets are 10 ms-rounded alignments, and an alignment off by a sample or two must not move the score
+    (megspeech-7gf.110). 0 leaves the onsets as they are."""
+
+    sigma: float = 0.0
+
+    def apply(self, onset: Float[Tensor, "g w"], mask: Bool[Tensor, "g w"]) -> Float[Tensor, "g w"]:
+        """`onset` with every word of `mask` moved, still in order and zero at each span's first word."""
+        if self.sigma == 0.0:
+            return onset
+        return self.ordered(onset + self.sigma * torch.randn_like(onset), mask, onset)
+
+    @staticmethod
+    def ordered(
+        moved: Float[Tensor, "g w"], mask: Bool[Tensor, "g w"], onset: Float[Tensor, "g w"]
+    ) -> Float[Tensor, "g w"]:
+        """`moved` re-sorted among the words of `mask`, padding kept as in `onset`, and re-zeroed at the first word."""
+        ordered = moved.where(mask, torch.full_like(moved, torch.inf)).sort(dim=1).values
+        return (ordered - ordered[:, :1] * mask[:, :1]).where(mask, onset)
 
 
 FEATURES = 14

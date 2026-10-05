@@ -26,6 +26,7 @@ from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import MAX_WORDS, PAD
 from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.metric.ruler import Graded, Ruler
+from megspeech.model.context.timing import Jitter
 from megspeech.model.input.subjects import Fallback, Unseen
 
 LOG = logging.getLogger(__name__)
@@ -34,6 +35,11 @@ QUANTILES = (0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99)
 GRID = 50.0
 """Hz of the cache: the share of gaps landing on its samples says whether an onset source was rounded to them."""
 GRID_TOLERANCE = 1e-3
+GRIDS = {"1/250": 250.0, "1/1000": 1000.0, "1/100": 100.0, "1/50": 50.0}
+"""Sample rates whose grids a gap may sit on: the Kaggle archives' 250 Hz, millisecond, 10 ms and the cache's 50 Hz."""
+GRID_EXACT = 1e-6
+"""Seconds a gap may be off a grid point and still sit on it (float32 onsets)."""
+GAP_QUANTILES = (0.1, 0.25, 0.5, 0.75, 0.9)
 JITTER_MS = (5, 10, 20, 40, 80)
 QUANTISE_MS = (20, 50)
 MS = 1000.0
@@ -111,6 +117,17 @@ class Timing:
         head = f"gaps n={len(values)} mean={values.mean():.3f}"
         return f"{head} {quantiles} zero={zeros:.4f} alone={alone:.3f} on-50Hz={grid:.3f}"
 
+    def grid(self) -> str:
+        """The share of gaps on each sample grid, then the minimum and the quantiles of the gaps in milliseconds."""
+        values = self.values().cpu().double().numpy()
+        shares = " ".join(
+            f"on-{name}={float((np.abs(values * rate - np.round(values * rate)) < GRID_EXACT * rate).mean()):.3f}"
+            for name, rate in GRIDS.items()
+        )
+        cuts = np.quantile(values, GAP_QUANTILES) * MS
+        quantiles = " ".join(f"q{round(100 * q)}={v:.1f}" for q, v in zip(GAP_QUANTILES, cuts, strict=True))
+        return f"gaps n={len(values)} min={values.min() * MS:.1f}ms {quantiles} (ms) {shares}"
+
     def positions(self) -> str:
         """Median gap and count at each place in the span."""
         gaps, pair = self.gaps().cpu().numpy(), self.pair().cpu().numpy()
@@ -142,10 +159,7 @@ class Timing:
 
     def blurred(self, onset: Float[Tensor, "g w"]) -> Split:
         """`split` at `onset`, kept in order among its words and re-zeroed at each span's first word."""
-        present = self.split.index != PAD
-        ordered = onset.where(present, torch.full_like(onset, torch.inf)).sort(dim=1).values
-        ordered = ordered.where(present, self.split.onset)
-        return replace(self.split, onset=ordered - ordered[:, :1] * present[:, :1])
+        return replace(self.split, onset=Jitter.ordered(onset, self.split.index != PAD, self.split.onset))
 
     def jittered(self, sigma: float, generator: torch.Generator) -> Split:
         """Every word onset moved by Gaussian noise of `sigma` seconds."""
@@ -161,6 +175,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("names", nargs="+")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--grid", action="store_true", help="report the sample grid and gap quantiles instead")
     parser.add_argument("--blur", action="store_true", help="score jittered and quantised onsets instead")
     tree = Tree(Scoring, Scoring(fallback=Fallback(Unseen.DEEP)))
     tree.arguments(parser)
@@ -175,6 +190,11 @@ def main() -> None:
     for partition in (Partition.VALIDATION, Partition.TEST):
         held = replace(loaded, partition=partition)
         domains, _ = held.domains(held.ruled(runs))
+        if args.grid:
+            LOG.info("kaggle-test %s", kaggle.grid())
+            for name, split in domains.items():
+                LOG.info("%s %s %s", partition, name, Timing(split).grid())
+            continue
         if args.blur:
             for label, blur in Timing.blurs(args.seed).items():
                 swapped = {name: blur(Timing(split)) for name, split in domains.items()}

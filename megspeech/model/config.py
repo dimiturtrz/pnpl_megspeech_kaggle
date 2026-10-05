@@ -68,6 +68,8 @@ class ContextConfig:
     timescales: int = 16
     clock: Clock = Clock.ONSET
     intervals: Intervals = Intervals.NONE
+    onset_jitter: float = 0.0
+    """Seconds of Gaussian error added to every word onset the timing input reads, in training only (`Jitter`)."""
     """Added beside the clock: `log` tells each word its gaps to its neighbours' onsets."""
     objective: Objective = Objective.SOFTMAX
     conv: ConvConfig = CONV

@@ -2,7 +2,7 @@ import math
 
 import torch
 
-from megspeech.model.context.timing import FEATURES, KAGGLE_GAP, Clock, Intervals, TimingHead
+from megspeech.model.context.timing import FEATURES, KAGGLE_GAP, Clock, Intervals, Jitter, TimingHead
 
 MASK = torch.tensor([[True, True, True, False]])
 ONSET = torch.tensor([[0.0, KAGGLE_GAP, 3 * KAGGLE_GAP, 0.0]])
@@ -19,6 +19,23 @@ def test_intervals_features() -> None:
     log2 = math.log(2)
     expected = torch.tensor([[[0.0, 1, 0, 0], [log2, 1, 0, 1], [0, 0, log2, 1], [0, 0, 0, 0]]])
     assert torch.allclose(Intervals.LOG.features(ONSET, MASK), expected, atol=1e-6)
+
+
+def test_jitter_apply() -> None:
+    """Sigma 0 is the identity; otherwise onsets move, stay ordered, start at zero and leave the padding alone."""
+    assert Jitter().apply(ONSET, MASK) is ONSET
+    torch.manual_seed(0)
+    moved = Jitter(0.5).apply(ONSET, MASK)
+    assert not torch.equal(moved, ONSET)
+    assert moved[0, 0] == 0
+    assert (moved[0, 1:3] >= moved[0, :2]).all()
+    assert moved[0, 3] == 0
+
+
+def test_jitter_ordered() -> None:
+    """Moved onsets that cross are sorted among the present words; the padded slot keeps its old value."""
+    moved = torch.tensor([[1.0, 0.5, 2.0, 9.0]])
+    assert Jitter.ordered(moved, MASK, ONSET).tolist() == [[0.0, 0.5, 1.5, 0.0]]
 
 
 def test_times() -> None:

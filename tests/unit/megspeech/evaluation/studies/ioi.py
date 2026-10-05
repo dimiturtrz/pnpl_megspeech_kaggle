@@ -36,6 +36,14 @@ def test_summary() -> None:
     assert "alone=0.333" in timing().summary()
 
 
+def test_grid() -> None:
+    """Gaps 0.1, 0.3, 0.2 s all sit on the 250 Hz and millisecond grids; the minimum is 100 ms."""
+    report = timing().grid()
+    assert "on-1/250=1.000" in report
+    assert "on-1/1000=1.000" in report
+    assert "min=100.0ms" in report
+
+
 def test_positions() -> None:
     assert timing().positions() == "0:0.150(n=2) 1:0.300(n=1)"
 

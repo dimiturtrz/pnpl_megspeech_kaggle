@@ -11,7 +11,7 @@ from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.context.span import SpanConformer
-from megspeech.model.context.timing import TimingHead
+from megspeech.model.context.timing import Jitter, TimingHead
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer, Unseen
 from megspeech.model.input.whitener import Whitener
@@ -56,6 +56,7 @@ class SentenceNet(nn.Module):
         self.clock = context.clock
         self.onsets = OnsetEncoding(context)
         self.intervals = context.intervals
+        self.jitter = Jitter(context.onset_jitter)
         self.context = self.mixer(context)
         self.head = context.objective.head(context.width, prototypes)
         self.timing = TimingHead(VOCAB_SIZE, active=context.rhythm)
@@ -132,6 +133,7 @@ class SentenceNet(nn.Module):
         embedded = self.embed(x, subject, valid[:rows])
         slots = nn.functional.pad(embedded, (0, 0, 0, 1))[slot]
         mask = slot < rows
+        onset = self.jitter.apply(onset, mask) if self.training else onset
         timing = self.onsets(self.clock.times(onset, mask), self.intervals.features(onset, mask))
         chunks = self.project(MeanMax.segmented(slots, self.tokens)) + timing[..., None, :] + self.latency
         return chunks.flatten(1, 2), slots
