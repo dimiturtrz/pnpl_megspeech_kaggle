@@ -1,0 +1,46 @@
+"""A model's local test: the official labelled test partition scored at the adjustment official validation selects.
+
+Validation picks tau (as `megspeech.submission` does); test only reports, once, at that tau. Every counted domain's
+balanced accuracy and unseen-span word count, the macro and its bootstrap interval, under each span cut.
+
+    uv run python -m megspeech.submission ens-sent40-s0123 --out x --local [--grouping kaggle]
+"""
+
+import logging
+from dataclasses import dataclass, replace
+
+from megspeech.data.raw.runs import Partition, Run
+from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.metric.ruler import Graded, Ruler
+
+LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class LocalTest:
+    """`loaded` scored on both official partitions of `runs`, at the tau its validation macro selects."""
+
+    loaded: LoadedModel
+    runs: list[Run]
+    ruler: Ruler = Ruler()
+
+    def tau(self) -> float:
+        return self.loaded.report(self.runs).tau
+
+    def graded(self, partition: Partition, tau: float) -> Graded:
+        return replace(self.loaded, partition=partition).graded(self.runs, tau)
+
+    def summary(self, graded: Graded) -> str:
+        """The macro with its interval, then each domain's balanced accuracy and word count."""
+        interval = self.ruler.interval(self.ruler.macro(graded))
+        domains = {
+            name: f"{self.ruler.balanced(hits, labels):.4f} n={len(labels)}"
+            for name, (hits, labels) in graded.domains.items()
+        }
+        words = sum(len(labels) for _, labels in graded.domains.values())
+        return f"macro {self.ruler.point(graded):.4f} [{interval.low:.4f}, {interval.high:.4f}] n={words} {domains}"
+
+    def report(self, label: str) -> None:
+        tau = self.tau()
+        for partition in (Partition.VALIDATION, Partition.TEST):
+            LOG.info("%s %s tau %s: %s", label, partition, tau, self.summary(self.graded(partition, tau)))

@@ -20,6 +20,7 @@ from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.rulers.base import TrackRuler
 from megspeech.evaluation.rulers.broad import BroadRuler
 from megspeech.evaluation.rulers.deep import DeepRuler
+from megspeech.evaluation.rulers.localtest import LocalTest
 from megspeech.model.input.subjects import Fallback, Unseen
 from megspeech.submission.writer import KaggleWriter
 
@@ -34,6 +35,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("names", nargs="+", help="trained models under models/, averaged as one")
     parser.add_argument("--out", required=True)
+    parser.add_argument("--local", action="store_true", help="report val and official test at val tau; write nothing")
     parser.add_argument("--track", type=Track, choices=list(Track), default=Track.DEEP)
     tree = Tree(Scoring, Scoring(fallback=Fallback(Unseen.DEEP)))
     tree.arguments(parser)
@@ -42,6 +44,8 @@ def main() -> None:
     root = DataRoot.from_config()
     loaded = Loader.of(root, args.names, tree.parse(args), torch.device("cuda"))
     ruler, runs = RULERS[args.track], Run.discover(root.raw())
+    if args.local:
+        return LocalTest(loaded, runs).report("+".join(args.names))
     selected = ruler.select(loaded, runs)
     out = root.models() / args.out
     out.mkdir(parents=True, exist_ok=True)
