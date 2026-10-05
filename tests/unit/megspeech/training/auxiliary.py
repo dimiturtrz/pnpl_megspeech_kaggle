@@ -16,6 +16,7 @@ from megspeech.model.config import ContextConfig
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig
 from megspeech.model.words.heads import WordHead
+from megspeech.objective.auxiliary.adversarial import TimingTerm
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
@@ -107,6 +108,8 @@ def test_of(tmp_path: Path) -> None:
     ContextTags(np.array(["a", "b"]), np.array([0.5, 1.5]), np.array([3, 5])).save(ContextTags.path(root))
     tags = Auxiliary.of(OptimConfig(tagging=0.5), root, CPU, WORDS.assign(onset=[0.5, 9.0]))
     assert cast("TagTerm", tags.terms[0]).tags.tolist() == [3, -1]
+    timed = Auxiliary.of(OptimConfig(adversary=1.0), root, CPU, WORDS.assign(sentence=0, onset=[0.0, 0.2]))
+    assert [type(t) for t in timed.terms] == [TimingTerm]
     with pytest.raises(FileNotFoundError):
         Auxiliary.of(OptimConfig(speech=1.0), root, CPU, WORDS)
     Targets(np.ones((2, DIM), np.float16)).save(Targets.directory(root) / "a.npy")

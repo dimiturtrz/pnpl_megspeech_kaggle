@@ -197,6 +197,18 @@ def test_reading() -> None:
     assert (delayed.length, delayed.offset) == (round(0.2 * RATE), round(0.2 * RATE))
 
 
+def test_spanned() -> None:
+    meg = torch.zeros(1, 400)
+    at = torch.tensor([0, 100, 200])
+    windows = Windows(meg, at, at + 100, following=torch.tensor([60, 100, 400]))
+    assert DataConfig().spanned(windows) is windows
+    assert Windows(meg, at, at + 100).following is None
+    assert DataConfig(span_lag=0.0).spanned(Windows(meg, at, at + 100)).end.tolist() == [100, 200, 300]
+    assert DataConfig(span_lag=0.0).spanned(windows).end.tolist() == [60, 101, 300]
+    assert DataConfig(span_lag=0.2).spanned(windows).end.tolist() == [70, 110, 300]
+    assert DataConfig(span_lag=0.0).reading(windows).end.tolist() == [60, 101, 300]
+
+
 def test_rate() -> None:
     assert DataConfig().rate == RATE
     assert DataConfig(decimate=4).rate == 62.5

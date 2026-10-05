@@ -26,6 +26,7 @@ from megspeech.training.auxiliary import Auxiliary, NoAuxiliary
 from megspeech.training.config import RunConfig
 from megspeech.training.hook import Scheduled, StepHook
 from megspeech.training.loop.ema import Ema
+from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.regional import Regional
 from megspeech.training.sampling.curriculum import Annealed, Curriculum, Natural, Robust
@@ -137,6 +138,7 @@ class Trainer:
         peaks = [group["lr"] for group in optimizer.param_groups]
         schedule = Scheduled(torch.optim.lr_scheduler.OneCycleLR(optimizer, peaks, total_steps=total))
         ema = Ema.of(model, optim.ema)
+        ramp = Ramp.of(model, optim.adversary, round(total * optim.adversary_ramp / optim.epochs))
         return TrainState(
             model,
             optimizer,
@@ -145,7 +147,7 @@ class Trainer:
             self.terms(train),
             model.readouts(),
             ema,
-            (anchor, schedule, ema),
+            (anchor, schedule, ema, ramp),
             Robust.of(Annealed.of(optim.curriculum), train, optim.robust),
         )
 

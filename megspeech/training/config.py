@@ -52,6 +52,14 @@ class OptimConfig:
     """Weight of the tag auxiliary (`megspeech.objective.auxiliary.tagging`): every training word's embedding classified
     into its in-context part of speech (`megspeech.data.labels.context_tags`), 11 universal tags and `OTHER`. It trains
     the tag head a `tagged` word head (`ConvConfig.head`) mixes its per-tag readouts by; 0 never reads the table."""
+    adversary: float = 0.0
+    """Strength of the timing adversary's gradient reversal (`megspeech.objective.auxiliary.adversarial`): a head
+    regresses each word's log duration and sentence position from the `tap`, and the encoder receives its gradient
+    times -`adversary`, so the MEG embedding is trained to hold none of the timing the onsets already give; 0 trains
+    no adversary (megspeech-7gf.98)."""
+    adversary_ramp: float = 2.0
+    """Epochs over which the reversal's strength rises linearly from 0 to `adversary`: the adversary must be able to
+    read timing before reversing its gradient means anything."""
     tap: Tap = Tap.WORD
     """What every auxiliary head reads: the encoder's word embedding, or the span transformer's output at the word
     (d'Ascoli et al. train that output of every heard word toward t5; the context head alone sees only the 50's)."""

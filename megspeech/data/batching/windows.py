@@ -33,6 +33,8 @@ class Windows:
     begin: Int[Tensor, " n"] | None = None
     """Each word's first readable sample, its sentence epoch's start: samples before it are zero, as a Kaggle test epoch
     holds none before its first onset. None bounds only at the signal's start."""
+    following: Int[Tensor, " n"] | None = None
+    """Each word's next onset sample in its sentence (its `end` for the last): where `DataConfig.span_lag` cuts."""
 
     @classmethod
     def stacked(cls, x: Float[Tensor, "n c s"], *, centred: bool = True) -> "Windows":

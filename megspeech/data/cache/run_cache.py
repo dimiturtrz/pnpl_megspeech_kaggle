@@ -184,6 +184,8 @@ class RunCache:
         table["samples"] = table["run"].map(samples).astype(np.int64)
         stop = np.round(table["end"].to_numpy() * self.rate).astype(np.int64)
         table["stop"] = np.minimum(np.maximum(stop, table["sample"] + round(self.rate)), table["samples"])
+        next_onset = table.groupby(["run", "sentence"])["sample"].shift(-1)
+        table["following"] = next_onset.fillna(table["stop"]).astype(np.int64)
         return table
 
     @staticmethod
@@ -257,6 +259,7 @@ class DeviceRecording:
             self.samples(self.words["start"] + self.words["stop"]),
             length,
             begin=self.samples(self.words["start"] + self.words["opening"]),
+            following=self.samples(self.words["start"] + self.words["following"]),
         )
 
     def samples(self, column: pd.Series) -> Int[Tensor, " n"]:

@@ -182,6 +182,7 @@ def test_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert set(table["samples"]) == {SAMPLES}
     assert table["stop"].tolist() == [90, 170, SAMPLES] * 2
     assert table["opening"].tolist() == table["sample"].tolist()
+    assert table["following"].tolist() == table["stop"].tolist()
     assert table.index.tolist() == list(range(6))
     assert cache.table([runs[0].name])["word"].tolist() == ["The", "null", "end"]
     faster = RunCache(cache.cache, 2).table([runs[0].name])
@@ -304,7 +305,7 @@ def test_standardise() -> None:
 
 def test_windows() -> None:
     meg = torch.arange(2 * 100, dtype=torch.float32).reshape(2, 100)
-    words = pd.DataFrame({"at": [40, 0], "start": [0, 0], "stop": [90, 50], "opening": [30, 0]})
+    words = pd.DataFrame({"at": [40, 0], "start": [0, 0], "stop": [90, 50], "opening": [30, 0], "following": [60, 50]})
     loaded = DeviceRecording(meg, np.array([0, 100]), ("r",), words)
     windows = loaded.windows()
     assert len(windows) == len(loaded.words)
@@ -313,6 +314,8 @@ def test_windows() -> None:
     assert windows.end.tolist() == [90, 50]
     assert windows.begin is not None
     assert windows.begin.tolist() == [30, 0]
+    assert windows.following is not None
+    assert windows.following.tolist() == [60, 50]
     assert loaded.windows(2 * RATE)(torch.tensor([0]))[0, :, RATE:].eq(0).all()
 
 

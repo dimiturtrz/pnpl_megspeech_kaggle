@@ -87,6 +87,10 @@ class DataConfig:
     """Cross-fitting: each source's subject-0 training sessions that test leaves, in key order, dealt round-robin into
     `folds` folds (`folded`); 1 keeps `share`'s validation pick. Every session trains `folds - 1` of the members, and
     each member's validation is the fold it never saw (megspeech-7gf.85)."""
+    span_lag: float = -1.0
+    """Seconds past the next word's onset where each word's MEG window is cut and zero-padded, the padding being the
+    mask: 0 reads the word's true span only, 0.2 lets the response to the next word's onset start; negative reads the
+    fixed `window` (megspeech-7gf.98)."""
     fold: int = 0
     """The fold held out as validation when `folds` > 1; the members over every fold ensemble into one."""
     subjects: tuple[int, ...] = (DEEP,)
@@ -161,7 +165,16 @@ class DataConfig:
         on `baseline` (0 centres on the whole window)."""
         lead = self.to_samples(self.lead)
         offset = self.to_samples(self.delay) - lead
-        return replace(windows, length=self.samples + lead, offset=offset, baseline=self.to_samples(self.baseline))
+        spanned = self.spanned(windows)
+        return replace(spanned, length=self.samples + lead, offset=offset, baseline=self.to_samples(self.baseline))
+
+    def spanned(self, windows: Windows) -> Windows:
+        """`windows` stopped `span_lag` after each word's next onset, never before its own first sample; as they are
+        when `span_lag` is negative or no next onset is known."""
+        if self.span_lag < 0 or windows.following is None:
+            return windows
+        cut = windows.following + self.to_samples(self.span_lag)
+        return replace(windows, end=torch.minimum(windows.end, cut).clamp(min=windows.at + 1))
 
     @property
     def official_split(self) -> "DataConfig":

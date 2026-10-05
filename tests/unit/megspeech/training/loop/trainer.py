@@ -27,6 +27,7 @@ from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig
 from megspeech.training.hook import Scheduled
 from megspeech.training.loop.ema import Ema
 from megspeech.training.loop.trainer import Trainer, TrainState
+from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.sampling.curriculum import Annealed, Natural, Robust
@@ -126,7 +127,7 @@ def test_state() -> None:
     state = made.state(net, split(), 10)
     assert state.model is net
     assert state.schedule.schedule.state_dict()["total_steps"] == 10
-    assert state.hooks == (Anchor.of(0.5, 0.01, 10), state.schedule, state.ema)
+    assert state.hooks == (Anchor.of(0.5, 0.01, 10), state.schedule, state.ema, Ramp([], 0.0, 1))
     assert state.readouts == net.readouts()
     assert len(state.terms) == len(state.readouts)
     assert state.rows == made.rows(split())
