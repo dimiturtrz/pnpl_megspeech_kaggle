@@ -165,6 +165,7 @@ def test_present() -> None:
 
 
 def test_directory(tmp_path: Path) -> None:
+    assert Targets.directory(cast("DataRoot", Root(tmp_path)), "gpt2-large").name == "gpt2-large"
     assert Targets.directory(cast("DataRoot", Root(tmp_path))) == tmp_path / "processed" / "speech" / STEM
 
 

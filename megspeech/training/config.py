@@ -45,6 +45,10 @@ class OptimConfig:
     """Weight of the speech auxiliary (`megspeech.objective.auxiliary.speech`): every training word whose chapter audio
     is aligned, SigLIP-aligned to the wav2vec2 latent of its 0.5 s of heard speech (Défossez et al. 2023), one target
     per word token, not per word type as the semantic auxiliary's; 0 never reads the targets."""
+    speech_source: str = ""
+    """The targets the speech auxiliary aligns to, a directory of `<run>.npy` under processed/speech: empty is the
+    wav2vec2 latents, `gpt2-large` the in-context text states of `megspeech.objective.targets.context`
+    (megspeech-7gf.101)."""
     speech_centred: bool = False
     """Centre each run's speech targets on its own mean (`Targets.centred`), removing the direction every target
     shares: raw, two random targets' cosine is ~0.6, so the L2-normalised SigLIP target is mostly that one direction."""
@@ -63,7 +67,7 @@ class OptimConfig:
     timing: str = ""
     """A timing expert (`megspeech.training.cli.timing`) whose head is loaded into the model's `rhythm` head and frozen,
     its logits added to the context head's in training and in every read after: a product of experts in which the
-    MEG path learns only what timing leaves (megspeech-7gf.99); empty trains no such expert."""
+    MEG path learns only what timing leaves (megspeech-7gf.100); empty trains no such expert."""
     tap: Tap = Tap.WORD
     """What every auxiliary head reads: the encoder's word embedding, or the span transformer's output at the word
     (d'Ascoli et al. train that output of every heard word toward t5; the context head alone sees only the 50's)."""

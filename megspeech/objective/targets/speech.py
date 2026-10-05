@@ -143,8 +143,9 @@ class Targets:
         return np.isfinite(self.vectors).all(axis=1)
 
     @staticmethod
-    def directory(root: DataRoot) -> Path:
-        return root.processed() / "speech" / STEM
+    def directory(root: DataRoot, source: str = "") -> Path:
+        """Where the per-word targets of `source` (the wav2vec2 latents when empty) live."""
+        return root.processed() / "speech" / (source or STEM)
 
     def save(self, path: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)

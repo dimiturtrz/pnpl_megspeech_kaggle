@@ -8,7 +8,7 @@ from megspeech.model.context.timing import TimingHead
 
 class TimingOnly(nn.Module):
     """A timing expert with no MEG: a `TimingHead` read as the context and the word head alike, so a trainer and an
-    evaluator that drive a sentence model drive it too (megspeech-7gf.99)."""
+    evaluator that drive a sentence model drive it too (megspeech-7gf.100)."""
 
     def __init__(self, vocabulary: int) -> None:
         super().__init__()
