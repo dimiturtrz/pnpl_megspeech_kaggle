@@ -11,6 +11,7 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
+from megspeech.data.labels.context_tags import ContextTags
 from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.labels.syntax import PartsOfSpeech
 from megspeech.model.auxiliary import Tap, WithAuxiliary
@@ -20,6 +21,7 @@ from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
 from megspeech.objective.auxiliary.speech import SpeechTerm
 from megspeech.objective.auxiliary.syntactic import SyntacticTerm
+from megspeech.objective.auxiliary.tagging import TagTerm
 from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import AuxiliaryTerm
@@ -61,6 +63,10 @@ class Auxiliary(ABC):
                 optim.syntactic,
                 lambda: SyntacticTerm(optim.syntactic, PartsOfSpeech.load(PartsOfSpeech.path(root)).to(device)),
             ),
+            (
+                optim.tagging,
+                lambda: TagTerm(optim.tagging, ContextTags.load(ContextTags.path(root)).tensor(words, device)),
+            ),
         )
         terms = tuple(build() for weight, build in builders if weight)
         return Joint(terms, optim.tap) if terms else NoAuxiliary()
@@ -85,5 +91,6 @@ class Joint(Auxiliary):
 
     @override
     def trained(self, net: SentenceNet, compiled: Callable[[WithAuxiliary], WithAuxiliary]) -> WithAuxiliary:
-        heads = nn.ModuleList(term.head(self.tap.width(net)) for term in self.terms)
+        width = self.tap.width(net)
+        heads = nn.ModuleList(term.readout(net.words.head, width) for term in self.terms)
         return compiled(WithAuxiliary(net, heads, self.tap))

@@ -21,6 +21,8 @@ from megspeech.training.loop.trainer import Trainer
 
 LOG = logging.getLogger(__name__)
 
+HEADS = "heads.pt"
+
 
 def main() -> None:
     """Train, write metrics + checkpoint + Kaggle test submission under models/pnpl_libribrain/<name>."""
@@ -46,6 +48,8 @@ def main() -> None:
     out = root.models() / args.name
     out.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out / "model.pt")
+    if trainer.heads:
+        torch.save(trainer.heads, out / HEADS)
     config.context.save(out)
     best = config.selected(history)
     summary = {"config": asdict(config), "train": len(train.y), "best": asdict(best)}

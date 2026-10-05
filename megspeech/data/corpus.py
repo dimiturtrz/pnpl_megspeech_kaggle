@@ -34,7 +34,8 @@ class Corpus:
     validation: dict[str, Split]
     seen: frozenset[tuple[int, ...]]
     positions: pd.DataFrame = field(default_factory=pd.DataFrame)
-    """Each train word's `run` and `position` in that run's word table (`RunCache.words`), in train-split order."""
+    """Each train word's `run`, `position` in that run's word table (`RunCache.words`) and `onset`, in train-split
+    order."""
     geometry: Geometry = AS_RECORDED
     """The sensor geometry every split was loaded in, which the Kaggle test must load in too."""
 
@@ -53,7 +54,7 @@ class Corpus:
         chosen = words[words["run"].isin(weights)]
         weight = chosen["run"].map(weights).to_numpy(dtype=np.float64)
         train = cls.split(source, chosen, data, weight).recurring(data.repeat_power)
-        positions = chosen[["run", "position"]].reset_index(drop=True)
+        positions = chosen[["run", "position", "onset"]].reset_index(drop=True)
         validation = cls.domains(source, words, held, data)
         features = Features.under(root, data.features)
         train = features.split(TRAIN, train)

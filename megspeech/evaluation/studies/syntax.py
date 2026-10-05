@@ -12,6 +12,7 @@ import argparse
 import itertools
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -33,6 +34,7 @@ from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.reader import Reader
 from megspeech.model.auxiliary import Tap
 from megspeech.model.sentence import SentenceNet
+from megspeech.objective.auxiliary.tagging import Tagging
 
 LOG = logging.getLogger(__name__)
 
@@ -95,6 +97,20 @@ class Embedded:
     """A frozen sentence model's per-word representations, one per `Tap`."""
 
     net: SentenceNet
+
+    @classmethod
+    def load(cls, path: Path, device: torch.device) -> "Embedded":  # devtools-ignore: test-mirror
+        """The model saved at `path`, on `device`."""
+        return cls(SentenceNet.load(path).to(device))
+
+    def tagged(self, split: Split) -> Int[np.ndarray, " n"]:  # devtools-ignore: test-mirror
+        """Every word of `split`'s most probable tag by the word head's own tag head (a `TaggedHead`)."""
+        slots = torch.as_tensor(self(split)[Tap.WORD], device=next(self.net.parameters()).device)
+        head = self.net.readouts()[1]
+        if not isinstance(head, Tagging):
+            raise ValueError("the word head has no tag head: train with context.conv.head tagged")
+        with torch.no_grad():
+            return head.readout()(slots).argmax(-1).cpu().numpy()
 
     def __call__(self, split: Split) -> dict[Tap, Float[np.ndarray, "n _"]]:  # devtools-ignore: test-mirror
         """Every word of `split`'s encoder embedding (its own 0.5 s window) and span transformer output (its
@@ -412,7 +428,7 @@ def main() -> None:
     trained = [run for run in data.trained(runs) if run.subject == DEEP][:: args.stride]
     contexts = ContextTags.load(ContextTags.path(root))
     timing = Timing.fitted(data.run_cache(root).table([run.name for run in trained]))
-    embedded = Embedded(SentenceNet.load(trained_in / "model.pt").to(device))
+    embedded = Embedded.load(trained_in / "model.pt", device)
     train = Table.of(reader, embedded, {"train": trained}, contexts, timing)
     valid = Table.of(reader, embedded, reader.ruled(runs), contexts, timing)
     LOG.info("probing on %d words of %d runs, scoring %d words", len(train.tags), len(trained), len(valid.tags))

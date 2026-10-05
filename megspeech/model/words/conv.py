@@ -8,6 +8,7 @@ from torch import Tensor, nn
 
 from megspeech.data.constants import CHANNELS
 from megspeech.model.words.base import WordEncoder
+from megspeech.model.words.heads import WordHead
 from megspeech.model.words.layers.attention_pool import AttentionPool
 from megspeech.model.words.layers.conformer import TimeConformer
 from megspeech.model.words.layers.dilated import DilatedBlock
@@ -45,6 +46,8 @@ class ConvConfig:
     dropout in training: Défossez et al. 2023's front end, 270 there; 0 mixes the sensors with the convolution alone."""
     gated: bool = False
     """GLU-gate every dilated block in place of its GELU (`DilatedBlock`), d'Ascoli et al.'s trunk activation."""
+    head: WordHead = WordHead.LINEAR
+    """How the embedding is read out as the 50 words: one linear layer, or one per part of speech (`TaggedHead`)."""
 
     def __post_init__(self) -> None:
         if any(kernel % 2 == 0 for kernel in self.kernels):
@@ -80,7 +83,7 @@ class ConvWords(WordEncoder):
         if config.ssm:
             self.blocks.append(Ssm(config.hidden, config.ssm, config.dropout))
         self.blocks.extend(TimeConformer(config.hidden, config.dropout) for _ in range(config.conformer))
-        self.head = self.classifier(config.dropout)
+        self.head = self.classifier(config.dropout, config.head)
 
     @override
     def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:

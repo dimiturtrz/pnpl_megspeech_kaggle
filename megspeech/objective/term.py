@@ -136,6 +136,11 @@ class AuxiliaryTerm(Term):
     @abstractmethod
     def head(self, width: int) -> nn.Module: ...
 
+    def readout(self, word_head: nn.Module, width: int) -> nn.Module:
+        """The head this term trains over `width`-wide representations: its own, unless it reads one the model's
+        `word_head` already holds."""
+        return self.head(width)
+
     @override
     def labels(self, split: Split) -> Int[Tensor, " n"]:
         return split.token

@@ -12,6 +12,7 @@ def test_feedforward() -> None:
 
 def test_forward() -> None:
     """An impulse mid-window reaches both window edges: attention mixes every sample with every other."""
+    torch.manual_seed(0)
     conformer = TimeConformer(8, 0.0, heads=2, kernel=3).eval()
     x = torch.zeros(2, 8, 30)
     x[..., 15] = 1.0

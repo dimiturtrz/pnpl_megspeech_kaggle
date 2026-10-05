@@ -22,7 +22,7 @@ class Pooled(WordEncoder):
 
 
 def test_classifier() -> None:
-    assert Pooled().classifier(0.5)[1].weight.shape == (VOCAB_SIZE, 5)
+    assert Pooled().classifier(0.5)(torch.zeros(2, 5)).shape == (2, VOCAB_SIZE)
 
 
 def test_normalise() -> None:

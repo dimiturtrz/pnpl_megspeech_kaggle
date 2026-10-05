@@ -27,9 +27,11 @@ from typing import Protocol
 import numpy as np
 import pandas as pd
 import spacy
+import torch
 from jaxtyping import Float, Int, Shaped
 from spacy.language import Language
 from spacy.tokens import Doc
+from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.constants import MISSING
@@ -159,6 +161,10 @@ class ContextTags:
         keys = pd.MultiIndex.from_arrays([self.runs, self.onsets])
         at = keys.get_indexer(pd.MultiIndex.from_arrays([runs, onsets]))
         return np.where(at >= 0, self.tags[at.clip(min=0)], UNKNOWN)
+
+    def tensor(self, words: pd.DataFrame, device: torch.device) -> Int[Tensor, " n"]:
+        """The class of each of `words`' (`run`, `onset`) rows as a tensor on `device`."""
+        return torch.from_numpy(self.classes(words["run"].to_numpy(), words["onset"].to_numpy(np.float64))).to(device)
 
     @staticmethod
     def trained(runs: Sequence[Run]) -> list[Run]:

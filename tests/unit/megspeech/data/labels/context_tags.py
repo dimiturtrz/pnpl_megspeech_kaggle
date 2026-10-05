@@ -4,6 +4,7 @@ from typing import cast
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 from spacy.language import Language
 from spacy.tokens import Doc
 from spacy.vocab import Vocab
@@ -154,3 +155,9 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(SpacyTagger, "load", classmethod(lambda cls: Lookup()))
     ContextTags.main()
     assert len(ContextTags.load(ContextTags.path(cast("DataRoot", root))).tags) == 4
+
+
+def test_tensor() -> None:
+    table = ContextTags.build(crowd())
+    words = pd.DataFrame({"run": ["r", "q"], "onset": [0.0, 0.0]})
+    assert table.tensor(words, torch.device("cpu")).tolist() == [DET, UNKNOWN]

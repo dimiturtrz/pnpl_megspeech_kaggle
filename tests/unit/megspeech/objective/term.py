@@ -64,6 +64,10 @@ def test_label_term_labels() -> None:
     assert WordTerm(0.0, None).labels(train) is train.y
 
 
+def test_auxiliary_term_readout() -> None:
+    assert lexical().readout(nn.Identity(), 4).in_features == 4
+
+
 def test_auxiliary_term_labels() -> None:
     train = split()
     assert lexical().labels(train) is train.token

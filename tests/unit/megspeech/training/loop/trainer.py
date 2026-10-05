@@ -156,7 +156,7 @@ def test_step() -> None:
         model, optimizer, schedule, made.rows(split()), made.terms(split()), model.readouts(), ema, (schedule, ema)
     )
     value = made.step(state, split(), torch.tensor([0, 1]))
-    assert value.ndim == 0
+    assert value.shape == (len(made.terms(split())),)
     assert not value.requires_grad
     assert any(not torch.equal(a, b) for a, b in zip(before, model.parameters(), strict=True))
 
@@ -171,6 +171,8 @@ def test_fit() -> None:
     made = Trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4)), Evaluator(CPU, min_novel=1), auxiliary=joint(train))
     net, _ = made.fit(train, {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE))
     assert isinstance(net, SentenceNet)
+    assert made.heads
+    assert all(key.startswith("heads.") for key in made.heads)
     anchored = trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, anchor=0.5)))
     assert isinstance(anchored.fit(split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE))[0], SentenceNet)
     balanced = trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, balance=0.5)))
@@ -179,3 +181,8 @@ def test_fit() -> None:
         trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, lr=math.inf))).fit(
             split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE)
         )
+
+
+def test_auxiliary_state() -> None:
+    model = nn.ModuleDict({"heads": nn.ModuleList([nn.Linear(2, 2)]), "words": nn.Linear(2, 2)})
+    assert set(Trainer.auxiliary_state(model)) == {"heads.0.weight", "heads.0.bias"}

@@ -23,7 +23,7 @@ class ExpertWords(WordEncoder):
         super().__init__(len(crops) * config.width, instance=False)
         self.experts = nn.ModuleList(Expert(crop, config, channels) for crop in crops)
         self.features = Scaler(torch.zeros(1, self.width, 1))
-        self.head = self.classifier(config.dropout)
+        self.head = self.classifier(config.dropout, config.head)
 
     @override
     def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:

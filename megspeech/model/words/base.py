@@ -6,7 +6,7 @@ from typing import override
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
-from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.model.words.heads import WordHead
 
 EPSILON = 1e-6
 
@@ -15,15 +15,15 @@ class WordEncoder(nn.Module, ABC):
     """A word classifier over one window; subclasses build `head` from `classifier` after their own layers, so a
     seeded initialisation draws in the order checkpoints were trained with."""
 
-    head: nn.Sequential
+    head: nn.Module
 
     def __init__(self, width: int, *, instance: bool) -> None:
         super().__init__()
         self.width = width
         self.instance = instance
 
-    def classifier(self, dropout: float) -> nn.Sequential:
-        return nn.Sequential(nn.Dropout(dropout), nn.Linear(self.width, VOCAB_SIZE))
+    def classifier(self, dropout: float, head: WordHead = WordHead.LINEAR) -> nn.Module:
+        return head.build(self.width, dropout)
 
     @abstractmethod
     def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:

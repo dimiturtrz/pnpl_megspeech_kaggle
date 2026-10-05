@@ -28,7 +28,7 @@ class FeatureWords(WordEncoder):
 
     def __init__(self, config: ConvConfig, width: int, *, instance: bool = False) -> None:
         super().__init__(width, instance=instance)
-        self.head = self.classifier(config.dropout)
+        self.head = self.classifier(config.dropout, config.head)
 
     @override
     def embed(self, x: Float[Tensor, "b c k"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:

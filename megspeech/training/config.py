@@ -48,6 +48,10 @@ class OptimConfig:
     speech_centred: bool = False
     """Centre each run's speech targets on its own mean (`Targets.centred`), removing the direction every target
     shares: raw, two random targets' cosine is ~0.6, so the L2-normalised SigLIP target is mostly that one direction."""
+    tagging: float = 0.0
+    """Weight of the tag auxiliary (`megspeech.objective.auxiliary.tagging`): every training word's embedding classified
+    into its in-context part of speech (`megspeech.data.labels.context_tags`), 11 universal tags and `OTHER`. It trains
+    the tag head a `tagged` word head (`ConvConfig.head`) mixes its per-tag readouts by; 0 never reads the table."""
     tap: Tap = Tap.WORD
     """What every auxiliary head reads: the encoder's word embedding, or the span transformer's output at the word
     (d'Ascoli et al. train that output of every heard word toward t5; the context head alone sees only the 50's)."""

@@ -1,7 +1,8 @@
 """Whether a part-of-speech posterior narrows the 50 candidates of the 50-way decoder (megspeech-7gf.94, -cn2). Each
 scored word's tag likelihood ratio of a candidate word w is sum_t p(t | w) p(t | MEG) / p(t): the word's class
 distribution in context on the training runs (`megspeech.data.labels.context_tags`, add-one smoothed) against a
-posterior over the word's class. A token the tagger could not align has no class and is left out. The probe's classes are
+posterior over the word's class. A token the tagger could not align has no class and is left out.
+The probe's classes are
 weighted by frequency (natural) or equally (balanced), the prior p(t) matching. Two arms read the ratio:
 
 - hierarchical: the vocabulary scores plus `lam` times its log, the factorisation log p(w | MEG) + lam log ratio;

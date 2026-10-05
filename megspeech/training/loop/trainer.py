@@ -4,10 +4,8 @@ Every word is read inside its span (`megspeech.data.spans.spans`): a CNN embeds 
 the embeddings across the span, and both the isolated-word head and the context head are trained.
 """
 
-import functools
 import logging
 import math
-import operator
 from dataclasses import asdict, dataclass, field
 
 import torch
@@ -61,6 +59,8 @@ class Trainer:
     initial: dict[str, Tensor] = field(default_factory=dict)
     teacher: Teacher = field(default_factory=Untaught)
     regional: Regional = field(default_factory=Regional.off)
+    heads: dict[str, Tensor] = field(default_factory=dict)
+    """The auxiliary heads' weights at the kept epoch, which the model's own state does not hold."""
 
     @classmethod
     def of(cls, corpus: Corpus, config: RunConfig, root: DataRoot) -> "Trainer":
@@ -109,14 +109,14 @@ class Trainer:
         context = self.teacher.taught(context, train, self.evaluator)
         return context, WordTerm(optim.label_smoothing, classes), *self.auxiliary.terms
 
-    def step(self, state: TrainState, train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, ""]:
-        """One optimiser step on the words of `spans`; returns the loss without syncing it to the host."""
+    def step(self, state: TrainState, train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, " k"]:
+        """One optimiser step on the words of `spans`; returns each term's loss without syncing it to the host."""
         batch = train.batch(spans, state.rows, self.config.augment.jitter)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             outputs = state.model(self.regional(self.config.augment(batch.x)), batch.onset, batch.slot, batch.subject)
             parts = zip(state.terms, state.readouts, outputs, strict=True)
-            losses = (term.loss(head, output, batch.target(term.labels(train))) for term, head, output in parts)
-            value = functools.reduce(operator.add, losses)
+            losses = torch.stack([term.loss(head, out, batch.target(term.labels(train))) for term, head, out in parts])
+            value = losses.sum()
         state.curriculum.observe(spans, outputs[0], batch.target(train.y))
         state.optimizer.zero_grad(set_to_none=True)
         value.backward()
@@ -125,7 +125,7 @@ class Trainer:
         lr = state.schedule.lr()
         for hook in state.hooks:
             hook.step(state.model, lr)
-        return value.detach()
+        return losses.detach()
 
     def state(self, net: SentenceNet, train: Split, total: int) -> TrainState:
         """Everything `step` advances to train `net` on `train` for `total` steps: `net` with its auxiliary heads, the
@@ -156,6 +156,11 @@ class Trainer:
         epochs = range(optim.epochs)
         return max(train.capacity(optim.batch, curriculum.weights(train, epoch, optim.epochs)) for epoch in epochs)
 
+    @staticmethod
+    def auxiliary_state(model: nn.Module) -> dict[str, Tensor]:
+        """The weights of `model`'s auxiliary heads (`WithAuxiliary.heads`), none for a model without."""
+        return {k: v for k, v in model.state_dict().items() if k.startswith("heads.")}
+
     def fit(
         self, train: Split, validation: dict[str, Split], log_prior: Float[Tensor, " v"]
     ) -> tuple[nn.Module, list[Epoch]]:
@@ -168,11 +173,18 @@ class Trainer:
         curriculum = state.curriculum
         history: list[Epoch] = []
         best_state = net.state_dict()
+        self.heads = self.auxiliary_state(model)
         for epoch in range(optim.epochs):
             model.train()
             weights = curriculum.weights(train, epoch, optim.epochs)
             draws = torch.multinomial(weights, per_epoch * optim.batch, replacement=True)
-            value = torch.stack([self.step(state, train, spans) for spans in draws.split(optim.batch)]).mean().item()
+            terms = torch.stack([self.step(state, train, spans) for spans in draws.split(optim.batch)]).mean(0)
+            value = terms.sum().item()
+            LOG.info(
+                "epoch %d loss by term %s",
+                epoch,
+                {type(t).__name__: v for t, v in zip(state.terms, terms.tolist(), strict=True)},
+            )
             if not math.isfinite(value):
                 raise FloatingPointError(f"non-finite loss at epoch {epoch}")
             with state.ema.applied(model):
@@ -181,5 +193,6 @@ class Trainer:
                 LOG.info("%s", asdict(row))
                 if self.config.selected(history) is row:
                     best_state = {k: v.clone() for k, v in net.state_dict().items()}
+                    self.heads = {k: v.clone() for k, v in self.auxiliary_state(model).items()}
         net.load_state_dict(best_state)
         return net, history
