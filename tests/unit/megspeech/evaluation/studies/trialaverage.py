@@ -15,6 +15,7 @@ WIDTH = 4
 class Reader(nn.Module):
     """A word head reading the first embedding component back as the class."""
 
+    @override
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
         return nn.functional.one_hot(embeddings[:, 0].long(), VOCAB_SIZE).float() * 10
 
