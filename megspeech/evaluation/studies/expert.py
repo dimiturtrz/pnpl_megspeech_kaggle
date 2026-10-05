@@ -15,8 +15,8 @@ on rows no model trained on.
 import argparse
 import json
 import logging
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -27,12 +27,13 @@ from torch.nn import functional
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
+from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import DataConfig
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.reader import Reader
-from megspeech.evaluation.studies.boosted import Boosting, Design, Rows
-from megspeech.evaluation.studies.peer import EPOCHS, HEADS, SEEDS, Dump, Study
+from megspeech.evaluation.studies.boosted import Booster, Boosting, Design, Rows
+from megspeech.evaluation.studies.peer import EPOCHS, HEADS, SEEDS, Dump, Probe, Study
 from megspeech.evaluation.studies.syntax import Embedded
 from megspeech.model.auxiliary import Tap
 
@@ -127,8 +128,13 @@ class Features:
             runs = data.split(Run.everywhere(root))[Partition.VALIDATION]
             for run, (_, split) in reader.splits(runs).items():
                 parts.append(heads[next(k for k, names in enumerate(held) if run.name in names)].vectors(split))
-        full = Head.load(root.models() / expert.model(None), expert.tap, device)
-        return cls(torch.cat(parts), torch.cat([full.vectors(split) for split in domains.values()]))
+        return cls(torch.cat(parts), cls.full(expert, root, domains.values(), device))
+
+    @staticmethod
+    def full(expert: Expert, root: DataRoot, splits: Iterable[Split], device: torch.device) -> Float[Tensor, "m d"]:
+        """The full-data expert's vectors of every word of `splits`, in order."""
+        head = Head.load(root.models() / expert.model(None), expert.tap, device)
+        return torch.cat([head.vectors(split) for split in splits])
 
     def reduced(self, count: int = COMPONENTS) -> "Features":
         """The leading `count` principal components of the OOF rows, both sets projected on them."""
@@ -155,18 +161,38 @@ class Gate:
         parts = [rows.base, own, padded[at].flatten(1), (rows.near >= 0).float()]
         return Design(torch.cat(parts, dim=1), rows.base, rows.y)
 
-    def arm(self, label: str, names: tuple[str, ...]) -> dict[str, object]:
-        """`names`' arm: its epoch count from the last fold's rows, then its official scores over `SEEDS`."""
+    def trained(self, names: tuple[str, ...]) -> tuple[int, list[Booster]]:
+        """`names`' epoch count from the last fold's rows, and a booster per `SEEDS` fitted on every fold for it."""
         study, device = self.study, self.study.device
         train = self.design(study.oof, names, val=False).to(device)
         held = (study.oof.group == torch.max(study.oof.group)).to(device)
         watched = train.where(held).labelled()
         _, curve = Boosting(seed=0).fit(train.where(~held), EPOCHS, watched)
         epochs = int(np.argmin(curve)) + 1
+        return epochs, [Boosting(seed=seed).fit(train, epochs)[0] for seed in SEEDS]
+
+    def averaged(self, models: Sequence[Booster], names: tuple[str, ...]) -> Float[Tensor, "n v"]:
+        """The `models`' probabilities of every validation row, averaged."""
+        val = self.design(self.study.val, names, val=True).to(self.study.device)
+        return torch.stack([Boosting.predict(model, val).exp().cpu() for model in models]).mean(0)
+
+    def submissions(
+        self, subsets: dict[str, tuple[str, ...]], test: "Gate"
+    ) -> dict[str, tuple[float, Float[Tensor, "k v"]]]:
+        """Each subset's seed-averaged official validation score, and its probabilities of `test`'s rows."""
+        out = {}
+        for label, names in subsets.items():
+            _, models = self.trained(names)
+            out[label] = (self.study.official(self.averaged(models, names).log()), test.averaged(models, names))
+            LOG.info("%s holdout: official %.4f", label, out[label][0])
+        return out
+
+    def arm(self, label: str, names: tuple[str, ...]) -> dict[str, object]:
+        """`names`' arm: its epoch count from the last fold's rows, then its official scores over `SEEDS`."""
+        study, device = self.study, self.study.device
+        epochs, models = self.trained(names)
         val = self.design(study.val, names, val=True).to(device)
-        scores = [
-            study.official(Boosting.predict(Boosting(seed=seed).fit(train, epochs)[0], val).cpu()) for seed in SEEDS
-        ]
+        scores = [study.official(Boosting.predict(model, val).cpu()) for model in models]
         LOG.info("%s epochs %d official %s", label, epochs, scores)
         return {"arm": label, "epochs": epochs, "official": scores, "mean": float(np.mean(scores))}
 
@@ -218,6 +244,14 @@ def main() -> None:
     parser.add_argument("--base", required=True)
     parser.add_argument("--experts", nargs="+", required=True, choices=sorted(TAPS))
     parser.add_argument("--refeature", action="store_true")
+    parser.add_argument(
+        "--holdout",
+        type=Path,
+        help="write the Deep Kaggle test's submissions to <stem>-<arm>.csv for each of `--arms`, not the gate",
+    )
+    parser.add_argument(
+        "--arms", nargs="+", default=["control"], help="comma-joined expert names per arm; `control` is none"
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), torch.device("cuda")
@@ -235,6 +269,21 @@ def main() -> None:
         features[name] = Features(saved["oof"], saved["val"]).reduced()
     study = Study(dump.oof, dump.val, dump.domains, loaded.evaluator, loaded.log_prior, domains, device)
     gate = Gate(study, features)
+    if args.holdout:
+        subsets = {arm: () if arm == "control" else tuple(arm.split(",")) for arm in args.arms}
+        split = loaded.kaggle(Track.DEEP)
+        rows = Probe.load(root.models() / args.base, root, device).rows(split, 0)
+        tested = {
+            name: Features(
+                torch.load(Dump.path(root, f"{args.base}-{name}"))["oof"],
+                Features.full(Expert(name), root, [split], device),
+            ).reduced()
+            for name in features
+        }
+        for label, (score, probabilities) in gate.submissions(subsets, Gate(replace(study, val=rows), tested)).items():
+            path = args.holdout.with_name(f"{args.holdout.stem}-{label.replace(',', '-')}.csv")
+            LOG.info("%s: official %.4f -> %s", label, score, Track.DEEP.write(root.raw(), probabilities.numpy(), path))
+        return
     results = {"arms": gate.arms(), "residual": {name: gate.residual(name) for name in features}}
     LOG.info("%s", json.dumps(results["residual"]))
     (Dump.path(root, f"{args.base}-expert").with_suffix(".json")).write_text(json.dumps(results, indent=1))

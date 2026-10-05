@@ -9,12 +9,15 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
+from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.kaggle import Track
 from megspeech.data.cache.run_cache import WORD_TABLE as TABLE
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import PAD
+from megspeech.evaluation import loaded as module
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.scoring.evaluator import Evaluator
@@ -138,3 +141,15 @@ def test_probabilities_lone(tmp_path: Path) -> None:
     split = replace(split, index=torch.cat([split.index[:1], lone]), onset=torch.zeros(4, split.index.shape[1]))
     probabilities = replace(loaded(tmp_path), model=Contrary()).probabilities(split, 0.5)
     assert probabilities.argmax(axis=1).tolist() == [0, 0, 0, VOCAB_SIZE - 1, VOCAB_SIZE - 1, VOCAB_SIZE - 1]
+
+
+def test_kaggle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every Kaggle test row is one word of the split, grouped by sentence."""
+    frame = pd.DataFrame(
+        {"index": range(3), "subject": 0, "source": ["sentence", "sentence", "word"], "epoch": 0, "onset_s": 0.0}
+    )
+    monkeypatch.setattr(module.Track, "kaggle", lambda *_: type("K", (), {"metadata_frame": lambda _self: frame})())
+    monkeypatch.setattr(module.Corpus, "kaggle", lambda *_: Windows.stacked(torch.zeros(3, CHANNELS, 4, device=CPU)))
+    split = loaded(tmp_path).kaggle(Track.DEEP)
+    assert len(split.y) == 3
+    assert split.index.shape[0] == 2

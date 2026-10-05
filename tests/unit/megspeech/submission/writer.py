@@ -7,6 +7,7 @@ import torch
 
 from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
+from megspeech.data.cache import kaggle as module
 from megspeech.data.cache.alignment import AS_RECORDED
 from megspeech.data.cache.kaggle import KaggleCache, Track
 from megspeech.data.config import DataConfig
@@ -15,7 +16,6 @@ from megspeech.data.labels.vocabulary import SECONDARY, VOCAB_SIZE
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.model.input.subjects import Reading
-from megspeech.submission import writer as module
 from megspeech.submission.writer import KaggleWriter
 from tests.unit.megspeech.evaluation.loaded import CPU, Favourite
 
@@ -70,7 +70,7 @@ def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         log_prior=torch.zeros(VOCAB_SIZE),
     )
     assert KaggleWriter(Track.BROAD).write(loaded, 0.5, tmp_path / "s.csv") == tmp_path / "s.csv"
-    assert (tracks, Cache.standardised, Cache.geometry) == ([Track.BROAD], [True], [AS_RECORDED])
+    assert (set(tracks), Cache.standardised, Cache.geometry) == ({Track.BROAD}, [True], [AS_RECORDED])
     assert written["p"].shape == (3, VOCAB_SIZE)
     assert (written["p"].argmax(axis=1) == VOCAB_SIZE - 1).all()
     assert np.allclose(written["s"], 1 / len(SECONDARY.words))

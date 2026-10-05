@@ -95,6 +95,37 @@ def test_arms(monkeypatch: pytest.MonkeyPatch) -> None:
     assert labels == ["control", "+textword", "+audsent", "all", "all-textword", "all-audsent"]
 
 
+def test_trained(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(module, "EPOCHS", 2)
+    epochs, models = gate().trained(("textword",))
+    assert 1 <= epochs <= 2
+    assert len(models) == len(module.SEEDS)
+
+
+def test_averaged(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(module, "EPOCHS", 1)
+    chosen = gate()
+    _, models = chosen.trained(("textword",))
+    out = chosen.averaged(models, ("textword",))
+    assert out.shape == (COUNT, VOCAB)
+    assert torch.allclose(out.sum(-1), torch.ones(COUNT), atol=1e-4)
+
+
+def test_submissions(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(module, "EPOCHS", 1)
+    out = gate().submissions({"control": (), "textword": ("textword",)}, gate())
+    assert set(out) == {"control", "textword"}
+    assert out["textword"][1].shape == (COUNT, VOCAB)
+
+
+def test_full(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    head = Head(cast("Embedded", Reading()), Tap.WORD, torch.eye(DIM), torch.zeros(DIM))
+    monkeypatch.setattr(module.Head, "load", staticmethod(lambda *_: head))
+    root = SimpleNamespace(models=lambda: tmp_path)
+    out = Features.full(Expert("textword"), cast("DataRoot", root), [cast("Split", None)] * 2, torch.device("cpu"))
+    assert out.shape == (2 * DIM, DIM)
+
+
 def test_residual() -> None:
     out = gate().residual("textword")
     assert set(out) == {"error", "margin"}

@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 import torch
 from jaxtyping import Bool, Float, Int
+from pnpl.competition import write_submission
 from pnpl.competition.holdout import DEEP_SUBJECTS, HOLDOUT_SUBDIR, TRACKS, LibriBrainCompetitionHoldout
 
 from core.paths import DataRoot
@@ -31,6 +32,7 @@ from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.cache.cleaning import UNCHANGED, Cleaner, Cleaning
 from megspeech.data.cache.run_cache import DeviceRecording, RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
+from megspeech.data.labels.vocabulary import SECONDARY
 from megspeech.data.raw.runs import Run
 
 LOG = logging.getLogger(__name__)
@@ -135,6 +137,11 @@ class Track(StrEnum):
     def kaggle(self, raw: Path) -> LibriBrainCompetitionHoldout:
         """The track's rows as the competition indexes them, from the archives under `raw`."""
         return LibriBrainCompetitionHoldout(self.value, data_path=raw, download=False)
+
+    def write(self, raw: Path, primary: Float[np.ndarray, "n v"], path: Path) -> Path:
+        """`primary` as the track's Kaggle submission, one row per test index; the secondary vocabulary uniform."""
+        secondary = np.full((len(primary), len(SECONDARY.words)), 1 / len(SECONDARY.words))
+        return write_submission(path, self.kaggle(raw).indices, primary, secondary)
 
 
 @dataclass(frozen=True)

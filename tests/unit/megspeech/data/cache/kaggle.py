@@ -13,11 +13,13 @@ import torch
 from pnpl.competition.holdout import HOLDOUT_SUBDIR, LibriBrainCompetitionHoldout
 
 from core.paths import ENV_OVERRIDE, DataRoot
+from megspeech.data.cache import kaggle as module
 from megspeech.data.cache.alignment import Alignment, Geometry, Projection
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.kaggle import KAGGLE_DIR, Archive, ArchiveKind, Epochs, KaggleCache, Track, main
 from megspeech.data.cache.run_cache import DIRECTORY, TAIL, WORD_TABLE, DeviceRecording, RunCache
 from megspeech.data.constants import RATE, SFREQ, WINDOW
+from megspeech.data.labels.vocabulary import SECONDARY, VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from tests.unit.megspeech.data.cache.run_cache import recording
 
@@ -266,3 +268,16 @@ def test_signal(tmp_path: Path) -> None:
     doubled = Archive(sentence_archive(tmp_path)).signal(cache, lambda meg: joined.append(meg.shape) or 2 * meg)
     assert joined == [(CHANNELS, LEAD + SAMPLES)]
     assert np.array_equal(doubled[:, lead:], cache.decimated(2 * stretch()))
+
+
+def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    written: dict[str, np.ndarray] = {}
+    kaggle(tmp_path)
+    monkeypatch.setattr(
+        module, "write_submission", lambda path, indices, p, s: written.update(i=indices, p=p, s=s) or path
+    )
+    primary = np.full((2, VOCAB_SIZE), 1 / VOCAB_SIZE)
+    assert Track.DEEP.write(tmp_path, primary, tmp_path / "s.csv") == tmp_path / "s.csv"
+    assert written["p"] is primary
+    assert written["s"].shape == (2, len(SECONDARY.words))
+    assert len(written["i"]) == len(Track.DEEP.kaggle(tmp_path))

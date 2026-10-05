@@ -7,7 +7,9 @@ import torch
 from jaxtyping import Float
 from torch import Tensor, nn
 
-from megspeech.data.batching.split import Split
+from megspeech.data.batching.split import KAGGLE_FEATURES, Split
+from megspeech.data.cache.kaggle import Track
+from megspeech.data.corpus import Corpus
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.reader import Reader
@@ -46,6 +48,12 @@ class LoadedModel(Reader):
         """Every counted domain of `runs` in the scored partition: its unseen-span words' hits at `tau`."""
         domains, _ = self.domains(self.ruled(runs))
         return self.evaluator.graded(self.model, domains, self.log_prior, tau)
+
+    def kaggle(self, track: Track) -> Split:
+        """Every row of `track`'s Kaggle test as this model reads it, each from its own subject's MEG."""
+        kaggle = track.kaggle(self.root.raw())
+        windows = Corpus.kaggle(self.root, self.data, track, self.device, self.geometry)
+        return self.read(f"{KAGGLE_FEATURES}-{track}", Split.from_kaggle(kaggle, windows))
 
     def probabilities(self, split: Split, tau: float) -> Float[np.ndarray, "n v"]:
         """Every word of `split`'s probabilities, logit-adjusted by `tau`: the context head's, but the word head's for
