@@ -1,5 +1,6 @@
 from dataclasses import replace
 from pathlib import Path
+from typing import override
 
 import torch
 from torch import nn
