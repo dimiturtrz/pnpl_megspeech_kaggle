@@ -35,6 +35,21 @@ def test_loss() -> None:
     assert semantic.loss(targets, targets, torch.full((3,), -100)).item() == 0.0
 
 
+def test_softmax_loss() -> None:
+    """Orthogonal targets: each row picks its own kind among the batch's distinct kinds; duplicates count once."""
+    semantic = Semantic(WIDTH)
+    eye = torch.eye(DIM)[:3]
+    targets = eye[[0, 1, 0]]
+    pair = softplus(-math.exp(TEMPERATURE))
+    loss = semantic.softmax_loss(targets, targets, torch.tensor([4, 7, 4]))
+    assert loss.item() == pytest.approx(pair, abs=1e-6)
+    padded = semantic.softmax_loss(
+        torch.cat([targets, eye[2:]]), torch.cat([targets, eye[2:]]), torch.tensor([4, 7, 4, -1])
+    )
+    assert padded.item() == pytest.approx(pair, abs=1e-6)
+    assert semantic.softmax_loss(targets, targets, torch.full((3,), -100)).item() == 0.0
+
+
 def term() -> SemanticTerm:
     return SemanticTerm(2.0, Lexicon(torch.tensor([10, 20]), torch.randn(2, DIM, generator=GENERATOR)))
 

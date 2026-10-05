@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import cast, override
 
+import torch
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 from torch.nn import functional
@@ -33,6 +34,20 @@ class Semantic(SigmoidScorer):
         logits = self.score(projected, functional.normalize(targets.float(), dim=-1))
         pairs = functional.binary_cross_entropy_with_logits(logits, same.float(), reduction="none")
         return ((pairs * candidate).sum(-1) * valid).sum() / valid.sum().clamp(min=1)
+
+    def softmax_loss(
+        self, projected: Float[Tensor, "n d"], targets: Float[Tensor, "n d"], kinds: Int[Tensor, " n"]
+    ) -> Float[Tensor, ""]:
+        """Cross-entropy of each row over the batch's distinct kinds, its own the label: the contrast learns like a
+        classifier over the batch's kinds (as the 50-way heads do), where `loss`'s independent sigmoids plateau at
+        the constant answer. Kinds are deduplicated as in `loss`."""
+        valid = kinds >= 0
+        same = kinds[:, None] == kinds[None, :]
+        candidate = valid & ~same.tril(-1).any(dim=1)
+        logits = self.score(projected, functional.normalize(targets.float(), dim=-1))
+        logits = logits.masked_fill(~candidate[None, :], torch.finfo(logits.dtype).min)
+        own = (logits.log_softmax(-1) * (same & candidate[None, :])).sum(-1)
+        return -(own * valid).sum() / valid.sum().clamp(min=1)
 
 
 @dataclass(frozen=True)

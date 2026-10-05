@@ -56,6 +56,9 @@ class OptimConfig:
     speech_centred: bool = False
     """Centre each run's speech targets on its own mean (`Targets.centred`), removing the direction every target
     shares: raw, two random targets' cosine is ~0.6, so the L2-normalised SigLIP target is mostly that one direction."""
+    speech_softmax: bool = False
+    """Contrast the speech targets by softmax over the batch's kinds, not independent sigmoids: the sigmoid contrast
+    cannot learn a word-identity oracle in 40 epochs where the 50-way heads learn it in 4."""
     tagging: float = 0.0
     """Weight of the tag auxiliary (`megspeech.objective.auxiliary.tagging`): every training word's embedding classified
     into its in-context part of speech (`megspeech.data.labels.context_tags`), 11 universal tags and `OTHER`. It trains

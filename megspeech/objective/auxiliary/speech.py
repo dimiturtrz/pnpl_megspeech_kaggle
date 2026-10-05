@@ -19,6 +19,8 @@ class SpeechTerm(AuxiliaryTerm):
 
     weight: float
     speech: Speech
+    softmax: bool = False
+    """Contrast by softmax over the batch's kinds (`Semantic.softmax_loss`) rather than independent sigmoids."""
 
     @override
     def head(self, width: int) -> nn.Module:
@@ -36,4 +38,6 @@ class SpeechTerm(AuxiliaryTerm):
         self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
     ) -> Float[Tensor, ""]:
         kinds = target.flatten()
-        return cast("Semantic", head).loss(output.flatten(0, 1), self.speech.vectors[kinds.clamp(min=0)], kinds)
+        semantic = cast("Semantic", head)
+        contrast = semantic.softmax_loss if self.softmax else semantic.loss
+        return contrast(output.flatten(0, 1), self.speech.vectors[kinds.clamp(min=0)], kinds)

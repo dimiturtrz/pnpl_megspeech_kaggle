@@ -45,3 +45,14 @@ def test_unweighted() -> None:
     value.backward()
     assert cast("Semantic", head).project.weight.grad is not None
     assert aligned.unweighted(head, projected, torch.full((2, 3), -1)).item() == 0.0
+
+
+def test_softmax() -> None:
+    """The softmax contrast is selected by the flag and differentiates into the projection."""
+    softmaxed = SpeechTerm(2.0, term().speech, softmax=True)
+    head = softmaxed.head(WIDTH)
+    projected = head(torch.randn(2, 3, WIDTH, generator=GENERATOR))
+    value = softmaxed.unweighted(head, projected, torch.tensor([[0, 1, -100], [2, -1, -100]]))
+    assert value.item() > 0
+    value.backward()
+    assert cast("Semantic", head).project.weight.grad is not None

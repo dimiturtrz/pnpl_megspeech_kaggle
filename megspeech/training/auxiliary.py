@@ -52,6 +52,7 @@ class Auxiliary(ABC):
                     Speech.gather(Targets.directory(root, optim.speech_source), words, centred=optim.speech_centred).to(
                         device
                     ),
+                    softmax=optim.speech_softmax,
                 ),
             ),
             (optim.semantic, lambda: SemanticTerm(optim.semantic, Lexicon.load(Lexicon.path(root)).to(device))),
