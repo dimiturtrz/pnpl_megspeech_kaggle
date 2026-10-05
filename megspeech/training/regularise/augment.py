@@ -26,6 +26,9 @@ class Augment:
     mix: float = 0.0
     """Largest share of another window, circularly shifted off its own onsets, added as background (BGMix without its
     label); each window draws its share uniformly up to it. Real MEG, so it stays in the field's own subspace."""
+    bgmix: float = 0.0
+    """Probability a labelled training word's window becomes its (subject, label) template plus another labelled word's
+    residual (`megspeech.training.regularise.bgmix`, trial-level BGMix), the label kept; 0 mixes none."""
     spatial: float = 0.0
     """Radius of the sensor patch each window loses (`Regional`), as a share of the array's widest extent."""
 

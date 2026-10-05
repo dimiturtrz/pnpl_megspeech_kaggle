@@ -28,6 +28,7 @@ from megspeech.training.hook import Scheduled, StepHook
 from megspeech.training.loop.ema import Ema
 from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
+from megspeech.training.regularise.bgmix import BGMix, Untouched
 from megspeech.training.regularise.regional import Regional
 from megspeech.training.sampling.curriculum import Annealed, Curriculum, Natural, Robust
 from megspeech.training.teacher import Teacher, Untaught
@@ -50,6 +51,7 @@ class TrainState:
     ema: Ema
     hooks: tuple[StepHook, ...]
     curriculum: Curriculum = field(default_factory=Natural)
+    bgmix: Untouched = field(default_factory=Untouched)
 
 
 @dataclass
@@ -127,7 +129,8 @@ class Trainer:
         """One optimiser step on the words of `spans`; returns each term's loss without syncing it to the host."""
         batch = train.batch(spans, state.rows, self.config.augment.jitter)
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            outputs = state.model(self.regional(self.config.augment(batch.x)), batch.onset, batch.slot, batch.subject)
+            mixed = state.bgmix.apply(batch.x, batch, train)
+            outputs = state.model(self.regional(self.config.augment(mixed)), batch.onset, batch.slot, batch.subject)
             parts = zip(state.terms, state.readouts, outputs, strict=True)
             losses = torch.stack([term.loss(head, out, batch.target(term.labels(train))) for term, head, out in parts])
             value = losses.sum()
@@ -162,6 +165,7 @@ class Trainer:
             ema,
             (anchor, schedule, ema, ramp),
             Robust.of(Annealed.of(optim.curriculum), train, optim.robust),
+            BGMix.of(train, self.config.augment.bgmix),
         )
 
     def rows(self, train: Split) -> int:
@@ -200,6 +204,7 @@ class Trainer:
                 epoch,
                 {type(t).__name__: v for t, v in zip(state.terms, terms.tolist(), strict=True)},
             )
+            LOG.info("epoch %d bgmix mixed words %d", epoch, state.bgmix.drained())
             if not math.isfinite(value):
                 raise FloatingPointError(f"non-finite loss at epoch {epoch}")
             with state.ema.applied(model):
