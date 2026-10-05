@@ -24,6 +24,14 @@ from megspeech.model.words.megxl import POOLED, RESOLVED, FeatureWords
 from megspeech.objective.context import Objective
 
 
+class Covariance(StrEnum):
+    """The covariance `whiten` inverts. `TOTAL`: that of the training windows, evoked signal and noise together.
+    `NOISE`: that of their residuals about each word's mean window, the noise alone (Engemann & Gramfort 2015)."""
+
+    TOTAL = "total"
+    NOISE = "noise"
+
+
 class Encoder(StrEnum):
     """The CNN trained from scratch, or a head over the features `DataConfig.features` names: MEG-XL's pooled over
     the sensors or each channel's own, or a trained run's CNN embeddings."""
@@ -89,6 +97,8 @@ class ContextConfig:
     across the chunks can tell them apart where one pooled token per word mixes them."""
     whiten: bool = False
     """Decorrelate the scaled sensors by their training covariance before the subject layer (`input.whitener`)."""
+    covariance: Covariance = Covariance.TOTAL
+    """Which covariance `whiten` inverts; the noise's is fit on training residuals (`training.regularise.noise`)."""
     rhythm: bool = False
     """A timing head's logits added to the context head's (`context.timing.TimingHead`); with `intervals` none, the
     transformer is told no gaps and timing reaches the words only through that head."""
@@ -115,6 +125,8 @@ class ContextConfig:
             )
         if self.whiten and self.encoder.cached:
             raise ValueError(f"encoder {self.encoder} reads saved features, not sensors, so there is nothing to whiten")
+        if self.covariance is Covariance.NOISE and not self.whiten:
+            raise ValueError("a noise covariance is only inverted by whiten")
 
     @property
     def tokens(self) -> int:

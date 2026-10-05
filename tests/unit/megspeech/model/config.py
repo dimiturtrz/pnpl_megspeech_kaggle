@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 from megspeech.model.config import CONTEXT as DEFAULT
-from megspeech.model.config import FILE, ContextConfig, Encoder, OnsetEncoding
+from megspeech.model.config import FILE, ContextConfig, Covariance, Encoder, OnsetEncoding
 from megspeech.model.context.timing import Clock, Intervals
 from megspeech.model.words.conv import ConvConfig, ConvWords
 from megspeech.model.words.expert import Crop
@@ -106,3 +106,9 @@ def test_onset_encoding_forward() -> None:
     timed = ContextConfig(width=16, timescales=4, intervals=Intervals.LOG)
     mask = torch.ones(2, 2, dtype=torch.bool)
     assert OnsetEncoding(timed).forward(onset, Intervals.LOG.features(onset, mask)).shape == (2, 2, 16)
+
+
+def test_noise_covariance_needs_whiten() -> None:
+    with pytest.raises(ValueError, match="noise covariance"):
+        ContextConfig(covariance=Covariance.NOISE)
+    assert ContextConfig(whiten=True, covariance=Covariance.NOISE).covariance is Covariance.NOISE

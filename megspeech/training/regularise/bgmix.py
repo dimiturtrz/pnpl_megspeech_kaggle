@@ -20,15 +20,19 @@ CHUNK = 2048
 
 
 class BGMixKey(StrEnum):
-    """What a template is per word. `SUBJECT`: the word's subject. `SOURCE`: the dataset the word was recorded in."""
+    """What a template is per word. `SUBJECT`: the word's subject. `SOURCE`: the dataset the word was recorded in.
+    `POOLED`: none, a template per label alone."""
 
     SUBJECT = "subject"
     SOURCE = "source"
+    POOLED = "pooled"
 
     def of(self, split: Split) -> Int[Tensor, " n"]:
         """Each word of `split`'s key."""
         if self is BGMixKey.SUBJECT:
             return split.subject
+        if self is BGMixKey.POOLED:
+            return torch.zeros_like(split.y)
         if split.source is None:
             raise ValueError("source-keyed BGMix needs a split that carries each word's source")
         return split.source
@@ -64,6 +68,12 @@ class BGMix(Untouched):
         """Mixing at `p` on templates averaged over `train`'s labelled windows by `key`; none when `p` is 0."""
         if not p:
             return Untouched()
+        table, _ = cls.templates(train, key)
+        return cls(p, table, key, torch.zeros((), dtype=torch.long, device=table.device))
+
+    @classmethod
+    def templates(cls, train: Split, key: BGMixKey) -> tuple[Float[Tensor, "s v c t"], Float[Tensor, " k"]]:
+        """The (key, label) templates averaged over `train`'s labelled windows, and the words each cell averaged."""
         words = train.labelled()
         keys = key.of(train)
         subjects = int(keys.max()) + 1
@@ -79,7 +89,7 @@ class BGMix(Untouched):
         table = cls.averaged(sums, cells, subjects)
         own = int((cells >= MIN_CELL).sum())
         LOG.info("bgmix key %s: %d keys, %d of %d (key, label) cells own a template", key, subjects, own, len(cells))
-        return cls(p, table, key, torch.zeros((), dtype=torch.long, device=table.device))
+        return table, cells
 
     @staticmethod
     def averaged(sums: Float[Tensor, "k c t"], counts: Float[Tensor, " k"], subjects: int) -> Float[Tensor, "s v c t"]:

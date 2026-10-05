@@ -29,6 +29,7 @@ from megspeech.training.loop.ema import Ema
 from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.bgmix import BGMix, Untouched
+from megspeech.training.regularise.noise import SAMPLES
 from megspeech.training.regularise.regional import Regional
 from megspeech.training.sampling.curriculum import Annealed, Curriculum, Natural, Robust
 from megspeech.training.teacher import Teacher, Untaught
@@ -94,7 +95,7 @@ class Trainer:
         model = SentenceNet(
             Scaler(sample), context=self.config.context, prototypes=self.prototypes, channels=sample.shape[1]
         )
-        model.whiten.fit(model.scale(sample))
+        model.whiten.fit(model.scale(SAMPLES[self.config.context.covariance].windows(train, sample)))
         if self.initial:
             model.load_state_dict(self.initial)
         if self.timing:

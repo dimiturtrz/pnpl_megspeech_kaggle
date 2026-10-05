@@ -135,3 +135,12 @@ def test_apply_source_keyed_uses_each_rows_own_source_template() -> None:
     out = BGMix(1.0, tab, BGMixKey.SOURCE).apply(x, batch, split)
     assert torch.allclose(out[0], tab[0, 1] + x[1] - tab[1, 2], atol=1e-4)
     assert torch.allclose(out[1], tab[1, 2] + x[0] - tab[0, 1], atol=1e-4)
+
+
+def test_templates() -> None:
+    labels = [3] * MIN_CELL + [4] * 2
+    split, _, _ = pair(labels)
+    table, cells = BGMix.templates(split, BGMixKey.POOLED)
+    assert table.shape[0] == 1
+    assert cells[3] == MIN_CELL
+    assert cells.sum() == len(labels)
