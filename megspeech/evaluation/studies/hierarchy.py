@@ -1,17 +1,27 @@
-"""Whether a part-of-speech posterior, trust-weighted, improves the 50-way decoder when late-fused into its logits
-(megspeech-7gf.94): every scored word's vocabulary scores plus `lam` times log sum_t p(t | MEG) p(t | word), the stacked
-probe's calibrated posterior over each word's tag against the tag distribution each vocabulary word shows in context on
-the training runs. The model is frozen and the fusion runs on the CPU.
+"""Whether a part-of-speech posterior narrows the 50 candidates of the 50-way decoder (megspeech-7gf.94, -cn2). Each
+scored word's tag likelihood ratio of a candidate word w is u_w + (1 - u_w) sum_t p(t | w) p(t | MEG) / p(t): the
+word's class distribution in context on the training runs (`megspeech.data.labels.context_tags`, add-one smoothed)
+against a posterior over the word's class. `UNKNOWN` is no class: u_w is the share of w's training tokens the tagger
+was unsure of, and it adds a neutral 1, so that mass neither helps nor hurts a candidate. The probe's classes are
+weighted by frequency (natural) or equally (balanced), the prior p(t) matching. Two arms read the ratio:
 
-`lam` is fit leave-one-domain-out over the official validation domains: chosen on two, scored on the third, the macro
-read as the official scorer reads it. The score at every grid `lam` over all domains is a diagnostic fit on validation.
+- hierarchical: the vocabulary scores plus `lam` times its log, the factorisation log p(w | MEG) + lam log ratio;
+- gate: the vocabulary scores with every candidate whose ratio is under the threshold ranked behind all the rest.
+
+The posterior is the stacked probe's, over timing and the context embeddings of the model named by `--embeddings`
+(default the decoder's own), or over the word embeddings alone for `--stack word`. The decoder is frozen and the
+fusion runs on the CPU. The setting of each arm (`lam`, the threshold) is fit leave-one-domain-out over the official
+validation domains: chosen on two, scored on the third, the macro read as the official scorer reads it. The score at
+every grid setting over all domains is a diagnostic fit on validation.
 
     uv run python -m megspeech.evaluation.studies.hierarchy sent40-ioi-ema9998-s0
 """
 
 import argparse
 import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import override
 
 import numpy as np
 import pandas as pd
@@ -21,13 +31,14 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.config import DataConfig
-from megspeech.data.labels.syntax import PartsOfSpeech
-from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.data.labels.context_tags import ContextTags
+from megspeech.data.labels.phonemes import UNKNOWN
+from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.data.raw.runs import DEEP, Run
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head, Score, SelectionConfig
-from megspeech.evaluation.studies.syntax import FLOOR, Embedded, Probe, Table
+from megspeech.evaluation.studies.syntax import FLOOR, Embedded, Probe, Table, Timing
 from megspeech.model.ensemble import Ensemble
 from megspeech.model.input.subjects import Fallback, SubjectLayer, Unseen
 from megspeech.model.sentence import SentenceNet
@@ -36,8 +47,12 @@ LOG = logging.getLogger(__name__)
 
 GRID = (0.0, 0.25, 0.5, 1.0, 2.0, 4.0)
 """Fusion weights on the part-of-speech bonus; 0 is the context head alone."""
-STACK = ("timing", "meg-context")
-"""The probes whose out-of-fold log-probabilities the stacker reads."""
+THRESHOLDS = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+"""Likelihood-ratio floors of the gate; 0 gates nothing and 1 gates every candidate the tags speak against."""
+DEMOTED = 1000.0
+"""What a gated candidate's score drops by: more than any logit spread and prior adjustment, so it ranks last."""
+STACKS = {"context": ("timing", "meg-context"), "word": ("meg-word",)}
+"""The probes whose out-of-fold log-probabilities the stacker reads, by `--stack`."""
 OFFICIAL = 0.6445
 """The context head's official macro BAcc@10 for sent40-ioi-ema9998-s0 (n=2512): the plumbing check's target."""
 TOLERANCE = 0.002
@@ -49,18 +64,63 @@ class WordTags:
     """Each vocabulary word's distribution over the stacker's tags, counted in context on training rows, add-one."""
 
     distribution: Float[np.ndarray, "v k"]
+    unknown: Float[np.ndarray, " v"]
 
     @classmethod
     def of(cls, targets: Int[np.ndarray, " n"], tags: Int[np.ndarray, " n"], k: int) -> "WordTags":
-        """The distribution of `tags` (each below `k`) over the rows whose 50-way `targets` name a word."""
+        """The distribution of `tags` (each below `k`, `UNKNOWN` for none) over the rows whose 50-way `targets` name a
+        word, and each word's share `unknown` of rows with no known tag."""
         counts = np.ones((VOCAB_SIZE, k))
+        said = np.full(VOCAB_SIZE, 2.0)
+        lacking = np.ones(VOCAB_SIZE)
         inside = targets >= 0
-        np.add.at(counts, (targets[inside], tags[inside]), 1)
-        return cls(counts / counts.sum(1, keepdims=True))
+        np.add.at(said, targets[inside], 1)
+        np.add.at(lacking, targets[inside & (tags == UNKNOWN)], 1)
+        known = inside & (tags != UNKNOWN)
+        np.add.at(counts, (targets[known], tags[known]), 1)
+        return cls(counts / counts.sum(1, keepdims=True), lacking / said)
 
-    def bonus(self, posterior: Float[np.ndarray, "n k"]) -> Float[np.ndarray, "n v"]:
-        """Each row's log-likelihood, under every word's tags, of the tag posterior's mass."""
-        return np.log(np.exp(posterior) @ self.distribution.T + FLOOR)
+    def bonus(self, posterior: Float[np.ndarray, "n k"], prior: Float[np.ndarray, " k"]) -> Float[np.ndarray, "n v"]:
+        """Each row's log likelihood ratio of every word: u + (1 - u) sum_t p(t | word) p(t | MEG) / p(t), so a word
+        with no known tag (share u) is neither helped nor hurt."""
+        evidence = np.exp(posterior) / prior @ self.distribution.T
+        return np.log(self.unknown + (1 - self.unknown) * evidence + FLOOR)
+
+
+@dataclass(frozen=True)
+class Arm(ABC):
+    """How the tag likelihood ratio narrows the vocabulary scores: a knob swept over `grid`, its first fuses nothing."""
+
+    name: str
+    grid: tuple[float, ...]
+
+    @abstractmethod
+    def fuse(self, logits: Float[Tensor, "n v"], bonus: Float[Tensor, "n v"], setting: float) -> Float[Tensor, "n v"]:
+        """`logits` narrowed by the log tag likelihood `bonus` at `setting`."""
+
+
+@dataclass(frozen=True)
+class Hierarchical(Arm):
+    """The log tag likelihood added at weight `setting`."""
+
+    name: str = "hierarchical"
+    grid: tuple[float, ...] = GRID
+
+    @override
+    def fuse(self, logits: Float[Tensor, "n v"], bonus: Float[Tensor, "n v"], setting: float) -> Float[Tensor, "n v"]:
+        return logits + setting * bonus
+
+
+@dataclass(frozen=True)
+class Gate(Arm):
+    """Every candidate whose likelihood ratio is under `setting` ranked behind the others, each by its own scores."""
+
+    name: str = "gate"
+    grid: tuple[float, ...] = THRESHOLDS
+
+    @override
+    def fuse(self, logits: Float[Tensor, "n v"], bonus: Float[Tensor, "n v"], setting: float) -> Float[Tensor, "n v"]:
+        return logits - DEMOTED * (bonus.exp() < setting)
 
 
 @dataclass(frozen=True)
@@ -92,67 +152,76 @@ class Domain:
         LOG.info("%d of %d scored words carry a part of speech", found.sum(), len(rows))
         return cls(logits, torch.from_numpy(aligned).float().to(logits.device), labels)
 
-    def fused(self, lam: float) -> Float[Tensor, "n v"]:
-        """The vocabulary scores with `lam` times the bonus added."""
-        return self.logits + lam * self.bonus
+    def fused(self, arm: "Arm", setting: float) -> Float[Tensor, "n v"]:
+        """The vocabulary scores `arm` fuses with the bonus at `setting`."""
+        return arm.fuse(self.logits, self.bonus, setting)
 
 
 @dataclass(frozen=True)
 class Grid:
-    """Every domain's score at every `lam`, each the official ruler's per-adjustment balanced accuracy."""
+    """Every domain's score at every setting of an arm, each the official ruler's per-adjustment balanced accuracy."""
 
     scores: dict[str, dict[float, Score]]
 
     @classmethod
-    def of(cls, evaluator: Evaluator, log_prior: Float[Tensor, " v"], domains: dict[str, Domain]) -> "Grid":
-        """`domains` scored at every `GRID` weight."""
+    def of(cls, evaluator: Evaluator, log_prior: Float[Tensor, " v"], domains: dict[str, Domain], arm: Arm) -> "Grid":
+        """`domains` scored at every setting of `arm`."""
         return cls(
             {
-                name: {lam: evaluator.evaluate(domain.fused(lam), domain.labels, log_prior) for lam in GRID}
+                name: {
+                    setting: evaluator.evaluate(domain.fused(arm, setting), domain.labels, log_prior)
+                    for setting in arm.grid
+                }
                 for name, domain in domains.items()
             }
         )
 
-    def macro(self, lam: float) -> Score:
-        """The macro over every domain at `lam`, the adjustment chosen once for all as the official scorer does."""
-        return Score.mean(by_lam[lam] for by_lam in self.scores.values())
+    @property
+    def settings(self) -> tuple[float, ...]:
+        return tuple(next(iter(self.scores.values())))
+
+    def macro(self, setting: float) -> Score:
+        """The macro over every domain at `setting`, the adjustment chosen once for all as the official scorer does."""
+        return Score.mean(by_setting[setting] for by_setting in self.scores.values())
 
     def chosen(self, held: str) -> float:
-        """The weight that scores best on every domain but `held`, the smaller on a tie."""
-        others = [by_lam for name, by_lam in self.scores.items() if name != held]
-        return max(GRID, key=lambda lam: Score.mean(by_lam[lam] for by_lam in others).bacc10)
+        """The setting that scores best on every domain but `held`, the earlier on a tie."""
+        others = [by_setting for name, by_setting in self.scores.items() if name != held]
+        return max(self.settings, key=lambda setting: Score.mean(by_setting[setting] for by_setting in others).bacc10)
 
     def leave_one_out(self) -> tuple[Score, dict[str, float]]:
-        """The macro of each domain scored at the weight the others chose, and those weights."""
+        """The macro of each domain scored at the setting the others chose, and those settings."""
         weights = {name: self.chosen(name) for name in self.scores}
-        return Score.mean(self.scores[name][lam] for name, lam in weights.items()), weights
+        return Score.mean(self.scores[name][setting] for name, setting in weights.items()), weights
 
     def per_domain(self, weights: dict[str, float], macro: Score) -> dict[str, tuple[float, int]]:
-        """Each domain's score at its weight, read at the macro's adjustment, and its word count."""
+        """Each domain's score at its setting, read at the macro's adjustment, and its word count."""
         return {
-            name: (round(self.scores[name][lam].by_tau[macro.tau], 4), self.scores[name][lam].n)
-            for name, lam in weights.items()
+            name: (round(self.scores[name][setting].by_tau[macro.tau], 4), self.scores[name][setting].n)
+            for name, setting in weights.items()
         }
 
-    def report(self) -> None:  # devtools-ignore: test-mirror
+    def report(self, arm: str, official: float) -> None:  # devtools-ignore: test-mirror
         """Log the plumbing check, the fit-on-validation grid and the leave-one-domain-out macro."""
-        base = self.macro(0.0)
-        LOG.info("lam 0 macro %.4f over %d words, official %.4f", base.bacc10, base.n, OFFICIAL)
-        if abs(base.bacc10 - OFFICIAL) > TOLERANCE:
-            raise ValueError(f"un-fused macro {base.bacc10:.4f} does not reproduce the official {OFFICIAL}")
-        for lam in GRID:
-            macro = self.macro(lam)
+        base = self.macro(self.settings[0])
+        LOG.info("%s setting 0 macro %.4f over %d words, official %.4f", arm, base.bacc10, base.n, official)
+        if abs(base.bacc10 - official) > TOLERANCE:
+            raise ValueError(f"un-fused macro {base.bacc10:.4f} does not reproduce the official {official}")
+        for setting in self.settings:
+            macro = self.macro(setting)
             LOG.info(
-                "fit-on-val lam %s macro %.4f tau %s over %d words, per domain %s",
-                lam,
+                "%s fit-on-val %s macro %.4f tau %s over %d words, per domain %s",
+                arm,
+                setting,
                 macro.bacc10,
                 macro.tau,
                 macro.n,
-                self.per_domain(dict.fromkeys(self.scores, lam), macro),
+                self.per_domain(dict.fromkeys(self.scores, setting), macro),
             )
         macro, weights = self.leave_one_out()
         LOG.info(
-            "leave-one-domain-out macro %.4f tau %s over %d words, per domain %s, lam %s",
+            "%s leave-one-domain-out macro %.4f tau %s over %d words, per domain %s, settings %s",
+            arm,
             macro.bacc10,
             macro.tau,
             macro.n,
@@ -163,7 +232,10 @@ class Grid:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("name", help="a trained model under models/")
+    parser.add_argument("name", help="the decoder under models/ whose logits are narrowed")
+    parser.add_argument("--embeddings", help="the model under models/ whose embeddings the probe reads (default: name)")
+    parser.add_argument("--stack", choices=sorted(STACKS), default="context", help="the probes the posterior stacks")
+    parser.add_argument("--official", type=float, default=OFFICIAL, help="the decoder's official macro BAcc@10")
     parser.add_argument("--stride", type=int, default=4, help="every stride-th subject-0 training run is probed on")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -179,24 +251,36 @@ def main() -> None:
     runs = Run.discover(root.raw())
     held = reader.ruled(runs)
     trained = [run for run in data.trained(runs) if run.subject == DEEP][:: args.stride]
-    parts = PartsOfSpeech.load(PartsOfSpeech.path(root))
-    embedded = Embedded(SentenceNet.load(root.models() / args.name / "model.pt").to(device))
-    train, valid = Table.of(reader, embedded, {"train": trained}, parts), Table.of(reader, embedded, held, parts)
-    probe = Probe(train, valid)
-    classes, posterior = probe.stacked(STACK, {name: probe.probabilities(name) for name in STACK})
-    bonus = WordTags.of(train.targets, np.searchsorted(classes, train.tags), len(classes)).bonus(posterior)
+    contexts = ContextTags.load(ContextTags.path(root))
+    timing = Timing.fitted(data.run_cache(root).table([run.name for run in trained]))
+    embedded = Embedded(SentenceNet.load(root.models() / (args.embeddings or args.name) / "model.pt").to(device))
+    train = Table.of(reader, embedded, {"train": trained}, contexts, timing)
+    valid = Table.of(reader, embedded, held, contexts, timing)
+    stack = STACKS[args.stack]
+    bonuses = {}
+    for balanced in (False, True):
+        probe = Probe(train, valid, balanced)
+        classes, posterior = probe.stacked(stack, {name: probe.probabilities(name) for name in stack})
+        tags = np.where(train.tags == UNKNOWN, UNKNOWN, np.searchsorted(classes, train.tags))
+        words = WordTags.of(train.targets, tags, len(classes))
+        counts = np.bincount(tags[tags != UNKNOWN], minlength=len(classes))
+        prior = np.full(len(classes), 1 / len(classes)) if balanced else counts / counts.sum()
+        bonuses["balanced" if balanced else "natural"] = words.bonus(posterior, prior)
+    LOG.info("unknown share u_w of the 50 %s", dict(zip(PRIMARY.words, words.unknown.round(3).tolist(), strict=True)))
     splits, _ = reader.domains(held)
     official = evaluator.report(model, splits, log_prior, 0, 0.0)
-    LOG.info("official macro %.4f over %d words, expected %.4f", official.macro.bacc10, official.macro.n, OFFICIAL)
-    _, words = reader.load([run for group in held.values() for run in group])
-    domains = {}
-    for name, split in splits.items():
-        novel = split.novel(evaluator.seen)
-        if len(novel) >= evaluator.min_novel:
-            rows = words[words["run"].isin([run.name for run in held[name]])].iloc[novel.cpu().numpy()]
-            logits = evaluator.logits(model, split)[Head.CONTEXT][novel]
-            domains[name] = Domain.of(logits, split.y[novel], rows, valid, bonus)
-    Grid.of(evaluator, log_prior, domains).report()
+    LOG.info("official macro %.4f over %d words, expected %.4f", official.macro.bacc10, official.macro.n, args.official)
+    _, heard = reader.load([run for group in held.values() for run in group])
+    for weighting, bonus in bonuses.items():
+        domains = {}
+        for name, split in splits.items():
+            novel = split.novel(evaluator.seen)
+            if len(novel) >= evaluator.min_novel:
+                rows = heard[heard["run"].isin([run.name for run in held[name]])].iloc[novel.cpu().numpy()]
+                logits = evaluator.logits(model, split)[Head.CONTEXT][novel]
+                domains[name] = Domain.of(logits, split.y[novel], rows, valid, bonus)
+        for arm in (Hierarchical(), Gate()):
+            Grid.of(evaluator, log_prior, domains, arm).report(f"{weighting} {arm.name}", args.official)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,9 @@
 """How well a word's part of speech decodes at all: classical probes on timing alone, on a frozen model's MEG
 embeddings, and on both stacked, fit on subject 0's training runs and scored on the official validation words.
 
-Timing is what a test row carries besides MEG: each word's onset beside its neighbours' and its sentence's bounds.
-Function words are short, so timing alone predicts part of speech; MEG counts only for what it adds beyond it. The
-tags are `megspeech.data.labels.syntax`'s, a training target: no holdout text is read.
+Timing is what a test row carries besides MEG: each word's onset beside its neighbours'. Function words are short, so
+timing alone predicts part of speech; MEG counts only for what it adds beyond it. The classes are
+`megspeech.data.labels.context_tags`', a training target: no holdout text is read.
 
     uv run python -m megspeech.evaluation.studies.syntax sent40-ioi-ema9998-s0
 """
@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from jaxtyping import Float, Int, Shaped
+from jaxtyping import Bool, Float, Int, Shaped
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix
@@ -26,8 +26,8 @@ from sklearn.model_selection import GroupKFold, cross_val_predict
 from core.paths import DataRoot
 from megspeech.data.batching.split import EVAL_SPANS, Split
 from megspeech.data.config import DataConfig
+from megspeech.data.labels.context_tags import CLASSES, ContextTags
 from megspeech.data.labels.phonemes import UNKNOWN
-from megspeech.data.labels.syntax import TAGS, PartsOfSpeech
 from megspeech.data.raw.runs import DEEP, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.reader import Reader
@@ -52,21 +52,35 @@ onsets and 50-way targets."""
 
 @dataclass(frozen=True)
 class Timing:
-    """Each word's timing within its sentence, the features a test row's onsets give."""
+    """Each word's timing within its sentence, the features a test row's onsets give: a test row carries no word end,
+    so a word's duration is its gap to the next onset. A sentence's last word has no next onset and takes `final`,
+    the median gap of the other words (the least assuming stand-in: the speaking rhythm), the same in every split."""
+
+    final: float
 
     @staticmethod
-    def features(words: pd.DataFrame) -> Float[np.ndarray, "n f"]:
-        """Seconds to the next onset (the sentence's end for its last word), from the previous onset (0 for its
-        first), the word's position, its sentence's length and the position as a share of it, in `words`' order."""
+    def gaps(words: pd.DataFrame) -> pd.Series:
+        """Seconds from each word's onset to the next in its sentence, NaN for the last, in `words`' order."""
+        ordered = words.reset_index(drop=True).sort_values(["run", "sentence", "onset"])
+        following = ordered.groupby(["run", "sentence"], sort=False)["onset"].shift(-1) - ordered["onset"]
+        return following.sort_index()
+
+    @classmethod
+    def fitted(cls, words: pd.DataFrame) -> "Timing":
+        """The timing whose `final` is the median gap over `words` (the training words)."""
+        return cls(float(np.nanmedian(cls.gaps(words))))
+
+    def features(self, words: pd.DataFrame) -> Float[np.ndarray, "n f"]:
+        """Seconds to the next onset (`final` for the last word), from the previous onset (0 for its first), the
+        word's position, its sentence's length and the position as a share of it, in `words`' order."""
         ordered = words.reset_index(drop=True).sort_values(["run", "sentence", "onset"])
         grouped = ordered.groupby(["run", "sentence"], sort=False)
-        following = grouped["onset"].shift(-1).fillna(ordered["end"]) - ordered["onset"]
         preceding = (ordered["onset"] - grouped["onset"].shift(1)).fillna(0.0)
         position = grouped.cumcount()
         length = grouped["onset"].transform("size")
         table = pd.DataFrame(
             {
-                "following": following,
+                "following": self.gaps(words).fillna(self.final).reindex(ordered.index),
                 "preceding": preceding,
                 "position": position,
                 "length": length,
@@ -125,15 +139,15 @@ class Probed:
     def recalls(self, predicted: Int[np.ndarray, " n"]) -> dict[str, tuple[float, int]]:
         """Each present tag's recall and its count of words."""
         return {
-            TAGS[tag]: (float((predicted[self.tags == tag] == tag).mean()), int((self.tags == tag).sum()))
+            CLASSES[tag]: (float((predicted[self.tags == tag] == tag).mean()), int((self.tags == tag).sum()))
             for tag in np.unique(self.tags)
         }
 
     def confusion(self, predicted: Int[np.ndarray, " n"], *, in_50: bool) -> pd.DataFrame:
-        """Word counts of each true tag (row) predicted as each tag (column), over the 50's words or every word."""
-        chosen = self.vocabulary if in_50 else np.ones(len(self.tags), bool)
+        """Word counts of each true tag (row) predicted as each tag (column), over the 50's words or the rest."""
+        chosen = self.vocabulary if in_50 else ~self.vocabulary
         present = np.union1d(self.tags[chosen], predicted[chosen])
-        names = [TAGS[tag] for tag in present]
+        names = [CLASSES[tag] for tag in present]
         counts = confusion_matrix(self.tags[chosen], predicted[chosen], labels=present)
         return pd.DataFrame(counts, index=names, columns=names)
 
@@ -205,43 +219,52 @@ class Table:
 
     @classmethod
     def of(  # devtools-ignore: test-mirror
-        cls, reader: Reader, embedded: Embedded, held: dict[str, list[Run]], parts: PartsOfSpeech
+        cls, reader: Reader, embedded: Embedded, held: dict[str, list[Run]], contexts: ContextTags, timing: Timing
     ) -> "Table":
         pieces = []
         for name, runs in held.items():
             for run, (words, split) in reader.splits(runs).items():
                 read = embedded(split)
-                tags = parts.classes(torch.from_numpy(words["token"].to_numpy(np.int64))).numpy()
+                onsets = words["onset"].to_numpy(np.float64)
+                tags = contexts.classes(words["run"].to_numpy(), onsets)
                 in_50 = (words["target"] >= 0).to_numpy()
                 sentences = (run.name + "/" + words["sentence"].astype(str)).to_numpy()
-                onsets = words["onset"].to_numpy(np.float64)
                 targets = words["target"].to_numpy(np.int64)
-                timing = Timing.features(words)
+                features = timing.features(words)
                 pieces.append(
-                    (timing, read[Tap.WORD], read[Tap.CONTEXT], tags, run.name, in_50, name, sentences, onsets, targets)
+                    (
+                        features,
+                        read[Tap.WORD],
+                        read[Tap.CONTEXT],
+                        tags,
+                        run.name,
+                        in_50,
+                        name,
+                        sentences,
+                        onsets,
+                        targets,
+                    )
                 )
         return cls.joined(pieces)
 
     @classmethod
     def joined(cls, pieces: list[Piece]) -> "Table":
-        """The pieces' rows concatenated, the untagged dropped, each sentence numbered."""
+        """The pieces' rows concatenated, each sentence numbered."""
         timing, word, context, tags, run, vocabulary, domain, sentences, onsets, targets = zip(*pieces, strict=True)
-        tag = np.concatenate(tags)
-        known = tag != UNKNOWN
         repeat = [len(t) for t in tags]
         return cls(
             {
-                "timing": np.concatenate(timing)[known],
-                "meg-word": np.concatenate(word)[known],
-                "meg-context": np.concatenate(context)[known],
+                "timing": np.concatenate(timing),
+                "meg-word": np.concatenate(word),
+                "meg-context": np.concatenate(context),
             },
-            tag[known],
-            np.repeat(run, repeat)[known],
-            np.concatenate(vocabulary)[known],
-            np.repeat(domain, repeat)[known],
-            np.unique(np.concatenate(sentences), return_inverse=True)[1][known],
-            np.concatenate(onsets)[known],
-            np.concatenate(targets)[known],
+            np.concatenate(tags),
+            np.repeat(run, repeat),
+            np.concatenate(vocabulary),
+            np.repeat(domain, repeat),
+            np.unique(np.concatenate(sentences), return_inverse=True)[1],
+            np.concatenate(onsets),
+            np.concatenate(targets),
         )
 
     def rows(self, runs: Shaped[np.ndarray, " m"], onsets: Float[np.ndarray, " m"]) -> Int[np.ndarray, " m"]:
@@ -256,10 +279,13 @@ class TorchLogistic(ClassifierMixin, BaseEstimator):
     """Multinomial logistic regression fit by full-batch L-BFGS on the GPU: sklearn's `LogisticRegression(C)` objective
     (summed cross-entropy plus ||W||^2 / 2C, intercept free) over features standardised on the fit rows."""
 
-    def __init__(self, c: float = 1.0, *, standardize: bool = True, max_iter: int = MAX_ITER) -> None:
+    def __init__(
+        self, c: float = 1.0, *, standardize: bool = True, max_iter: int = MAX_ITER, balanced: bool = False
+    ) -> None:
         self.c = c
         self.standardize = standardize
         self.max_iter = max_iter
+        self.balanced = balanced
 
     def fit(self, x: Float[np.ndarray, "n d"], y: Int[np.ndarray, " n"]) -> "TorchLogistic":
         """The weights minimising the penalised loss of `y` (any integer labels) on `x`."""
@@ -272,6 +298,8 @@ class TorchLogistic(ClassifierMixin, BaseEstimator):
         features = (features - self.mean_) / self.scale_
         labels = torch.as_tensor(targets, device=device)
         rows = len(labels)
+        counts = torch.bincount(labels, minlength=len(self.classes_)).float()
+        emphasis = rows / (len(self.classes_) * counts) if self.balanced else None
         weight = torch.zeros(features.shape[1], len(self.classes_), device=device, requires_grad=True)
         bias = torch.zeros(len(self.classes_), device=device, requires_grad=True)
         optimiser = torch.optim.LBFGS(
@@ -280,7 +308,9 @@ class TorchLogistic(ClassifierMixin, BaseEstimator):
 
         def closure() -> torch.Tensor:
             optimiser.zero_grad()
-            loss = F.cross_entropy(features @ weight + bias, labels) + 0.5 * weight.square().sum() / (self.c * rows)
+            loss = F.cross_entropy(features @ weight + bias, labels, weight=emphasis) + 0.5 * weight.square().sum() / (
+                self.c * rows
+            )
             loss.backward()
             return loss
 
@@ -309,19 +339,28 @@ class Probe:
 
     train: Table
     valid: Table
+    balanced: bool = False
 
-    @staticmethod
-    def model(name: str) -> HistGradientBoostingClassifier | TorchLogistic:
-        """Gradient boosting for the few tabular timing features; a linear readout for an embedding."""
+    @property
+    def known(self) -> Bool[np.ndarray, " n"]:
+        """The training words whose tag is known: an `UNKNOWN` word is neither fit nor stacked on."""
+        return self.train.tags != UNKNOWN
+
+    def model(self, name: str) -> HistGradientBoostingClassifier | TorchLogistic:
+        """Gradient boosting for the few tabular timing features; a linear readout for an embedding. Each weighs the
+        classes equally when `balanced`, by their frequency otherwise."""
         if name == "timing":
-            return HistGradientBoostingClassifier(max_iter=200, early_stopping=False, random_state=0)
-        return TorchLogistic(c=0.1)
+            return HistGradientBoostingClassifier(
+                max_iter=200, early_stopping=False, random_state=0, class_weight="balanced" if self.balanced else None
+            )
+        return TorchLogistic(c=0.1, balanced=self.balanced)
 
     def probabilities(self, name: str) -> tuple[Float[np.ndarray, "m k"], Float[np.ndarray, "n k"]]:
-        """`name`'s probe's log-probabilities: out-of-fold on the training runs, then fit on them all, on validation."""
+        """`name`'s probe's log-probabilities: out-of-fold on the known training words (`m` of them), then fit on
+        them all, on every validation word."""
         fit = self.model(name)
-        x, y = self.train.features[name], self.train.tags
-        folded = cross_val_predict(fit, x, y, cv=GroupKFold(FOLDS), groups=self.train.runs, method="predict_proba")
+        x, y, runs = self.train.features[name][self.known], self.train.tags[self.known], self.train.runs[self.known]
+        folded = cross_val_predict(fit, x, y, cv=GroupKFold(FOLDS), groups=runs, method="predict_proba")
         return np.log(folded + FLOOR), np.log(fit.fit(x, y).predict_proba(self.valid.features[name]) + FLOOR)
 
     def stacked(
@@ -330,7 +369,9 @@ class Probe:
         """The tags a logistic stacker fit on `names`' out-of-fold `probed` log-probabilities knows, and its
         validation log-posterior over them."""
         inputs, outputs = zip(*(probed[name] for name in names), strict=True)
-        stacker = TorchLogistic(standardize=False).fit(np.hstack(inputs), self.train.tags)
+        stacker = TorchLogistic(standardize=False, balanced=self.balanced).fit(
+            np.hstack(inputs), self.train.tags[self.known]
+        )
         return stacker.classes_, stacker.predict_log_proba(np.hstack(outputs))
 
     def predicted(
@@ -344,8 +385,8 @@ class Probe:
         """Each validation sentence's most probable tag path under the training sentences' grammar, each word's
         emission its stacked posterior over the training tag prior."""
         classes, posterior = self.stacked(names, probed)
-        train = np.searchsorted(classes, self.train.tags)
-        grammar = Grammar.of(train, self.train.sentences, self.train.onsets, len(classes))
+        train = np.searchsorted(classes, self.train.tags[self.known])
+        grammar = Grammar.of(train, self.train.sentences[self.known], self.train.onsets[self.known], len(classes))
         prior = np.log(np.bincount(train, minlength=len(classes)) / len(train))
         return classes[grammar.decode(posterior - prior, self.valid.sentences, self.valid.onsets)]
 
@@ -369,25 +410,31 @@ def main() -> None:
     reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False), official=True)
     runs = Run.discover(root.raw())
     trained = [run for run in data.trained(runs) if run.subject == DEEP][:: args.stride]
-    parts = PartsOfSpeech.load(PartsOfSpeech.path(root))
+    contexts = ContextTags.load(ContextTags.path(root))
+    timing = Timing.fitted(data.run_cache(root).table([run.name for run in trained]))
     embedded = Embedded(SentenceNet.load(trained_in / "model.pt").to(device))
-    train = Table.of(reader, embedded, {"train": trained}, parts)
-    valid = Table.of(reader, embedded, reader.ruled(runs), parts)
+    train = Table.of(reader, embedded, {"train": trained}, contexts, timing)
+    valid = Table.of(reader, embedded, reader.ruled(runs), contexts, timing)
     LOG.info("probing on %d words of %d runs, scoring %d words", len(train.tags), len(trained), len(valid.tags))
-    scored = Probed(valid.tags, valid.vocabulary, valid.domain)
-    LOG.info("majority-tag accuracy %.4f", scored.majority())
-    for arm, predicted in Probe(train, valid).report().items():
-        LOG.info(
-            "%s (bacc, acc, n) %s",
-            arm,
-            {k: (round(b, 4), round(a, 4), n) for k, (b, a, n) in scored.scores(predicted).items()},
-        )
-        LOG.info("%s recall %s", arm, {k: (round(r, 3), n) for k, (r, n) in scored.recalls(predicted).items()})
-        if arm.startswith("timing+meg-context"):
-            for in_50 in (True, False):
-                LOG.info(
-                    "%s confusion, in-50 %s:\n%s", arm, in_50, scored.confusion(predicted, in_50=in_50).to_string()
-                )
+    known = valid.tags != UNKNOWN
+    scored = Probed(valid.tags[known], valid.vocabulary[known], valid.domain[known])
+    LOG.info("scoring %d known-tag words of %d, majority-tag accuracy %.4f", known.sum(), len(known), scored.majority())
+    for balanced in (False, True):
+        weighting = "balanced" if balanced else "natural"
+        for arm, predicted in Probe(train, valid, balanced).report().items():
+            name = f"{weighting} {arm}"
+            predicted = predicted[known]
+            LOG.info(
+                "%s (bacc, acc, n) %s",
+                name,
+                {k: (round(b, 4), round(a, 4), n) for k, (b, a, n) in scored.scores(predicted).items()},
+            )
+            LOG.info("%s recall %s", name, {k: (round(r, 3), n) for k, (r, n) in scored.recalls(predicted).items()})
+            if arm.startswith("timing+meg-context"):
+                for in_50 in (True, False):
+                    LOG.info(
+                        "%s confusion, in-50 %s:\n%s", name, in_50, scored.confusion(predicted, in_50=in_50).to_string()
+                    )
 
 
 if __name__ == "__main__":

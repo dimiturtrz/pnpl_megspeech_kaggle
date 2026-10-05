@@ -1,4 +1,5 @@
 from dataclasses import replace
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -13,7 +14,6 @@ WORDS = pd.DataFrame(
         "run": ["a", "a", "a", "b"],
         "sentence": [0, 0, 0, 0],
         "onset": [1.5, 1.0, 2.5, 4.0],
-        "end": [3.0, 3.0, 3.0, 5.0],
     },
     index=[7, 3, 9, 1],
 )
@@ -40,13 +40,23 @@ def table(seed: int, n: int = 120) -> Table:
 ALTERNATING = Grammar.of(np.array([0, 1, 0, 0, 1, 0]), np.array([0, 0, 0, 1, 1, 1]), np.arange(6.0), 2)
 
 
+def test_gaps() -> None:
+    gaps = Timing.gaps(WORDS)
+    assert gaps.iloc[:2].tolist() == [1.0, 0.5]
+    assert gaps.iloc[2:].isna().all()
+
+
+def test_fitted() -> None:
+    assert Timing.fitted(WORDS).final == 0.75
+
+
 def test_features() -> None:
-    features = Timing.features(WORDS)
+    features = Timing(final=2.0).features(WORDS)
     assert features.tolist() == [
         [1.0, 0.5, 1.0, 3.0, pytest.approx(1 / 3)],
         [0.5, 0.0, 0.0, 3.0, 0.0],
-        [0.5, 1.0, 2.0, 3.0, pytest.approx(2 / 3)],
-        [1.0, 0.0, 0.0, 1.0, 0.0],
+        [2.0, 1.0, 2.0, 3.0, pytest.approx(2 / 3)],
+        [2.0, 0.0, 0.0, 1.0, 0.0],
     ]
 
 
@@ -76,13 +86,13 @@ def test_joined() -> None:
         targets,
     )
     joined = Table.joined([piece, piece])
-    assert joined.sentences.tolist() == [0, 1, 0, 1]
-    assert joined.onsets.tolist() == [0.0, 2.0, 0.0, 2.0]
-    assert joined.tags.tolist() == [2, 5, 2, 5]
-    assert joined.features["meg-context"].shape == (4, 4)
-    assert joined.runs.tolist() == ["r"] * 4
-    assert joined.domain.tolist() == ["d"] * 4
-    assert joined.targets.tolist() == [3, 4, 3, 4]
+    assert joined.sentences.tolist() == [0, 0, 1, 0, 0, 1]
+    assert joined.onsets.tolist() == [0.0, 1.0, 2.0] * 2
+    assert joined.tags.tolist() == [2, UNKNOWN, 5] * 2
+    assert joined.features["meg-context"].shape == (6, 4)
+    assert joined.runs.tolist() == ["r"] * 6
+    assert joined.domain.tolist() == ["d"] * 6
+    assert joined.targets.tolist() == [3, -1, 4] * 2
 
 
 def test_rows() -> None:
@@ -94,14 +104,28 @@ def test_rows() -> None:
         replace(held, onsets=np.zeros(len(held.tags))).rows(np.array([0]), np.array([0.0]))
 
 
+def unseen(held: Table) -> Table:
+    """`held` with every tenth word's tag unknown."""
+    return replace(held, tags=np.where(np.arange(len(held.tags)) % 10 == 0, UNKNOWN, held.tags))
+
+
+def test_known() -> None:
+    assert Probe(unseen(table(0)), table(1)).known.sum() == 108
+    assert Probe(table(0), table(1)).known.all()
+
+
 def test_model() -> None:
-    assert type(Probe.model("timing")).__name__ == "HistGradientBoostingClassifier"
-    assert type(Probe.model("meg-word")).__name__ == "TorchLogistic"
+    probe = Probe(table(0), table(1))
+    assert type(probe.model("timing")).__name__ == "HistGradientBoostingClassifier"
+    assert type(probe.model("meg-word")).__name__ == "TorchLogistic"
+    assert cast("TorchLogistic", probe.model("meg-word")).balanced is False
+    assert cast("TorchLogistic", Probe(table(0), table(1), balanced=True).model("meg-word")).balanced is True
 
 
 def test_probabilities() -> None:
-    folded, valid = Probe(table(0), table(1)).probabilities("timing")
-    assert folded.shape == valid.shape == (120, 2)
+    folded, valid = Probe(unseen(table(0)), table(1)).probabilities("timing")
+    assert folded.shape == (108, 2)
+    assert valid.shape == (120, 2)
     assert np.allclose(np.exp(valid).sum(1), 1, atol=1e-4)
 
 
@@ -154,7 +178,9 @@ def test_confusion() -> None:
         "ADJ": {"ADJ": 1, "ADP": 0},
         "ADP": {"ADJ": 1, "ADP": 1},
     }
-    assert probed.confusion(predicted, in_50=False).loc["ADV", "ADJ"] == 1
+    outside = probed.confusion(predicted, in_50=False)
+    assert outside.loc["ADV", "ADJ"] == 1
+    assert outside.to_numpy().sum() == 1
 
 
 def test_majority() -> None:
@@ -189,6 +215,13 @@ def test_fit() -> None:
     assert fitted.weight_.shape == (4, 3)
     reference = LogisticRegression(C=0.1, max_iter=1000).fit((x - x.mean(0)) / x.std(0), y)
     assert np.allclose(fitted.weight_.cpu().numpy().T, reference.coef_, atol=2e-2)
+
+
+def test_fit_balanced() -> None:
+    x = np.r_[np.zeros((90, 1)), np.ones((10, 1))] + np.random.default_rng(0).standard_normal((100, 1)) * 0.8
+    y = np.r_[np.zeros(90, int), np.ones(10, int)]
+    natural, balanced = TorchLogistic().fit(x, y).predict(x), TorchLogistic(balanced=True).fit(x, y).predict(x)
+    assert balanced.sum() > natural.sum()
 
 
 def test_predict_log_proba() -> None:

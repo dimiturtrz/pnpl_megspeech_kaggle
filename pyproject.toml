@@ -26,6 +26,8 @@ dependencies = [
     "spacy>=3.8.16",
     "en-core-web-sm",
     "scikit-learn>=1.9.1",
+    "cupy-cuda13x>=14.2.0",
+    "en-core-web-trf",
 ]
 
 [project.optional-dependencies]
@@ -56,6 +58,7 @@ explicit = true
 [tool.uv.sources]
 torch = { index = "pytorch-cu130" }
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
+en-core-web-trf = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0-py3-none-any.whl" }
 
 [tool.setuptools.packages.find]
 include = ["core*", "megspeech*"]
@@ -86,7 +89,7 @@ extend_exclude = ["noxfile.py"]
 # (numpy/jaxtyping/beartype/pydantic) — they read as unused until you import them.
 [tool.deptry.per_rule_ignores]
 # >>> LOCAL-SLOT: deptry-unused — PRUNE a starter once you wire it (keep pytest/pytest-cov/sdlc-devtools)
-DEP002 = ["pytest", "pytest-cov", "sdlc-devtools", "numpy", "jaxtyping", "beartype", "pydantic", "torch", "pnpl", "triton-windows", "pytorch-lightning", "einops"]
+DEP002 = ["cupy-cuda13x", "en-core-web-trf", "pytest", "pytest-cov", "sdlc-devtools", "numpy", "jaxtyping", "beartype", "pydantic", "torch", "pnpl", "triton-windows", "pytorch-lightning", "einops"]
 # <<< LOCAL-SLOT: deptry-unused
 
 [tool.ruff]
