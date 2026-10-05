@@ -140,8 +140,16 @@ tests — this repo's tests cover only ITS packages. Consumer-specific detector 
   parameterised (pyrefly: `list[dict[str, object]]`, not `list[dict]`).
 - **Competition loop** — data comes from `python -m megspeech.data.raw.fetch` (the `pnpl/*` HF repos are public, so it
   fetches with `token=False`; a stale local HF token cannot break it). Spend a Kaggle submission only on a
-  model scored locally on the official val split, and record LB vs local in its beads issue. The GPU is shared
-  with other projects — check `nvidia-smi` before launching.
+  model scored on the official ruler's local test, and record public vs local in its beads issue. The GPU is
+  shared with other projects — check `nvidia-smi` before launching.
+- **Three tests** — *local test*: our labelled report set, never used to select. *Public test*: the Kaggle
+  public-leaderboard rows (~434, one score's SE ≈ 0.023 — cannot rank models closer than ~0.04). *Final test*:
+  the organisers' ranking set, stimuli entirely different from anything released. Never call any of them
+  "holdout".
+- **Two rulers** — scores never compare across them. *Official*: pnpl's labelled partitions — official val
+  selects epoch and tau, official test reports. *Balanced*: the stratified 80/10/10 session split
+  (`--data.share 0.1 --data.stratify`) — its val selects, its test reports; it ranks recipes, and the winning
+  recipe is refit on all data for submission. A score on the split that also selected is val, not a test.
 
 
 
