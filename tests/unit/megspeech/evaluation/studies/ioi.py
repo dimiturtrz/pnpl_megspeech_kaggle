@@ -83,3 +83,35 @@ def test_score() -> None:
     domains = {"d": (torch.tensor([True, False, True, True]), torch.tensor([0, 1, 2, 3]))}
     assert "n=4" in Timing.score(Graded(domains))
     assert Timing.score(Graded(domains)).startswith("macro ")
+
+
+def test_blurred() -> None:
+    """Words stay in order and each span restarts at zero; padding is untouched."""
+    base = timing()
+    onset = base.split.onset.clone()
+    onset[0, :3] = torch.tensor([0.5, 0.3, 0.9])
+    out = base.blurred(onset).onset
+    assert out[0, :3].tolist() == pytest.approx([0.0, 0.2, 0.6])
+    assert out[2, 0] == 0
+
+
+def test_jittered() -> None:
+    base = timing()
+    out = base.jittered(0.01, torch.Generator().manual_seed(0)).onset
+    assert (out[0, 1:3] - out[0, :2] > 0).all()
+    assert out[0, 0] == 0
+    assert not torch.equal(out, base.split.onset)
+
+
+def test_quantised() -> None:
+    out = timing().quantised(0.25).onset
+    assert out[0, :3].tolist() == [0.0, 0.0, 0.5]
+
+
+def test_blurs() -> None:
+    arms = Timing.blurs(0)
+    assert list(arms)[:2] == ["real", "jitter5ms"]
+    assert len(arms) == 8
+    base = timing()
+    assert arms["real"](base) is base.split
+    assert arms["quant20ms"](base).onset.shape == base.split.onset.shape

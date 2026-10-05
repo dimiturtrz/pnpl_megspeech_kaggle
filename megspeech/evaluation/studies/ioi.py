@@ -9,6 +9,7 @@ model is scored on the replaced onsets with MEG and labels untouched (megspeech-
 
 import argparse
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
@@ -33,6 +34,9 @@ QUANTILES = (0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99)
 GRID = 50.0
 """Hz of the cache: the share of gaps landing on its samples says whether an onset source was rounded to them."""
 GRID_TOLERANCE = 1e-3
+JITTER_MS = (5, 10, 20, 40, 80)
+QUANTISE_MS = (20, 50)
+MS = 1000.0
 
 
 class Replacement(StrEnum):
@@ -114,6 +118,16 @@ class Timing:
         return " ".join(f"{k}:{np.median(gaps[pair[:, k], k]):.3f}(n={pair[:, k].sum()})" for k in places)
 
     @staticmethod
+    def blurs(seed: int) -> dict[str, Callable[["Timing"], Split]]:
+        """Each onset-blurring arm by label: the real onsets, jitter at every sigma, and the quantised grids."""
+        arms: dict[str, Callable[[Timing], Split]] = {"real": lambda timing: timing.split}
+        for ms in JITTER_MS:
+            arms[f"jitter{ms}ms"] = lambda timing, ms=ms: timing.jittered(ms / MS, torch.Generator().manual_seed(seed))
+        for ms in QUANTISE_MS:
+            arms[f"quant{ms}ms"] = lambda timing, ms=ms: timing.quantised(ms / MS)
+        return arms
+
+    @staticmethod
     def score(graded: Graded) -> str:
         """The macro with its bootstrap interval, then each domain's balanced accuracy and word count."""
         ruler = Ruler()
@@ -126,11 +140,28 @@ class Timing:
         onset = torch.cat([gaps.new_zeros(len(gaps), 1), gaps.cumsum(dim=1)], dim=1)
         return replace(self.split, onset=onset)
 
+    def blurred(self, onset: Float[Tensor, "g w"]) -> Split:
+        """`split` at `onset`, kept in order among its words and re-zeroed at each span's first word."""
+        present = self.split.index != PAD
+        ordered = onset.where(present, torch.full_like(onset, torch.inf)).sort(dim=1).values
+        ordered = ordered.where(present, self.split.onset)
+        return replace(self.split, onset=ordered - ordered[:, :1] * present[:, :1])
+
+    def jittered(self, sigma: float, generator: torch.Generator) -> Split:
+        """Every word onset moved by Gaussian noise of `sigma` seconds."""
+        noise = torch.randn(self.split.onset.shape, generator=generator).to(self.split.onset.device)
+        return self.blurred(self.split.onset + sigma * noise)
+
+    def quantised(self, step: float) -> Split:
+        """Every word onset rounded to the grid of `step` seconds."""
+        return self.blurred(torch.round(self.split.onset / step) * step)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("names", nargs="+")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--blur", action="store_true", help="score jittered and quantised onsets instead")
     tree = Tree(Scoring, Scoring(fallback=Fallback(Unseen.DEEP)))
     tree.arguments(parser)
     args = parser.parse_args()
@@ -141,11 +172,17 @@ def main() -> None:
     tau = loaded.report(runs).tau
     kaggle = Timing(loaded.kaggle(Track.DEEP))
     pool = kaggle.values()
-    LOG.info("kaggle-test %s", kaggle.summary())
-    LOG.info("kaggle-test positions %s", kaggle.positions())
     for partition in (Partition.VALIDATION, Partition.TEST):
         held = replace(loaded, partition=partition)
         domains, _ = held.domains(held.ruled(runs))
+        if args.blur:
+            for label, blur in Timing.blurs(args.seed).items():
+                swapped = {name: blur(Timing(split)) for name, split in domains.items()}
+                graded = held.evaluator.graded(held.model, swapped, held.log_prior, tau)
+                LOG.info("%s onsets=%s tau %s: %s", partition, label, tau, Timing.score(graded))
+            continue
+        LOG.info("kaggle-test %s", kaggle.summary())
+        LOG.info("kaggle-test positions %s", kaggle.positions())
         for name, split in domains.items():
             LOG.info("%s %s %s", partition, name, Timing(split).summary())
             LOG.info("%s %s positions %s", partition, name, Timing(split).positions())
