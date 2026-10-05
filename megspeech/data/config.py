@@ -3,8 +3,9 @@
 import itertools
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields, replace
+from enum import StrEnum
 from pathlib import Path
 
 import numpy as np
@@ -24,17 +25,38 @@ from megspeech.data.stratify import Picked, Stratify
 METRICS = "metrics.json"
 """The record a finished run leaves in its directory, its config under `config`."""
 
-PHASES = (0.25, 0.75)
-"""Where in each stride of a source's sessions the `strided` validation and test sessions sit."""
-
 READ = frozenset({"TIMIT", "MOCHATIMIT"})
 """Tasks of read sentences, the Kaggle test's domain; the rest is narrative (Sherlock, TheMoth)."""
 
-NARRATIVE = ("Sherlock", "TheMoth")
-"""The strata the ruler scores: Sherlock's nine books are one, TheMoth's stories another."""
-
 NARRATOR = "Sherlock"
 """The stratum read by one voice throughout; every TheMoth story and read sentence has its own speaker."""
+
+
+class LocalRuler(StrEnum):
+    """The two local rulers; their scores never compare. `OFFICIAL`: pnpl's labelled partitions, official validation
+    selects epoch and adjustment, official test reports. `BALANCED`: a stratified 80/10/10 session split of subject 0's
+    training sessions (`Stratify`), each source's validation selecting and test reporting, the official runs joining
+    theirs: ~30k scored words per partition against the official ~2.5k, whose interval spans +-0.03 (megspeech-7gf.81,
+    megspeech-7gf.103)."""
+
+    OFFICIAL = "official"
+    BALANCED = "balanced"
+
+    @property
+    def share(self) -> float:
+        """Of each source's sessions, the share held out for validation and as much for test."""
+        return {self.OFFICIAL: 0.0, self.BALANCED: 0.1}[self]
+
+    @classmethod
+    def migrated(cls, record: Mapping[str, object]) -> dict[str, object]:
+        """A saved data config under the retired `extra`/`share`/`stratify` fields as one under `ruler`; the retired
+        strided split and extra validation domains are refused."""
+        kept = {k: v for k, v in record.items() if k not in {"extra", "share", "stratify"}}
+        share, stratified = float(str(record.get("share", 0.0))), bool(record.get("stratify", False))
+        if int(str(record.get("extra", 0))) or (share and not stratified):
+            raise ValueError("this run trained under a retired ruler (strided share or extra validation runs)")
+        ruled: dict[str, object] = {"ruler": cls.BALANCED} if share else {}
+        return kept | ruled
 
 
 @dataclass(frozen=True)
@@ -60,19 +82,9 @@ class DataConfig:
     """Each recording — training or validation run, Kaggle test archive — robust-scaled per channel by its own median
     and IQR before the model's scaler. Across the 162 runs a channel's IQR over its median run spans 0.78-1.28 (p5-p95);
     the Kaggle test sentence archive's sits at 0.90."""
-    extra: int = 0
-    """Whole training sessions per narrative stratum held out as one more validation domain, `<stratum>+`, beside
-    the official run: each book's or story's last session first. One official run per stratum leaves the macro's
-    interval near +-0.035; `k` more runs of similar size shrink it by about `sqrt(1 + k)`, for `k` runs of the
-    ~150 trained."""
-    share: float = 0.0
-    """Of each source's subject-0 training sessions (`stratum`), the share held out for validation and as much for
-    test (`split`); domains are then scored per source, the official runs joining theirs. 0 keeps the official split,
-    one run per task. 0.1 holds out 11+11 of Sherlock's 112 sessions, 3+3 of TheMoth's 28 and 1+1 of TIMIT's 14: ~30k
-    scored words per partition against the official ~2.5k, whose interval spans +-0.03 (megspeech-7gf.81)."""
-    stratify: bool = False
-    """Pick each source's `share` by `Stratify`: the sessions whose words best match training's on volume, word rate,
-    sentence length, in-vocabulary share, label mix and book mix. Off picks one per stride in key order (`strided`)."""
+    ruler: LocalRuler = LocalRuler.OFFICIAL
+    """The local ruler the model trains under: which sessions are withheld for validation (selects epoch and tau) and
+    test (reports); see `LocalRuler`."""
     baseline: float = 0.0
     """Seconds from each window's start its centring mean is taken over; 0 centres on the whole window. The
     reference pipeline baselines on 0-0.5 s, the pre-response stretch, so the word's evoked field is kept whole."""
@@ -85,7 +97,7 @@ class DataConfig:
     """The 250 Hz recordings' decimation factor: which continuous cache training reads (`RunCache.under`)."""
     folds: int = 1
     """Cross-fitting: each source's subject-0 training sessions that test leaves, in key order, dealt round-robin into
-    `folds` folds (`folded`); 1 keeps `share`'s validation pick. Every session trains `folds - 1` of the members, and
+    `folds` folds (`folded`); 1 keeps the ruler's validation pick. Every session trains `folds - 1` of the members, and
     each member's validation is the fold it never saw (megspeech-7gf.85)."""
     span_lag: float = -1.0
     """Seconds past the next word's onset where each word's MEG window is cut and zero-padded, the padding being the
@@ -131,7 +143,7 @@ class DataConfig:
     def saved(cls, directory: Path) -> "DataConfig":
         """The data config a run in `directory` recorded; a record without one, or a flat one, falls to defaults."""
         config = json.loads((directory / METRICS).read_text())["config"]
-        return Tree(cls).load(config.get("data", {}))
+        return Tree(cls).load(LocalRuler.migrated(config.get("data", {})))
 
     @classmethod
     def shared(cls, directories: Sequence[Path], grouping: Grouping) -> "DataConfig":
@@ -176,10 +188,14 @@ class DataConfig:
         cut = windows.following + self.to_samples(self.span_lag)
         return replace(windows, end=torch.minimum(windows.end, cut).clamp(min=windows.at + 1))
 
-    @property
-    def official_split(self) -> "DataConfig":
-        """This config on the official split: no `share` carved off, no strata, no folds (megspeech-7gf.81)."""
-        return replace(self, share=0.0, stratify=False, folds=1, fold=0)
+    def under(self, ruler: "LocalRuler") -> "DataConfig":
+        """This config scored under `ruler`: the official one needs no carved sessions, so it also reads a model trained
+        on the balanced split; the balanced one only reads a model trained on it (megspeech-7gf.103)."""
+        if ruler is self.ruler:
+            return self
+        if ruler is not LocalRuler.OFFICIAL:
+            raise ValueError(f"a model trained under the {self.ruler} ruler cannot be scored under {ruler}")
+        return replace(self, ruler=ruler, folds=1, fold=0)
 
     @property
     def recoloured(self) -> bool:
@@ -231,38 +247,17 @@ class DataConfig:
         """The task without its book number: `Sherlock3` reads as `Sherlock`."""
         return re.sub(r"\d+$", "", task)
 
-    def extras(self, runs: Sequence[Run]) -> list[Run]:
-        """The `extra` training runs per narrative stratum held out: every book's last session, then every book's
-        second-to-last, books in order."""
-        deep = (r for r in runs if r.partition is Partition.TRAIN and r.subject == DEEP)
-        train = sorted(deep, key=lambda r: r.key, reverse=True)
-        ranked = sorted(
-            ((rank, run.key[0]), run)
-            for _, book in itertools.groupby(train, key=lambda r: r.key[0])
-            for rank, run in enumerate(book)
-        )
-        return [
-            run
-            for stratum in NARRATIVE
-            for _, run in [entry for entry in ranked if self.stratum(entry[0][1]) == stratum][: self.extra]
-        ]
-
     def source(self, run: Run) -> tuple[str, tuple[str, int, int]]:
         return self.stratum(run.key[0]), run.key
 
-    @staticmethod
-    def strided(source: tuple[Run, ...], count: int) -> Picked:
-        """In key order (book, then recording date), one session per stride: spans every book and date."""
-        val, test = ([source[int((j + phase) * len(source) / count)] for j in range(count)] for phase in PHASES)
-        return val, test
-
     def split(self, runs: Sequence[Run]) -> dict[Partition, list[Run]]:
         """Subject 0's training sessions `share` holds out for validation and test, `round(share * n)` of each source's
-        `n` each, `stratify`'d or `strided` from the source's sessions in key order."""
+        `n` each, picked by `Stratify`."""
         deep = sorted((r for r in runs if r.partition is Partition.TRAIN and r.subject == DEEP), key=self.source)
         sources = [tuple(group) for _, group in itertools.groupby(deep, key=lambda r: self.source(r)[0])]
-        pick = Stratify.split if self.stratify else self.strided
-        held_out = [self.folded(source, pick(source, round(self.share * len(source)))) for source in sources]
+        held_out = [
+            self.folded(source, Stratify.split(source, round(self.ruler.share * len(source)))) for source in sources
+        ]
         return {
             partition: [run for chosen in held_out for run in chosen[at]]
             for at, partition in enumerate((Partition.VALIDATION, Partition.TEST))
@@ -277,16 +272,16 @@ class DataConfig:
         return [r for r in source if r.name not in tested][self.fold :: self.folds], test
 
     def trained(self, runs: Sequence[Run]) -> list[Run]:
-        """The runs training reads: `trains_on`, less the held-out test runs, and less the extra and held-out validation
-        runs unless refitting on validation."""
+        """The runs training reads: `trains_on`, less the held-out test runs, and less the held-out validation runs
+        unless refitting on validation."""
         held_out = self.split(runs)
-        held: list[Run] = [] if self.refit else [*self.extras(runs), *held_out[Partition.VALIDATION]]
+        held: list[Run] = [] if self.refit else held_out[Partition.VALIDATION]
         excluded = {r.name for r in [*held, *held_out[Partition.TEST]]}
         return [r for r in runs if self.trains_on(r) and r.name not in excluded]
 
     def domain(self, run: Run) -> str:
         """The domain `run` is scored in: its source once `share` or `folds` holds out sessions, else its task."""
-        return self.stratum(run.key[0]) if self.share or self.folds > 1 else run.key[0]
+        return self.stratum(run.key[0]) if self.ruler is LocalRuler.BALANCED or self.folds > 1 else run.key[0]
 
     def scored(self, runs: Sequence[Run], partition: Partition) -> dict[str, list[Run]]:
         """`partition`'s domains: subject 0's official runs of it with the sessions held out for it, under `domain`."""
@@ -298,10 +293,8 @@ class DataConfig:
         return self.scored(runs, Partition.TEST)
 
     def held(self, runs: Sequence[Run]) -> dict[str, list[Run]]:
-        """The validation domains' runs (`scored`), the extras under `<stratum>+`."""
-        domains = self.scored(runs, Partition.VALIDATION)
-        extras = {f"{s}+": [r for r in self.extras(runs) if self.stratum(r.key[0]) == s] for s in NARRATIVE}
-        return domains | {name: chosen for name, chosen in extras.items() if chosen}
+        """The validation domains' runs, which select epoch and adjustment."""
+        return self.scored(runs, Partition.VALIDATION)
 
     def ruled(self, runs: Sequence[Run], partition: Partition) -> dict[str, list[Run]]:
         """The domains `partition` is scored over: validation's (`held`) or test's (`tested`)."""

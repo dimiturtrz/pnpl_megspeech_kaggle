@@ -48,7 +48,7 @@ def main() -> None:
     root, device = DataRoot.from_config(), torch.device("cuda")
     trained_in = root.models() / args.name
     data = DataConfig.shared([trained_in], DataConfig.grouping)
-    reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False), official=True)
+    reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False))
     contexts = ContextTags.load(ContextTags.path(root))
     embedded = Embedded.load(trained_in / "model.pt", device)
     tags: list[np.ndarray] = []

@@ -235,7 +235,7 @@ def main() -> None:
     root, device = DataRoot.from_config(), torch.device("cuda")
     directories = Ensemble.trained(root.models(), args.name)
     data = DataConfig.shared(directories, DataConfig.grouping)
-    reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False), official=True)
+    reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False))
     model = Ensemble.load([directory / "model.pt" for directory in directories], Unseen.DEEP).to(device)
     for layer in (module for module in model.modules() if isinstance(module, SubjectLayer)):
         layer.shrink(Fallback(Unseen.DEEP).keep, Unseen.DEEP)

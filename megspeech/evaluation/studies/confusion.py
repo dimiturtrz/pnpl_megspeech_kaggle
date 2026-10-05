@@ -393,7 +393,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    loaded = Loader.of(root, [args.name], Scoring(official=True), torch.device(args.device))
+    loaded = Loader.of(root, [args.name], Scoring(), torch.device(args.device))
     runs = Run.discover(root.raw())
     collected = Collected.of(loaded, runs)
     words = PRIMARY.words

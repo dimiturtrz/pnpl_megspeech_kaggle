@@ -7,7 +7,7 @@ from pnpl.competition.holdout import N_SUBJECTS
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import FEATURES
-from megspeech.data.config import DataConfig
+from megspeech.data.config import DataConfig, LocalRuler
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Partition
 from megspeech.evaluation.reader import Reader
@@ -63,10 +63,13 @@ def test_domains(tmp_path: Path) -> None:
 
 
 def test_ruled(tmp_path: Path) -> None:
-    """A split model scores its own split's domains, or the official partition's when `official`."""
-    every, split = runs(tmp_path), replace(reader(tmp_path), data=DataConfig(share=0.1))
-    assert split.ruled(every) == DataConfig(share=0.1).ruled(every, Partition.VALIDATION)
-    assert replace(split, official=True).ruled(every) == DataConfig().ruled(every, Partition.VALIDATION)
+    """A balanced model scores its own split's domains under `BALANCED`, the official partition's under `OFFICIAL`."""
+    every, split = (
+        runs(tmp_path),
+        replace(reader(tmp_path), data=DataConfig(ruler=LocalRuler.BALANCED), ruler=LocalRuler.BALANCED),
+    )
+    assert split.ruled(every) == DataConfig(ruler=LocalRuler.BALANCED).ruled(every, Partition.VALIDATION)
+    assert replace(split, ruler=LocalRuler.OFFICIAL).ruled(every) == DataConfig().ruled(every, Partition.VALIDATION)
 
 
 def test_heard(tmp_path: Path) -> None:

@@ -450,7 +450,7 @@ def main() -> None:
     root, device = DataRoot.from_config(), torch.device("cuda")
     trained_in = root.models() / args.name
     data = DataConfig.shared([trained_in], DataConfig.grouping)
-    reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False), official=True)
+    reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False))
     runs = Run.discover(root.raw())
     trained = [run for run in data.trained(runs) if run.subject == DEEP][:: args.stride]
     contexts = ContextTags.load(ContextTags.path(root))

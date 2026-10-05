@@ -148,7 +148,7 @@ tests — this repo's tests cover only ITS packages. Consumer-specific detector 
   "holdout".
 - **Two rulers** — scores never compare across them. *Official*: pnpl's labelled partitions — official val
   selects epoch and tau, official test reports. *Balanced*: the stratified 80/10/10 session split
-  (`--data.share 0.1 --data.stratify`) — its val selects, its test reports; it ranks recipes, and the winning
+  (`--ruler balanced`; `--ruler official` is the default, `--grouping` cuts spans) — its val selects, its test reports; it ranks recipes, and the winning
   recipe is refit on all data for submission. A score on the split that also selected is val, not a test.
 
 

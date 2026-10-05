@@ -16,6 +16,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
+from megspeech.data.config import LocalRuler
 from megspeech.features.extract import CHUNK, Export
 from megspeech.model.sentence import SentenceNet
 from megspeech.training.config import RunConfig
@@ -42,13 +43,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True)
     parser.add_argument("--name", required=True)
-    parser.add_argument("--official", action="store_true", help="the official split's words, as experts share")
+    parser.add_argument("--ruler", type=LocalRuler, choices=list(LocalRuler), default=LocalRuler.OFFICIAL)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), torch.device("cuda")
     run = root.models() / args.run
     config = RunConfig.saved(run)
-    data = config.data.official_split if args.official else config.data
+    data = config.data.under(args.ruler)
     net = SentenceNet.load(run / "model.pt").to(device).eval()
     Export.of(data, root, args.name, device).save(Trained(net), asdict(config) | {"run": args.run})
 

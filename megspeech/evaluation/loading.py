@@ -5,7 +5,7 @@ from dataclasses import dataclass, fields
 import torch
 
 from core.paths import DataRoot
-from megspeech.data.config import DataConfig
+from megspeech.data.config import DataConfig, LocalRuler
 from megspeech.data.raw.runs import Partition
 from megspeech.data.spans.spans import Grouping
 from megspeech.evaluation.loaded import LoadedModel
@@ -40,9 +40,9 @@ class Scoring:
     partition: Partition = Partition.VALIDATION
     """The labelled partition scored (`DataConfig.ruled`): validation selects; test only reports, once, on a model
     already chosen (megspeech-7gf.81)."""
-    official: bool = False
-    """Score only the official partition's runs (`share` 0): the ruler every model before the 80/10/10 split was
-    selected on, so a split model reads on the same scale as they did (megspeech-7gf.81)."""
+    ruler: LocalRuler = LocalRuler.OFFICIAL
+    """The local ruler every score is read under (`DataConfig.under`); a model trained on the balanced split reads under
+    either, one trained on the official split only under the official (megspeech-7gf.103)."""
 
 
 class Loader:
@@ -58,7 +58,7 @@ class Loader:
         data = DataConfig.shared(directories, scoring.grouping)
         model = LowPass(model, data.rate, scoring.lowpass) if scoring.lowpass else model
         geometry = data.geometry(root, device, aligned=scoring.aligned)
-        reader = Reader(root, data, device, scoring.reading, geometry, scoring.partition, scoring.official)
+        reader = Reader(root, data, device, scoring.reading, geometry, scoring.partition, scoring.ruler)
         sequences, prior = reader.heard()
         evaluator = Evaluator(
             device,

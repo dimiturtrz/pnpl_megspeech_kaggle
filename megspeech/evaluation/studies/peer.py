@@ -3,7 +3,7 @@ side information about the word and its neighbours.
 
 The base's out-of-fold features come from cross-fit fold models (`--folds`, each read on the sessions it never trained
 on), the booster trains on those rows alone, and the official validation split scores `base + booster` with the
-ruler `megspeech.submission --official` uses. The booster's epoch count is picked on the last fold's rows.
+official ruler `megspeech.submission` reports. The booster's epoch count is picked on the last fold's rows.
 
     uv run python -m megspeech.evaluation.studies.peer --folds kf5t-f0 kf5t-f1 kf5t-f2 kf5t-f3 kf5t-f4 \\
         --base peerbase-s0
@@ -183,7 +183,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), torch.device("cuda")
-    loaded = Loader.of(root, [args.base], Scoring(official=True), device)
+    loaded = Loader.of(root, [args.base], Scoring(), device)
     domains, _ = loaded.domains(loaded.ruled(Run.discover(root.raw())))
     path = Dump.path(root, args.base)
     if args.redump or not path.exists():

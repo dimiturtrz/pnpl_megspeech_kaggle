@@ -43,4 +43,11 @@ class LocalTest:
     def report(self, label: str) -> None:
         tau = self.tau()
         for partition in (Partition.VALIDATION, Partition.TEST):
-            LOG.info("%s %s tau %s: %s", label, partition, tau, self.summary(self.graded(partition, tau)))
+            LOG.info(
+                "%s ruler=%s %s tau %s: %s",
+                label,
+                self.loaded.ruler,
+                partition,
+                tau,
+                self.summary(self.graded(partition, tau)),
+            )

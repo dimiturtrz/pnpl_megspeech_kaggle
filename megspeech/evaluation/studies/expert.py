@@ -255,7 +255,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), torch.device("cuda")
-    loaded = Loader.of(root, [args.base], Scoring(official=True), device)
+    loaded = Loader.of(root, [args.base], Scoring(), device)
     domains, _ = loaded.domains(loaded.ruled(Run.discover(root.raw())))
     dump = Dump.load(Dump.path(root, args.base))
     features = {}

@@ -116,7 +116,6 @@ def test_heard(tmp_path: Path) -> None:
     found = Run.discover(root.raw())
     heard = Corpus.heard(DataConfig().run_cache(root), found, DataConfig())
     assert heard["word"].tolist() == ["the", "zebra", "a"]
-    assert Corpus.heard(DataConfig().run_cache(root), found, DataConfig(extra=1)).empty
     pooled = Corpus.heard(DataConfig().run_cache(root), found, DataConfig(subjects=(0, 3)))
     assert pooled["word"].tolist() == ["the", "zebra", "a"]
     assert pooled["weight"].tolist() == [1.0] * 3
@@ -161,10 +160,6 @@ def test_load(tmp_path: Path) -> None:
     assert set(corpus.positions["run"]) == {Run(tmp_path / TRAIN).name}
     assert set(corpus.validation) == {"Sherlock1"}
     assert corpus.seen == {tokens("the", "zebra", "a")}
-    widened = Corpus.load(DataConfig(extra=1), corpus_root(tmp_path / "widened"), CPU)
-    assert len(widened.train.y) == 0
-    assert set(widened.validation) == {"Sherlock1", "Sherlock+"}
-    assert widened.seen == frozenset()
     pooled = Corpus.load(DataConfig(subjects=(0, 3)), corpus_root(tmp_path / "pooled"), CPU)
     assert pooled.train.y.tolist() == [THE, IGNORE, A]
     assert set(pooled.validation) == {"Sherlock1"}

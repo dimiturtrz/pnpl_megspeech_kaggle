@@ -34,4 +34,4 @@ def test_summary(tmp_path: Path) -> None:
 def test_report(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.INFO, logger=module.__name__):
         local(tmp_path).report("label")
-    assert [r.getMessage().split()[1] for r in caplog.records] == [Partition.VALIDATION, Partition.TEST]
+    assert [r.getMessage().split()[2] for r in caplog.records] == [Partition.VALIDATION, Partition.TEST]

@@ -12,7 +12,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Features, Split
 from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.cache.run_cache import DeviceRecording
-from megspeech.data.config import DataConfig
+from megspeech.data.config import DataConfig, LocalRuler
 from megspeech.data.corpus import Corpus
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.evaluation.text import RULER, Text
@@ -22,7 +22,7 @@ from megspeech.model.input.subjects import Reading
 @dataclass(frozen=True)
 class Reader:
     """Runs on `device` as a model trained under `data` reads them, each word presented as `reading`'s subject; the
-    scored domains are `partition`'s, under the official split when `official`."""
+    scored domains are `partition`'s under `ruler`."""
 
     root: DataRoot
     data: DataConfig
@@ -30,7 +30,7 @@ class Reader:
     reading: Reading = Reading.OWN
     geometry: Geometry = AS_RECORDED
     partition: Partition = Partition.VALIDATION
-    official: bool = False
+    ruler: LocalRuler = LocalRuler.OFFICIAL
 
     def heard(self) -> tuple[frozenset[tuple[int, ...]], Float[Tensor, " v"]]:
         """The text the model's training heard, as every span's token sequence, and the label prior of its draws."""
@@ -74,6 +74,6 @@ class Reader:
         return {name: self.read(name, split) for name, split in domains.items()}, ruler
 
     def ruled(self, runs: list[Run]) -> dict[str, list[Run]]:
-        """The domains of `runs` scored: the partition's, under the split the model trained on or the official one."""
-        data = self.data.official_split if self.official else self.data
+        """The domains of `runs` scored: the partition's, under `ruler`."""
+        data = self.data.under(self.ruler)
         return data.ruled(runs, self.partition)
