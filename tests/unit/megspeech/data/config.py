@@ -138,6 +138,23 @@ def test_trained(tmp_path: Path) -> None:
     assert not [r for r in pooled if r.subject]
 
 
+def test_thinned(tmp_path: Path) -> None:
+    """A share keeps `ceil(share * n)` whole sessions of each source, nested across shares; 1 keeps every run."""
+    every = sessions(tmp_path)
+    full = DataConfig().trained(every)
+    half, quarter = (DataConfig(train_share=s).thinned(full) for s in (0.5, 0.25))
+    assert len(half) == 10 and len(quarter) == 5
+    assert {r.name for r in quarter} < {r.name for r in half} < {r.name for r in full}
+    assert DataConfig().thinned(full) == full
+    assert DataConfig(train_share=0.5).trained(every) == half
+
+
+def test_train_share_range() -> None:
+    for bad in (0.0, 1.5):
+        with pytest.raises(ValueError, match="train_share"):
+            DataConfig(train_share=bad)
+
+
 def test_trained_folds(tmp_path: Path) -> None:
     """Each member trains on all but its validation fold, and the folds tile subject 0's training sessions."""
     every = {r.name for r in DataConfig().trained(runs(tmp_path))}

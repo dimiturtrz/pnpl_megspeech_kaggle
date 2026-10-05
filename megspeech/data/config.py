@@ -2,6 +2,7 @@
 
 import itertools
 import json
+import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields, replace
@@ -20,7 +21,7 @@ from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
 from megspeech.data.raw.runs import DEEP, Partition, Run
 from megspeech.data.spans.spans import Grouping
-from megspeech.data.stratify import Picked, Stratify
+from megspeech.data.stratify import SEED, Picked, Stratify
 
 METRICS = "metrics.json"
 """The record a finished run leaves in its directory, its config under `config`."""
@@ -82,6 +83,9 @@ class DataConfig:
     """Each recording — training or validation run, Kaggle test archive — robust-scaled per channel by its own median
     and IQR before the model's scaler. Across the 162 runs a channel's IQR over its median run spans 0.78-1.28 (p5-p95);
     the Kaggle test sentence archive's sits at 0.90."""
+    train_share: float = 1.0
+    """Of each source's training sessions the ruler leaves, the share that train: whole sessions, the same seeded order
+    per source so a smaller share is a subset of a larger one (the data-scaling curve, megspeech-7gf.104)."""
     ruler: LocalRuler = LocalRuler.OFFICIAL
     """The local ruler the model trains under: which sessions are withheld for validation (selects epoch and tau) and
     test (reports); see `LocalRuler`."""
@@ -129,6 +133,8 @@ class DataConfig:
     20 sensors against 5.1 by chance (n=765256 onsets, megspeech-7gf.77), the acoustic expert's spatial prior."""
 
     def __post_init__(self) -> None:
+        if not 0 < self.train_share <= 1:
+            raise ValueError(f"train_share {self.train_share} is not in (0, 1]")
         if not 0 <= self.fold < self.folds:
             raise ValueError(f"fold {self.fold} is not one of the {self.folds} folds")
         if self.subspace and self.regions:
@@ -277,7 +283,20 @@ class DataConfig:
         held_out = self.split(runs)
         held: list[Run] = [] if self.refit else held_out[Partition.VALIDATION]
         excluded = {r.name for r in [*held, *held_out[Partition.TEST]]}
-        return [r for r in runs if self.trains_on(r) and r.name not in excluded]
+        return self.thinned([r for r in runs if self.trains_on(r) and r.name not in excluded])
+
+    def thinned(self, runs: Sequence[Run]) -> list[Run]:
+        """`runs` cut to `train_share` of each source's sessions: the leading `ceil(share * n)` of a seeded permutation
+        of the source's sessions, so the share's subsets nest; every run when the share is 1."""
+        if self.train_share == 1:
+            return list(runs)
+        ordered = sorted(runs, key=self.source)
+        kept: set[str] = set()
+        for _, group in itertools.groupby(ordered, key=lambda r: self.source(r)[0]):
+            sessions = list(group)
+            order = np.random.default_rng(SEED).permutation(len(sessions))
+            kept |= {sessions[i].name for i in order[: math.ceil(self.train_share * len(sessions))]}
+        return [r for r in runs if r.name in kept]
 
     def domain(self, run: Run) -> str:
         """The domain `run` is scored in: its source once `share` or `folds` holds out sessions, else its task."""
