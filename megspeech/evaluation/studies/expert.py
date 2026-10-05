@@ -15,6 +15,7 @@ on rows no model trained on.
 import argparse
 import json
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,7 +38,15 @@ from megspeech.model.auxiliary import Tap
 
 LOG = logging.getLogger(__name__)
 
-TAPS = {"textword": Tap.WORD, "textsent": Tap.CONTEXT, "audword": Tap.WORD, "audsent": Tap.CONTEXT}
+TAPS = {
+    "textword": Tap.WORD,
+    "textwordw": Tap.WORD,
+    "textwordc": Tap.WORD,
+    "textsent": Tap.CONTEXT,
+    "audword": Tap.WORD,
+    "audwordw": Tap.WORD,
+    "audsent": Tap.CONTEXT,
+}
 """What each expert's speech head read in training."""
 FOLDS = 3
 COMPONENTS = 32
@@ -61,10 +70,10 @@ class Expert:
         """The run's name: fold `fold`'s, or the full-data one."""
         return f"xp-{self.name}-{'full' if fold is None else fold}"
 
-    def held(self, root: DataRoot) -> list[set[str]]:  # devtools-ignore: test-mirror
-        """The names of the runs each fold model held out."""
+    def held(self, root: DataRoot, folds: Sequence[int] = range(FOLDS)) -> list[set[str]]:
+        """The names of the runs each of `folds`' models held out."""
         out = []
-        for k in range(FOLDS):
+        for k in folds:
             data = DataConfig.shared([root.models() / self.model(k)], DataConfig.grouping)
             out.append({run.name for run in data.split(Run.everywhere(root))[Partition.VALIDATION]})
         return out

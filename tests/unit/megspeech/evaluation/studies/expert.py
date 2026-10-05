@@ -1,11 +1,15 @@
 from dataclasses import dataclass
+from pathlib import Path
+from types import SimpleNamespace
 from typing import cast, override
 
 import pytest
 import torch
 from torch import Tensor
 
+from core.paths import DataRoot
 from megspeech.data.batching.split import Split
+from megspeech.data.raw.runs import Partition
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.studies import expert as module
 from megspeech.evaluation.studies.expert import COMPONENTS, FOLDS, TAPS, Expert, Features, Gate, Head
@@ -102,3 +106,13 @@ def test_held_out_r2() -> None:
     group = torch.arange(90) % FOLDS
     assert Gate.held_out_r2(x, x[:, 0] * 2, group) > 0.9
     assert Gate.held_out_r2(x, torch.randn(90, generator=generator), group) < 0.1
+
+
+def test_held(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Each requested fold's held-out runs are the validation runs its model's data config leaves out."""
+    runs = [SimpleNamespace(name=name) for name in "abc"]
+    split = SimpleNamespace(split=lambda everyone: {Partition.VALIDATION: everyone[:1]})
+    monkeypatch.setattr(module.Run, "everywhere", staticmethod(lambda _: runs))
+    monkeypatch.setattr(module.DataConfig, "shared", staticmethod(lambda *_: split))
+    root = SimpleNamespace(models=lambda: tmp_path)
+    assert Expert("textword").held(cast("DataRoot", root), [0, 2]) == [{"a"}, {"a"}]
