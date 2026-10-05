@@ -7,7 +7,7 @@ that ruler selects, under models/<out>.
 import argparse
 import json
 import logging
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 import torch
 
@@ -15,12 +15,13 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Partition, Run
 from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.rulers.base import TrackRuler
 from megspeech.evaluation.rulers.broad import BroadRuler
 from megspeech.evaluation.rulers.deep import DeepRuler
 from megspeech.evaluation.rulers.localtest import LocalTest
+from megspeech.evaluation.studies.memorisation import Memorisation
 from megspeech.model.input.subjects import Fallback, Unseen
 from megspeech.submission.writer import KaggleWriter
 
@@ -36,6 +37,9 @@ def main() -> None:
     parser.add_argument("names", nargs="+", help="trained models under models/, averaged as one")
     parser.add_argument("--out", required=True)
     parser.add_argument("--local", action="store_true", help="report val and official test at val tau; write nothing")
+    parser.add_argument(
+        "--memorisation", action="store_true", help="with --local, tally test hits by what training heard"
+    )
     parser.add_argument("--track", type=Track, choices=list(Track), default=Track.DEEP)
     tree = Tree(Scoring, Scoring(fallback=Fallback(Unseen.DEEP)))
     tree.arguments(parser)
@@ -45,7 +49,11 @@ def main() -> None:
     loaded = Loader.of(root, args.names, tree.parse(args), torch.device("cuda"))
     ruler, runs = RULERS[args.track], Run.discover(root.raw())
     if args.local:
-        return LocalTest(loaded, runs).report("+".join(args.names))
+        test, label = LocalTest(loaded, runs), "+".join(args.names)
+        test.report(label)
+        if args.memorisation:
+            Memorisation(replace(loaded, partition=Partition.TEST)).report(runs, test.tau(), label)
+        return None
     selected = ruler.select(loaded, runs)
     out = root.models() / args.out
     out.mkdir(parents=True, exist_ok=True)
