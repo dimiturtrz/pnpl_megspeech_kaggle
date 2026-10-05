@@ -65,8 +65,9 @@ class Probe:
         device = features.device
         order = {run: rank for rank, run in enumerate(sorted(positions["run"].unique()))}
         held = torch.from_numpy(positions["run"].map(order).to_numpy()[chosen] % HELD_EVERY == 0).to(device)
-        x = features[torch.from_numpy(chosen).to(device)].float()
-        y = speech.vectors.to(device)[speech.rows[torch.from_numpy(chosen).to(device)]].float()
+        picked = torch.from_numpy(chosen)
+        x = features[picked.to(device)].float()
+        y = speech.vectors[speech.rows[picked]].to(device).float()
         fit = ~held
         x = ((x - x[fit].mean(0)) / x[fit].std(0).clamp_min(1e-6)).clamp(-CLIP, CLIP)
         y = (y - y[fit].mean(0)) / y[fit].std(0).clamp_min(1e-6)
@@ -75,11 +76,12 @@ class Probe:
     def r2(self, ridges: tuple[float, ...] = RIDGES) -> dict[float, float]:
         """Held-out R2 (all dimensions, unit variance) of the ridge at each penalty, one eigendecomposition for all."""
         fit = ~self.held
-        x, y = self.x[fit].double(), self.y[fit].double()
-        values, vectors = torch.linalg.eigh(x.T @ x / len(x))
+        x, y = self.x[fit], self.y[fit]
+        values, basis = torch.linalg.eigh((x.T @ x / len(x)).double())
+        values, vectors = values.float(), basis.float()
         cross = vectors.T @ (x.T @ y / len(x))
         scale = values.mean()
-        held_x, held_y = self.x[self.held].double() @ vectors, self.y[self.held].double()
+        held_x, held_y = self.x[self.held] @ vectors, self.y[self.held]
         total = (held_y**2).sum()
         return {
             ridge: float(1 - ((held_y - held_x @ (cross / (values + ridge * scale)[:, None])) ** 2).sum() / total)
