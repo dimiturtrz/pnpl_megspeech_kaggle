@@ -143,7 +143,7 @@ tests — this repo's tests cover only ITS packages. Consumer-specific detector 
   model scored on the official ruler's local test, and record public vs local in its beads issue. The GPU is
   shared with other projects — check `nvidia-smi` before launching.
 - **Three tests** — *local test*: our labelled report set, never used to select. *Public test*: the Kaggle
-  public-leaderboard rows (~434, one score's SE ≈ 0.023 — cannot rank models closer than ~0.04). *Final test*:
+  public-leaderboard rows (~434). A real measurement, not noise to dismiss: SE ≈ 0.023 bounds one score, but two models scored on the same rows differ by far less sampling noise — explain a public move before discounting it. *Final test*:
   the organisers' ranking set, stimuli entirely different from anything released. Never call any of them
   "holdout".
 - **Two rulers** — scores never compare across them. *Official*: pnpl's labelled partitions — official val
