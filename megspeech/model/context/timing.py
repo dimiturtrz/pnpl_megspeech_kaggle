@@ -100,3 +100,8 @@ class TimingHead(nn.Module):
     def forward(self, onset: Float[Tensor, "g w"], mask: Bool[Tensor, "g w"]) -> Float[Tensor, "..."]:
         """Each position's timing logits; a scalar 0 when inactive."""
         return self.layers(self.features(onset, mask)) if self.active else onset.new_zeros(())
+
+    def frozen(self, state: dict[str, Tensor]) -> None:
+        """Hold the weights of a timing expert trained alone (a `TimingOnly`), which no optimiser step then moves."""
+        self.load_state_dict(state)
+        self.requires_grad_(requires_grad=False)

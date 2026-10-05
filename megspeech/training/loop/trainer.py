@@ -31,6 +31,7 @@ from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.regional import Regional
 from megspeech.training.sampling.curriculum import Annealed, Curriculum, Natural, Robust
 from megspeech.training.teacher import Teacher, Untaught
+from megspeech.training.timing_expert import TimingExpert
 
 LOG = logging.getLogger(__name__)
 
@@ -60,8 +61,15 @@ class Trainer:
     initial: dict[str, Tensor] = field(default_factory=dict)
     teacher: Teacher = field(default_factory=Untaught)
     regional: Regional = field(default_factory=Regional.off)
+    timing: dict[str, Tensor] = field(default_factory=dict)
+    """The frozen timing expert's head weights, when the run trains over one."""
     heads: dict[str, Tensor] = field(default_factory=dict)
     """The auxiliary heads' weights at the kept epoch, which the model's own state does not hold."""
+
+    @staticmethod
+    def corpus(config: RunConfig, root: DataRoot, device: torch.device) -> Corpus:
+        """The data `config` records, on `device`."""
+        return Corpus.load(config.data, root, device)
 
     @classmethod
     def of(cls, corpus: Corpus, config: RunConfig, root: DataRoot) -> "Trainer":
@@ -75,7 +83,8 @@ class Trainer:
         initial = torch.load(root.models() / warm / "model.pt", map_location=device, weights_only=True) if warm else {}
         auxiliary = Auxiliary.of(config.optim, root, device, corpus.positions)
         regional = Regional.of(config.augment.spatial, root, device)
-        return cls(config, evaluator, prototypes, auxiliary, initial, Teacher.of(config.optim, root), regional)
+        timing = TimingExpert.load(root, config.optim.timing)
+        return cls(config, evaluator, prototypes, auxiliary, initial, Teacher.of(config.optim, root), regional, timing)
 
     def model(self, train: Split) -> SentenceNet:
         """A fresh model, or the warm start's weights when there is one."""
@@ -86,6 +95,8 @@ class Trainer:
         model.whiten.fit(model.scale(sample))
         if self.initial:
             model.load_state_dict(self.initial)
+        if self.timing:
+            model.timing.frozen(self.timing)
         return self.compiled(model.to(self.evaluator.device))
 
     def compiled[M: nn.Module](self, model: M) -> M:

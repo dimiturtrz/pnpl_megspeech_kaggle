@@ -46,9 +46,18 @@ def test_timing_head_features() -> None:
     assert torch.isfinite(features).all()
 
 
-def test_forward() -> None:
+def test_timing_head_forward() -> None:
     """Active, logits at each position; inactive, a scalar 0 and nothing saved."""
     assert TimingHead(5).forward(ONSET, MASK).shape == (1, 4, 5)
     inactive = TimingHead(5, active=False)
     assert inactive.forward(ONSET, MASK).shape == ()
     assert not inactive.state_dict()
+
+
+def test_frozen() -> None:
+    """A trained head's weights are loaded and no gradient reaches them."""
+    donor = TimingHead(5)
+    held = TimingHead(5)
+    held.frozen(donor.state_dict())
+    assert torch.equal(held.forward(ONSET, MASK), donor.forward(ONSET, MASK))
+    assert not any(parameter.requires_grad for parameter in held.parameters())

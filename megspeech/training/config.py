@@ -60,6 +60,10 @@ class OptimConfig:
     adversary_ramp: float = 2.0
     """Epochs over which the reversal's strength rises linearly from 0 to `adversary`: the adversary must be able to
     read timing before reversing its gradient means anything."""
+    timing: str = ""
+    """A timing expert (`megspeech.training.cli.timing`) whose head is loaded into the model's `rhythm` head and frozen,
+    its logits added to the context head's in training and in every read after: a product of experts in which the
+    MEG path learns only what timing leaves (megspeech-7gf.99); empty trains no such expert."""
     tap: Tap = Tap.WORD
     """What every auxiliary head reads: the encoder's word embedding, or the span transformer's output at the word
     (d'Ascoli et al. train that output of every heard word toward t5; the context head alone sees only the 50's)."""

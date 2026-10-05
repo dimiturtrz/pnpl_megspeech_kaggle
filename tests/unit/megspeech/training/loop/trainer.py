@@ -16,6 +16,8 @@ from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.spans.spans import Spans
 from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.model.config import ContextConfig
+from megspeech.model.context.timing import TimingHead
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
@@ -31,6 +33,7 @@ from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.sampling.curriculum import Annealed, Natural, Robust
+from megspeech.training.timing_expert import TimingExpert
 
 SAMPLES = 50
 CPU = torch.device("cpu")
@@ -54,6 +57,12 @@ def joint(train: Split) -> Joint:
     lexicon = Lexicon(keys, torch.randn(len(keys), DIM, generator=torch.Generator().manual_seed(0)))
     spelled = (torch.arange(len(keys)) % 3).unsqueeze(-1)
     return Joint((SemanticTerm(1.0, lexicon), PhoneticTerm(1.0, Pronunciation(keys, spelled))))
+
+
+def test_corpus(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    expected = Corpus(split(), {"a": split(seed=1)}, frozenset())
+    monkeypatch.setattr(Corpus, "load", classmethod(lambda *_: expected))
+    assert Trainer.corpus(RunConfig(), cast("DataRoot", tmp_path), CPU) is expected
 
 
 def test_of(tmp_path: Path) -> None:
@@ -187,3 +196,15 @@ def test_fit() -> None:
 def test_auxiliary_state() -> None:
     model = nn.ModuleDict({"heads": nn.ModuleList([nn.Linear(2, 2)]), "words": nn.Linear(2, 2)})
     assert set(Trainer.auxiliary_state(model)) == {"heads.0.weight", "heads.0.bias"}
+
+
+def test_model_timing(tmp_path: Path) -> None:
+    """A run over a timing expert holds the expert's head frozen at its weights."""
+    root = DataRoot(tmp_path)
+    expert = TimingHead(VOCAB_SIZE)
+    TimingExpert.save(expert, root.models() / "t")
+    config = RunConfig(context=ContextConfig(rhythm=True), optim=OptimConfig(compiled=False, timing="t"))
+    made = Trainer.of(Corpus(split(), {"a": split(seed=1)}, frozenset()), config, root)
+    model = made.model(split())
+    assert all(torch.equal(model.timing.state_dict()[k], v) for k, v in expert.state_dict().items())
+    assert not any(parameter.requires_grad for parameter in model.timing.parameters())
