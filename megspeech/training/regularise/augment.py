@@ -6,6 +6,8 @@ import torch
 from jaxtyping import Float
 from torch import Tensor
 
+from megspeech.training.regularise.bgmix import BGMixKey
+
 
 @dataclass(frozen=True)
 class Augment:
@@ -27,8 +29,10 @@ class Augment:
     """Largest share of another window, circularly shifted off its own onsets, added as background (BGMix without its
     label); each window draws its share uniformly up to it. Real MEG, so it stays in the field's own subspace."""
     bgmix: float = 0.0
-    """Probability a labelled training word's window becomes its (subject, label) template plus another labelled word's
-    residual (`megspeech.training.regularise.bgmix`, trial-level BGMix), the label kept; 0 mixes none."""
+    """Probability a labelled training word's window becomes its (`bgmix_key`, label) template plus another labelled
+    word's residual (`megspeech.training.regularise.bgmix`, trial-level BGMix), the label kept; 0 mixes none."""
+    bgmix_key: BGMixKey = BGMixKey.SUBJECT
+    """What a BGMix template is per word: its subject, or the dataset it was recorded in (`BGMixKey`)."""
     spatial: float = 0.0
     """Radius of the sensor patch each window loses (`Regional`), as a share of the array's widest extent."""
 

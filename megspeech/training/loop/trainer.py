@@ -165,7 +165,7 @@ class Trainer:
             ema,
             (anchor, schedule, ema, ramp),
             Robust.of(Annealed.of(optim.curriculum), train, optim.robust),
-            BGMix.of(train, self.config.augment.bgmix),
+            BGMix.of(train, self.config.augment.bgmix, self.config.augment.bgmix_key),
         )
 
     def rows(self, train: Split) -> int:

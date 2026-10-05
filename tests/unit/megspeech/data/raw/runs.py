@@ -79,3 +79,8 @@ def test_pooled(tmp_path: Path) -> None:
 def test_subjects() -> None:
     names = pd.Series(["sub-0_ses-1_task-Sherlock1_run-1", "sub-17_ses-12_task-Sherlock1_run-1"])
     assert Run.subjects(names).tolist() == [0, 17]
+
+
+def test_tasks() -> None:
+    names = pd.Series(["sub-0_ses-1_task-Sherlock1_run-2", "sub-0_ses-3_task-TheMoth_run-1"])
+    assert Run.tasks(names).tolist() == ["Sherlock1", "TheMoth"]

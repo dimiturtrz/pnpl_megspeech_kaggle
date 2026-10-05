@@ -106,6 +106,8 @@ class Split:
     onset: Float[Tensor, "g w"]
     weight: Float[Tensor, " n"]
     subject: Int[Tensor, " n"]
+    source: Int[Tensor, " n"] | None = None
+    """Each word's recording source, an index into the sorted sources of the split; None where unknown."""
 
     @classmethod
     def from_arrays(

@@ -10,7 +10,9 @@ from enum import StrEnum
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
+from jaxtyping import Int
 
 from core.paths import DataRoot
 from core.tree import Tree
@@ -252,6 +254,12 @@ class DataConfig:
     def stratum(task: str) -> str:
         """The task without its book number: `Sherlock3` reads as `Sherlock`."""
         return re.sub(r"\d+$", "", task)
+
+    @classmethod
+    def sources(cls, names: "pd.Series[str]") -> Int[np.ndarray, " n"]:
+        """Each run `name`'s dataset (`stratum` of its task) as an index into the sorted datasets present."""
+        strata = Run.tasks(names).map(cls.stratum)
+        return pd.factorize(strata, sort=True)[0].astype(np.int64)
 
     def source(self, run: Run) -> tuple[str, tuple[str, int, int]]:
         return self.stratum(run.key[0]), run.key

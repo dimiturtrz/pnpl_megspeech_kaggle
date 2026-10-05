@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from itertools import chain
 
 import numpy as np
@@ -101,7 +101,8 @@ class Corpus:
             )
         )
         labels = (words["target"].to_numpy(), words["token"].to_numpy())
-        return Split.of(windows, labels, data.grouping.spans(words), weight, Run.subjects(words["run"]))
+        held = Split.of(windows, labels, data.grouping.spans(words), weight, Run.subjects(words["run"]))
+        return replace(held, source=torch.tensor(data.sources(words["run"]), device=windows.device))
 
     @classmethod
     def domains(

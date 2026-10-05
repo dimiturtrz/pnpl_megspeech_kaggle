@@ -4,6 +4,7 @@ from pathlib import Path
 
 import mne
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 
@@ -415,3 +416,8 @@ def test_weight(tmp_path: Path) -> None:
     moth = Run(tmp_path / "sub-0_ses-1_task-TheMoth_run-1_meg.h5")
     assert [DataConfig(read_weight=0.25).weight(r) for r in (sherlock, timit, moth)] == [1.0, 0.25, 1.0]
     assert [DataConfig(narrator_weight=0.5).weight(r) for r in (sherlock, timit, moth)] == [0.5, 1.0, 1.0]
+
+
+def test_sources() -> None:
+    names = pd.Series([f"sub-0_ses-1_task-{task}_run-1" for task in ("Sherlock2", "Alpha", "Sherlock1", "Alpha")])
+    assert DataConfig.sources(names).tolist() == [1, 0, 1, 0]

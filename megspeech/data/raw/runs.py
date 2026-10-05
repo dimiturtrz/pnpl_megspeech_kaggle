@@ -69,6 +69,11 @@ class Run:
         """The subject of each run `name` (as `Run.name` spells it)."""
         return (names + "_").str.extract(NAME)["subject"].astype(np.int64).to_numpy()
 
+    @staticmethod
+    def tasks(names: "pd.Series[str]") -> "pd.Series[str]":
+        """The task of each run `name` (as `Run.name` spells it)."""
+        return (names + "_").str.extract(NAME)["task"]
+
     @property
     def key(self) -> tuple[str, int, int]:
         match = self.parsed

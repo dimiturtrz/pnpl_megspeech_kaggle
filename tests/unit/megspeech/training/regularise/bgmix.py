@@ -1,10 +1,13 @@
+import dataclasses
+
 import numpy as np
+import pytest
 import torch
 
 from megspeech.data.batching.split import Batch, Split
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.spans.spans import Spans
-from megspeech.training.regularise.bgmix import MIN_CELL, BGMix, Untouched
+from megspeech.training.regularise.bgmix import MIN_CELL, BGMix, BGMixKey, Untouched
 
 CPU = torch.device("cpu")
 CHANNELS = 2
@@ -88,3 +91,47 @@ def test_drained() -> None:
     assert mixer.drained() == 4
     assert mixer.drained() == 0
     assert Untouched().drained() == 0
+
+
+def sourced(labels: list[int], sources: list[int]) -> tuple[Split, Batch, torch.Tensor]:
+    split, batch, x = pair(labels)
+    return dataclasses.replace(split, source=torch.tensor(sources)), batch, x
+
+
+def test_key_of() -> None:
+    split, _, _ = sourced([1, 2], [3, 4])
+    assert BGMixKey.SUBJECT.of(split).tolist() == [0, 0]
+    assert BGMixKey.SOURCE.of(split).tolist() == [3, 4]
+    with pytest.raises(ValueError, match="source"):
+        BGMixKey.SOURCE.of(pair([1])[0])
+
+
+def test_of_source_keyed_templates_are_per_source() -> None:
+    labels = [3] * (2 * MIN_CELL)
+    sources = [0] * MIN_CELL + [1] * MIN_CELL
+    split, _, _ = sourced(labels, sources)
+    x = split.windows(torch.arange(len(labels)))
+    mixer = BGMix.of(split, 1.0, BGMixKey.SOURCE)
+    assert isinstance(mixer, BGMix)
+    assert mixer.table.shape[0] == 2
+    assert torch.allclose(mixer.table[0, 3], x[:MIN_CELL].mean(0), atol=1e-5)
+    assert torch.allclose(mixer.table[1, 3], x[MIN_CELL:].mean(0), atol=1e-5)
+
+
+def test_of_source_keyed_thin_cell_falls_back_to_pooled_label() -> None:
+    labels = [3] * MIN_CELL + [3] * 2
+    split, _, _ = sourced(labels, [0] * MIN_CELL + [1] * 2)
+    x = split.windows(torch.arange(len(labels)))
+    mixer = BGMix.of(split, 1.0, BGMixKey.SOURCE)
+    assert isinstance(mixer, BGMix)
+    assert torch.allclose(mixer.table[1, 3], x.mean(0), atol=1e-5)
+
+
+def test_apply_source_keyed_uses_each_rows_own_source_template() -> None:
+    torch.manual_seed(0)
+    split, batch, x = sourced([1, 2], [0, 1])
+    tab = table(2)
+    tab[1] += 100.0
+    out = BGMix(1.0, tab, BGMixKey.SOURCE).apply(x, batch, split)
+    assert torch.allclose(out[0], tab[0, 1] + x[1] - tab[1, 2], atol=1e-4)
+    assert torch.allclose(out[1], tab[1, 2] + x[0] - tab[0, 1], atol=1e-4)
