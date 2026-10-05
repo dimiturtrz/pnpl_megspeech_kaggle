@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import torch
 
 from core.paths import DataRoot
 from megspeech.data.cache.run_cache import RunCache
@@ -22,7 +23,8 @@ LOG = logging.getLogger(__name__)
 
 
 class Oracle:
-    """The teacher `source` with every word's target replaced by its vocabulary word's centroid."""
+    """The teacher `source` with every word's target replaced by its vocabulary word's centroid, the centroids centred
+    and scaled to unit spread (their common mean would otherwise make every word's cosine to every other near 1)."""
 
     def __init__(self, source: Path, cache: RunCache) -> None:
         self.source = source
@@ -38,12 +40,16 @@ class Oracle:
         """Write each run's targets under `destination`, NaN where a word is outside the vocabulary."""
         words = self.words()
         centroids = Centroids.fit(words, self.source)
+        means = centroids.means
+        present = means.norm(dim=-1) > 0
+        spread = means[present] - means[present].mean(0)
+        means = torch.zeros_like(means).index_put((present.nonzero().squeeze(-1),), spread / spread.std(0).mean())
         destination.mkdir(parents=True, exist_ok=True)
         for run, group in words.groupby("run"):
             rows = len(np.load(self.source / f"{run}.npy", mmap_mode="r"))
-            vectors = np.full((rows, centroids.means.shape[1]), np.nan, dtype=np.float16)
+            vectors = np.full((rows, means.shape[1]), np.nan, dtype=np.float16)
             known = group[group["target"] != IGNORE]
-            vectors[known["position"].to_numpy()] = centroids.means[known["target"].to_numpy()].numpy()
+            vectors[known["position"].to_numpy()] = means[known["target"].to_numpy()].numpy()
             Targets(vectors).save(destination / f"{run}.npy")
         return centroids
 
