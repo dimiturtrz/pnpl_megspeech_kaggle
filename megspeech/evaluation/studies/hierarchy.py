@@ -1,8 +1,7 @@
 """Whether a part-of-speech posterior narrows the 50 candidates of the 50-way decoder (megspeech-7gf.94, -cn2). Each
-scored word's tag likelihood ratio of a candidate word w is u_w + (1 - u_w) sum_t p(t | w) p(t | MEG) / p(t): the
-word's class distribution in context on the training runs (`megspeech.data.labels.context_tags`, add-one smoothed)
-against a posterior over the word's class. `UNKNOWN` is no class: u_w is the share of w's training tokens the tagger
-was unsure of, and it adds a neutral 1, so that mass neither helps nor hurts a candidate. The probe's classes are
+scored word's tag likelihood ratio of a candidate word w is sum_t p(t | w) p(t | MEG) / p(t): the word's class
+distribution in context on the training runs (`megspeech.data.labels.context_tags`, add-one smoothed) against a
+posterior over the word's class. A token the tagger could not align has no class and is left out. The probe's classes are
 weighted by frequency (natural) or equally (balanced), the prior p(t) matching. Two arms read the ratio:
 
 - hierarchical: the vocabulary scores plus `lam` times its log, the factorisation log p(w | MEG) + lam log ratio;
@@ -33,7 +32,7 @@ from core.paths import DataRoot
 from megspeech.data.config import DataConfig
 from megspeech.data.labels.context_tags import ContextTags
 from megspeech.data.labels.phonemes import UNKNOWN
-from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import DEEP, Run
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.evaluator import Evaluator
@@ -64,27 +63,20 @@ class WordTags:
     """Each vocabulary word's distribution over the stacker's tags, counted in context on training rows, add-one."""
 
     distribution: Float[np.ndarray, "v k"]
-    unknown: Float[np.ndarray, " v"]
 
     @classmethod
     def of(cls, targets: Int[np.ndarray, " n"], tags: Int[np.ndarray, " n"], k: int) -> "WordTags":
         """The distribution of `tags` (each below `k`, `UNKNOWN` for none) over the rows whose 50-way `targets` name a
-        word, and each word's share `unknown` of rows with no known tag."""
+        word and whose tag is known."""
         counts = np.ones((VOCAB_SIZE, k))
-        said = np.full(VOCAB_SIZE, 2.0)
-        lacking = np.ones(VOCAB_SIZE)
-        inside = targets >= 0
-        np.add.at(said, targets[inside], 1)
-        np.add.at(lacking, targets[inside & (tags == UNKNOWN)], 1)
-        known = inside & (tags != UNKNOWN)
+        known = (targets >= 0) & (tags != UNKNOWN)
         np.add.at(counts, (targets[known], tags[known]), 1)
-        return cls(counts / counts.sum(1, keepdims=True), lacking / said)
+        return cls(counts / counts.sum(1, keepdims=True))
 
     def bonus(self, posterior: Float[np.ndarray, "n k"], prior: Float[np.ndarray, " k"]) -> Float[np.ndarray, "n v"]:
-        """Each row's log likelihood ratio of every word: u + (1 - u) sum_t p(t | word) p(t | MEG) / p(t), so a word
-        with no known tag (share u) is neither helped nor hurt."""
+        """Each row's log likelihood ratio of every word: sum_t p(t | word) p(t | MEG) / p(t)."""
         evidence = np.exp(posterior) / prior @ self.distribution.T
-        return np.log(self.unknown + (1 - self.unknown) * evidence + FLOOR)
+        return np.log(evidence + FLOOR)
 
 
 @dataclass(frozen=True)
@@ -266,7 +258,6 @@ def main() -> None:
         counts = np.bincount(tags[tags != UNKNOWN], minlength=len(classes))
         prior = np.full(len(classes), 1 / len(classes)) if balanced else counts / counts.sum()
         bonuses["balanced" if balanced else "natural"] = words.bonus(posterior, prior)
-    LOG.info("unknown share u_w of the 50 %s", dict(zip(PRIMARY.words, words.unknown.round(3).tolist(), strict=True)))
     splits, _ = reader.domains(held)
     official = evaluator.report(model, splits, log_prior, 0, 0.0)
     LOG.info("official macro %.4f over %d words, expected %.4f", official.macro.bacc10, official.macro.n, args.official)

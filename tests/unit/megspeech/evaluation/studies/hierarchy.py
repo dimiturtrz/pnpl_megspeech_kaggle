@@ -31,14 +31,13 @@ def test_word_tags_of() -> None:
     assert tags.distribution[0].tolist() == pytest.approx([1 / 4, 3 / 4])
     assert tags.distribution[1].tolist() == pytest.approx([2 / 3, 1 / 3])
     assert tags.distribution[2].tolist() == pytest.approx([0.5, 0.5])
-    assert tags.unknown[:3].tolist() == pytest.approx([0.4, 1 / 3, 0.5])
 
 
 def test_bonus() -> None:
     tags = WordTags.of(np.array([0, 0, 0, 1, -100]), np.array([1, 1, UNKNOWN, 0, 0]), 2)
     bonus = tags.bonus(np.log(np.array([[0.9, 0.1]])), np.array([0.5, 0.5]))
     assert bonus.shape == (1, VOCAB_SIZE)
-    assert bonus[0, 0] == pytest.approx(np.log(0.4 + 0.6 * 0.6), abs=1e-4)
+    assert bonus[0, 0] == pytest.approx(np.log(0.6), abs=1e-4)
     assert bonus[0, 2] == pytest.approx(0.0, abs=1e-4)
 
 

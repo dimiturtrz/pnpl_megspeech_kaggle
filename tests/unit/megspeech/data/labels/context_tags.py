@@ -25,7 +25,7 @@ EVENTS = HEADER + (
     "word\tlone\t\t\t6.0\n"
 )
 LOOKUP = {"she": "PRON", "ran": "VERB", "home": "ADV", "the": "DET"}
-DET, VERB, ADV, ADP, PRON = (CLASSES.index(c) for c in ("DET", "VERB", "ADV", "ADP", "PRON"))
+DET, VERB, ADV, ADP, PRON, NOUN = (CLASSES.index(c) for c in ("DET", "VERB", "ADV", "ADP", "PRON", "NOUN"))
 
 
 class Lookup:
@@ -58,7 +58,7 @@ def run(raw: Path) -> Run:
 
 
 def crowd() -> pd.DataFrame:
-    """Settled types: dominant, split, with a slip, rare classes; and one too rare to judge."""
+    """Types dominant, split, with a slip, and of rare classes."""
     rows = [("the", "DET")] * 30 + [("like", "VERB")] * 15 + [("like", "ADP")] * 15
     rows += [("run", "VERB")] * 29 + [("run", "NOUN")] + [("john", "PROPN")] * 25 + [("one", "NUM")] * 25
     rows += [("rare", "VERB"), ("rare", "ADP"), ("rare", "ADP")]
@@ -89,13 +89,15 @@ def test_classified() -> None:
     classes = ContextTags.classified(crowd())
     kinds = crowd().assign(code=classes).groupby(["word", "tag"])["code"].agg(lambda c: sorted(set(c)))
     assert kinds["the", "DET"] == [DET]
-    assert kinds["like", "VERB"] == kinds["like", "ADP"] == [UNKNOWN]
+    assert kinds["like", "VERB"] == [VERB]
+    assert kinds["like", "ADP"] == [ADP]
     assert kinds["run", "VERB"] == [VERB]
-    assert kinds["run", "NOUN"] == [UNKNOWN]
+    assert kinds["run", "NOUN"] == [NOUN]
     assert kinds["john", "PROPN"] == [OTHER]
     assert kinds["one", "NUM"] == [OTHER]
     assert kinds["rare", "VERB"] == [VERB]
     assert kinds["rare", "ADP"] == [ADP]
+    assert ContextTags.classified(pd.DataFrame({"word": ["a"], "tag": [""]})).tolist() == [UNKNOWN]
 
 
 def test_build() -> None:
@@ -113,7 +115,7 @@ def test_read(tmp_path: Path) -> None:
 def test_summary() -> None:
     summary = ContextTags.summary(crowd(), Vocabulary(("the", "like", "absent")))
     assert summary["tokens"].tolist() == [30, 30, 0]
-    assert summary["classes"].tolist() == [{"DET": 1.0}, {"UNKNOWN": 1.0}, {}]
+    assert summary["classes"].tolist() == [{"DET": 1.0}, {"VERB": 0.5, "ADP": 0.5}, {}]
 
 
 def test_path(tmp_path: Path) -> None:

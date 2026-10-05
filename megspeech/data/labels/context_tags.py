@@ -9,18 +9,9 @@ The classes are `CLASSES`: spaCy's universal tags plus `OTHER`, a real class tha
 distribution. PROPN, NUM, INTJ, X, PUNCT, SYM and SPACE fall into `OTHER`: none contains one of the 50 targets and each
 is rare, so each can only say "definitely not a target", which one class says as well as seven.
 
-`UNKNOWN` (-1, the ignore index) is not a class: it marks a token the tagger cannot be trusted on, a "no hint, work it
-out yourself". Probes neither train nor score on it, and a fusion treats its mass as neutral. The transformer
-pipeline exposes no per-tag probability, so trust is read from the tagger's own consistency across the text instead:
-
-- no tag: spaCy returned a tag count other than the sentence's word count;
-- no dominant class: fewer than `DOMINANT` of the word type's tokens share its most frequent class, so its class is a
-  property of the sentence, not of the word, and no single class speaks for it;
-- a minor reading: the token carries a class under `MINOR` of its type's tokens, a tagger slip beside an otherwise
-  settled word.
-
-A type seen on fewer than `SETTLED` tokens has too few for either share to mean anything and keeps its class. A word
-outside any sentence has no context and reads as `UNKNOWN`. The cache is keyed by (run, word onset), the key a split's
+`UNKNOWN` (-1, the ignore index) is not a class and no rule assigns it by judgement of the tagger: a token has it only
+where spaCy's output does not align to the sentence's words, or where it lies outside any sentence. Every other token
+carries its in-context tag. The cache is keyed by (run, word onset), the key a split's
 words carry, and read from subject 0's training and validation runs only: the Kaggle test carries MEG alone.
 
     uv run python -m megspeech.data.labels.context_tags   # under processed/syntax
@@ -48,12 +39,6 @@ from megspeech.data.raw.runs import DEEP, Partition, Run
 
 LOG = logging.getLogger(__name__)
 
-DOMINANT = 0.6
-"""The share of a word type's tokens its most frequent class must hold: a clear majority, so the class is the word's."""
-MINOR = 0.05
-"""The share of a settled type's tokens a tag falls under to count as a tagger slip, not a reading."""
-SETTLED = 20
-"""Tokens a type needs before its tag shares are judged: one slip in fewer than 20 is already over `MINOR`."""
 BATCH = 128
 """Sentences spaCy tags per GPU batch."""
 SENTENCE_COLUMNS = ["kind", "segment", "sentenceidx", "wordidx", "timemeg"]
@@ -126,16 +111,9 @@ class ContextTags:
 
     @staticmethod
     def classified(tagged: pd.DataFrame) -> Int[np.ndarray, " n"]:
-        """Each token's class: its tag in `CLASSES` (`OTHER` for any other), `UNKNOWN` where it has no tag, its type's
-        tokens have no dominant class or it is a minor reading of a settled type."""
+        """Each token's class: its tag in `CLASSES` (`OTHER` for any other), `UNKNOWN` where it has no tag."""
         index = pd.Series(range(len(CLASSES)), index=CLASSES)
-        coded = tagged["tag"].map(index).fillna(OTHER).where(tagged["tag"] != "", UNKNOWN).astype(np.int64)
-        frame = pd.DataFrame({"type": Vocabulary.token(tagged["word"]), "code": coded.to_numpy()}, index=tagged.index)
-        total = frame.groupby("type")["code"].transform("size")
-        share = frame.groupby(["type", "code"])["code"].transform("size") / total
-        modal = share.groupby(frame["type"]).transform("max")
-        trusted = (total < SETTLED) | ((modal >= DOMINANT) & (share >= MINOR))
-        return coded.where(trusted, UNKNOWN).to_numpy()
+        return tagged["tag"].map(index).fillna(OTHER).where(tagged["tag"] != "", UNKNOWN).astype(np.int64).to_numpy()
 
     @classmethod
     def build(cls, tagged: pd.DataFrame) -> "ContextTags":
