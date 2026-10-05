@@ -151,6 +151,17 @@ class Evaluator:
         Each domain's logits are computed once and serve both its report and the interval's per-word hits.
         """
         logits = {name: self.logits(model, split) for name, split in domains.items()}
+        return self.summarised(logits, domains, log_prior, epoch, loss)
+
+    def summarised(
+        self,
+        logits: dict[str, dict[Head, Float[Tensor, "n v"]]],
+        domains: dict[str, Split],
+        log_prior: Float[Tensor, " v"],
+        epoch: int,
+        loss: float,
+    ) -> Epoch:
+        """The report from each domain's already computed logits: scores logits that come from no single model."""
         reports = {name: self.scored(logits[name], split, log_prior) for name, split in domains.items()}
         counted = self.counted({name: r.novel for name, r in reports.items()})
         macro = Score.mean(counted.values())

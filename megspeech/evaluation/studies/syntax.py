@@ -23,12 +23,14 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix
 from sklearn.model_selection import GroupKFold, cross_val_predict
+from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import EVAL_SPANS, Split
 from megspeech.data.config import DataConfig
 from megspeech.data.labels.context_tags import CLASSES, ContextTags
 from megspeech.data.labels.phonemes import UNKNOWN
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import DEEP, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.reader import Reader
@@ -112,6 +114,30 @@ class Embedded:
         slots = torch.as_tensor(self(split)[tap], device=next(self.net.parameters()).device)
         with torch.no_grad():
             return head.readout()(slots).argmax(-1).cpu().numpy()
+
+    def read(self, split: Split) -> tuple[Float[Tensor, "n v"], Float[Tensor, "n e"]]:  # devtools-ignore: test-mirror
+        """Every word of `split`'s context-head log-probabilities and encoder embedding, in word order."""
+        words, rows = len(split.y), EVAL_SPANS * split.index.shape[1]
+        device = split.index.device
+        logp = torch.zeros(words + 1, VOCAB_SIZE, device=device)
+        slots = torch.zeros(words + 1, Tap.WORD.width(self.net), device=device)
+        self.net.eval()
+        with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+            for spans in torch.arange(len(split.index), device=device).split(EVAL_SPANS):
+                batch = split.batch(spans, rows)
+                _, embedded, context, _ = self.net.heard(batch.x, batch.onset, batch.slot, batch.subject)
+                at = torch.where(batch.index != PAD, batch.index, words)
+                logp[at] = context.float().log_softmax(-1)
+                slots[at] = embedded.float()
+        return logp[:words], slots[:words]
+
+    def tag_probabilities(self, slots: Float[Tensor, "n e"]) -> Float[Tensor, "n t"]:  # devtools-ignore: test-mirror
+        """The word head's own tag head's probabilities over `CLASSES` for each embedding in `slots`."""
+        head = self.net.readouts()[1]
+        if not isinstance(head, Tagging):
+            raise ValueError("the word head has no tag head: train with context.conv.head tagged")
+        with torch.no_grad():
+            return head.readout()(slots).softmax(-1)
 
     def __call__(self, split: Split) -> dict[Tap, Float[np.ndarray, "n _"]]:  # devtools-ignore: test-mirror
         """Every word of `split`'s encoder embedding (its own 0.5 s window) and span transformer output (its

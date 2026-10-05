@@ -173,3 +173,14 @@ def test_report() -> None:
     assert report.interval.low <= report.macro.by_tau[report.macro.tau] <= report.interval.high
     assert report.top1 == pytest.approx(np.mean([r.top1[report.macro.tau] for r in counted]))
     assert report.bits == pytest.approx(0.0)
+
+
+def test_summarised() -> None:
+    evaluator = Evaluator(CPU, min_novel=1)
+    domains = {"a": split(), "b": split(n=8, seed=1)}
+    prior = torch.zeros(VOCAB_SIZE)
+    logits = {name: evaluator.logits(Constant(), domain) for name, domain in domains.items()}
+    summed = evaluator.summarised(logits, domains, prior, 2, 0.25)
+    reported = evaluator.report(Constant(), domains, prior, 2, 0.25)
+    assert summed.macro == reported.macro
+    assert summed.loss == 0.25
