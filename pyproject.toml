@@ -312,7 +312,7 @@ layers = [
 [tool.structure]
 # >>> LOCAL-SLOT: arch-thresholds — tune per repo; the template ships defaults and won't churn these,
 # so a per-project override survives `copier update` without a merge conflict.
-bottleneck_degree = 9    # fan-in AND fan-out both over this = god-module
+bottleneck_degree = 8    # fan-in AND fan-out both over this = god-module
 file_max = 750           # god-file line ceiling — raise as real files grow
 file_min = 0             # advisory line floor — 0 = OFF (no honest universal floor; raise per repo if wanted)
 betweenness_max = 0.10   # advisory chokepoint threshold

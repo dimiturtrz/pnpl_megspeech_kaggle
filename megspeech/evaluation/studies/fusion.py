@@ -23,7 +23,8 @@ from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE, PRIMARY
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
-from megspeech.evaluation.loaded import LoadedModel, Scoring
+from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.scoring.score import Head
 from megspeech.model.input.subjects import Fallback, Unseen
 
@@ -135,7 +136,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), torch.device("cuda")
-    loaded = LoadedModel.of(root, args.names, Scoring(fallback=Fallback(Unseen.DEEP)), device)
+    loaded = Loader.of(root, args.names, Scoring(fallback=Fallback(Unseen.DEEP)), device)
     held = loaded.data.held(Run.discover(root.raw()))
     table = Fusion(loaded, MaskedPrior.load(args.model, device)).table(held)
     for name, scores in table.items():

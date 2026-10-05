@@ -9,7 +9,8 @@ import pytest
 from core.paths import DataRoot
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
-from megspeech.evaluation.loaded import LoadedModel, Scoring
+from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loading import Scoring
 from megspeech.model.input.subjects import Reading, Unseen
 from megspeech.submission import __main__ as module
 from megspeech.submission.__main__ import HITS, SUBMISSIONS, main
@@ -22,13 +23,13 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.Lo
     scorings: list[Scoring] = []
     written: list[tuple[Track, float, Path]] = []
 
-    def of(_: type[LoadedModel], __: DataRoot, names: list[str], scoring: Scoring, ___: object) -> LoadedModel:
+    def of(_: DataRoot, names: list[str], scoring: Scoring, __: object) -> LoadedModel:
         scorings.append(scoring)
         return replace(loaded(tmp_path), names=tuple(names))
 
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))
     monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: every))
-    monkeypatch.setattr(module.LoadedModel, "of", classmethod(of))
+    monkeypatch.setattr(module.Loader, "of", staticmethod(of))
     monkeypatch.setattr(
         module.KaggleWriter, "write", lambda self, _, tau, path: written.append((self.track, tau, path)) or path
     )

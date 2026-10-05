@@ -68,7 +68,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.Lo
     every = runs(tmp_path)
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))
     monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: every))
-    monkeypatch.setattr(module.LoadedModel, "of", classmethod(lambda *_: loaded(tmp_path)))
+    monkeypatch.setattr(module.Loader, "of", staticmethod(lambda *_: loaded(tmp_path)))
     monkeypatch.setattr(sys, "argv", ["pooling", NAMES[0]])
     with caplog.at_level(logging.INFO, logger=module.__name__):
         main()

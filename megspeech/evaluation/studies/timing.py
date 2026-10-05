@@ -27,7 +27,8 @@ from sklearn.preprocessing import StandardScaler
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import DEEP, Run
-from megspeech.evaluation.loaded import LoadedModel, Scoring
+from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.studies.syntax import Embedded
@@ -189,7 +190,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), torch.device("cuda")
-    loaded = LoadedModel.of(root, [args.name], Scoring(official=True), device)
+    loaded = Loader.of(root, [args.name], Scoring(official=True), device)
     runs = Run.discover(root.raw())
     held = [run for group in loaded.ruled(runs).values() for run in group]
     trained = [run for run in loaded.data.trained(runs) if run.subject == DEEP][:: args.stride]

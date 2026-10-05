@@ -16,7 +16,7 @@ from core.tree import Tree
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation.loaded import LoadedModel, Scoring
+from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.rulers.base import TrackRuler
 from megspeech.evaluation.rulers.broad import BroadRuler
 from megspeech.evaluation.rulers.deep import DeepRuler
@@ -40,7 +40,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    loaded = LoadedModel.of(root, args.names, tree.parse(args), torch.device("cuda"))
+    loaded = Loader.of(root, args.names, tree.parse(args), torch.device("cuda"))
     ruler, runs = RULERS[args.track], Run.discover(root.raw())
     selected = ruler.select(loaded, runs)
     out = root.models() / args.out
