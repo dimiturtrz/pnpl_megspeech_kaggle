@@ -25,6 +25,10 @@ class OptimConfig:
     ema: float = 0.0
     """Decay of the weight average scored and kept; 0 keeps the raw weights. At 0.999 the average spans ~1000
     steps, about half an epoch of the ~1750 a sentence-path epoch takes."""
+    heads: float = 1.0
+    """Weight of the two 50-way heads' losses (context and word). 0 trains an expert (megspeech-6ow.3): the encoder
+    learns from the auxiliary terms alone, never the 50 words, and the run keeps its last epoch, since the heads it
+    would be selected on are untrained."""
     semantic: float = 0.0
     """Weight of the semantic auxiliary (`megspeech.objective.auxiliary.semantic`): every heard word's window, the
     ~60% outside the 50 included, SigLIP-aligned to the word's t5-large layer-12 embedding, d'Ascoli et al.'s
@@ -132,7 +136,9 @@ class RunConfig:
 
     def selected(self, history: list[Epoch]) -> Epoch:
         """The epoch whose weights the run keeps: the best on validation, or the last when validation was trained on."""
-        return history[-1] if self.data.refit else max(history, key=lambda row: row.macro.bacc10)
+        return (
+            history[-1] if self.data.refit or not self.optim.heads else max(history, key=lambda row: row.macro.bacc10)
+        )
 
     @classmethod
     def saved(cls, directory: Path) -> "RunConfig":

@@ -10,7 +10,7 @@ from megspeech.evaluation.scoring.score import Epoch, Score
 from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.context.timing import Clock
 from megspeech.model.words.conv import ConvConfig
-from megspeech.training.config import METRICS, RunConfig
+from megspeech.training.config import METRICS, OptimConfig, RunConfig
 from megspeech.training.regularise.augment import Augment
 
 
@@ -35,6 +35,7 @@ def test_selected() -> None:
     history = [epoch(0, 0.2), epoch(1, 0.4), epoch(2, 0.4), epoch(3, 0.3)]
     assert RunConfig().selected(history) is history[1]
     assert RunConfig(data=DataConfig(refit=True)).selected(history) is history[-1]
+    assert RunConfig(optim=OptimConfig(heads=0.0)).selected(history) is history[-1]
 
 
 @pytest.mark.parametrize("context", [ContextConfig(encoder=Encoder.CACHED), ContextConfig(conv=ConvConfig(merger=270))])

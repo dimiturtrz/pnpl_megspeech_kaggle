@@ -117,9 +117,11 @@ class Trainer:
         class-weighted alike."""
         optim = self.config.optim
         classes = LabelTerm.balanced(train.y, train.weight, optim.balance)
-        context = ContextTerm(optim.label_smoothing, classes, objective=self.config.context.objective)
+        context = ContextTerm(
+            optim.label_smoothing, classes, objective=self.config.context.objective, weight=optim.heads
+        )
         context = self.teacher.taught(context, train, self.evaluator)
-        return context, WordTerm(optim.label_smoothing, classes), *self.auxiliary.terms
+        return context, WordTerm(optim.label_smoothing, classes, weight=optim.heads), *self.auxiliary.terms
 
     def step(self, state: TrainState, train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, " k"]:
         """One optimiser step on the words of `spans`; returns each term's loss without syncing it to the host."""

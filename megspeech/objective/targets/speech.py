@@ -58,6 +58,8 @@ different recording (Sherlock3 sessions 1-8, Sherlock4 8, Sherlock6 14) or past 
 0.8-2.5 bar 3 boundary blocks; the middle of the trough between."""
 SILENCE = 1e-3
 """Energy floor, as a fraction of the chapter's mean energy, so a silent stretch has a finite contrast."""
+FLOOR = 1e-6
+"""Least per-dimension spread `Targets.standardised` divides by."""
 DEVICE = "cuda"
 LOG = logging.getLogger(__name__)
 
@@ -137,6 +139,14 @@ class Targets:
         """Less the run's mean target over its present words: the direction all targets share removed."""
         mean = np.nanmean(self.vectors.astype(np.float32), axis=0) if self.present.any() else 0.0
         return Targets((self.vectors - mean).astype(np.float16))
+
+    def standardised(self) -> "Targets":
+        """Each dimension's mean removed and spread divided out over the run's present words."""
+        if not self.present.any():
+            return self
+        vectors = self.vectors.astype(np.float32)
+        spread = np.nanstd(vectors, axis=0)
+        return Targets(((vectors - np.nanmean(vectors, axis=0)) / np.maximum(spread, FLOOR)).astype(np.float16))
 
     @property
     def present(self) -> Bool[np.ndarray, " n"]:

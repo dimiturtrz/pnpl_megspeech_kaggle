@@ -125,6 +125,9 @@ def test_terms() -> None:
     plain = trainer(RunConfig()).terms(train)[1]
     assert isinstance(plain, WordTerm)
     assert plain.classes is None
+    expert = trainer(RunConfig(optim=OptimConfig(heads=0.0))).terms(train)
+    assert [term.weight for term in expert[:2]] == [0.0, 0.0]
+    assert [term.weight for term in trainer(RunConfig()).terms(train)[:2]] == [1.0, 1.0]
 
 
 def test_state() -> None:

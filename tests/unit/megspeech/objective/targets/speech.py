@@ -237,3 +237,13 @@ def test_to() -> None:
     speech = Speech(torch.tensor([0, -1]), torch.ones(1, DIM)).to(CPU)
     assert speech.rows.device == CPU
     assert speech.vectors.device == CPU
+
+
+def test_standardised() -> None:
+    vectors = np.array([[1.0, 5.0], [np.nan, np.nan], [3.0, 5.0]], np.float16)
+    standard = Targets(vectors).standardised()
+    assert standard.vectors[[0, 2], 0].tolist() == [-1, 1]
+    assert standard.vectors[[0, 2], 1].tolist() == [0, 0]
+    assert standard.present.tolist() == [True, False, True]
+    empty = Targets(np.full((1, DIM), np.nan, np.float16))
+    assert empty.standardised() is empty
