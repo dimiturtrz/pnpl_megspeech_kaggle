@@ -7,7 +7,7 @@ import torch
 
 from megspeech.data.batching.split import Split
 from megspeech.evaluation.studies.expert import Head
-from megspeech.evaluation.studies.expertcheck import Agreement, Centroids
+from megspeech.evaluation.studies.expertcheck import Agreement, Centroids, Probe
 from megspeech.evaluation.studies.syntax import Embedded
 from megspeech.model.auxiliary import Tap
 
@@ -64,3 +64,31 @@ def test_balanced(tmp_path: Path) -> None:
     assert fitted.balanced(torch.from_numpy(targets), torch.from_numpy(words)) == 1.0
     noise = torch.from_numpy(np.random.default_rng(3).normal(size=targets.shape).astype(np.float32))
     assert fitted.balanced(noise, torch.from_numpy(words)) < 1.0
+
+
+def test_found() -> None:
+    """A row whose own word is among its ten best scores counts; labels outside the vocabulary are ignored."""
+    scores = -torch.arange(50.0).repeat(3, 1)
+    labels = torch.tensor([3, 40, -100])
+    assert Centroids.found(scores, labels) == 0.5
+
+
+def test_learn() -> None:
+    """Words separable along their own axes are read from outputs the probe never saw."""
+    rng = np.random.default_rng(4)
+    words = torch.from_numpy(np.arange(200) % 4)
+    out = torch.from_numpy(np.eye(DIM)[words.numpy()] * 5 + rng.normal(size=(200, DIM)) * 0.1).float()
+    probe = Probe.learn(out, words)
+    assert probe.weight.shape == (DIM, 50)
+    assert probe.accuracy(out, words) == 1.0
+
+
+def test_accuracy() -> None:
+    """Outputs carrying no word score below outputs that do, among thirty words."""
+    rng = np.random.default_rng(5)
+    count = 30
+    words = torch.from_numpy(np.arange(600) % count)
+    signal = torch.from_numpy(np.eye(count)[words.numpy()] * 5 + rng.normal(size=(600, count))).float()
+    probe = Probe.learn(signal, words)
+    noise = torch.from_numpy(rng.normal(size=signal.shape)).float()
+    assert probe.accuracy(noise, words) < probe.accuracy(signal, words)
