@@ -218,7 +218,7 @@ def test_gather(tmp_path: Path) -> None:
     np.save(tmp_path / "a.npy", np.array([[1, 2], [np.nan, np.nan], [3, 4]], np.float16))
     words = pd.DataFrame({"run": ["a", "a", "b", "a", "a"], "position": [2, 0, 0, 1, 0]})
     speech = Speech.gather(tmp_path, words)
-    assert speech.rows.tolist() == [0, 1, -1, -1, 2]
+    assert speech.rows.tolist() == [0, 1, -1, -1, 1]
     assert speech.vectors.tolist() == [[3, 4], [1, 2], [1, 2]]
     assert Speech.gather(tmp_path, words, centred=True).vectors.tolist() == [[1, 1], [-1, -1], [-1, -1]]
     with pytest.raises(FileNotFoundError):
@@ -231,6 +231,14 @@ def test_centred() -> None:
     assert centred.vectors[[0, 2]].tolist() == [[-1, -2], [1, 2]]
     assert centred.present.tolist() == [True, False, True]
     assert not Targets(np.full((1, DIM), np.nan, np.float16)).centred().present.any()
+
+
+def test_merged() -> None:
+    """Words with an identical target share a row; distinct targets and absent words keep theirs."""
+    speech = Speech(torch.tensor([0, 1, 2, -1, 3]), torch.tensor([[1.0, 2], [3, 4], [1, 2], [5, 6]]))
+    assert speech.merged().rows.tolist() == [0, 1, 0, -1, 3]
+    empty = Speech(torch.tensor([-1]), torch.zeros(0, DIM))
+    assert empty.merged().rows.tolist() == [-1]
 
 
 def test_to() -> None:

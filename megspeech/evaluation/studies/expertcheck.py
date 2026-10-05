@@ -28,6 +28,8 @@ LOG = logging.getLogger(__name__)
 
 SEED = 0
 TOP = 5
+CANDIDATES = 10
+"""The nearest centroids a word counts as found among: the competition metric's BAcc@10."""
 
 
 @dataclass(frozen=True)
@@ -88,11 +90,11 @@ class Centroids:
         return cls(means, float(offset), float(variance[:TOP].sum() / variance.sum()))
 
     def balanced(self, out: Float[Tensor, "n d"], labels: Int[Tensor, " n"]) -> float:
-        """Balanced accuracy over the vocabulary of `out` taking its nearest centroid, among the labelled words."""
+        """Balanced accuracy over the vocabulary of `out` finding its word among its `CANDIDATES` nearest centroids."""
         known = labels != IGNORE
-        guess = (functional.normalize(out[known], dim=-1) @ functional.normalize(self.means, dim=-1).T).argmax(-1)
+        near = (functional.normalize(out[known], dim=-1) @ functional.normalize(self.means, dim=-1).T).topk(CANDIDATES)
         truth = labels[known]
-        hits = torch.zeros(VOCAB_SIZE).index_add_(0, truth, (guess == truth).float())
+        hits = torch.zeros(VOCAB_SIZE).index_add_(0, truth, (near.indices == truth[:, None]).any(-1).float())
         counts = torch.bincount(truth, minlength=VOCAB_SIZE)
         return float((hits[counts > 0] / counts[counts > 0]).mean())
 
@@ -121,7 +123,7 @@ def main() -> None:
     LOG.info("targets: mean norm / std %.2f  top-5 variance share %.3f", centroids.offset, centroids.top)
     for run, (part, split) in reader.splits(runs).items():
         LOG.info("%s %s", run.name, Agreement.of(head, split, part, directory))
-        LOG.info("%s centroid bacc %.4f", run.name, centroids.balanced(head.vectors(split), split.y.cpu()))
+        LOG.info("%s centroid bacc@10 %.4f", run.name, centroids.balanced(head.vectors(split), split.y.cpu()))
 
 
 if __name__ == "__main__":

@@ -59,7 +59,8 @@ def test_fit(tmp_path: Path) -> None:
 
 
 def test_balanced(tmp_path: Path) -> None:
-    """Targets labelled by their own word score 1; labels rotated off by one score 0."""
+    """Targets labelled by their own word are found among the nearest centroids; random outputs mostly are not."""
     fitted, targets, words = centroids(tmp_path)
     assert fitted.balanced(torch.from_numpy(targets), torch.from_numpy(words)) == 1.0
-    assert fitted.balanced(torch.from_numpy(targets), torch.from_numpy((words + 1) % 4)) == 0.0
+    noise = torch.from_numpy(np.random.default_rng(3).normal(size=targets.shape).astype(np.float32))
+    assert fitted.balanced(noise, torch.from_numpy(words)) < 1.0

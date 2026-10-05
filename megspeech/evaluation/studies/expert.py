@@ -40,6 +40,9 @@ LOG = logging.getLogger(__name__)
 
 TAPS = {
     "textword": Tap.WORD,
+    "oracle": Tap.WORD,
+    "oraclew": Tap.WORD,
+    "oraclel": Tap.WORD,
     "textwordw": Tap.WORD,
     "textwordc": Tap.WORD,
     "textsent": Tap.CONTEXT,

@@ -60,6 +60,8 @@ SILENCE = 1e-3
 """Energy floor, as a fraction of the chapter's mean energy, so a silent stretch has a finite contrast."""
 FLOOR = 1e-6
 """Least per-dimension spread `Targets.standardised` divides by."""
+KEY_SEED = 0
+"""Seed of the random direction a target is keyed by to tell identical targets apart."""
 DEVICE = "cuda"
 LOG = logging.getLogger(__name__)
 
@@ -242,7 +244,20 @@ class Speech:
                 vectors[group.index] = chosen.vectors[group["position"].to_numpy()]
         present = np.isfinite(vectors).all(axis=1)
         rows = np.where(present, np.cumsum(present) - 1, -1)
-        return cls(torch.from_numpy(rows), torch.from_numpy(vectors[present]))
+        return cls(torch.from_numpy(rows), torch.from_numpy(vectors[present])).merged()
+
+    def merged(self) -> "Speech":
+        """Words with an identical target pointing at one row, so the contrast counts them as one kind, not as
+        negatives of each other."""
+        if not len(self.vectors):
+            return self
+        keys = self.vectors.double() @ torch.randn(
+            self.vectors.shape[1], dtype=torch.float64, generator=torch.Generator().manual_seed(KEY_SEED)
+        )
+        _, inverse = torch.unique(keys, return_inverse=True)
+        first = torch.full((int(inverse.max()) + 1,), len(keys), dtype=torch.long)
+        first = first.scatter_reduce(0, inverse, torch.arange(len(keys)), "amin")
+        return Speech(torch.where(self.rows >= 0, first[inverse][self.rows.clamp(min=0)], self.rows), self.vectors)
 
     def to(self, device: torch.device) -> "Speech":
         return Speech(self.rows.to(device), self.vectors.to(device))
