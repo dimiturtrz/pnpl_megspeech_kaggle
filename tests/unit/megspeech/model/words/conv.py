@@ -6,6 +6,7 @@ import torch
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.words.conv import ConvConfig, ConvWords
+from megspeech.model.words.layers.sensorwise import Sensorwise
 from megspeech.model.words.layers.spatial import SpatialAttention
 
 SMALL = ConvConfig(hidden=8, dilations=(1, 2))
@@ -98,3 +99,17 @@ def test_embed_merger_attends_before_the_convolution() -> None:
     assert cast("torch.nn.Conv1d", convolution).in_channels == 5
     assert net.embed(x).shape == (3, 2 * 8)
     assert isinstance(ConvWords(SMALL).spatial, torch.nn.Conv1d)
+
+
+def test_sensorwise() -> None:
+    config = ConvConfig(hidden=8, dilations=(1, 2), sensorwise=4)
+    net = ConvWords(config, 5)
+    x = torch.randn(3, 5, SAMPLES, generator=GENERATOR)
+    assert net.embed(x, torch.tensor([True, True, False])).shape == (3, 2 * config.hidden)
+    with pytest.raises(ValueError, match="two spatial front ends"):
+        ConvConfig(merger=5, sensorwise=4)
+
+
+def test_front() -> None:
+    assert isinstance(ConvWords.front(ConvConfig(hidden=8, sensorwise=4), 5), Sensorwise)
+    assert isinstance(ConvWords.front(SMALL, 5), torch.nn.Conv1d)

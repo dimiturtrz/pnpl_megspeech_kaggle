@@ -13,6 +13,7 @@ from megspeech.model.words.layers.attention_pool import AttentionPool
 from megspeech.model.words.layers.conformer import TimeConformer
 from megspeech.model.words.layers.dilated import DilatedBlock
 from megspeech.model.words.layers.mean_max import MeanMax
+from megspeech.model.words.layers.sensorwise import Sensorwise
 from megspeech.model.words.layers.spatial import SpatialAttention
 from megspeech.model.words.layers.ssm import Ssm
 
@@ -44,6 +45,9 @@ class ConvConfig:
     merger: int = 0
     """Channels a `SpatialAttention` merges the sensors into before the 1x1 spatial convolution, with spatial
     dropout in training: Défossez et al. 2023's front end, 270 there; 0 mixes the sensors with the convolution alone."""
+    sensorwise: int = 0
+    """Channels per sensor of a temporal stack shared by every sensor, run before the sensors are fused (`Sensorwise`):
+    time first, space second, weights shared across sensors; 0 mixes the sensors first."""
     gated: bool = False
     """GLU-gate every dilated block in place of its GELU (`DilatedBlock`), d'Ascoli et al.'s trunk activation."""
     head: WordHead = WordHead.LINEAR
@@ -52,6 +56,8 @@ class ConvConfig:
     def __post_init__(self) -> None:
         if any(kernel % 2 == 0 for kernel in self.kernels):
             raise ValueError(f"kernels {self.kernels} must be odd to keep the time axis")
+        if self.merger and self.sensorwise:
+            raise ValueError(f"merger={self.merger} and sensorwise={self.sensorwise} are two spatial front ends")
         if self.lora:
             raise ValueError(f"lora={self.lora}: the end-to-end MEG-XL encoder it adapted is retired")
 
@@ -72,11 +78,7 @@ class ConvWords(WordEncoder):
             raise ValueError(f"a {config.merger}-channel spatial merger lays out {CHANNELS} sensors, not {channels}")
         super().__init__(config.width, instance=config.instance)
         self.pool = AttentionPool(config.hidden, config.queries) if config.queries else MeanMax(config.segments)
-        self.spatial = (
-            nn.Sequential(SpatialAttention(config.merger), nn.Conv1d(config.merger, config.hidden, 1))
-            if config.merger
-            else nn.Conv1d(channels, config.hidden, 1)
-        )
+        self.spatial = self.front(config, channels)
         self.blocks = nn.ModuleList(
             DilatedBlock(config.hidden, d, config.dropout, config.kernels, gated=config.gated) for d in config.dilations
         )
@@ -85,9 +87,23 @@ class ConvWords(WordEncoder):
         self.blocks.extend(TimeConformer(config.hidden, config.dropout) for _ in range(config.conformer))
         self.head = self.classifier(config.dropout, config.head)
 
+    @staticmethod
+    def front(config: ConvConfig, channels: int) -> nn.Module:
+        """The layer taking the sensors to `hidden` channels: a per-sensor stack then fusion, a spatial merger, or one
+        1x1 convolution."""
+        if config.sensorwise:
+            stack = (
+                DilatedBlock(config.sensorwise, d, config.dropout, config.kernels, gated=config.gated)
+                for d in config.dilations
+            )
+            return Sensorwise(channels, config.sensorwise, config.hidden, stack)
+        if config.merger:
+            return nn.Sequential(SpatialAttention(config.merger), nn.Conv1d(config.merger, config.hidden, 1))
+        return nn.Conv1d(channels, config.hidden, 1)
+
     def taps(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> list[Float[Tensor, "b h t"]]:
         """Every block's per-timestep feature map, the last the one `embed` pools."""
-        h = self.spatial(x)
+        h = self.spatial(x, valid) if isinstance(self.spatial, Sensorwise) else self.spatial(x)
         maps = []
         for block in self.blocks:
             h = block(h, valid)
