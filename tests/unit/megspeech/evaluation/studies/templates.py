@@ -12,9 +12,6 @@ from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.objective.targets.t5 import Prototypes
-from tests.unit.megspeech.evaluation.loaded import CPU as DEVICE
-from tests.unit.megspeech.evaluation.loaded import NAMES, SAMPLES, SPOKEN
 from megspeech.evaluation.studies.templates import (
     ABSENT,
     Durations,
@@ -28,6 +25,9 @@ from megspeech.evaluation.studies.templates import (
     Templates,
     Whitener,
 )
+from megspeech.objective.targets.t5 import Prototypes
+from tests.unit.megspeech.evaluation.loaded import CPU as DEVICE
+from tests.unit.megspeech.evaluation.loaded import NAMES, SAMPLES, SPOKEN
 
 CPU = torch.device("cpu")
 SHAPE = (4, 6)

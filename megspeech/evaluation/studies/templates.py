@@ -234,7 +234,9 @@ class Noise:
             self.seen[at] += len(rows)
 
     @staticmethod
-    def shrunk(total: Float[Tensor, "p p"], quartic: Float[Tensor, ""], seen: Float[Tensor, ""]) -> Float[Tensor, "p p"]:
+    def shrunk(
+        total: Float[Tensor, "p p"], quartic: Float[Tensor, ""], seen: Float[Tensor, ""]
+    ) -> Float[Tensor, "p p"]:
         """The sample covariance `total / seen` pulled towards its mean variance by the Ledoit-Wolf weight,
         `b^2 / d^2` with `d^2 = |S - mI|^2` and `b^2 = (sum |x x' - S|^2) / n^2 = (quartic - n |S|^2) / n^2`."""
         cov = total / seen
