@@ -6,7 +6,7 @@ every heard word's embedding (`AuxiliaryTerm`).
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import override
+from typing import ClassVar, override
 
 import torch
 from jaxtyping import Float, Int
@@ -132,6 +132,9 @@ class WordTerm(LabelTerm):
 
 class AuxiliaryTerm(Term):
     """A head over every heard word's embedding, in or out of the 50, scored against the word itself."""
+
+    local: ClassVar[bool] = False
+    """Whether the head reads the word's local embedding, before the span transformer, whatever tap the run sets."""
 
     @abstractmethod
     def head(self, width: int) -> nn.Module: ...

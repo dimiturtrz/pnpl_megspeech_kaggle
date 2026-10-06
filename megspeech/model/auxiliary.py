@@ -29,11 +29,15 @@ class Tap(StrEnum):
 class WithAuxiliary(nn.Module):
     """The sentence model with auxiliary heads reading its `tap`, trained as one."""
 
-    def __init__(self, net: SentenceNet, heads: nn.ModuleList, tap: Tap = Tap.WORD) -> None:
+    def __init__(
+        self, net: SentenceNet, heads: nn.ModuleList, tap: Tap = Tap.WORD, taps: tuple[Tap, ...] | None = None
+    ) -> None:
+        """`taps` names each head's own tap; heads without one read `tap`."""
         super().__init__()
         self.net = net
         self.heads = heads
         self.tap = tap
+        self.taps = taps or tuple(tap for _ in heads)
 
     @override
     def forward(
@@ -46,8 +50,7 @@ class WithAuxiliary(nn.Module):
         """`SentenceNet`'s two heads, then each auxiliary head's reading of every span position's tapped
         representation."""
         refined, slots, context, word = self.net.heard(x, onset, slot, subject)
-        tapped = self.tap.pick(slots, refined)
-        return context, word, *(head(tapped) for head in self.heads)
+        return context, word, *(head(tap.pick(slots, refined)) for head, tap in zip(self.heads, self.taps, strict=True))
 
     def readouts(self) -> tuple[nn.Module, ...]:
         """The modules reading each of `forward`'s outputs, in order: `SentenceNet`'s, then the auxiliary heads."""

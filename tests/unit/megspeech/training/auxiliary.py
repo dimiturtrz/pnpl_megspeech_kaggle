@@ -11,6 +11,7 @@ from core.paths import DataRoot
 from megspeech.data.labels.context_tags import CLASSES, ContextTags
 from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.labels.syntax import PartsOfSpeech
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.config import ContextConfig
 from megspeech.model.sentence import SentenceNet
@@ -18,6 +19,7 @@ from megspeech.model.words.conv import ConvConfig
 from megspeech.model.words.heads import WordHead
 from megspeech.objective.auxiliary.adversarial import TimingTerm
 from megspeech.objective.auxiliary.lexical import LexicalTerm
+from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
 from megspeech.objective.auxiliary.speech import SpeechTerm
@@ -77,6 +79,13 @@ def test_joint_trained() -> None:
     assert tapped.heads[0](torch.zeros(1, model.width)).shape == (1, DIM)
 
 
+def test_joint_neighbour_taps_the_word() -> None:
+    model = net()
+    trained = Joint((NextWordTerm(weight=1.0), semantic()), Tap.CONTEXT).trained(model, identity)
+    assert trained.taps == (Tap.WORD, Tap.CONTEXT)
+    assert trained.heads[0](torch.zeros(1, model.words.width)).shape == (1, VOCAB_SIZE)
+
+
 def test_of(tmp_path: Path) -> None:
     root = cast("DataRoot", Root(tmp_path))
     assert isinstance(Auxiliary.of(OptimConfig(), root, CPU, WORDS), NoAuxiliary)
@@ -96,6 +105,8 @@ def test_of(tmp_path: Path) -> None:
     assert both.terms[1].weight == 1.0
     worded = Auxiliary.of(OptimConfig(semantic=0.5, lexical=2.0), root, CPU, WORDS)
     assert [type(t) for t in worded.terms] == [SemanticTerm, LexicalTerm]
+    neighbours = Auxiliary.of(OptimConfig(next_word=0.3, prev_word=0.2), root, CPU, WORDS)
+    assert [(type(t), t.weight) for t in neighbours.terms] == [(NextWordTerm, 0.3), (PreviousWordTerm, 0.2)]
     spelled = Auxiliary.of(OptimConfig(phonetic=1.0, positions=2), root, CPU, WORDS)
     assert cast("PhoneticTerm", spelled.terms[0]).positions == 2
     with pytest.raises(FileNotFoundError):

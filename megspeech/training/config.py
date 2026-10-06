@@ -67,6 +67,12 @@ class OptimConfig:
     """Weight of the tag auxiliary (`megspeech.objective.auxiliary.tagging`): every training word's embedding classified
     into its in-context part of speech (`megspeech.data.labels.context_tags`), 11 universal tags and `OTHER`. It trains
     the tag head a `tagged` word head (`ConvConfig.head`) mixes its per-tag readouts by; 0 never reads the table."""
+    next_word: float = 0.0
+    """Weight of the next-word auxiliary (`megspeech.objective.auxiliary.neighbour`): each word slot's local encoder
+    embedding, before the span transformer whatever the `tap`, predicts the next word's 50-way label in its span
+    (ignored where that word is outside the 50, absent or in another span); 0 creates no head."""
+    prev_word: float = 0.0
+    """Weight of the previous-word auxiliary, the next-word one's mirror; 0 creates no head."""
     adversary: float = 0.0
     """Strength of the timing adversary's gradient reversal (`megspeech.objective.auxiliary.adversarial`): a head
     regresses each word's log duration and sentence position from the `tap`, and the encoder receives its gradient

@@ -18,6 +18,7 @@ from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.adversarial import TimingTerm
 from megspeech.objective.auxiliary.lexical import LexicalTerm
+from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
 from megspeech.objective.auxiliary.speech import SpeechTerm
@@ -71,6 +72,8 @@ class Auxiliary(ABC):
                 optim.tagging,
                 lambda: TagTerm(optim.tagging, ContextTags.load(ContextTags.path(root)).tensor(words, device)),
             ),
+            (optim.next_word, lambda: NextWordTerm(weight=optim.next_word)),
+            (optim.prev_word, lambda: PreviousWordTerm(weight=optim.prev_word)),
             (optim.adversary, lambda: TimingTerm.of(1.0, words, device)),
         )
         terms = tuple(build() for weight, build in builders if weight)
@@ -96,7 +99,9 @@ class Joint(Auxiliary):
 
     @override
     def trained(self, net: SentenceNet, compiled: Callable[[WithAuxiliary], WithAuxiliary]) -> WithAuxiliary:
-        width = self.tap.width(net)
-        heads = nn.ModuleList(term.readout(net.words.head, width) for term in self.terms)
+        taps = tuple(Tap.WORD if term.local else self.tap for term in self.terms)
+        heads = nn.ModuleList(
+            term.readout(net.words.head, tap.width(net)) for term, tap in zip(self.terms, taps, strict=True)
+        )
         heads.to(next(net.parameters()).device)
-        return compiled(WithAuxiliary(net, heads, self.tap))
+        return compiled(WithAuxiliary(net, heads, self.tap, taps))
