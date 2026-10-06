@@ -1,7 +1,9 @@
-"""How training draws spans as it goes: their natural mix, annealed toward the Deep subject, or tilted toward the
-strata training fits worst, or prioritised span by span by how rarely drawn and how hard."""
+"""How training draws spans as it goes: a base distribution (uniform, the corpus's natural mix, or balanced by
+stratum) that modifiers wrap, each forwarding what training observes to what it wraps: annealed toward the Deep
+subject, tilted toward the strata training fits worst, prioritised span by span by how rarely drawn and how hard."""
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Protocol
 
 import torch
@@ -12,11 +14,7 @@ from torch.nn import functional
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.raw.runs import DEEP
-from megspeech.data.spans.spans import PAD
-
-BINS = 3
-"""Quantile bins of span length and of word rate within a stratum: terciles, so each bin holds a third of the spans
-and a subject's strata stay large enough to measure an epoch's loss on."""
+from megspeech.training.sampling.strata import Strata
 
 FLOOR = 0.25
 """Share of its base weight no prioritised span falls below, so easy or often-seen spans are never starved."""
@@ -39,6 +37,22 @@ class Curriculum(Protocol):
         ...
 
 
+@dataclass(frozen=True)
+class Uniform:
+    """Every span at weight 1, whichever run or subject heard it."""
+
+    def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
+        return torch.ones(len(train.index), device=train.index.device)
+
+    def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
+        """Nothing: the draw ignores the loss."""
+
+    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
+        """Nothing to report: the draw is not tilted by a loss."""
+        return {}
+
+
+@dataclass(frozen=True)
 class Natural:
     """Every span at its own weight, whichever subject heard it: the mix the corpus holds."""
 
@@ -63,15 +77,15 @@ class Annealed:
     """
 
     share: float
+    base: Curriculum
 
     @classmethod
-    def of(cls, share: float) -> Curriculum:
-        """Annealed toward `share`; the natural mix at 0."""
-        return cls(share) if share else Natural()
+    def of(cls, share: float, base: Curriculum) -> Curriculum:
+        """`base` annealed toward `share`; `base` itself at 0."""
+        return cls(share, base) if share else base
 
     def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
-        first = train.index[:, 0]
-        weight, subject = train.weight[first], train.subject[first]
+        weight, subject = self.base.weights(train, epoch, epochs), train.subject[train.index[:, 0]]
         present, which = torch.unique(subject, return_inverse=True)
         totals = torch.zeros(len(present), dtype=weight.dtype, device=weight.device).index_add_(0, which, weight)
         progress = epoch / max(epochs - 1, 1)
@@ -81,11 +95,55 @@ class Annealed:
         return weight / totals[which] * shares[which]
 
     def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
-        """Nothing: the schedule ignores the loss."""
+        """Forwarded to `base`: the schedule ignores the loss."""
+        self.base.observe(spans, logits, target)
 
     def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
         """Nothing to report: the draw is not tilted by a loss."""
         return {}
+
+
+@dataclass(frozen=True)
+class Stratified:
+    """Each span at `count ** -alpha` of its stratum's span count (`Strata.sourced`: source, subject, span length and
+    word rate), so at 1 every stratum draws equally whatever its size and at 0 every span draws alike: balanced
+    data rather than a reshaped objective, as inverse-frequency sampling of rare groups (Sagawa et al. 2020)."""
+
+    alpha: float
+    strata: Int[Tensor, " g"]
+
+    @classmethod
+    def of(cls, alpha: float, train: Split) -> "Stratified":
+        """The strata of `train` at exponent `alpha`."""
+        return cls(alpha, Strata.sourced(train))
+
+    def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
+        counts = torch.bincount(self.strata).float()
+        return counts[self.strata].pow(-self.alpha)
+
+    def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
+        """Nothing: the draw ignores the loss."""
+
+    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
+        """Nothing to report: the draw is not tilted by a loss."""
+        return {}
+
+
+class Base(StrEnum):
+    """The distribution over spans a sampler's modifiers start from."""
+
+    UNIFORM = "uniform"
+    NATURAL = "natural"
+    STRATIFIED = "stratified"
+
+    def of(self, train: Split, alpha: float) -> Curriculum:
+        """This base over `train`'s spans; `alpha` is `Stratified`'s exponent."""
+        builders = {
+            Base.UNIFORM: Uniform,
+            Base.NATURAL: Natural,
+            Base.STRATIFIED: lambda: Stratified.of(alpha, train),
+        }
+        return builders[self]()
 
 
 @dataclass
@@ -108,28 +166,13 @@ class Robust:
         """`base` tilted at `power` over `train`'s strata; `base` itself at 0."""
         if not power:
             return base
-        strata = cls.stratify(train)
+        strata = Strata.stratify(train)
         ones = torch.ones(int(strata.max()) + 1, device=strata.device)
         return cls(base, strata, power, ones, torch.zeros_like(ones), torch.zeros_like(ones))
 
-    @staticmethod
-    def stratify(train: Split) -> Int[Tensor, " g"]:
-        """Each span's stratum: its subject, then its word count's and its words per second's `BINS`-quantile bins
-        (a one-word span's rate is 0)."""
-        length = (train.index != PAD).sum(dim=1)
-        last = train.onset.gather(1, (length - 1).clamp(min=0)[:, None])[:, 0]
-        rate = torch.where(length > 1, (length - 1) / (last - train.onset[:, 0]), 0.0)
-        subject = train.subject[train.index[:, 0]]
-        return (subject * BINS + Robust.binned(length.float())) * BINS + Robust.binned(rate)
-
-    @staticmethod
-    def binned(values: Float[Tensor, " g"]) -> Int[Tensor, " g"]:
-        """Each value's `BINS`-quantile bin, 0 the lowest."""
-        edges = torch.quantile(values, torch.linspace(0, 1, BINS + 1, device=values.device)[1:-1])
-        return torch.bucketize(values, edges)
-
     def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
-        """Each labelled word's cross-entropy summed into its span's stratum, without a host sync."""
+        """Each labelled word's cross-entropy summed into its span's stratum, without a host sync, and `base` told."""
+        self.base.observe(spans, logits, target)
         words = functional.cross_entropy(
             logits.detach().flatten(0, 1).float(), target.flatten(), ignore_index=IGNORE, reduction="none"
         )
@@ -181,7 +224,8 @@ class Prioritised:
 
     def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
         """Each drawn span counted, and its difficulty moved halfway to this batch's mean labelled-word loss, without a
-        host sync; a span with no labelled word keeps its difficulty."""
+        host sync; a span with no labelled word keeps its difficulty. `base` is told too."""
+        self.base.observe(spans, logits, target)
         words = functional.cross_entropy(
             logits.detach().flatten(0, 1).float(), target.flatten(), ignore_index=IGNORE, reduction="none"
         )

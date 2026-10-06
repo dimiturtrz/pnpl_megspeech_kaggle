@@ -182,7 +182,7 @@ def test_rows() -> None:
     assert natural.rows(train) == train.capacity(natural.config.optim.batch, train.weight[train.index[:, 0]])
     annealed = trainer(RunConfig(optim=OptimConfig(epochs=3, curriculum=0.9)))
     epochs = range(3)
-    draws = (Annealed(0.9).weights(train, epoch, 3) for epoch in epochs)
+    draws = (Annealed(0.9, Natural()).weights(train, epoch, 3) for epoch in epochs)
     assert annealed.rows(train) == max(train.capacity(annealed.config.optim.batch, draw) for draw in draws)
 
 

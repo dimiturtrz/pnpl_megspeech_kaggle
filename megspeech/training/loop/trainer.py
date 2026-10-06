@@ -32,7 +32,8 @@ from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.bgmix import BGMix, Untouched
 from megspeech.training.regularise.noise import SAMPLES
 from megspeech.training.regularise.regional import Regional
-from megspeech.training.sampling.curriculum import Annealed, Curriculum, Natural, Prioritised, Robust
+from megspeech.training.sampling.curriculum import Curriculum, Natural
+from megspeech.training.sampling.sampler import Sampler
 from megspeech.training.teacher import Teacher, Untaught
 from megspeech.training.timing_expert import TimingExpert
 
@@ -185,25 +186,14 @@ class Trainer:
             model.readouts(),
             ema,
             (anchor, schedule, ema, ramp),
-            self.drawn(train),
+            Sampler.of(self.config.optim, train),
             BGMix.of(train, self.config.augment.bgmix, self.config.augment.bgmix_key),
-        )
-
-    def drawn(self, train: Split) -> Curriculum:
-        """The curriculum training draws spans by: annealed, then tilted by stratum (`robust`) or by span
-        (`priority`, `visibility`), which both want the losses and so exclude each other."""
-        optim = self.config.optim
-        if optim.robust and (optim.priority or optim.visibility):
-            raise ValueError("optim.robust and optim.priority/optim.visibility each tilt the draw by loss; set one")
-        base = Annealed.of(optim.curriculum)
-        return Prioritised.of(
-            Robust.of(base, train, optim.robust), train, optim.priority, optim.visibility, train.reads()
         )
 
     def rows(self, train: Split) -> int:
         """Word rows for one batch at the curriculum's draw weights in whichever epoch draws the most words."""
         optim = self.config.optim
-        curriculum = Annealed.of(optim.curriculum)
+        curriculum = Sampler.scheduled(optim, train)
         epochs = range(optim.epochs)
         return max(train.capacity(optim.batch, curriculum.weights(train, epoch, optim.epochs)) for epoch in epochs)
 

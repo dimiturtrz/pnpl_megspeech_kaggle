@@ -9,7 +9,16 @@ from megspeech.data.batching.split import Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.spans.spans import Spans
-from megspeech.training.sampling.curriculum import Annealed, Natural, Prioritised, Robust
+from megspeech.training.sampling.curriculum import (
+    Annealed,
+    Base,
+    Natural,
+    Prioritised,
+    Robust,
+    Stratified,
+    Uniform,
+)
+from megspeech.training.sampling.strata import Strata
 
 
 def split(subject: list[int], weight: list[float]) -> Split:
@@ -27,15 +36,27 @@ def test_natural_weights() -> None:
     assert Natural().weights(TRAIN, 0, 10).tolist() == [1.0, 3.0, 2.0, 5.0]
 
 
+def test_uniform_weights() -> None:
+    assert Uniform().weights(TRAIN, 0, 10).tolist() == [1.0] * 4
+
+
+def test_annealed_observe() -> None:
+    """Annealing wraps its base: uniform spans keep their equal weights inside a subject, and observing reaches it."""
+    assert Annealed(0.9, Uniform()).weights(TRAIN, 9, 10)[:2].tolist() == pytest.approx([0.45, 0.45])
+    seen = prioritised()
+    Annealed(0.9, seen).observe(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
+    assert seen.seen.tolist() == [1.0, 0.0, 0.0, 0.0]
+
+
 def test_annealed_of() -> None:
-    assert isinstance(Annealed.of(0.0), Natural)
-    assert Annealed.of(0.9) == Annealed(0.9)
+    assert isinstance(Annealed.of(0.0, Natural()), Natural)
+    assert Annealed.of(0.9, Natural()) == Annealed(0.9, Natural())
 
 
 @pytest.mark.parametrize(("epoch", "deep"), [(0, 1 / 3), (9, 0.9), (3, 1 / 3 + (0.9 - 1 / 3) / 3)])
 def test_annealed_weights(epoch: int, deep: float) -> None:
     """Subject shares follow the schedule; inside the Deep subject spans keep their 1:3 ratio."""
-    weights = Annealed(0.9).weights(TRAIN, epoch, 10)
+    weights = Annealed(0.9, Natural()).weights(TRAIN, epoch, 10)
     shares = weights / weights.sum()
     assert float(shares[:2].sum()) == pytest.approx(deep)
     assert float(shares[2]) == pytest.approx((1 - deep) / 2)
@@ -44,7 +65,7 @@ def test_annealed_weights(epoch: int, deep: float) -> None:
 
 def test_annealed_weights_single_subject() -> None:
     lone = split([0, 0], [1.0, 3.0])
-    weights = Annealed(0.9).weights(lone, 5, 10)
+    weights = Annealed(0.9, Natural()).weights(lone, 5, 10)
     assert torch.allclose(weights / weights.sum(), torch.tensor([0.25, 0.75]))
 
 
@@ -70,22 +91,10 @@ def test_robust_of() -> None:
     assert made.tilt.tolist() == [1.0] * 9
 
 
-def test_stratify() -> None:
-    """Subject, then length tercile, then rate tercile; a second subject's strata sit past the first's."""
-    assert Robust.stratify(SPANNED).tolist() == [8, 0, 4]
-    other = replace(SPANNED, subject=torch.ones(6, dtype=torch.int64))
-    assert Robust.stratify(other).tolist() == [17, 9, 13]
-
-
-def test_binned() -> None:
-    assert Robust.binned(torch.tensor([3.0, 1.0, 2.0])).tolist() == [2, 0, 1]
-    assert Robust.binned(torch.arange(6.0)).tolist() == [0, 0, 1, 1, 2, 2]
-
-
-def test_observe() -> None:
+def test_robust_observe() -> None:
     """Each labelled word's cross-entropy lands in its span's stratum; ignored positions add neither loss nor count."""
     Natural().observe(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
-    Annealed(0.9).observe(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
+    Annealed(0.9, Natural()).observe(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
     made = robust([1, 0, 1])
     target = torch.tensor([[0, 1, IGNORE], [3, IGNORE, IGNORE]])
     made.observe(torch.tensor([0, 2]), torch.zeros(2, 3, 50), target)
@@ -130,7 +139,7 @@ def test_prioritised_observe() -> None:
     assert made.difficulty[0].item() == pytest.approx(math.log(50) / 2)
 
 
-def test_prioritised_weights_unseen_beats_seen() -> None:
+def test_prioritised_weights() -> None:
     made = prioritised(power=0.0)
     made.observe(torch.tensor([0, 1]), torch.zeros(2, 1, 50), torch.zeros(2, 1, dtype=torch.int64))
     weights = made.weights(TRAIN, 0, 10)
@@ -178,10 +187,22 @@ def test_prioritised_weights_negative_power_and_ceiling() -> None:
     assert boosted.weights(TRAIN, 0, 10)[3].item() == pytest.approx(20.0)
 
 
-def test_summary() -> None:
-    """Untilted curricula report nothing; a prioritised one reports the ratio quantiles, clamp shares and ESS."""
-    for plain in (Natural(), Annealed(0.9), robust([0, 1, 0, 1])):
-        assert plain.summary(TRAIN, 0, 10, plain.weights(TRAIN, 0, 10)) == {}
+def test_natural_summary() -> None:
+    assert Natural().summary(TRAIN, 0, 10, Natural().weights(TRAIN, 0, 10)) == {}
+
+
+def test_annealed_summary() -> None:
+    made = Annealed(0.9, Natural())
+    assert made.summary(TRAIN, 0, 10, made.weights(TRAIN, 0, 10)) == {}
+
+
+def test_robust_summary() -> None:
+    made = robust([0, 1, 0, 1])
+    assert made.summary(TRAIN, 0, 10, made.weights(TRAIN, 0, 10)) == {}
+
+
+def test_prioritised_summary() -> None:
+    """A prioritised one reports the ratio quantiles, clamp shares and ESS."""
     made = prioritised(power=1.0, visibility=0.0)
     flat = made.summary(TRAIN, 0, 10, made.weights(TRAIN, 0, 10))
     assert flat["ratio_p50"] == pytest.approx(1.0)
@@ -194,3 +215,54 @@ def test_summary() -> None:
     assert out["at_floor"] == pytest.approx(0.25)
     assert out["at_ceiling"] == 0.0
     assert out["ratio_p95"] == pytest.approx(1.0)
+
+
+def test_stratified_of() -> None:
+    made = Stratified.of(0.5, TRAIN_STRATA)
+    assert made.alpha == 0.5
+    assert made.strata.tolist() == Strata.sourced(TRAIN_STRATA).tolist()
+
+
+def test_stratified_weights() -> None:
+    """At alpha 1 each stratum's spans sum to the same total whatever its size; at 0 every span draws alike."""
+    made = Stratified.of(1.0, TRAIN_STRATA)
+    assert made.strata.tolist() == Strata.sourced(TRAIN_STRATA).tolist()
+    weights = made.weights(TRAIN_STRATA, 0, 10)
+    totals = torch.zeros(int(made.strata.max()) + 1).index_add_(0, made.strata, weights)
+    assert totals.tolist() == pytest.approx([1.0] * len(totals))
+    assert Stratified.of(0.0, TRAIN_STRATA).weights(TRAIN_STRATA, 0, 10).tolist() == [1.0] * 3
+
+
+def test_stratified_summary() -> None:
+    made = Stratified.of(1.0, TRAIN_STRATA)
+    made.observe(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
+    assert made.summary(TRAIN_STRATA, 0, 10, made.weights(TRAIN_STRATA, 0, 10)) == {}
+
+
+def test_base_of() -> None:
+    assert Base.UNIFORM.of(TRAIN, 1.0) == Uniform()
+    assert Base.NATURAL.of(TRAIN, 1.0) == Natural()
+    stratified = Base.STRATIFIED.of(TRAIN_STRATA, 0.5)
+    assert isinstance(stratified, Stratified)
+    assert stratified.alpha == 0.5
+    assert stratified.strata.tolist() == Strata.sourced(TRAIN_STRATA).tolist()
+
+
+def test_uniform_summary() -> None:
+    Uniform().observe(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
+    assert Uniform().summary(TRAIN, 0, 10, Uniform().weights(TRAIN, 0, 10)) == {}
+
+
+def test_robust_and_prioritised_both_observe() -> None:
+    """Prioritised over Robust: one `observe` reaches both, so each tilt draws by the loss it saw."""
+    inner = robust([0, 1, 0, 1])
+    outer = Prioritised.of(inner, TRAIN, 1.0, 1.0)
+    assert isinstance(outer, Prioritised)
+    outer.observe(torch.tensor([0, 1]), torch.zeros(2, 1, 50), torch.zeros(2, 1, dtype=torch.int64))
+    assert outer.seen.tolist() == [1.0, 1.0, 0.0, 0.0]
+    assert inner.counts.tolist() == [1.0, 1.0]
+    assert outer.weights(TRAIN, 1, 10).shape == (4,)
+    assert outer.summary(TRAIN, 1, 10, outer.weights(TRAIN, 1, 10))["ess"] > 0
+
+
+TRAIN_STRATA = replace(SPANNED, source=torch.tensor([0, 0, 0, 1, 1, 1]))
