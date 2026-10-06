@@ -7,7 +7,8 @@ from jaxtyping import Bool, Float
 from torch import Tensor, nn
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
-from megspeech.model.context.droppath import DropPath, DropPathLayer
+from megspeech.model.context.droplayer import DropPathLayer
+from megspeech.model.context.droppath import DropPath
 from megspeech.model.context.mixing import Mixing
 from megspeech.model.words.layers.conformer import EXPANSION
 

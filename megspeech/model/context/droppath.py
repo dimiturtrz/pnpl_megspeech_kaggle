@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from typing import override
 
 import torch
+from jaxtyping import Float
 from torch import Tensor, nn
 
 
@@ -16,13 +17,13 @@ class DropPath(nn.Module):
         self.rate = rate
 
     @override
-    def forward(self, branch: Tensor) -> Tensor:
+    def forward(self, branch: Float[Tensor, "b *rest"]) -> Float[Tensor, "b *rest"]:
         if not self.training or not self.rate:
             return branch
         keep = torch.rand((len(branch),) + (1,) * (branch.dim() - 1), device=branch.device) >= self.rate
         return branch * keep.to(branch.dtype) / (1.0 - self.rate)
 
-    def residual(self, base: Tensor, out: Tensor) -> Tensor:
+    def residual(self, base: Float[Tensor, "b *rest"], out: Float[Tensor, "b *rest"]) -> Float[Tensor, "b *rest"]:
         """`out`, a layer's output over `base`, with only its change over `base` droppable."""
         return base + self(out - base) if self.training and self.rate else out
 
@@ -32,25 +33,3 @@ class DropPath(nn.Module):
         ordered = [path for path in paths if isinstance(path, DropPath)]
         for depth, path in enumerate(ordered, start=1):
             path.rate = peak * depth / len(ordered)
-
-
-class DropPathLayer(nn.TransformerEncoderLayer):
-    """A pre-norm transformer layer whose attention and feed-forward branches each pass through `path` in training;
-    with rate 0 or in evaluation exactly `nn.TransformerEncoderLayer`."""
-
-    def __init__(self, width: int, heads: int, feedforward: int, dropout: float) -> None:
-        super().__init__(width, heads, feedforward, dropout, batch_first=True, norm_first=True)
-        self.path = DropPath()
-
-    @override
-    def forward(
-        self,
-        src: Tensor,
-        src_mask: Tensor | None = None,
-        src_key_padding_mask: Tensor | None = None,
-        is_causal: bool = False,
-    ) -> Tensor:
-        if not self.training or not self.path.rate:
-            return super().forward(src, src_mask, src_key_padding_mask, is_causal)
-        x = src + self.path(self._sa_block(self.norm1(src), src_mask, src_key_padding_mask, is_causal))
-        return x + self.path(self._ff_block(self.norm2(x)))

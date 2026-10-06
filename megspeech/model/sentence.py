@@ -10,7 +10,8 @@ from torch import Tensor, nn
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
-from megspeech.model.context.droppath import DropPath, DropPathLayer
+from megspeech.model.context.droplayer import DropPathLayer
+from megspeech.model.context.droppath import DropPath
 from megspeech.model.context.masking import WordMask
 from megspeech.model.context.span import SpanConformer
 from megspeech.model.context.timing import Jitter, TimingHead
