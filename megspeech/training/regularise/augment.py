@@ -23,6 +23,8 @@ class Augment:
     """Samples of one span per window, at a uniform start, zeroed on every sensor."""
     band: int = 0
     """Frequency bins of one band per window, at a uniform lowest bin, zeroed on every sensor."""
+    chance: float = 1.0
+    """Probability each window gets its time mask and its band mask, drawn independently per window and per mask."""
     noise: float = 0.0
     """Gaussian noise added to each sensor, as a share of that sensor's spread over the window."""
     mix: float = 0.0
@@ -36,6 +38,10 @@ class Augment:
     spatial: float = 0.0
     """Radius of the sensor patch each window loses (`Regional`), as a share of the array's widest extent."""
 
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.chance <= 1.0:
+            raise ValueError(f"chance must lie in [0, 1], got {self.chance}")
+
     def __call__(self, x: Float[Tensor, "n c t"]) -> Float[Tensor, "n c t"]:
         """The perturbed windows in float32: the half-precision cache's largest values sit near its overflow."""
         x = x.float()
@@ -43,9 +49,9 @@ class Augment:
         keep = torch.rand(shape, device=x.device) >= self.dropout
         scale = torch.exp(self.gain * torch.randn(shape, device=x.device))
         x = x * (keep * scale)
-        x = self.masked(x, self.mask, x.shape[-1])
+        x = self.masked(x, self.mask, x.shape[-1], self.chance)
         if self.band:
-            spectrum = self.masked(torch.fft.rfft(x, dim=-1), self.band, x.shape[-1] // 2 + 1)
+            spectrum = self.masked(torch.fft.rfft(x, dim=-1), self.band, x.shape[-1] // 2 + 1, self.chance)
             x = torch.fft.irfft(spectrum, n=x.shape[-1], dim=-1)
         if self.noise:
             spread = x.std(dim=-1, keepdim=True)
@@ -64,11 +70,13 @@ class Augment:
         return x + share * background * (x != 0)
 
     @staticmethod
-    def masked(x: Float[Tensor, "n c f"], width: int, length: int) -> Float[Tensor, "n c f"]:
-        """`x` with `width` consecutive positions along its last axis zeroed, at a start drawn per window."""
+    def masked(x: Float[Tensor, "n c f"], width: int, length: int, chance: float = 1.0) -> Float[Tensor, "n c f"]:
+        """`x` with `width` consecutive positions along its last axis zeroed, at a start drawn per window, in each
+        window with probability `chance`."""
         if not width:
             return x
         start = torch.randint(0, max(length - width, 0) + 1, (x.shape[0], 1), device=x.device)
         position = torch.arange(x.shape[-1], device=x.device)
         hidden = (position >= start) & (position < start + width)
+        hidden = hidden & (torch.rand(x.shape[0], 1, device=x.device) < chance)
         return x.masked_fill(hidden[:, None, :], 0)

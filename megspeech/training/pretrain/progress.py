@@ -118,11 +118,13 @@ class Progress:
         similarity: Float[Tensor, "m n"], labels: Int[Tensor, " n"], k: int, temperature: float
     ) -> Float[Tensor, "m v"]:
         """Each row's scores over the vocabulary: its `k` most similar columns each voting their label with weight
-        `exp(similarity / temperature)`."""
+        `exp(similarity / temperature)`, each label's votes divided by its count among the columns. Raw votes follow
+        the prior, so the same frequent words win every row's top 10 and the balanced ruler reads chance."""
         nearest = similarity.topk(min(k, similarity.shape[1]), dim=1)
         weight = (nearest.values / temperature).exp()
         votes = torch.zeros(len(similarity), VOCAB_SIZE, device=similarity.device)
-        return votes.scatter_add_(1, labels[nearest.indices], weight)
+        counts = torch.bincount(labels, minlength=VOCAB_SIZE).clamp(min=1)
+        return votes.scatter_add_(1, labels[nearest.indices], weight) / counts
 
     @torch.no_grad()
     def score(self, net: SentenceNet) -> float:

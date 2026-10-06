@@ -157,9 +157,11 @@ def test_vote() -> None:
     assert votes.shape == (2, VOCAB_SIZE)
     assert votes[0].argmax() == 1
     assert votes[0, 2] == 0
-    assert torch.isclose(votes[0, 1], torch.tensor([0.9 / 0.5, 0.8 / 0.5]).exp().sum())
+    assert torch.isclose(votes[0, 1], torch.tensor([0.9 / 0.5, 0.8 / 0.5]).exp().sum() / 2)
     assert votes[1].argmax() == 2
     assert Progress.vote(similarity, labels, 99, 0.5).shape == (2, VOCAB_SIZE)
+    frequent = torch.tensor([[0.5, 0.5, 0.5, 0.6]])
+    assert Progress.vote(frequent, torch.tensor([1, 1, 1, 2]), 4, 1.0)[0].argmax() == 2
 
 
 def test_score() -> None:

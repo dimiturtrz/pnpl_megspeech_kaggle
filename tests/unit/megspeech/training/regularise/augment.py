@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from megspeech.training.regularise.augment import Augment
@@ -52,10 +53,28 @@ def test_call_half_precision_near_overflow_stays_finite() -> None:
     assert torch.isfinite(perturbed).all()
 
 
+def test_call_chance_gates_time_and_band_masks_per_window() -> None:
+    torch.manual_seed(0)
+    x = torch.ones(64, 4, 10)
+    assert torch.all((Augment(mask=3, chance=1.0)(x) == 0).sum(dim=-1) == 3)
+    assert torch.equal(Augment(mask=3, band=2, chance=0.0)(x), x)
+    hit = (Augment(mask=3, chance=0.5)(x) == 0).any(dim=(1, 2))
+    assert 0 < hit.sum() < 64
+    spectrum = torch.fft.rfft(Augment(band=2, chance=0.5)(torch.randn(64, 4, 10)), dim=-1).abs() < 1e-5
+    assert 0 < spectrum.any(dim=(1, 2)).sum() < 64
+
+
+def test_post_init_rejects_chance_outside_unit_interval() -> None:
+    for bad in (-0.1, 1.1):
+        with pytest.raises(ValueError, match="chance"):
+            Augment(chance=bad)
+
+
 def test_masked() -> None:
     x = torch.ones(2, 1, 4)
     assert torch.equal(Augment.masked(x, 0, 4), x)
     assert torch.all(Augment.masked(x, 4, 4) == 0)
+    assert torch.equal(Augment.masked(x, 4, 4, 0.0), x)
 
 
 def test_mixed() -> None:
