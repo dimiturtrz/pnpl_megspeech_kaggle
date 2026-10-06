@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from megspeech.data.labels.vocabulary import IGNORE
-from megspeech.data.spans.spans import KAGGLE_WORDS, MAX_WORDS, PAD, Grouping, Sentences, Spans
+from megspeech.data.spans.spans import KAGGLE_WORDS, MAX_WORDS, PAD, Grouping, Pieces, Sentences, Spans
 
 
 def test_by_gap() -> None:
@@ -35,6 +35,26 @@ def test_by_sentence_aims_at_words() -> None:
     onset = np.arange(len(group)) * 0.5
     assert Spans.by_sentence(group, onset, KAGGLE_WORDS).lengths.tolist() == [5, 4, 7, 6, 6, 5]
     assert Spans.by_sentence(group, onset, MAX_WORDS).lengths.tolist() == [9, 7, 9, 8]
+
+
+def test_by_pieces() -> None:
+    sizes = [3, MAX_WORDS, 40] * 30
+    group = np.repeat(np.arange(len(sizes)), sizes)
+    onset = np.arange(len(group)) * 0.5
+    spans = Spans.by_pieces(group, onset, np.random.default_rng(0))
+    assert spans.index[spans.index != PAD].tolist() == list(range(len(group)))
+    assert spans.lengths.min() >= 1
+    assert spans.lengths.max() <= MAX_WORDS
+    assert (np.diff(spans.index[:, 0]) > 0).all()
+    covered = np.where(spans.index == PAD, spans.index[:, :1], spans.index)
+    assert (group[covered].max(axis=1) == group[covered].min(axis=1)).all()
+    assert np.allclose(spans.onset[:, 0], 0.0)
+    again = Spans.by_pieces(group, onset, np.random.default_rng(0))
+    assert (again.index == spans.index).all()
+    assert 4.0 < spans.lengths.mean() < 6.0
+    short = Spans.by_pieces(np.zeros(3, np.int64), np.arange(3.0), np.random.default_rng(0))
+    assert short.lengths.sum() == 3
+    assert Spans.by_pieces(np.array([], np.int64), np.array([]), np.random.default_rng(0)).index.shape == (0, MAX_WORDS)
 
 
 def test_by_key() -> None:
@@ -81,6 +101,15 @@ def test_sentences() -> None:
     """A sentence cut keys sentences by run too: the same sentence number in two runs is two spans."""
     assert Sentences()(WORDS).lengths.tolist() == [2, 1, 1]
     assert Sentences(KAGGLE_WORDS).words == KAGGLE_WORDS
+
+
+def test_pieces() -> None:
+    long = pd.DataFrame({"run": ["a"] * 40, "sentence": [0] * 40, "onset": np.arange(40) * 0.3})
+    spans = Pieces()(long)
+    assert spans.lengths.sum() == 40
+    assert spans.lengths.max() <= MAX_WORDS
+    assert (Grouping.SPEC.spans(long).index == spans.index).all()
+    assert Grouping.SPEC.rule.unlabelled
 
 
 def test_bound() -> None:

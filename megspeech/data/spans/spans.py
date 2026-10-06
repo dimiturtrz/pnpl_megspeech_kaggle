@@ -27,6 +27,9 @@ KAGGLE_WORDS = 5.56
 """Mean words per Deep Kaggle test sentence epoch (`word_onsets_s` mask, subject 0): pieces this long match its
 spans, where whole PNPL sentences run 6.8-7.4 words in validation."""
 
+SEED = 0
+"""Seed of the piece lengths `Spans.by_pieces` draws: one table always cuts the same way."""
+
 PAD = -1
 
 
@@ -80,6 +83,25 @@ class Spans:
         return cls.assemble(np.r_[0, np.cumsum(cuts)][sentence] + piece, position - start, onset)
 
     @classmethod
+    def by_pieces(
+        cls, group: Int[np.ndarray, " n"], onset: Float[np.ndarray, " n"], generator: np.random.Generator
+    ) -> "Spans":
+        """One span per piece of a run of equal consecutive `group` codes, piece lengths i.i.d. uniform on
+        `1..MAX_WORDS`; the last piece of a run takes what remains."""
+        new = np.r_[True, group[1:] != group[:-1]][: len(group)]
+        sentence = np.cumsum(new) - 1
+        first = np.flatnonzero(new)[sentence]
+        end = first + np.diff(np.r_[np.flatnonzero(new), len(group)])[sentence]
+        draw = generator.integers(1, MAX_WORDS + 1, len(group))
+        total = np.cumsum(draw)
+        base = (total - draw)[first]
+        stops = np.minimum(first + total - base, end)
+        word = np.arange(len(group))
+        piece = np.unique(np.searchsorted(stops, word, side="right"), return_inverse=True)[1]
+        start = np.flatnonzero(np.r_[True, piece[1:] != piece[:-1]][: len(group)])
+        return cls.assemble(piece, word - start[piece], onset)
+
+    @classmethod
     def by_key(cls, keys: pd.DataFrame, onset: Float[np.ndarray, " n"]) -> "Spans":
         """One span per distinct key row (e.g. a Kaggle test sentence), in the order the words appear."""
         grouped = keys.groupby(list(keys.columns), sort=False)
@@ -102,15 +124,17 @@ class Rule:
 
 class Grouping(StrEnum):
     """`GAP`: vocabulary words only, spans by onset gap. `SENTENCE`: every word, spans by PNPL sentence. `KAGGLE`:
-    every word, each PNPL sentence cut into pieces of the Kaggle test's length (`KAGGLE_WORDS`).
+    every word, each PNPL sentence cut into pieces of the Kaggle test's length (`KAGGLE_WORDS`). `SPEC`:
+    every word, each PNPL sentence cut into pieces of random length uniform on 1 to `MAX_WORDS`, seeded by `SEED`.
 
-    Under `SENTENCE` and `KAGGLE` an out-of-vocabulary word still carries its MEG into its span's context,
+    Under `SENTENCE`, `KAGGLE` and `SPEC` an out-of-vocabulary word still carries its MEG into its span's context,
     labelled `IGNORE` so no loss or score counts it.
     """
 
     GAP = "gap"
     SENTENCE = "sentence"
     KAGGLE = "kaggle"
+    SPEC = "spec"
 
     @property
     def rule(self) -> Rule:
@@ -141,8 +165,17 @@ class Sentences:
         return Spans.by_sentence(group, table["onset"].to_numpy(), self.words)
 
 
+class Pieces:
+    """The random cut: pieces of uniform length on `1..MAX_WORDS`, drawn from a generator seeded by `SEED`."""
+
+    def __call__(self, table: pd.DataFrame) -> Spans:
+        group = table.groupby(["run", "sentence"], sort=False).ngroup().to_numpy()
+        return Spans.by_pieces(group, table["onset"].to_numpy(), np.random.default_rng(SEED))
+
+
 RULES = {
     Grouping.GAP: Rule("samples", lambda words: Spans.by_gap(words["onset"].to_numpy()), unlabelled=False),
     Grouping.SENTENCE: Rule("stop", Sentences(), unlabelled=True),
     Grouping.KAGGLE: Rule("stop", Sentences(KAGGLE_WORDS), unlabelled=True),
+    Grouping.SPEC: Rule("stop", Pieces(), unlabelled=True),
 }
