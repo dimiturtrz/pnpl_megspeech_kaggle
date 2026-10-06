@@ -10,6 +10,7 @@ from megspeech.evaluation.scoring.score import Epoch, Score
 from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.context.timing import Clock
 from megspeech.model.words.conv import ConvConfig
+from megspeech.submission.config import ReportConfig
 from megspeech.training.config import METRICS, OptimConfig, RunConfig, StopConfig
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.sampling.curriculum import Base
@@ -101,3 +102,10 @@ def test_saved_without_stop(tmp_path: Path) -> None:
     assert RunConfig.saved(tmp_path).stop == StopConfig()
     (tmp_path / METRICS).write_text(json.dumps({"config": {"stop": {"patience": 5}}}))
     assert RunConfig.saved(tmp_path).stop.patience == 5
+
+
+def test_report_defaults_off(tmp_path: Path) -> None:
+    """A record from before the report section loads with it off."""
+    (tmp_path / METRICS).write_text(json.dumps({"config": {"optim": {"epochs": 3}}}))
+    assert RunConfig.saved(tmp_path).report == ReportConfig()
+    assert RunConfig().report == ReportConfig(local=False, tracks=(), aligned=False)

@@ -5,6 +5,7 @@ from dataclasses import dataclass, fields
 import torch
 
 from core.paths import DataRoot
+from megspeech.data.cache.alignment import Geometry
 from megspeech.data.config import DataConfig
 from megspeech.data.raw.runs import Partition
 from megspeech.data.spans.spans import Grouping
@@ -44,9 +45,16 @@ class Scoring:
 
 class Loader:
     @staticmethod
-    def of(root: DataRoot, names: list[str], scoring: Scoring, device: torch.device) -> LoadedModel:
+    def of(
+        root: DataRoot,
+        names: list[str],
+        scoring: Scoring,
+        device: torch.device,
+        geometry: Geometry | None = None,
+    ) -> LoadedModel:
         """The trained runs behind `names` averaged as one model, scored as their training scored them: the prior of
-        the draws they trained on, and the selection that counted their domains."""
+        the draws they trained on, and the selection that counted their domains. A `geometry` already built in this
+        process stands in for the one `scoring` would build, unless it asks for `aligned`."""
         directories = [member for name in names for member in Ensemble.trained(root.models(), name)]
         model = Ensemble.load([directory / "model.pt" for directory in directories], scoring.fallback.unseen)
         model = model.to(device)
@@ -54,7 +62,8 @@ class Loader:
             layer.shrink(scoring.fallback.keep, scoring.fallback.unseen)
         data = DataConfig.shared(directories, scoring.grouping)
         model = LowPass(model, data.rate, scoring.lowpass) if scoring.lowpass else model
-        geometry = data.geometry(root, device, aligned=scoring.aligned)
+        if geometry is None or scoring.aligned:
+            geometry = data.geometry(root, device, aligned=scoring.aligned)
         reader = Reader(root, data, device, scoring.reading, geometry, scoring.partition)
         sequences, prior = reader.heard()
         evaluator = Evaluator(

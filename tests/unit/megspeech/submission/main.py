@@ -13,7 +13,9 @@ from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Scoring
 from megspeech.model.input.subjects import Reading, Unseen
 from megspeech.submission import __main__ as module
-from megspeech.submission.__main__ import HITS, SUBMISSIONS, main
+from megspeech.submission import report
+from megspeech.submission.__main__ import main
+from megspeech.submission.report import HITS, SUBMISSIONS
 from tests.unit.megspeech.evaluation.loaded import loaded, runs
 
 
@@ -31,7 +33,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.Lo
     monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: every))
     monkeypatch.setattr(module.Loader, "of", staticmethod(of))
     monkeypatch.setattr(
-        module.KaggleWriter, "write", lambda self, _, tau, path: written.append((self.track, tau, path)) or path
+        report.KaggleWriter, "write", lambda self, _, tau, path: written.append((self.track, tau, path)) or path
     )
     for track in Track:
         monkeypatch.setattr(

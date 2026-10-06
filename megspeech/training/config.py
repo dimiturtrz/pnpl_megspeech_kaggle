@@ -11,6 +11,7 @@ from megspeech.data.config import METRICS, DataConfig, Refit, Val
 from megspeech.evaluation.scoring.score import Epoch, SelectionConfig
 from megspeech.model.auxiliary import Tap
 from megspeech.model.config import CONTEXT, ContextConfig
+from megspeech.submission.config import ReportConfig
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.sampling.sampler import SamplerConfig
 
@@ -149,6 +150,7 @@ class RunConfig:
     sampler: SamplerConfig = SamplerConfig()
     selection: SelectionConfig = SelectionConfig()
     stop: StopConfig = StopConfig()
+    report: ReportConfig = ReportConfig()
 
     def __post_init__(self) -> None:
         if self.stop.patience < 0:

@@ -15,6 +15,7 @@ from core.tree import Tree
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.corpus import Corpus
 from megspeech.evaluation.loaded import LoadedModel
+from megspeech.submission.report import Report
 from megspeech.submission.writer import KaggleWriter
 from megspeech.training.config import METRICS, RunConfig
 from megspeech.training.loop.trainer import Trainer
@@ -72,6 +73,7 @@ def main() -> None:
         log_prior=log_prior,
     )
     KaggleWriter(Track.DEEP).write(loaded, best.tau, out / "submission.csv")
+    Report(config.report, root, args.name, evaluator.device, corpus.geometry).run()
 
 
 if __name__ == "__main__":

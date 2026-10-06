@@ -6,7 +6,8 @@ import pytest
 import torch
 
 from core.paths import DataRoot
-from megspeech.data.config import METRICS
+from megspeech.data.cache.alignment import AS_RECORDED, Geometry
+from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.evaluation import loading as module
 from megspeech.evaluation import reader as reader_module
@@ -45,3 +46,14 @@ def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert (built.names, built.reading) == (("a", "b"), Reading.UNSEEN)
     with pytest.raises(ValueError, match="an ensemble needs one"):
         Loader.of(DataRoot(tmp_path), ["b", "c"], scoring, CPU)
+
+
+def test_of_geometry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A geometry already built is the one read, unless the scoring asks for its own alignment."""
+    members(tmp_path, monkeypatch, {"a": 5})
+    built = Geometry(None, None)
+    asked: list[bool] = []
+    monkeypatch.setattr(DataConfig, "geometry", lambda _s, _r, _d, *, aligned: asked.append(aligned) or AS_RECORDED)
+    assert Loader.of(DataRoot(tmp_path), ["a"], Scoring(), CPU, built).geometry is built and not asked
+    assert Loader.of(DataRoot(tmp_path), ["a"], Scoring(aligned=True), CPU, built).geometry is AS_RECORDED
+    assert asked == [True]
