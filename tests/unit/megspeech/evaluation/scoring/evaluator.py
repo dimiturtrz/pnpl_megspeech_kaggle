@@ -135,6 +135,13 @@ def test_graded() -> None:
     assert torch.equal(hits, labels.eq(0))
 
 
+def test_point() -> None:
+    domains = {"a": split()}
+    study = Evaluator(CPU, min_novel=1)
+    graded = study.graded(Constant(), domains, torch.zeros(VOCAB_SIZE), 0.5)
+    assert study.point(Constant(), domains, torch.zeros(VOCAB_SIZE), 0.5) == study.ruler.point(graded)
+
+
 def test_grade() -> None:
     evaluator, domains = Evaluator(CPU, min_novel=1), {"a": split()}
     context = {"a": evaluator.logits(Constant(), domains["a"])[Head.CONTEXT]}

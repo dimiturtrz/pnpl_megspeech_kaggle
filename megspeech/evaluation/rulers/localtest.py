@@ -8,14 +8,18 @@ balanced accuracy and unseen-span word count, the macro and its bootstrap interv
 
 import logging
 from dataclasses import dataclass, replace
+from pathlib import Path
 
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.metric.ruler import Graded, Ruler
+from megspeech.evaluation.scoring.probabilities import Probabilities
 
 LOG = logging.getLogger(__name__)
 
 SCORED = {Partition.VALIDATION: "val", Partition.TEST: "local test"}
+SECTIONS = {Partition.VALIDATION: "official-val", Partition.TEST: "local-test"}
+"""The sections of `probs.pt` each partition's predictions are saved under."""
 
 
 @dataclass(frozen=True)
@@ -42,7 +46,18 @@ class LocalTest:
         words = sum(len(labels) for _, labels in graded.domains.values())
         return f"macro {self.ruler.point(graded):.4f} [{interval.low:.4f}, {interval.high:.4f}] n={words} {domains}"
 
-    def report(self, label: str) -> None:
+    def record(self, partition: Partition, tau: float, path: Path) -> Path:
+        """Every labelled word of `partition`'s domains with its probabilities at `tau`, saved into `path`."""
+        loaded = replace(self.loaded, partition=partition)
+        domains, _ = loaded.domains(loaded.ruled(self.runs))
+        probabilities = Probabilities.of(loaded.evaluator, loaded.model, domains, loaded.log_prior, tau)
+        return probabilities.save(path, SECTIONS[partition])
+
+    def report(self, label: str, probabilities: Path | None = None) -> None:
+        """Log both partitions' scores at val's tau, and save their per-word probabilities when `probabilities`
+        names a file."""
         tau = self.tau()
         for partition in (Partition.VALIDATION, Partition.TEST):
             LOG.info("%s %s tau %s: %s", label, SCORED[partition], tau, self.summary(self.graded(partition, tau)))
+            if probabilities is not None:
+                self.record(partition, tau, probabilities)

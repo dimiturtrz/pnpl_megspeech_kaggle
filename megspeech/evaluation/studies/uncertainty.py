@@ -13,6 +13,7 @@ seed shares is invisible to it, and the aleatoric share is an upper bound.
 import argparse
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -27,6 +28,8 @@ from megspeech.data.raw.runs import Partition, Run
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.metric.ruler import Ruler
+from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.evaluation.scoring.score import Head
 from megspeech.model.ensemble import Ensemble
 
@@ -60,31 +63,22 @@ class Decomposition:
 
 
 @dataclass(frozen=True)
-class Members:
-    """A loaded ensemble read member by member on the scored words of one split."""
+class Reading:
+    """Members' log-probabilities over scored words, read as hits at `TAU` and as entropies."""
 
-    loaded: LoadedModel
-
-    @property
-    def networks(self) -> list[nn.Module]:
-        return list(cast("Ensemble", self.loaded.model).members)
-
-    def logits(self, split: Split) -> Float[Tensor, "m n v"]:
-        """Every member's context-head log-probabilities for every word of `split`."""
-        evaluator = self.loaded.evaluator
-        return torch.stack([evaluator.logits(net, split)[Head.CONTEXT] for net in self.networks])
+    evaluator: Evaluator
+    log_prior: Float[Tensor, " v"]
 
     def hits(self, logits: Float[Tensor, "m n v"], labels: Int[Tensor, " n"]) -> Bool[Tensor, "e n"]:
         """Top-k hits at `TAU` of each member, then of the ensemble (the mean of its members' log-probabilities)."""
-        evaluator, prior = self.loaded.evaluator, self.loaded.log_prior
         rows = [*logits, logits.mean(dim=0)]
-        return torch.stack([Ruler().hits(evaluator.adjusted(row, prior, TAU), labels) for row in rows])
+        return torch.stack([Ruler().hits(self.evaluator.adjusted(row, self.log_prior, TAU), labels) for row in rows])
 
-    def frame(self, split: Split, domain: str) -> tuple[pd.DataFrame, Bool[Tensor, "e n"]]:
-        """The scored (unseen-span) words of `split`: `domain`, `label`, `hit` of the ensemble and the three entropies;
-        with every member's and then the ensemble's hits."""
-        novel = split.novel(self.loaded.evaluator.seen)
-        logits, labels = self.logits(split)[:, novel], split.y[novel]
+    def frame(
+        self, logits: Float[Tensor, "m n v"], labels: Int[Tensor, " n"], domain: str
+    ) -> tuple[pd.DataFrame, Bool[Tensor, "e n"]]:
+        """The scored words: `domain`, `label`, `hit` of the ensemble and the three entropies; with every member's and
+        then the ensemble's hits."""
         hits = self.hits(logits, labels)
         parts = Decomposition.of(logits)
         frame = pd.DataFrame(
@@ -99,13 +93,75 @@ class Members:
         )
         return frame, hits.cpu()
 
+    @staticmethod
+    def pooled(
+        read: dict[str, tuple[pd.DataFrame, Bool[Tensor, "e n"]]],
+    ) -> tuple[pd.DataFrame, dict[str, Bool[Tensor, "e n"]]]:
+        """The domains' frames concatenated, and each domain's hits."""
+        return pd.concat([f for f, _ in read.values()], ignore_index=True), {name: h for name, (_, h) in read.items()}
+
+
+@dataclass(frozen=True)
+class Members:
+    """A loaded ensemble read member by member on the scored words of one split."""
+
+    loaded: LoadedModel
+
+    @property
+    def networks(self) -> list[nn.Module]:
+        return list(cast("Ensemble", self.loaded.model).members)
+
+    @property
+    def reading(self) -> Reading:
+        return Reading(self.loaded.evaluator, self.loaded.log_prior)
+
+    def logits(self, split: Split) -> Float[Tensor, "m n v"]:
+        """Every member's context-head log-probabilities for every word of `split`."""
+        evaluator = self.loaded.evaluator
+        return torch.stack([evaluator.logits(net, split)[Head.CONTEXT] for net in self.networks])
+
+    def hits(self, logits: Float[Tensor, "m n v"], labels: Int[Tensor, " n"]) -> Bool[Tensor, "e n"]:
+        """Top-k hits at `TAU` of each member, then of the ensemble (the mean of its members' log-probabilities)."""
+        return self.reading.hits(logits, labels)
+
+    def frame(self, split: Split, domain: str) -> tuple[pd.DataFrame, Bool[Tensor, "e n"]]:
+        """The scored (unseen-span) words of `split`: `domain`, `label`, `hit` of the ensemble and the three entropies;
+        with every member's and then the ensemble's hits."""
+        novel = split.novel(self.loaded.evaluator.seen)
+        return self.reading.frame(self.logits(split)[:, novel], split.y[novel], domain)
+
     def partition(self, runs: list[Run]) -> tuple[pd.DataFrame, dict[str, Bool[Tensor, "e n"]]]:
         """Every counted domain of the scored partition of `runs`: the words' frame and each domain's hits."""
         domains, _ = self.loaded.domains(self.loaded.ruled(runs))
         evaluator = self.loaded.evaluator
         counted = {name: s for name, s in domains.items() if len(s.novel(evaluator.seen)) >= evaluator.min_novel}
-        read = {name: self.frame(split, name) for name, split in counted.items()}
-        return pd.concat([f for f, _ in read.values()], ignore_index=True), {name: h for name, (_, h) in read.items()}
+        return Reading.pooled({name: self.frame(split, name) for name, split in counted.items()})
+
+
+@dataclass(frozen=True)
+class Saved:
+    """Member runs' saved predictions (`probs.pt`), read as an ensemble without loading any model."""
+
+    members: list[Probabilities]
+
+    @classmethod
+    def load(cls, directories: list[Path], section: str) -> "Saved":
+        return cls([Probabilities.load(directory / PROBS, section) for directory in directories])
+
+    def partition(self) -> tuple[pd.DataFrame, dict[str, Bool[Tensor, "e n"]]]:
+        """Every counted domain's scored (unseen-span) words, as `Members.partition` reads them live."""
+        first = self.members[0]
+        reading = Reading(Evaluator(torch.device("cpu")), first.log_prior)
+        read = {}
+        for name, words in first.domains.items():
+            if int(words.novel.sum()) < first.min_novel:
+                continue
+            aligned = [member.domains[name] for member in self.members]
+            if any(not torch.equal(other.ids, words.ids) for other in aligned):
+                raise ValueError(f"members' saved words differ in domain {name}")
+            logits = torch.stack([other.logits[words.novel] for other in aligned])
+            read[name] = reading.frame(logits, words.labels[words.novel], name)
+        return Reading.pooled(read)
 
 
 @dataclass(frozen=True)
@@ -152,14 +208,20 @@ class Study:
     @staticmethod
     def main() -> None:
         parser = argparse.ArgumentParser(description=__doc__)
-        parser.add_argument("name", help="an ensemble under models/")
+        parser.add_argument("name", nargs="+", help="an ensemble under models/, or with --section the member runs")
+        parser.add_argument("--section", help="read these runs' saved `probs.pt` section instead of loading a model")
         parser.add_argument("--partitions", nargs="+", default=[Partition.VALIDATION, Partition.TEST])
         args = parser.parse_args()
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
         root, device = DataRoot.from_config(), torch.device("cuda")
+        if args.section:
+            saved = Saved.load([root.models() / name for name in args.name], args.section)
+            for line in Tally(*saved.partition()).lines():
+                LOG.info("%s %s", args.section, line)
+            return
         runs = Run.discover(root.raw())
         for partition in map(Partition, args.partitions):
-            loaded = Loader.of(root, [args.name], Scoring(partition=partition), device)
+            loaded = Loader.of(root, args.name, Scoring(partition=partition), device)
             frame, hits = Members(loaded).partition(runs)
             for line in Tally(frame, hits).lines():
                 LOG.info("%s %s", partition, line)

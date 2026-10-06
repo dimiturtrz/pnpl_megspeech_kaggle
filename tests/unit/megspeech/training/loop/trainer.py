@@ -17,6 +17,7 @@ from megspeech.data.spans.spans import Spans
 from megspeech.evaluation.metric.ruler import Interval
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Epoch, Score
+from megspeech.evaluation.scoring.telemetry import TelemetryConfig
 from megspeech.model.config import ContextConfig
 from megspeech.model.context.timing import TimingHead
 from megspeech.model.sentence import SentenceNet
@@ -224,6 +225,29 @@ def test_fit() -> None:
         trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, lr=math.inf))).fit(
             split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE)
         )
+
+
+def test_fit_telemetry_equivalence() -> None:
+    """Telemetry only reads: on or off, the same seed trains the same weights and scores the same epochs."""
+
+    def steering_free(row: Epoch) -> tuple[int, float, object, object]:
+        return row.epoch, row.loss, row.macro, row.interval
+
+    def run(config: TelemetryConfig) -> tuple[SentenceNet, list[Epoch]]:
+        torch.manual_seed(0)
+        net, history = trainer(RunConfig(optim=OptimConfig(epochs=2, batch=4), telemetry=config)).fit(
+            split(n=24), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE)
+        )
+        return cast("SentenceNet", net), history
+
+    on, seen = run(TelemetryConfig())
+    off, plain = run(TelemetryConfig(fit=False, neural=False, probs=False))
+    assert all(row.fit is not None and row.shuffled is not None for row in seen)
+    assert all(row.fit is None and row.shuffled is None for row in plain)
+    assert [(r.epoch, r.loss, r.macro, r.interval) for r in seen] == [
+        (r.epoch, r.loss, r.macro, r.interval) for r in plain
+    ]
+    assert all(torch.equal(a, b) for a, b in zip(on.state_dict().values(), off.state_dict().values(), strict=True))
 
 
 def scripted(monkeypatch: pytest.MonkeyPatch, bacc10: list[float]) -> None:
