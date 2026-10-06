@@ -12,6 +12,7 @@ from megspeech.model.words.heads import WordHead
 from megspeech.model.words.layers.attention_pool import AttentionPool
 from megspeech.model.words.layers.conformer import TimeConformer
 from megspeech.model.words.layers.dilated import DilatedBlock
+from megspeech.model.words.layers.downsample import Downsample
 from megspeech.model.words.layers.mean_max import MeanMax
 from megspeech.model.words.layers.sensorwise import Grouping, Sensorwise
 from megspeech.model.words.layers.spatial import SpatialAttention
@@ -60,6 +61,11 @@ class ConvConfig:
     """GLU-gate every dilated block in place of its GELU (`DilatedBlock`), d'Ascoli et al.'s trunk activation."""
     head: WordHead = WordHead.LINEAR
     """How the embedding is read out as the 50 words: one linear layer, or one per part of speech (`TaggedHead`)."""
+    stages: tuple[int, ...] = ()
+    """Indices into `dilations` before which the trunk halves time and widens by `growth` (`Downsample`): the
+    AlexNet/ResNet pyramid; empty keeps every block at full rate and width."""
+    growth: float = 1.5
+    """Channel multiplier per stage, each width rounded to a multiple of 8."""
 
     def __post_init__(self) -> None:
         if any(kernel % 2 == 0 for kernel in self.kernels):
@@ -74,13 +80,36 @@ class ConvConfig:
             raise ValueError(f"sensorwise_out={self.sensorwise_out} needs sensorwise")
         if self.lora:
             raise ValueError(f"lora={self.lora}: the end-to-end MEG-XL encoder it adapted is retired")
+        if list(self.stages) != sorted(set(self.stages)) or any(
+            not 1 <= stage < len(self.dilations) for stage in self.stages
+        ):
+            raise ValueError(f"stages {self.stages} must increase strictly within 1..{len(self.dilations) - 1}")
+        if self.growth < 1:
+            raise ValueError(f"growth={self.growth} must be at least 1")
+
+    @property
+    def widths(self) -> tuple[int, ...]:
+        """The trunk's width after 0..len(dilations) blocks: `hidden`, grown once per stage reached."""
+        return (
+            self.hidden,
+            *(self.grown(sum(stage <= i for stage in self.stages)) for i in range(len(self.dilations))),
+        )
+
+    def grown(self, stages: int) -> int:
+        return round(self.hidden * self.growth**stages / WIDTH_MULTIPLE) * WIDTH_MULTIPLE if stages else self.hidden
+
+    @property
+    def out(self) -> int:
+        """The trunk's final width, what the pool and every layer after the convolutions work in."""
+        return self.widths[-1]
 
     @property
     def width(self) -> int:
         """The embedding's width: each attention query's pooled channels, or each segment's mean and max."""
-        return self.hidden * (self.queries or 2 * self.segments)
+        return self.out * (self.queries or 2 * self.segments)
 
 
+WIDTH_MULTIPLE = 8
 CONV = ConvConfig()
 
 
@@ -91,14 +120,18 @@ class ConvWords(WordEncoder):
         if config.merger and channels != CHANNELS:
             raise ValueError(f"a {config.merger}-channel spatial merger lays out {CHANNELS} sensors, not {channels}")
         super().__init__(config.width, instance=config.instance)
-        self.pool = AttentionPool(config.hidden, config.queries) if config.queries else MeanMax(config.segments)
+        self.pool = AttentionPool(config.out, config.queries) if config.queries else MeanMax(config.segments)
         self.spatial = self.front(config, channels)
-        self.blocks = nn.ModuleList(
-            DilatedBlock(config.hidden, d, config.dropout, config.kernels, gated=config.gated) for d in config.dilations
-        )
+        self.blocks = nn.ModuleList()
+        for i, d in enumerate(config.dilations):
+            if i in config.stages:
+                self.blocks.append(Downsample(config.widths[i], config.widths[i + 1]))
+            self.blocks.append(
+                DilatedBlock(config.widths[i + 1], d, config.dropout, config.kernels, gated=config.gated)
+            )
         if config.ssm:
-            self.blocks.append(Ssm(config.hidden, config.ssm, config.dropout))
-        self.blocks.extend(TimeConformer(config.hidden, config.dropout) for _ in range(config.conformer))
+            self.blocks.append(Ssm(config.out, config.ssm, config.dropout))
+        self.blocks.extend(TimeConformer(config.out, config.dropout) for _ in range(config.conformer))
         self.head = self.classifier(config.dropout, config.head)
 
     @staticmethod
@@ -127,7 +160,8 @@ class ConvWords(WordEncoder):
         maps = []
         for block in self.blocks:
             h = block(h, valid)
-            maps.append(h)
+            if not isinstance(block, Downsample):
+                maps.append(h)
         return maps
 
     @override

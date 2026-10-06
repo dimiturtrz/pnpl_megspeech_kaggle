@@ -133,6 +133,48 @@ def test_sensorwise_site() -> None:
         ConvConfig(sensorwise_site=3)
 
 
+def test_stages() -> None:
+    plain = ConvWords(ConvConfig(dilations=(1, 2, 4, 8, 1, 2)))
+    piramid = ConvWords(ConvConfig(dilations=(1, 2, 4, 8, 1, 2), stages=(2, 4)))
+    x = torch.randn(3, CHANNELS, 150, generator=GENERATOR)
+    assert piramid.embed(x).shape == (3, piramid.width)
+    assert piramid.width == 2 * 576
+    assert plain.width == 2 * 256
+    assert len(piramid.taps(x)) == 6
+    assert piramid.taps(x)[-1].shape == (3, 576, 38)
+    assert sum(p.numel() for p in plain.parameters()) == sum(
+        p.numel() for p in ConvWords(ConvConfig(stages=())).parameters()
+    )
+    assert piramid.forward(x).shape == (3, VOCAB_SIZE)
+
+
+def test_widths() -> None:
+    config = ConvConfig(dilations=(1, 2, 4, 8, 1, 2), stages=(2, 4))
+    assert config.widths == (256, 256, 256, 384, 384, 576, 576)
+    assert config.out == 576
+    assert ConvConfig(hidden=8, stages=(1,)).out == 16
+    assert ConvConfig(hidden=8, dilations=()).widths == (8,)
+
+
+def test_grown() -> None:
+    config = ConvConfig()
+    assert [config.grown(k) for k in range(3)] == [256, 384, 576]
+
+
+def test_stages_ssm_and_conformer_use_final_width() -> None:
+    net = ConvWords(ConvConfig(hidden=8, dilations=(1, 2), stages=(1,), ssm=4, conformer=1))
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    assert net.embed(x).shape == (3, 2 * 16)
+
+
+def test_stages_invalid() -> None:
+    for stages in [(0,), (6,), (4, 2), (2, 2)]:
+        with pytest.raises(ValueError, match="stages"):
+            ConvConfig(stages=stages)
+    with pytest.raises(ValueError, match="growth"):
+        ConvConfig(growth=0.5)
+
+
 def test_sensorwise_out() -> None:
     config = ConvConfig(hidden=8, dilations=(1, 2), sensorwise=4, sensorwise_out=2)
     assert cast(Sensorwise, ConvWords.front(config, 6)).fuse.in_channels == 12
