@@ -27,8 +27,9 @@ from megspeech.data.batching.split import Split
 from megspeech.data.config import DataConfig
 from megspeech.data.labels.vocabulary import PRIMARY, Vocabulary
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head
 from megspeech.evaluation.studies.boosted import ARMS, Arm, Boosting, Rows, Spanned

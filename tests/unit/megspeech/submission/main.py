@@ -10,7 +10,7 @@ from core.paths import DataRoot
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
 from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Scoring
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.input.subjects import Reading, Unseen
 from megspeech.submission import __main__ as module
 from megspeech.submission import report

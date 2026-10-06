@@ -24,8 +24,9 @@ from megspeech.data.batching.split import Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import MAX_WORDS, PAD
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Graded, Ruler
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.context.timing import Jitter
 from megspeech.model.input.subjects import Fallback, Unseen
 

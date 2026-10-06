@@ -232,6 +232,12 @@ def test_ruled(tmp_path: Path) -> None:
     assert CARVED.ruled(every, Partition.TEST) != CARVED.ruled(every, Partition.VALIDATION)
 
 
+def test_carried() -> None:
+    table = pd.DataFrame({"word": ["the", "zebra"], "run": "r", "sample": 0, "samples": 1000, "onset": [0.0, 0.1]})
+    assert DataConfig(grouping=Grouping.GAP).carried(table)["word"].tolist() == ["the"]
+    assert DataConfig(grouping=Grouping.SENTENCE).carried(table)["word"].tolist() == ["the", "zebra"]
+
+
 def test_migrated() -> None:
     assert Val.migrated({"window": 2.0}) == {"window": 2.0, "val": Val.OFFICIAL}
     assert Val.migrated({"ruler": "official"}) == {"val": Val.OFFICIAL}

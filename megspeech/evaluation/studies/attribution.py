@@ -32,7 +32,8 @@ from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.masc import Neuromag
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.context.timing import KAGGLE_GAP
 
 LOG = logging.getLogger(__name__)

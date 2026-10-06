@@ -30,8 +30,9 @@ from megspeech.data.batching.split import Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import DataConfig
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.studies.boosted import Booster, Boosting, Design, Rows
 from megspeech.evaluation.studies.peer import EPOCHS, HEADS, SEEDS, Dump, Probe, Study
 from megspeech.evaluation.studies.syntax import Embedded

@@ -121,7 +121,7 @@ def test_cut(monkeypatch: pytest.MonkeyPatch) -> None:
     source = DeviceRecording(torch.zeros(CHANNELS, 4).half(), np.array([0, 2, 4]), ("a", "b"), table)
     seen: dict[str, object] = {}
     monkeypatch.setattr(
-        module.Corpus, "words", staticmethod(lambda words, *_: seen.update(positions=list(words["position"])) or words)
+        module.DataConfig, "carried", lambda _s, words: seen.update(positions=list(words["position"])) or words
     )
     monkeypatch.setattr(
         module.Corpus, "split", staticmethod(lambda _s, words, *_: seen.update(n=len(words)) or split(4))

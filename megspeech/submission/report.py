@@ -17,11 +17,12 @@ from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.rulers.base import TrackRuler
 from megspeech.evaluation.rulers.broad import BroadRuler
 from megspeech.evaluation.rulers.deep import DeepRuler
 from megspeech.evaluation.rulers.localtest import LocalTest
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.probabilities import PROBS
 from megspeech.model.input.subjects import Fallback, Unseen
 from megspeech.submission.config import ReportConfig

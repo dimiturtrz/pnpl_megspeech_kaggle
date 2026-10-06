@@ -28,9 +28,10 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import DEEP, Run
 from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.studies.syntax import Embedded
 from megspeech.model.auxiliary import Tap
 

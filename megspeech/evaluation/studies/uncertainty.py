@@ -26,8 +26,9 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Ruler
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.evaluation.scoring.score import Head

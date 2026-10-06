@@ -353,6 +353,10 @@ class DataConfig:
         """Val's domains' runs, which select epoch and adjustment."""
         return self.scored(runs, Partition.VALIDATION)
 
+    def carried(self, table: pd.DataFrame) -> pd.DataFrame:
+        """The words of `table` the grouping carries, at this config's rate (`Grouping.carried`)."""
+        return self.grouping.carried(table, self.rate)
+
     def ruled(self, runs: Sequence[Run], partition: Partition) -> dict[str, list[Run]]:
         """The domains `partition` is scored over: validation's (`held`) or test's (`tested`)."""
         return {Partition.VALIDATION: self.held, Partition.TEST: self.tested}[partition](runs)

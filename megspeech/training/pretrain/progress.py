@@ -90,7 +90,7 @@ class Progress:
     def cut(source: DeviceRecording, data: DataConfig) -> Split:
         """Every word of `source` that `data.grouping` carries, as a split."""
         table = source.words.assign(position=source.words.groupby("run").cumcount())
-        words = Corpus.words(table, data.grouping, data.rate)
+        words = data.carried(table)
         return Corpus.split(source, words, data, np.ones(len(words)))
 
     @staticmethod

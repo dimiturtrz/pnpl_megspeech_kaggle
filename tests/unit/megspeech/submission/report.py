@@ -10,8 +10,8 @@ from core.paths import DataRoot
 from megspeech.data.cache.alignment import AS_RECORDED
 from megspeech.data.cache.kaggle import Track
 from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Scoring
 from megspeech.evaluation.rulers.localtest import SECTIONS
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.submission import __main__ as cli
 from megspeech.submission import report as module

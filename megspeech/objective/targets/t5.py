@@ -20,7 +20,6 @@ from transformers import AutoTokenizer, T5EncoderModel
 
 from core.paths import DataRoot
 from megspeech.data.cache.run_cache import RunCache
-from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import PRIMARY
 from megspeech.data.spans.grouping import Grouping
 
@@ -90,14 +89,14 @@ class Prototypes:
 @dataclass(frozen=True)
 class Lexicon:
     """The t5 embedding of every distinct word heard, in or out of the 50, keyed by the `token` a split carries
-    (`Corpus.words`): the targets that let every window, not only the 50 words', train the encoder."""
+    (`Grouping.carried`): the targets that let every window, not only the 50 words', train the encoder."""
 
     keys: Int[Tensor, " k"]
     vectors: Float[Tensor, "k d"]
 
     @classmethod
     def encode(cls, words: pd.DataFrame, tokenizer: Tokenizer, encoder: Encoder, layer: int) -> "Lexicon":
-        """The distinct `token`s of `words` (`Corpus.words` rows), each lower-cased word as `Prototypes.encode`."""
+        """The distinct `token`s of `words` (`Grouping.carried` rows), each lower-cased word as `Prototypes.encode`."""
         distinct = words.drop_duplicates("token").sort_values("token")
         text = tuple(distinct["word"].astype(str).str.lower())
         vectors = Prototypes.encode(text, tokenizer, encoder, layer).vectors
@@ -130,7 +129,7 @@ class Lexicon:
         """Every word of every cached run's table, as the sentence path reads them."""
         cache = RunCache.under(root.processed())
         names = sorted(path.stem for path in cache.cache.glob("*.npy"))
-        lexicon = cls.encode(Corpus.words(cache.table(names), Grouping.SENTENCE), tokenizer, encoder, LAYER)
+        lexicon = cls.encode(Grouping.SENTENCE.carried(cache.table(names)), tokenizer, encoder, LAYER)
         LOG.info("%d distinct words from %d runs", len(lexicon.keys), len(names))
         return lexicon.save(cls.path(root))
 

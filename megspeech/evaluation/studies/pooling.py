@@ -25,8 +25,9 @@ from core.tree import Tree
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import TOP
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.score import Score
 from megspeech.evaluation.text import RULER, Text
 

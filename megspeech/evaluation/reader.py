@@ -5,8 +5,6 @@ from dataclasses import dataclass, replace
 import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Float
-from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import Features, Split
@@ -31,11 +29,6 @@ class Reader:
     geometry: Geometry = AS_RECORDED
     partition: Partition = Partition.VALIDATION
 
-    def heard(self) -> tuple[frozenset[tuple[int, ...]], Float[Tensor, " v"]]:
-        """The text the model's training heard, as every span's token sequence, and the label prior of its draws."""
-        heard = Corpus.heard(self.data.run_cache(self.root), Run.everywhere(self.root), self.data)
-        return Corpus.sequences(heard, self.data.grouping), Corpus.prior(heard, self.data).to(self.device)
-
     def load(self, runs: list[Run]) -> tuple[DeviceRecording, pd.DataFrame]:
         """`runs` on the device, and their words keyed by `Text` and cut as the model's grouping cuts them."""
         cache = self.data.run_cache(self.root)
@@ -43,12 +36,12 @@ class Reader:
         source = DeviceRecording.load(
             cache, self.device, names, standardised=self.data.standardised, geometry=self.geometry
         )
-        return source, Corpus.words(Text.of(source.words).words, self.data.grouping, self.data.rate)
+        return source, self.data.carried(Text.of(source.words).words)
 
     def spoken(self, runs: list[Run]) -> tuple[pd.DataFrame, pd.DataFrame]:  # devtools-ignore: test-mirror
         """`runs`' every word keyed by `Text` (no MEG read), and those of them the model's grouping carries."""
         full = Text.of(self.data.run_cache(self.root).table([run.name for run in runs])).words
-        return full, Corpus.words(full, self.data.grouping, self.data.rate)
+        return full, self.data.carried(full)
 
     @property
     def features(self) -> Features:

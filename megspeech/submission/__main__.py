@@ -14,8 +14,9 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.rulers.localtest import LocalTest
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.studies.memorisation import Memorisation
 from megspeech.submission.report import SCORING, Submission
 

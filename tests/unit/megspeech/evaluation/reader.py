@@ -2,13 +2,11 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-import torch
 from pnpl.competition.holdout import N_SUBJECTS
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import FEATURES
 from megspeech.data.config import DataConfig, Val
-from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Partition
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.text import RULER
@@ -69,12 +67,3 @@ def test_ruled(tmp_path: Path) -> None:
     assert carved.ruled(every) == DataConfig(val=Val.CARVED).ruled(every, Partition.VALIDATION)
     official = replace(split, data=DataConfig(val=Val.OFFICIAL), partition=Partition.TEST)
     assert official.ruled(every) == DataConfig(val=Val.OFFICIAL).ruled(every, Partition.TEST)
-
-
-def test_heard(tmp_path: Path) -> None:
-    """No run discovered under the root: training heard no text, and the prior is the smoothed uniform."""
-    runs(tmp_path)
-    sequences, prior = reader(tmp_path).heard()
-    assert sequences == frozenset()
-    assert prior.shape == (VOCAB_SIZE,)
-    assert torch.allclose(prior, prior[0])

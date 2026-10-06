@@ -31,6 +31,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.config import DataConfig
+from megspeech.data.heard import Heard
 from megspeech.data.labels.context_tags import ContextTags
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
@@ -239,7 +240,7 @@ def main() -> None:
     model = Ensemble.load([directory / "model.pt" for directory in directories], Unseen.DEEP).to(device)
     for layer in (module for module in model.modules() if isinstance(module, SubjectLayer)):
         layer.shrink(Fallback(Unseen.DEEP).keep, Unseen.DEEP)
-    sequences, log_prior = reader.heard()
+    sequences, log_prior = Heard.under(root, data, device)
     evaluator = Evaluator(device, sequences, SelectionConfig.shared(directories).min_novel)
     runs = Run.discover(root.raw())
     held = reader.ruled(runs)

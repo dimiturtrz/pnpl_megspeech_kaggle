@@ -36,8 +36,9 @@ from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import TOP, Ruler
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.score import Head
 from megspeech.evaluation.studies.timing import PERMUTATIONS
 

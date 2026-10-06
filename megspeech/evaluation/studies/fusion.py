@@ -24,7 +24,8 @@ from megspeech.data.labels.vocabulary import IGNORE, PRIMARY
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.score import Head
 from megspeech.model.input.subjects import Fallback, Unseen
 

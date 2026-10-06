@@ -6,13 +6,15 @@ import pytest
 import torch
 
 from core.paths import DataRoot
+from megspeech.data import heard as heard_module
 from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.evaluation import loading as module
 from megspeech.evaluation import reader as reader_module
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.balance import Sinkhorn
+from megspeech.evaluation.scoring import config as module
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.input.subjects import Reading
 from tests.unit.megspeech.evaluation.loaded import CPU, Favourite
 
@@ -22,7 +24,7 @@ def members(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selections: dict[st
     heard = pd.DataFrame(
         {"run": "r", "sentence": 0, "onset": [0.0, 0.1], "target": [0, 1], "token": [7, 8], "weight": 1.0}
     )
-    monkeypatch.setattr(reader_module.Corpus, "heard", classmethod(lambda *_: heard))
+    monkeypatch.setattr(heard_module.Heard, "of", classmethod(lambda *_: heard))
     monkeypatch.setattr(reader_module.Run, "discover", classmethod(lambda *_: []))
     monkeypatch.setattr(module.Ensemble, "load", classmethod(lambda *_: Favourite()))
     for name, min_novel in selections.items():
