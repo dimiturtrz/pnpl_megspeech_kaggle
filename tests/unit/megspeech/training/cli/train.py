@@ -13,6 +13,7 @@ from megspeech.data.constants import CHANNELS
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.context_tags import ContextTags
 from megspeech.data.spans.spans import Spans
+from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.training.cli import train as module
 from megspeech.training.cli.train import HEADS, main
 from megspeech.training.config import METRICS
@@ -45,6 +46,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(metrics["history"]) == 1
     assert (out / "model.pt").is_file()
     assert (out / "hits.pt").is_file()
+    assert set(Probabilities.stored(out / PROBS)) >= {"val#meta", "val/a"}
     assert written == [out / "submission.csv"]
     assert not (out / HEADS).exists()
     ContextTags(np.array(["a"] * ROWS), np.arange(ROWS, dtype=float), np.arange(ROWS) % 12).save(
@@ -57,6 +59,9 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert any(
         key.startswith("words.head.tag.") for key in torch.load(DataRoot(tmp_path).models() / "tagged" / "model.pt")
     )
+    monkeypatch.setattr(sys, "argv", [*argv[:2], "quiet", *argv[3:], "--no-telemetry.probs"])
+    main()
+    assert not (DataRoot(tmp_path).models() / "quiet" / PROBS).exists()
     narrow = ["--context.width", "32", "--context.conv.hidden", "32"]
     monkeypatch.setattr(sys, "argv", [*argv[:2], "base", *argv[3:], *narrow])
     main()

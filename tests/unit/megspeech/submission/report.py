@@ -11,6 +11,8 @@ from megspeech.data.cache.alignment import AS_RECORDED
 from megspeech.data.cache.kaggle import Track
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Scoring
+from megspeech.evaluation.rulers.localtest import SECTIONS
+from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.submission import __main__ as cli
 from megspeech.submission import report as module
 from megspeech.submission.config import ReportConfig
@@ -61,6 +63,16 @@ def test_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.Log
     assert (root.models() / f"{RUN}-deep" / SUBMISSIONS[Track.DEEP]).is_file()
     assert (root.models() / f"{RUN}-broad" / SUBMISSIONS[Track.BROAD]).is_file()
     assert "run val tau" in caplog.text and "run local test tau" in caplog.text
+
+
+def test_run_probabilities(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Asked to, the local report leaves both partitions' per-word probabilities next to the model."""
+    stub(tmp_path, monkeypatch, [])
+    root = DataRoot(tmp_path)
+    (root.models() / RUN).mkdir(parents=True)
+    Report(ReportConfig(local=True), root, RUN, CPU, AS_RECORDED, probabilities=True).run()
+    sections = {key.split("/")[0].split("#")[0] for key in Probabilities.stored(root.models() / RUN / PROBS)}
+    assert sections == set(SECTIONS.values())
 
 
 def test_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -124,6 +124,10 @@ class Evaluator:
         context = {name: self.logits(model, split)[Head.CONTEXT] for name, split in counted.items()}
         return self.grade(context, counted, log_prior, tau)
 
+    def point(self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], tau: float) -> float:
+        """The selection macro of `graded` at `tau`."""
+        return self.ruler.point(self.graded(model, domains, log_prior, tau))
+
     def grade(
         self,
         context: dict[str, Float[Tensor, "n v"]],

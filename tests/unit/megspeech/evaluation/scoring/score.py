@@ -1,5 +1,6 @@
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -59,3 +60,14 @@ def test_shared(tmp_path: Path) -> None:
 def test_tau() -> None:
     macro = Score.best({0.0: 0.2, 0.5: 0.4, 1.0: 0.3}, 7)
     assert Epoch(0, 0.0, {}, macro, Interval(0.3, 0.5), 0.1, 0.0).tau == 0.5
+
+
+def test_steering() -> None:
+    macro = Score.best({0.0: 0.2, 0.5: 0.4, 1.0: 0.3}, 7)
+    row = replace(Epoch(0, 0.0, {}, macro, Interval(0.3, 0.5), 0.1, 0.0), fit=0.9, shuffled=0.25)
+    steering = row.steering()
+    assert steering["gap"] == pytest.approx(0.5)
+    assert steering["neural"] == pytest.approx(0.15)
+    bare = replace(row, fit=None, shuffled=None).steering()
+    assert bare["gap"] is None
+    assert bare["neural"] is None

@@ -12,7 +12,7 @@ real model shares, and the overlap two independent hitters would show.
 
 import argparse
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -165,20 +165,8 @@ class Shuffled:
     loaded: LoadedModel
     tau: float
 
-    @staticmethod
-    def permuted(split: Split, seed: int) -> Split:
-        """`split` with every word's window (start, end, first readable sample, next onset) another word's."""
-        order = torch.randperm(len(split.y), generator=torch.Generator().manual_seed(seed)).to(split.y.device)
-        windows = split.windows
-        moved = {
-            name: getattr(windows, name)[order]
-            for name in ("at", "end", "begin", "following")
-            if getattr(windows, name) is not None
-        }
-        return replace(split, windows=replace(windows, **moved))
-
     def graded(self, domains: dict[str, Split], seed: int) -> Graded:
-        shuffled = {name: self.permuted(split, seed) for name, split in domains.items()}
+        shuffled = {name: split.permuted(seed) for name, split in domains.items()}
         loaded = self.loaded
         return loaded.evaluator.graded(loaded.model, shuffled, loaded.log_prior, self.tau)
 

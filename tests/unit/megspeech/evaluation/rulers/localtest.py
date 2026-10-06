@@ -5,7 +5,8 @@ import pytest
 
 from megspeech.data.raw.runs import Partition
 from megspeech.evaluation.rulers import localtest as module
-from megspeech.evaluation.rulers.localtest import LocalTest
+from megspeech.evaluation.rulers.localtest import SECTIONS, LocalTest
+from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from tests.unit.megspeech.evaluation.loaded import loaded, runs
 
 
@@ -35,3 +36,21 @@ def test_report(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.INFO, logger=module.__name__):
         local(tmp_path).report("label")
     assert [r.getMessage().split(" tau ")[0] for r in caplog.records] == ["label val", "label local test"]
+
+
+def test_record(tmp_path: Path) -> None:
+    """A partition's per-word probabilities are saved under its own section, at the tau asked."""
+    study = local(tmp_path)
+    path = study.record(Partition.TEST, 0.5, tmp_path / PROBS)
+    saved = Probabilities.load(path, SECTIONS[Partition.TEST])
+    assert list(saved.domains) == ["Sherlock1"]
+    assert saved.tau == 0.5
+    study.record(Partition.VALIDATION, 0.5, path)
+    assert len(Probabilities.load(path, SECTIONS[Partition.VALIDATION]).domains) == 2
+    assert list(Probabilities.load(path, SECTIONS[Partition.TEST]).domains) == ["Sherlock1"]
+
+
+def test_report_saved(tmp_path: Path) -> None:
+    local(tmp_path).report("label", tmp_path / PROBS)
+    sections = {key.split("/")[0].split("#")[0] for key in Probabilities.stored(tmp_path / PROBS)}
+    assert sections == set(SECTIONS.values())

@@ -39,7 +39,7 @@ from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.metric.ruler import TOP, Ruler
 from megspeech.evaluation.scoring.score import Head
-from megspeech.evaluation.studies.timing import PERMUTATIONS, Shuffled
+from megspeech.evaluation.studies.timing import PERMUTATIONS
 
 LOG = logging.getLogger(__name__)
 
@@ -240,9 +240,7 @@ class Collected:
                 continue
             labels.append(split.y[novel].cpu().numpy())
             real.append(cls._probabilities(loaded, split, novel, tau))
-            shuffles = [
-                cls._probabilities(loaded, Shuffled.permuted(split, seed), novel, tau) for seed in range(PERMUTATIONS)
-            ]
+            shuffles = [cls._probabilities(loaded, split.permuted(seed), novel, tau) for seed in range(PERMUTATIONS)]
             timing.append(np.mean(shuffles, axis=0))
             names.append(np.full(len(novel), name))
             gaps.append(Lengths.durations(split, novel))

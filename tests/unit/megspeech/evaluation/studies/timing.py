@@ -80,19 +80,6 @@ def split(n: int = 4) -> Split:
     return Split.from_arrays(x, np.arange(n) % 3, Spans.by_gap(np.arange(n) * 2.0), CPU)
 
 
-def test_permuted() -> None:
-    """Window starts are moved together, the labels and onsets stay."""
-    original = split(6)
-    moved = Shuffled.permuted(original, 0)
-    order = torch.randperm(6, generator=torch.Generator().manual_seed(0))
-    assert sorted(moved.windows.at.tolist()) == sorted(original.windows.at.tolist())
-    assert not torch.equal(moved.windows.at, original.windows.at)
-    assert torch.equal(moved.windows.end - moved.windows.at, original.windows.end[order] - original.windows.at[order])
-    assert torch.equal(moved.y, original.y)
-    assert torch.equal(moved.onset, original.onset)
-    assert torch.equal(Shuffled.permuted(original, 0).windows.at, moved.windows.at)
-
-
 def test_pooled() -> None:
     domains = {"x": (torch.tensor([True, False]), torch.tensor([1, 2])), "y": (torch.tensor([True]), torch.tensor([3]))}
     hits, names = Agreement.pooled(Graded(domains))
@@ -116,4 +103,4 @@ def test_graded() -> None:
     loaded = Recorder()
     original = split(6)
     assert Shuffled(cast(LoadedModel, loaded), 0.5).graded({"d": original}, 0) == 0.5
-    assert torch.equal(loaded.seen["d"].windows.at, Shuffled.permuted(original, 0).windows.at)
+    assert torch.equal(loaded.seen["d"].windows.at, original.permuted(0).windows.at)

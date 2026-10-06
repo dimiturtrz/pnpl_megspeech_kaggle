@@ -97,7 +97,17 @@ class Epoch:
     interval: Interval
     top1: float
     bits: float
+    fit: float | None = None
+    """The context head's balanced top-k on a fixed subset of training words at `tau` (`Telemetry`), None unmeasured."""
+    shuffled: float | None = None
+    """The macro at `tau` with every word's MEG window swapped for another's of its domain (`Telemetry`)."""
 
     @property
     def tau(self) -> float:
         return self.macro.tau
+
+    def steering(self) -> dict[str, float | None]:
+        """The fit-versus-validation gap and the neural share: the macro less what shuffled MEG still earns."""
+        neural = None if self.shuffled is None else self.macro.bacc10 - self.shuffled
+        gap = None if self.fit is None else self.fit - self.macro.bacc10
+        return {"val": self.macro.bacc10, "fit": self.fit, "gap": gap, "shuffled": self.shuffled, "neural": neural}

@@ -15,6 +15,7 @@ from core.tree import Tree
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.corpus import Corpus
 from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.submission.report import Report
 from megspeech.submission.writer import KaggleWriter
 from megspeech.training.config import METRICS, RunConfig
@@ -63,6 +64,8 @@ def main() -> None:
     LOG.info("best %s", best)
     evaluator = trainer.evaluator
     evaluator.graded(model, validation, log_prior, best.tau).save(out / "hits.pt")
+    if config.telemetry.probs:
+        Probabilities.of(evaluator, model, validation, log_prior, best.tau).save(out / PROBS, "val")
     loaded = LoadedModel(
         root,
         config.data,
@@ -73,7 +76,7 @@ def main() -> None:
         log_prior=log_prior,
     )
     KaggleWriter(Track.DEEP).write(loaded, best.tau, out / "submission.csv")
-    Report(config.report, root, args.name, evaluator.device, corpus.geometry).run()
+    Report(config.report, root, args.name, evaluator.device, corpus.geometry, config.telemetry.probs).run()
 
 
 if __name__ == "__main__":

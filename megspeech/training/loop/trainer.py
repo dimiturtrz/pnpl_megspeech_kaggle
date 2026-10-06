@@ -18,6 +18,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.corpus import Corpus
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Epoch
+from megspeech.evaluation.scoring.telemetry import Telemetry
 from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.context import Objective
@@ -215,6 +216,7 @@ class Trainer:
         history: list[Epoch] = []
         best_state = net.state_dict()
         self.heads = self.auxiliary_state(model)
+        telemetry = Telemetry.of(self.evaluator, self.config.telemetry, train, validation)
         for epoch in range(optim.epochs):
             model.train()
             weights = curriculum.weights(train, epoch, optim.epochs)
@@ -232,7 +234,9 @@ class Trainer:
             if not math.isfinite(value):
                 raise FloatingPointError(f"non-finite loss at epoch {epoch}")
             with state.ema.applied(model):
-                row = self.evaluator.report(net, validation, log_prior, epoch, value)
+                row = telemetry.measured(
+                    net, self.evaluator.report(net, validation, log_prior, epoch, value), log_prior
+                )
                 history.append(row)
                 LOG.info("%s", asdict(row))
                 if self.config.selected(history) is row:
