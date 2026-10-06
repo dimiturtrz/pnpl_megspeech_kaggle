@@ -85,9 +85,15 @@ class ConvWords(WordEncoder):
         self.blocks.extend(TimeConformer(config.hidden, config.dropout) for _ in range(config.conformer))
         self.head = self.classifier(config.dropout, config.head)
 
-    @override
-    def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:
+    def taps(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> list[Float[Tensor, "b h t"]]:
+        """Every block's per-timestep feature map, the last the one `embed` pools."""
         h = self.spatial(x)
+        maps = []
         for block in self.blocks:
             h = block(h, valid)
-        return self.pool(h)
+            maps.append(h)
+        return maps
+
+    @override
+    def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:
+        return self.pool(self.taps(x, valid)[-1])

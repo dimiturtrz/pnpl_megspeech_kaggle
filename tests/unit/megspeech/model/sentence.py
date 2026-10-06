@@ -13,7 +13,7 @@ from megspeech.model.context.span import SpanConformer
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer
 from megspeech.model.sentence import SentenceNet
-from megspeech.model.words.conv import ConvConfig
+from megspeech.model.words.conv import ConvConfig, ConvWords
 
 CONTEXT = ContextConfig(width=16, heads=2, layers=1, conv=ConvConfig(hidden=8, dilations=(1, 2)))
 SAMPLES = 50
@@ -39,6 +39,15 @@ def test_embed() -> None:
     assert embedded.shape == (3, CONTEXT.conv.width)
     _, slots = model.features(x, torch.zeros(1, 3), torch.tensor([[0, 1, 2]]), subject)
     assert torch.allclose(slots[0], embedded, atol=1e-6)
+
+
+def test_prepare() -> None:
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    subject = torch.zeros(len(x), dtype=torch.long)
+    assert model.prepare(x, subject).shape == x.shape
+    words = cast("ConvWords", model.words)
+    assert torch.equal(words.pool(words.taps(model.prepare(x, subject))[-1]), model.embed(x, subject))
 
 
 def test_encoder() -> None:

@@ -154,9 +154,12 @@ class SentenceNet(nn.Module):
     ) -> Float[Tensor, "r e"]:
         """Each window's word embedding through the scaler, the subject layer and the encoder; `valid` rows alone
         set any batch statistics."""
+        return self.words.embed(self.prepare(x, subject), valid)
+
+    def prepare(self, x: Float[Tensor, "r c t"], subject: Int[Tensor, " r"]) -> Float[Tensor, "r c t"]:
+        """Each window as the word encoder reads it: scaled, whitened, in its subject's space, normalised."""
         sensors = self.subjects(self.whiten(self.scale(x)), subject)
-        scaled = self.words.normalise(sensors, x.ne(0).any(dim=1, keepdim=True))
-        return self.words.embed(scaled, valid)
+        return self.words.normalise(sensors, x.ne(0).any(dim=1, keepdim=True))
 
     def classify(
         self, h: Float[Tensor, "g w h"], slots: Float[Tensor, "g w e"], mask: Bool[Tensor, "g w"]

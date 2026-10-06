@@ -18,6 +18,15 @@ def test_embed() -> None:
     assert ConvWords(SMALL).embed(x).shape == (3, 2 * SMALL.hidden)
 
 
+def test_taps() -> None:
+    words = ConvWords(SMALL).eval()
+    x = torch.randn(2, CHANNELS, SAMPLES, generator=GENERATOR)
+    maps = words.taps(x)
+    assert len(maps) == len(SMALL.dilations)
+    assert all(m.shape == (2, SMALL.hidden, SAMPLES) for m in maps)
+    assert torch.equal(words.pool(maps[-1]), words.embed(x))
+
+
 def test_channels() -> None:
     x = torch.randn(3, 5, SAMPLES, generator=GENERATOR)
     assert ConvWords(SMALL, 5).embed(x).shape == (3, 2 * SMALL.hidden)
