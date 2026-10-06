@@ -42,6 +42,7 @@ def test_selected() -> None:
     assert RunConfig().selected(history) is history[1]
     assert RunConfig(data=DataConfig(refit=True)).selected(history) is history[-1]
     assert RunConfig(optim=OptimConfig(heads=0.0)).selected(history) is history[-1]
+    assert RunConfig(optim=OptimConfig(last=True)).selected(history) is history[-1]
 
 
 @pytest.mark.parametrize("context", [ContextConfig(encoder=Encoder.CACHED), ContextConfig(conv=ConvConfig(merger=270))])

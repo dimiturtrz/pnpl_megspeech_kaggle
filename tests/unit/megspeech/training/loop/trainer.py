@@ -97,6 +97,21 @@ def test_model_warm(tmp_path: Path) -> None:
         assert torch.equal(warmed.state_dict()[key], value)
 
 
+def test_model_stem(tmp_path: Path) -> None:
+    config = RunConfig(optim=OptimConfig(compiled=False, stem="pre"))
+    trained = trainer(config).model(split())
+    with torch.no_grad():
+        for parameter in trained.parameters():
+            parameter.add_(1.0)
+    root = DataRoot(tmp_path)
+    (root.models() / "pre").mkdir(parents=True)
+    torch.save(trained.state_dict(), root.models() / "pre" / "model.pt")
+    made = Trainer.of(Corpus(split(), {"a": split(seed=1)}, frozenset()), config, root)
+    stemmed = made.model(split(seed=2))
+    assert all(torch.equal(a, b) for a, b in zip(stemmed.encoder(), trained.encoder(), strict=True))
+    assert not any(torch.equal(a, b) for a, b in zip(stemmed.head.parameters(), trained.head.parameters(), strict=True))
+
+
 def test_compiled() -> None:
     model = nn.Linear(2, 2)
     assert trainer(RunConfig(optim=OptimConfig(compiled=True))).compiled(model) is model
@@ -107,6 +122,19 @@ def test_optimizer() -> None:
     optimizer = made.optimizer(made.model(split()), Anchor())
     assert optimizer.defaults["lr"] == 0.01
     assert not optimizer.defaults["fused"]
+
+
+@pytest.mark.parametrize("share", [0.0, 0.1])
+def test_optimizer_encoder_share(share: float) -> None:
+    made = trainer(RunConfig(optim=OptimConfig(lr=0.01, encoder_lr=share)))
+    net = made.model(split())
+    optimizer = made.optimizer(net, Anchor(), tuple(net.encoder()))
+    encoder = {id(p) for p in net.encoder()}
+    rates = {group["lr"] for group in optimizer.param_groups for p in group["params"] if id(p) in encoder}
+    others = {group["lr"] for group in optimizer.param_groups for p in group["params"] if id(p) not in encoder}
+    assert rates == {0.01 * share}
+    assert others == {0.01}
+    assert sum(len(group["params"]) for group in optimizer.param_groups) == len(list(net.parameters()))
 
 
 def test_terms() -> None:

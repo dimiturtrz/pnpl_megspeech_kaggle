@@ -2,6 +2,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
+import pytest
 import torch
 from torch import nn
 
@@ -38,6 +39,24 @@ def test_embed() -> None:
     assert embedded.shape == (3, CONTEXT.conv.width)
     _, slots = model.features(x, torch.zeros(1, 3), torch.tensor([[0, 1, 2]]), subject)
     assert torch.allclose(slots[0], embedded, atol=1e-6)
+
+
+def test_encoder() -> None:
+    model = SentenceNet(nn.Identity(), CONTEXT)
+    encoder = {id(p) for p in model.encoder()}
+    assert {id(p) for p in model.words.parameters()} <= encoder
+    assert not encoder & {id(p) for p in [*model.head.parameters(), *model.context.parameters()]}
+
+
+def test_adopt() -> None:
+    model = SentenceNet(nn.Identity(), CONTEXT)
+    other = SentenceNet(nn.Identity(), CONTEXT)
+    head = [p.clone() for p in model.head.parameters()]
+    model.adopt(other.state_dict())
+    assert all(torch.equal(a, b) for a, b in zip(model.encoder(), other.encoder(), strict=True))
+    assert all(torch.equal(a, b) for a, b in zip(model.head.parameters(), head, strict=True))
+    with pytest.raises(KeyError, match="encoder"):
+        model.adopt({})
 
 
 def test_readouts() -> None:

@@ -114,6 +114,15 @@ class OptimConfig:
     unlabelled: bool = False
     """Distil on every training word in a span, the ~60% outside the 50 too, not only the labelled; read only with a
     teacher."""
+    last: bool = False
+    """Keep the last epoch, not the best on validation: a stage-1 encoder trained to the end of its schedule, its word
+    head converged where the context head selected at its best epoch reads an immature one (megspeech-7gf.117)."""
+    stem: str = ""
+    """A trained run under models/ whose encoder (scaler, whitener, subject layer, word CNN and word head) the model
+    starts from, the span transformer and context head fresh; empty starts the encoder from scratch."""
+    encoder_lr: float = 1.0
+    """The encoder's learning rate as a share of `lr`, its decay alike; 0 freezes it: a `stem` encoder kept while the
+    span transformer trains on top of it."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
     pretrained: float = 0.1
@@ -140,7 +149,9 @@ class RunConfig:
     def selected(self, history: list[Epoch]) -> Epoch:
         """The epoch whose weights the run keeps: the best on validation, or the last when validation was trained on."""
         return (
-            history[-1] if self.data.refit or not self.optim.heads else max(history, key=lambda row: row.macro.bacc10)
+            history[-1]
+            if self.data.refit or self.optim.last or not self.optim.heads
+            else max(history, key=lambda row: row.macro.bacc10)
         )
 
     @classmethod

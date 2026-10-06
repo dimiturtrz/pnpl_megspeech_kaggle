@@ -23,6 +23,9 @@ LATENCY_INIT = 0.02
 SCALE_MEDIAN = "scale.median"
 """A SentenceNet state's per-channel scaler median: one entry per channel the model reads."""
 
+ENCODER = ("scale", "whiten", "subjects", "words")
+"""The stage-1 modules: everything between a window and its word embedding, and the word head the CNN owns."""
+
 
 class SentenceNet(nn.Module):
     """Per-word embeddings refined by a transformer over the span of words heard together.
@@ -169,6 +172,19 @@ class SentenceNet(nn.Module):
     def width(self) -> int:
         """Width of the refined positions the context head reads."""
         return self.project.out_features
+
+    def encoder(self) -> list[nn.Parameter]:
+        """The stage-1 parameters, every one a word's embedding and word-head logits depend on: the subject layer, the
+        word CNN and its head; the span transformer and context head are the rest."""
+        return [p for name in ENCODER for p in getattr(self, name).parameters()]
+
+    def adopt(self, state: dict[str, Tensor]) -> None:
+        """The stage-1 entries of another run's `state` loaded in, every other weight left as it is."""
+        own = {key: value for key, value in state.items() if key.split(".")[0] in ENCODER}
+        missing, _ = self.load_state_dict(own, strict=False)
+        stale = [key for key in missing if key.split(".")[0] in ENCODER]
+        if stale:
+            raise KeyError(f"stem state lacks encoder entries {stale}")
 
     def readouts(self) -> tuple[nn.Module, ...]:
         """The modules reading each of `forward`'s outputs, in order: the context head, then the word head."""

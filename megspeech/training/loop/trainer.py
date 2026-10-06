@@ -7,6 +7,7 @@ the embeddings across the span, and both the isolated-word head and the context 
 import logging
 import math
 from dataclasses import asdict, dataclass, field
+from typing import cast
 
 import torch
 from jaxtyping import Float, Int
@@ -68,6 +69,8 @@ class Trainer:
     """The frozen timing expert's head weights, when the run trains over one."""
     heads: dict[str, Tensor] = field(default_factory=dict)
     """The auxiliary heads' weights at the kept epoch, which the model's own state does not hold."""
+    stem: dict[str, Tensor] = field(default_factory=dict)
+    """The trained run's state whose encoder the model starts from, when the run names one."""
 
     @staticmethod
     def corpus(config: RunConfig, root: DataRoot, device: torch.device) -> Corpus:
@@ -87,7 +90,10 @@ class Trainer:
         auxiliary = Auxiliary.of(config.optim, root, device, corpus.positions)
         regional = Regional.of(config.augment.spatial, root, device)
         timing = TimingExpert.load(root, config.optim.timing)
-        return cls(config, evaluator, prototypes, auxiliary, initial, Teacher.of(config.optim, root), regional, timing)
+        stem = config.optim.stem
+        stemmed = torch.load(root.models() / stem / "model.pt", map_location=device, weights_only=True) if stem else {}
+        taught = Teacher.of(config.optim, root)
+        return cls(config, evaluator, prototypes, auxiliary, initial, taught, regional, timing, stem=stemmed)
 
     def model(self, train: Split) -> SentenceNet:
         """A fresh model, or the warm start's weights when there is one."""
@@ -98,6 +104,8 @@ class Trainer:
         model.whiten.fit(model.scale(SAMPLES[self.config.context.covariance].windows(train, sample)))
         if self.initial:
             model.load_state_dict(self.initial)
+        if self.stem:
+            model.adopt(self.stem)
         if self.timing:
             model.timing.frozen(self.timing)
         return self.compiled(model.to(self.evaluator.device))
@@ -108,12 +116,24 @@ class Trainer:
             model.compile(mode="reduce-overhead")
         return model
 
-    def optimizer(self, model: nn.Module, anchor: Anchor) -> torch.optim.AdamW:
-        """AdamW as one fused kernel on the GPU; per-parameter launches were most of a step's device time."""
+    def optimizer(self, model: nn.Module, anchor: Anchor, encoder: tuple[nn.Parameter, ...] = ()) -> torch.optim.AdamW:
+        """AdamW as one fused kernel on the GPU; per-parameter launches were most of a step's device time. Each of the
+        anchor's groups splits off its `encoder` parameters at `encoder_lr` times the rate."""
         optim = self.config.optim
         fused = self.evaluator.device.type == "cuda"
-        groups = anchor.groups(model, optim.weight_decay)
-        return torch.optim.AdamW(groups, lr=optim.lr, weight_decay=optim.weight_decay, fused=fused)
+        ids = {id(p) for p in encoder}
+        rates = {False: optim.lr, True: optim.lr * optim.encoder_lr}
+        kept: list[dict[str, object]] = []
+        for group in anchor.groups(model, optim.weight_decay):
+            params = cast("list[nn.Parameter]", group["params"])
+            for inside, lr in rates.items():
+                part = [p for p in params if (id(p) in ids) == inside]
+                if part:
+                    kept.append({**group, "params": part, "lr": lr})
+        LOG.info(
+            "optimiser groups (lr, params) %s", [(g["lr"], len(cast("list[nn.Parameter]", g["params"]))) for g in kept]
+        )
+        return torch.optim.AdamW(kept, lr=optim.lr, weight_decay=optim.weight_decay, fused=fused)
 
     def terms(self, train: Split) -> tuple[Term, ...]:
         """The context head's term as the teacher teaches it, the word head's softmax, then the auxiliary heads';
@@ -151,7 +171,7 @@ class Trainer:
         optim = self.config.optim
         model = self.auxiliary.trained(net, self.compiled)
         anchor = Anchor.of(optim.anchor, optim.lr, total)
-        optimizer = self.optimizer(model, anchor)
+        optimizer = self.optimizer(model, anchor, tuple(net.encoder()))
         peaks = [group["lr"] for group in optimizer.param_groups]
         schedule = Scheduled(torch.optim.lr_scheduler.OneCycleLR(optimizer, peaks, total_steps=total))
         ema = Ema.of(model, optim.ema)
