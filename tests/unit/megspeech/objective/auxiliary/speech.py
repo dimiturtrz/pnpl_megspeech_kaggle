@@ -56,3 +56,17 @@ def test_softmax() -> None:
     assert value.item() > 0
     value.backward()
     assert cast("Semantic", head).project.weight.grad is not None
+
+
+def test_weighted() -> None:
+    """Rows at weight 1 are the unweighted loss, in both contrasts; a heavier row moves it."""
+    target = torch.tensor([[0, 1, -100], [2, -1, -100]])
+    for softmax in (False, True):
+        aligned = SpeechTerm(2.0, term().speech, softmax=softmax)
+        head = aligned.head(WIDTH)
+        projected = head(torch.randn(2, 3, WIDTH, generator=GENERATOR))
+        assert torch.equal(
+            aligned.weighted(head, projected, target, torch.ones(2, 3)), aligned.unweighted(head, projected, target)
+        )
+        skewed = aligned.weighted(head, projected, target, torch.tensor([[1.0, 1.0, 1.0], [9.0, 1.0, 1.0]]))
+        assert skewed.item() != aligned.unweighted(head, projected, target).item()

@@ -28,11 +28,13 @@ def test_loss() -> None:
     targets = eye[[0, 1, 0]]
     positive, negative = math.exp(TEMPERATURE) + BIAS, BIAS
     pair = softplus(-positive) + softplus(negative)
-    loss = semantic.loss(targets, targets, torch.tensor([4, 7, 4]))
+    loss = semantic.loss(targets, targets, torch.tensor([4, 7, 4]), torch.ones(3))
     assert loss.item() == pytest.approx(pair, rel=1e-5)
-    padded = semantic.loss(torch.cat([targets, eye[2:]]), torch.cat([targets, eye[2:]]), torch.tensor([4, 7, 4, -1]))
+    padded = semantic.loss(
+        torch.cat([targets, eye[2:]]), torch.cat([targets, eye[2:]]), torch.tensor([4, 7, 4, -1]), torch.ones(4)
+    )
     assert padded.item() == pytest.approx(pair, rel=1e-5)
-    assert semantic.loss(targets, targets, torch.full((3,), -100)).item() == 0.0
+    assert semantic.loss(targets, targets, torch.full((3,), -100), torch.ones(3)).item() == 0.0
 
 
 def test_softmax_loss() -> None:
@@ -41,13 +43,13 @@ def test_softmax_loss() -> None:
     eye = torch.eye(DIM)[:3]
     targets = eye[[0, 1, 0]]
     pair = softplus(-math.exp(TEMPERATURE))
-    loss = semantic.softmax_loss(targets, targets, torch.tensor([4, 7, 4]))
+    loss = semantic.softmax_loss(targets, targets, torch.tensor([4, 7, 4]), torch.ones(3))
     assert loss.item() == pytest.approx(pair, abs=1e-6)
     padded = semantic.softmax_loss(
-        torch.cat([targets, eye[2:]]), torch.cat([targets, eye[2:]]), torch.tensor([4, 7, 4, -1])
+        torch.cat([targets, eye[2:]]), torch.cat([targets, eye[2:]]), torch.tensor([4, 7, 4, -1]), torch.ones(4)
     )
     assert padded.item() == pytest.approx(pair, abs=1e-6)
-    assert semantic.softmax_loss(targets, targets, torch.full((3,), -100)).item() == 0.0
+    assert semantic.softmax_loss(targets, targets, torch.full((3,), -100), torch.ones(3)).item() == 0.0
 
 
 def term() -> SemanticTerm:
@@ -69,3 +71,16 @@ def test_unweighted() -> None:
     value.backward()
     assert cast("Semantic", head).project.weight.grad is not None
     assert aligned.unweighted(head, projected, torch.full((2, 3), 99)).item() == 0.0
+
+
+def test_weighted() -> None:
+    """Rows at weight 1 are the unweighted loss; other weights move it; no token in the lexicon is still 0."""
+    aligned = term()
+    head = aligned.head(16)
+    projected = head(torch.randn(2, 3, 16, generator=GENERATOR))
+    assert torch.equal(
+        aligned.weighted(head, projected, TOKENS, torch.ones(2, 3)), aligned.unweighted(head, projected, TOKENS)
+    )
+    skewed = aligned.weighted(head, projected, TOKENS, torch.tensor([[1.0, 1.0, 1.0], [9.0, 1.0, 1.0]]))
+    assert skewed.item() != aligned.unweighted(head, projected, TOKENS).item()
+    assert aligned.weighted(head, projected, torch.full((2, 3), 99), torch.full((2, 3), 3.0)).item() == 0.0

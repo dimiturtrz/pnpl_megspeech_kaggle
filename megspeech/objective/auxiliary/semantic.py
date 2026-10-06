@@ -21,22 +21,31 @@ class Semantic(SigmoidScorer):
         return self.project(embedded)
 
     def loss(
-        self, projected: Float[Tensor, "n d"], targets: Float[Tensor, "n d"], kinds: Int[Tensor, " n"]
+        self,
+        projected: Float[Tensor, "n d"],
+        targets: Float[Tensor, "n d"],
+        kinds: Int[Tensor, " n"],
+        rows: Float[Tensor, " n"],
     ) -> Float[Tensor, ""]:
         """SigLIP of each row against every distinct kind in the batch, positive on its own kind only.
 
         A negative kind is no word (padding, or a word without a target): it is neither a row nor a candidate.
-        Candidates are deduplicated by kind without a host sync, so the step keeps fixed shapes.
+        Candidates are deduplicated by kind without a host sync, so the step keeps fixed shapes. The rows
+        average at their weights in `rows`.
         """
         valid = kinds >= 0
         same = kinds[:, None] == kinds[None, :]
         candidate = valid & ~same.tril(-1).any(dim=1)
         logits = self.score(projected, functional.normalize(targets.float(), dim=-1))
         pairs = functional.binary_cross_entropy_with_logits(logits, same.float(), reduction="none")
-        return ((pairs * candidate).sum(-1) * valid).sum() / valid.sum().clamp(min=1)
+        return AuxiliaryTerm.averaged((pairs * candidate).sum(-1), valid, rows)
 
     def softmax_loss(
-        self, projected: Float[Tensor, "n d"], targets: Float[Tensor, "n d"], kinds: Int[Tensor, " n"]
+        self,
+        projected: Float[Tensor, "n d"],
+        targets: Float[Tensor, "n d"],
+        kinds: Int[Tensor, " n"],
+        rows: Float[Tensor, " n"],
     ) -> Float[Tensor, ""]:
         """Cross-entropy of each row over the batch's distinct kinds, its own the label: the contrast learns like a
         classifier over the batch's kinds (as the 50-way heads do), where `loss`'s independent sigmoids plateau at
@@ -47,7 +56,7 @@ class Semantic(SigmoidScorer):
         logits = self.score(projected, functional.normalize(targets.float(), dim=-1))
         logits = logits.masked_fill(~candidate[None, :], torch.finfo(logits.dtype).min)
         own = (logits.log_softmax(-1) * (same & candidate[None, :])).sum(-1)
-        return -(own * valid).sum() / valid.sum().clamp(min=1)
+        return -AuxiliaryTerm.averaged(own, valid, rows)
 
 
 @dataclass(frozen=True)
@@ -62,8 +71,9 @@ class SemanticTerm(AuxiliaryTerm):
         return Semantic(width).to(self.lexicon.vectors.device)
 
     @override
-    def unweighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
+    def weighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
     ) -> Float[Tensor, ""]:
         kinds = self.lexicon.rows(target).flatten()
-        return cast("Semantic", head).loss(output.flatten(0, 1), self.lexicon.vectors[kinds.clamp(min=0)], kinds)
+        vectors = self.lexicon.vectors[kinds.clamp(min=0)]
+        return cast("Semantic", head).loss(output.flatten(0, 1), vectors, kinds, rows.flatten())

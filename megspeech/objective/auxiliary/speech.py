@@ -34,10 +34,10 @@ class SpeechTerm(AuxiliaryTerm):
         return self.speech.rows
 
     @override
-    def unweighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
+    def weighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
     ) -> Float[Tensor, ""]:
         kinds = target.flatten()
         semantic = cast("Semantic", head)
         contrast = semantic.softmax_loss if self.softmax else semantic.loss
-        return contrast(output.flatten(0, 1), self.speech.vectors[kinds.clamp(min=0)], kinds)
+        return contrast(output.flatten(0, 1), self.speech.vectors[kinds.clamp(min=0)], kinds, rows.flatten())

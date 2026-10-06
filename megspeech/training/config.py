@@ -63,6 +63,9 @@ class OptimConfig:
     speech_softmax: bool = False
     """Contrast the speech targets by softmax over the batch's kinds, not independent sigmoids: the sigmoid contrast
     cannot learn a word-identity oracle in 40 epochs where the 50-way heads learn it in 4."""
+    vocab_weight: float = 1.0
+    """Each row of a word in the 50 weighs this against 1 for the others in every auxiliary term's mean, normalised by
+    the weights (megspeech-7gf.126); 1 weighs every row alike."""
     tagging: float = 0.0
     """Weight of the tag auxiliary (`megspeech.objective.auxiliary.tagging`): every training word's embedding classified
     into its in-context part of speech (`megspeech.data.labels.context_tags`), 11 universal tags and `OTHER`. It trains

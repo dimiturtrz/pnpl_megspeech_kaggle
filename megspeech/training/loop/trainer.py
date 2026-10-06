@@ -16,6 +16,7 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.corpus import Corpus
+from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Epoch
 from megspeech.evaluation.scoring.telemetry import Telemetry
@@ -160,7 +161,10 @@ class Trainer:
             mixed = state.bgmix.apply(batch.x, batch, train)
             outputs = state.model(self.regional(self.config.augment(mixed)), batch.onset, batch.slot, batch.subject)
             parts = zip(state.terms, state.readouts, outputs, strict=True)
-            losses = torch.stack([term.loss(head, out, batch.target(term.labels(train))) for term, head, out in parts])
+            inside = batch.target(train.y) != IGNORE
+            losses = torch.stack(
+                [term.loss(head, out, batch.target(term.labels(train)), inside) for term, head, out in parts]
+            )
             value = losses.sum()
         state.curriculum.observe(spans, outputs[0], batch.target(train.y))
         state.optimizer.zero_grad(set_to_none=True)

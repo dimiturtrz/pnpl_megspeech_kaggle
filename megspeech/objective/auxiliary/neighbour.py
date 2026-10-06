@@ -48,15 +48,14 @@ class NeighbourTerm(AuxiliaryTerm):
         return torch.where((target == IGNORE) | (beside < 0), IGNORE, beside)
 
     @override
-    def unweighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
+    def weighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
     ) -> Float[Tensor, ""]:
         known = self.neighbours(target)
-        rows = functional.cross_entropy(
+        losses = functional.cross_entropy(
             output.flatten(0, 1).float(), known.flatten(), ignore_index=IGNORE, reduction="none"
         )
-        valid = (known != IGNORE).flatten()
-        return rows.sum() / valid.sum().clamp(min=1)
+        return self.averaged(losses, (known != IGNORE).flatten(), rows.flatten())
 
 
 @dataclass(frozen=True)

@@ -69,10 +69,10 @@ class TimingTerm(AuxiliaryTerm):
         return torch.arange(len(self.targets), device=self.targets.device)
 
     @override
-    def unweighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
+    def weighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
     ) -> Float[Tensor, ""]:
-        rows = target.clamp(min=0)
-        valid = self.known[rows] & (target != IGNORE)[..., None]
-        error = (output.float() - self.targets[rows]).square() * valid
-        return error.sum() / valid.sum().clamp(min=1)
+        at = target.clamp(min=0)
+        valid = self.known[at] & (target != IGNORE)[..., None]
+        error = (output.float() - self.targets[at]).square()
+        return self.averaged(error.flatten(), valid.flatten(), rows[..., None].expand_as(valid).flatten())

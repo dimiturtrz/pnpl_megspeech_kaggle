@@ -1,4 +1,5 @@
 import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -14,7 +15,7 @@ from megspeech.data.spans.spans import Spans
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.context import Objective
 from megspeech.objective.targets.t5 import Lexicon
-from megspeech.objective.term import Classified, ContextTerm, DistilledTerm, LabelTerm, WordTerm
+from megspeech.objective.term import AuxiliaryTerm, Classified, ContextTerm, DistilledTerm, LabelTerm, WordTerm
 
 CPU = torch.device("cpu")
 Y = torch.tensor([[3, 7], [IGNORE, 3]])
@@ -151,8 +152,49 @@ def test_classified_unweighted() -> None:
 def test_masked() -> None:
     """Uniform logits cost log(k) on each known row; unknown rows are neither counted nor averaged over."""
     uniform = torch.zeros(3, 5)
-    assert Classified.masked(uniform, torch.tensor([0, 4, UNKNOWN])).item() == pytest.approx(math.log(5))
+    assert Classified.masked(uniform, torch.tensor([0, 4, UNKNOWN]), torch.ones(3)).item() == pytest.approx(math.log(5))
     sure = torch.full((1, 5), -50.0)
     sure[0, 4] = 50.0
-    assert Classified.masked(sure, torch.tensor([4])).item() == pytest.approx(0.0, abs=1e-6)
-    assert Classified.masked(uniform, torch.full((3,), UNKNOWN)).item() == 0.0
+    assert Classified.masked(sure, torch.tensor([4]), torch.ones(1)).item() == pytest.approx(0.0, abs=1e-6)
+    assert Classified.masked(uniform, torch.full((3,), UNKNOWN), torch.ones(3)).item() == 0.0
+
+
+def test_averaged() -> None:
+    """The weighted mean over the kept rows: weights of 1 are the plain mean, a heavier row pulls it, none kept is 0."""
+    values = torch.tensor([0.0, 4.0, 100.0])
+    keep = torch.tensor([True, True, False])
+    assert AuxiliaryTerm.averaged(values, keep, torch.ones(3)).item() == pytest.approx(2.0)
+    assert AuxiliaryTerm.averaged(values, keep, torch.tensor([3.0, 1.0, 9.0])).item() == pytest.approx(1.0)
+    assert AuxiliaryTerm.averaged(values, torch.zeros(3, dtype=torch.bool), torch.ones(3)).item() == 0.0
+
+
+def inside_logits() -> torch.Tensor:
+    """Row 0 (token 10, class 0) classified right, row 1 (token 20, class 1) wrong."""
+    logits = torch.tensor([[[10.0, -10.0], [10.0, -10.0]]])
+    return logits
+
+
+TOKEN_PAIR = torch.tensor([[10, 20]])
+INSIDE = torch.tensor([[True, False]])
+
+
+def test_weighted() -> None:
+    """Rows at weight 1 are the unweighted loss; a heavier right row lowers the mean toward its zero loss."""
+    term = lexical()
+    flat = term.unweighted(nn.Identity(), inside_logits(), TOKEN_PAIR)
+    assert torch.equal(term.weighted(nn.Identity(), inside_logits(), TOKEN_PAIR, torch.ones(1, 2)), flat)
+    wrong = flat.item() * 2
+    heavy = term.weighted(nn.Identity(), inside_logits(), TOKEN_PAIR, torch.tensor([[9.0, 1.0]]))
+    assert heavy.item() == pytest.approx(wrong / 10)
+
+
+def test_auxiliary_loss_vocab_weight() -> None:
+    """Weight 1 equals the old loss exactly; above 1 it moves toward the in-vocabulary rows; an all-OOV batch and a
+    batch without `inside` read as weight 1."""
+    plain = lexical()
+    flat = plain.unweighted(nn.Identity(), inside_logits(), TOKEN_PAIR)
+    assert torch.equal(plain.loss(nn.Identity(), inside_logits(), TOKEN_PAIR, INSIDE), flat)
+    emphasised = replace(plain, vocab_weight=9.0)
+    assert emphasised.loss(nn.Identity(), inside_logits(), TOKEN_PAIR, INSIDE).item() == pytest.approx(flat.item() / 5)
+    assert emphasised.loss(nn.Identity(), inside_logits(), TOKEN_PAIR, torch.zeros(1, 2, dtype=torch.bool)) == flat
+    assert torch.equal(emphasised.loss(nn.Identity(), inside_logits(), TOKEN_PAIR), flat)

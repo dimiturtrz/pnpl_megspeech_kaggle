@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar, override
 
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 from torch.nn import functional
 
@@ -25,8 +25,15 @@ class Term(ABC):
 
     weight: float = field(kw_only=True)
 
-    def loss(self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]) -> Float[Tensor, ""]:
-        """`output` of `head` at span positions whose words carry `target`, gathered from `labels`."""
+    def loss(
+        self,
+        head: nn.Module,
+        output: Float[Tensor, "g w _"],
+        target: Int[Tensor, "g w"],
+        inside: Bool[Tensor, "g w"] | None = None,
+    ) -> Float[Tensor, ""]:
+        """`output` of `head` at span positions whose words carry `target`, gathered from `labels`; `inside` marks the
+        positions of words in the vocabulary, which only the auxiliary terms read."""
         return self.weight * self.unweighted(head, output, target)
 
     @abstractmethod
@@ -130,11 +137,45 @@ class WordTerm(LabelTerm):
         )
 
 
+@dataclass(frozen=True)
 class AuxiliaryTerm(Term):
     """A head over every heard word's embedding, in or out of the 50, scored against the word itself."""
 
     local: ClassVar[bool] = False
     """Whether the head reads the word's local embedding, before the span transformer, whatever tap the run sets."""
+    vocab_weight: float = field(default=1.0, kw_only=True)
+    """Each row of a word in the 50 weighs this against 1 for the others, in a mean normalised by the weights."""
+
+    @staticmethod
+    def averaged(values: Float[Tensor, " n"], keep: Bool[Tensor, " n"], rows: Float[Tensor, " n"]) -> Float[Tensor, ""]:
+        """The mean of `values` over the `keep` rows, each at its weight in `rows`; 0 when none, without a host sync."""
+        share = keep * rows
+        return (values * share).sum() / share.sum().clamp(min=torch.finfo(share.dtype).tiny)
+
+    @override
+    def loss(
+        self,
+        head: nn.Module,
+        output: Float[Tensor, "g w _"],
+        target: Int[Tensor, "g w"],
+        inside: Bool[Tensor, "g w"] | None = None,
+    ) -> Float[Tensor, ""]:
+        rows = torch.ones(target.shape, device=target.device)
+        if inside is not None:
+            rows = rows + (self.vocab_weight - 1.0) * inside.float()
+        return self.weight * self.weighted(head, output, target, rows)
+
+    @override
+    def unweighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
+    ) -> Float[Tensor, ""]:
+        return self.weighted(head, output, target, torch.ones(target.shape, device=target.device))
+
+    @abstractmethod
+    def weighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
+    ) -> Float[Tensor, ""]:
+        """The loss with each position's row at its weight in `rows`."""
 
     @abstractmethod
     def head(self, width: int) -> nn.Module: ...
@@ -159,14 +200,18 @@ class Classified(AuxiliaryTerm):
     def classify(self, token: Int[Tensor, "g w"]) -> Int[Tensor, "g w *p"]: ...
 
     @staticmethod
-    def masked(logits: Float[Tensor, "n k"], classes: Int[Tensor, " n"]) -> Float[Tensor, ""]:
-        """Cross-entropy over the rows with a known class; 0 when there are none, without a host sync."""
-        known = classes != UNKNOWN
-        rows = functional.cross_entropy(logits.float(), classes.clamp(min=0), reduction="none") * known
-        return rows.sum() / known.sum().clamp(min=1)
+    def masked(
+        logits: Float[Tensor, "n k"], classes: Int[Tensor, " n"], rows: Float[Tensor, " n"]
+    ) -> Float[Tensor, ""]:
+        """Cross-entropy over the rows with a known class, each at its weight in `rows`; 0 when there are none,
+        without a host sync."""
+        losses = functional.cross_entropy(logits.float(), classes.clamp(min=0), reduction="none")
+        return AuxiliaryTerm.averaged(losses, classes != UNKNOWN, rows)
 
     @override
-    def unweighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
+    def weighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
     ) -> Float[Tensor, ""]:
-        return self.masked(output.reshape(-1, self.count()), self.classify(target).flatten())
+        classes = self.classify(target)
+        spread = rows.reshape(*rows.shape, *[1] * (classes.ndim - rows.ndim)).expand_as(classes)
+        return self.masked(output.reshape(-1, self.count()), classes.flatten(), spread.flatten())

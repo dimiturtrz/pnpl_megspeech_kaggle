@@ -3,7 +3,7 @@ embedding aligned, its word classified, its leading phonemes classified."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import override
 
 import pandas as pd
@@ -76,7 +76,7 @@ class Auxiliary(ABC):
             (optim.prev_word, lambda: PreviousWordTerm(weight=optim.prev_word)),
             (optim.adversary, lambda: TimingTerm.of(1.0, words, device)),
         )
-        terms = tuple(build() for weight, build in builders if weight)
+        terms = tuple(replace(build(), vocab_weight=optim.vocab_weight) for weight, build in builders if weight)
         return Joint(terms, optim.tap) if terms else NoAuxiliary()
 
 

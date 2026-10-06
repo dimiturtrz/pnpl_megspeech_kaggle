@@ -56,3 +56,19 @@ def test_unweighted() -> None:
     zero = timing.unweighted(Adversary(2), torch.zeros(1, 4, 2), target)
     kept = timing.targets[[0, 1, 2]][timing.known[[0, 1, 2]]]
     assert zero.item() == pytest.approx(kept.square().mean().item())
+
+
+def test_weighted() -> None:
+    """Zero predictions cost the known entries' weighted mean square; weight 1 is the unweighted loss."""
+    timing = term()
+    target = torch.tensor([[0, 1, 2, IGNORE]])
+    zero = torch.zeros(1, 4, 2)
+    assert torch.equal(
+        timing.weighted(Adversary(2), zero, target, torch.ones(1, 4)), timing.unweighted(Adversary(2), zero, target)
+    )
+    rows = torch.tensor([[1.0, 3.0, 1.0, 1.0]])
+    square = timing.targets[[0, 1, 2]].square() * timing.known[[0, 1, 2]]
+    weight = rows[0, :3, None] * timing.known[[0, 1, 2]]
+    assert timing.weighted(Adversary(2), zero, target, rows).item() == pytest.approx(
+        ((square * rows[0, :3, None]).sum() / weight.sum()).item()
+    )
