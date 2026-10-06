@@ -94,6 +94,14 @@ class OptimConfig:
     """Power of the tilt toward the strata (subject x span length x word rate) whose training loss ran highest last
     epoch (`megspeech.training.sampling.curriculum.Robust`): a stratum at twice the mean loss draws `2 ** robust` times
     its weight, and none draws below its own; 0 draws at the curriculum's weights alone."""
+    priority: float = 0.0
+    """Power of each span's difficulty (the EMA of its training loss) over the mean, tilting its draw weight
+    (`megspeech.training.sampling.curriculum.Prioritised`); an unseen span counts at the highest difficulty so far,
+    and none draws below a quarter or above four times its weight. Negative is self-paced, drawing the hard least
+    (noisy trials may be unlearnable). 0 turns the tilt off; exclusive with `robust`."""
+    visibility: float = 0.0
+    """Exponent `beta` of a span's draw weight `(1 + seen) ** -beta` in the times training has drawn it, so unseen spans
+    draw first and the corpus is rotated through; 0 turns it off; exclusive with `robust`."""
     anchor: float = 1.0
     """Share of each subject matrix's deviation from the Deep subject's that the run's decay leaves by its end, were
     its gradient never to restore it (`megspeech.training.regularise.anchor`); 1 decays the matrices toward 0 like

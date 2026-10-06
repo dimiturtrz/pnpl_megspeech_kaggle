@@ -1,11 +1,11 @@
 """How training draws spans as it goes: their natural mix, annealed toward the Deep subject, or tilted toward the
-strata training fits worst."""
+strata training fits worst, or prioritised span by span by how rarely drawn and how hard."""
 
 from dataclasses import dataclass
 from typing import Protocol
 
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Bool, Float, Int
 from torch import Tensor
 from torch.nn import functional
 
@@ -17,6 +17,12 @@ from megspeech.data.spans.spans import PAD
 BINS = 3
 """Quantile bins of span length and of word rate within a stratum: terciles, so each bin holds a third of the spans
 and a subject's strata stay large enough to measure an epoch's loss on."""
+
+FLOOR = 0.25
+"""Share of its base weight no prioritised span falls below, so easy or often-seen spans are never starved."""
+
+CEILING = 4.0
+"""Multiple of its base weight no prioritised span rises above, so no span dominates the draw."""
 
 
 class Curriculum(Protocol):
@@ -128,3 +134,54 @@ class Robust:
         self.sums.zero_()
         self.counts.zero_()
         return self.base.weights(train, epoch, epochs) * self.tilt[self.strata]
+
+
+@dataclass
+class Prioritised:
+    """`base`'s draw reweighted span by span: `(1 + seen) ** -visibility` for how often training has drawn it, times
+    its difficulty (the EMA of its mean word cross-entropy) over the mean difficulty, to the `power`; never below
+    `FLOOR` nor above `CEILING` times its `base` weight (a negative `power` is self-paced: it down-weights the
+    hard), and a `capped` span never above it. An unseen span takes the highest difficulty so far, as prioritised
+    replay gives a new transition the maximum priority (Schaul et al. 2016); a seen one is tilted by its training
+    loss as in online batch selection (Loshchilov & Hutter 2015), so validation never steers the draw.
+    """
+
+    base: Curriculum
+    power: float
+    visibility: float
+    seen: Float[Tensor, " g"]
+    difficulty: Float[Tensor, " g"]
+    capped: Bool[Tensor, " g"]
+
+    @classmethod
+    def of(
+        cls, base: Curriculum, train: Split, power: float, visibility: float, capped: Bool[Tensor, " g"] | None = None
+    ) -> Curriculum:
+        """`base` prioritised over `train`'s spans; `base` itself when `power` and `visibility` are both 0."""
+        if not (power or visibility):
+            return base
+        zeros = torch.zeros(train.index.shape[0], device=train.index.device)
+        return cls(base, power, visibility, zeros, zeros.clone(), zeros.bool() if capped is None else capped)
+
+    def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
+        """Each drawn span counted, and its difficulty moved halfway to this batch's mean labelled-word loss, without a
+        host sync; a span with no labelled word keeps its difficulty."""
+        words = functional.cross_entropy(
+            logits.detach().flatten(0, 1).float(), target.flatten(), ignore_index=IGNORE, reduction="none"
+        )
+        counts = (target != IGNORE).sum(dim=1).float()
+        loss = words.view_as(target).sum(dim=1) / counts.clamp(min=1)
+        before = self.difficulty[spans]
+        moved = torch.where(before > 0, (before + loss) / 2, loss)
+        self.difficulty[spans] = torch.where(counts > 0, moved, before)
+        self.seen.index_add_(0, spans, torch.ones_like(loss))
+
+    def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
+        """`base`'s weights scaled by each span's visibility and difficulty, floored and capped against them."""
+        base = self.base.weights(train, epoch, epochs)
+        filled = torch.where(self.difficulty > 0, self.difficulty, self.difficulty.max())
+        mean = filled.mean()
+        relative = torch.where(mean > 0, filled / mean.clamp(min=torch.finfo(mean.dtype).tiny), torch.ones_like(filled))
+        scaled = base * (1 + self.seen).pow(-self.visibility) * relative.pow(self.power)
+        bounded = torch.minimum(torch.maximum(scaled, FLOOR * base), CEILING * base)
+        return torch.where(self.capped, torch.minimum(bounded, base), bounded)

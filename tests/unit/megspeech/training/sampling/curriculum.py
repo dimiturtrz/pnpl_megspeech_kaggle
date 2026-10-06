@@ -9,7 +9,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.spans.spans import Spans
-from megspeech.training.sampling.curriculum import Annealed, Natural, Robust
+from megspeech.training.sampling.curriculum import Annealed, Natural, Prioritised, Robust
 
 
 def split(subject: list[int], weight: list[float]) -> Split:
@@ -103,3 +103,76 @@ def test_robust_weights() -> None:
     assert made.weights(TRAIN, 1, 10).tolist() == pytest.approx(expected)
     assert made.counts.tolist() == [0.0, 0.0]
     assert made.weights(TRAIN, 2, 10).tolist() == pytest.approx(expected)
+
+
+def prioritised(power: float = 1.0, visibility: float = 1.0, capped: list[bool] | None = None) -> Prioritised:
+    made = Prioritised.of(Natural(), TRAIN, power, visibility, None if capped is None else torch.tensor(capped))
+    assert isinstance(made, Prioritised)
+    return made
+
+
+def test_prioritised_of() -> None:
+    assert isinstance(Prioritised.of(Natural(), TRAIN, 0.0, 0.0), Natural)
+    made = prioritised()
+    assert made.seen.tolist() == [0.0] * 4
+    assert made.capped.tolist() == [False] * 4
+
+
+def test_prioritised_observe() -> None:
+    """Draws are counted, difficulty moves halfway to each new loss, and a span with no labelled word keeps its own."""
+    made = prioritised()
+    made.observe(torch.tensor([0, 1]), torch.zeros(2, 1, 50), torch.tensor([[0], [IGNORE]]))
+    assert made.seen.tolist() == [1.0, 1.0, 0.0, 0.0]
+    assert made.difficulty.tolist() == pytest.approx([math.log(50), 0.0, 0.0, 0.0])
+    logits = torch.zeros(1, 1, 50)
+    logits[0, 0, 0] = 1e4
+    made.observe(torch.tensor([0]), logits, torch.tensor([[0]]))
+    assert made.difficulty[0].item() == pytest.approx(math.log(50) / 2)
+
+
+def test_prioritised_weights_unseen_beats_seen() -> None:
+    made = prioritised(power=0.0)
+    made.observe(torch.tensor([0, 1]), torch.zeros(2, 1, 50), torch.zeros(2, 1, dtype=torch.int64))
+    weights = made.weights(TRAIN, 0, 10)
+    assert weights[:2].tolist() == pytest.approx([0.5, 1.5])
+    assert weights[2:].tolist() == pytest.approx([2.0, 5.0])
+
+
+def test_prioritised_weights_harder_beats_easier() -> None:
+    """Unseen spans take the highest difficulty, so they and the harder seen span draw above the easier one."""
+    made = prioritised(visibility=0.0)
+    made.difficulty = torch.tensor([1.0, 3.0, 0.0, 0.0])
+    mean = (1.0 + 3.0 + 3.0 + 3.0) / 4
+    expected = [1.0 / mean, 3.0 * 3.0 / mean, 2.0 * 3.0 / mean, 5.0 * 3.0 / mean]
+    assert made.weights(TRAIN, 0, 10).tolist() == pytest.approx(expected)
+
+
+def test_prioritised_weights_nothing_observed_is_base() -> None:
+    assert prioritised(power=2.0, visibility=0.0).weights(TRAIN, 0, 10).tolist() == [1.0, 3.0, 2.0, 5.0]
+
+
+def test_prioritised_weights_floor() -> None:
+    made = prioritised(power=1.0, visibility=3.0)
+    made.seen = torch.tensor([100.0, 0.0, 0.0, 0.0])
+    made.difficulty = torch.tensor([0.1, 5.0, 5.0, 5.0])
+    assert made.weights(TRAIN, 0, 10)[0].item() == pytest.approx(0.25)
+
+
+def test_prioritised_weights_capped() -> None:
+    """A capped span never exceeds its base weight however hard; an uncapped one does."""
+    made = prioritised(visibility=0.0, capped=[False, False, True, False])
+    made.difficulty = torch.tensor([1.0, 9.0, 9.0, 1.0])
+    weights = made.weights(TRAIN, 0, 10)
+    assert weights[1].item() > 3.0
+    assert weights[2].item() == pytest.approx(2.0)
+
+
+def test_prioritised_weights_negative_power_and_ceiling() -> None:
+    """A negative power ranks the easier span above the harder; none rises past four times its base weight."""
+    made = prioritised(power=-1.0, visibility=0.0)
+    made.difficulty = torch.tensor([1.0, 3.0, 1.0, 1.0])
+    weights = made.weights(TRAIN, 0, 10)
+    assert weights[0].item() > weights[1].item() / 3.0
+    boosted = prioritised(power=5.0, visibility=0.0)
+    boosted.difficulty = torch.tensor([1.0, 1.0, 1.0, 100.0])
+    assert boosted.weights(TRAIN, 0, 10)[3].item() == pytest.approx(20.0)
