@@ -22,7 +22,7 @@ import pandas as pd
 from jaxtyping import Float, Int
 
 from core.paths import DataRoot
-from megspeech.data.config import DEEP, METRICS, Refit
+from megspeech.data.config import DEEP, METRICS
 from megspeech.training.config import RunConfig
 
 LOG = logging.getLogger(__name__)
@@ -48,21 +48,21 @@ class Run:
 
     @classmethod
     def of(cls, directory: Path) -> "Run | None":
-        """The run in `directory`, or nothing when it has no complete val-selected history under a loadable config."""
+        """The run in `directory`, or nothing when it has no complete val-selected history under a loadable config:
+        every epoch, or fewer with the record's `stopped` mark (early stop), unlike a crash."""
         record = directory / METRICS
         if not record.exists():
             return None
-        history = json.loads(record.read_text()).get("history")
+        saved = json.loads(record.read_text())
+        history = saved.get("history")
         try:
             config = RunConfig.saved(directory)
         except (KeyError, ValueError):
             return None
-        selected = config.data.refit is Refit.NONE and config.optim.heads > 0 and not config.optim.last
-        if (
-            not history
-            or not selected
-            or len(history) != config.optim.epochs
-            or not all("macro" in row for row in history)
+        if not history or config.keeps_last or not all("macro" in row for row in history):
+            return None
+        if len(history) != config.optim.epochs and not (
+            saved.get("stopped") is True and len(history) < config.optim.epochs
         ):
             return None
         seedless = replace(config, optim=replace(config.optim, seed=0))
@@ -71,8 +71,14 @@ class Run:
             cls.family_of(config),
             repr(seedless),
             config.optim.seed,
-            np.array([row["macro"]["bacc10"] for row in history]),
+            cls.padded([row["macro"]["bacc10"] for row in history], config.optim.epochs),
         )
+
+    @staticmethod
+    def padded(val: list[float], epochs: int) -> Float[np.ndarray, " e"]:
+        """`val` carried to `epochs` by its best so far: what an early-stopped run keeps over the epochs it skipped."""
+        curve = np.array(val)
+        return np.concatenate([curve, np.full(epochs - len(curve), curve.max())])
 
     @staticmethod
     def family_of(config: RunConfig) -> str:

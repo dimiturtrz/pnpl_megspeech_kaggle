@@ -52,7 +52,12 @@ def main() -> None:
         torch.save(trainer.heads, out / HEADS)
     config.context.save(out)
     best = config.selected(history)
-    summary = {"config": asdict(config), "train": len(train.y), "best": asdict(best)}
+    summary = {
+        "config": asdict(config),
+        "train": len(train.y),
+        "best": asdict(best),
+        "stopped": len(history) < config.optim.epochs,
+    }
     (out / METRICS).write_text(json.dumps({**summary, "history": [asdict(row) for row in history]}, indent=1))
     LOG.info("best %s", best)
     evaluator = trainer.evaluator

@@ -14,7 +14,9 @@ from megspeech.data.corpus import Corpus
 from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.spans.spans import Spans
+from megspeech.evaluation.metric.ruler import Interval
 from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.score import Epoch, Score
 from megspeech.model.config import ContextConfig
 from megspeech.model.context.timing import TimingHead
 from megspeech.model.sentence import SentenceNet
@@ -24,7 +26,7 @@ from megspeech.objective.scorer import DIM
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import ContextTerm, WordTerm
 from megspeech.training.auxiliary import Joint, NoAuxiliary
-from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig
+from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig, StopConfig
 from megspeech.training.hook import Scheduled
 from megspeech.training.loop.ema import Ema
 from megspeech.training.loop.trainer import Trainer, TrainState
@@ -222,6 +224,24 @@ def test_fit() -> None:
         trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, lr=math.inf))).fit(
             split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE)
         )
+
+
+def scripted(monkeypatch: pytest.MonkeyPatch, bacc10: list[float]) -> None:
+    def report(_: Evaluator, *args: object) -> Epoch:
+        epoch, loss = cast("int", args[-2]), cast("float", args[-1])
+        value = bacc10[epoch]
+        return Epoch(epoch, loss, {}, Score(0.5, value, {0.5: value}, 1), Interval(value, value), 0.0, 0.0)
+
+    monkeypatch.setattr(Evaluator, "report", report)
+
+
+@pytest.mark.parametrize(("patience", "trained"), [(0, 6), (2, 4), (5, 6), (1, 3)])
+def test_fit_patience(monkeypatch: pytest.MonkeyPatch, patience: int, trained: int) -> None:
+    scripted(monkeypatch, [0.2, 0.5, 0.3, 0.3, 0.9, 0.9])
+    config = RunConfig(optim=OptimConfig(epochs=6, batch=4), stop=StopConfig(patience))
+    _, history = trainer(config).fit(split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE))
+    assert len(history) == trained
+    assert config.selected(history).epoch == (1 if trained < 5 else 4)
 
 
 def test_auxiliary_state() -> None:

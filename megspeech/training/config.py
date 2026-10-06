@@ -124,6 +124,21 @@ class OptimConfig:
 
 
 @dataclass(frozen=True)
+class StopConfig:
+    """When the epoch loop ends before its schedule does."""
+
+    patience: int = 0
+    """Stop once the selection metric (macro bacc10) has not strictly improved for this many epochs, keeping the best
+    epoch as ever; 0 trains every epoch. The learning-rate schedule stays defined over all `epochs`, so a stopped run
+    is that schedule truncated. Refused where no epoch is selected on validation (`refit`, `last`, no heads)."""
+
+    def stalled(self, history: list[Epoch]) -> bool:
+        """Whether `history`'s best epoch (the first of equals) is `patience` or more epochs behind its last."""
+        best = max(range(len(history)), key=lambda at: history[at].macro.bacc10)
+        return self.patience > 0 and len(history) - 1 - best >= self.patience
+
+
+@dataclass(frozen=True)
 class RunConfig:
     """Everything a training run is made of; `core.tree.Tree` turns it into the command line."""
 
@@ -133,21 +148,30 @@ class RunConfig:
     optim: OptimConfig = OptimConfig()
     sampler: SamplerConfig = SamplerConfig()
     selection: SelectionConfig = SelectionConfig()
+    stop: StopConfig = StopConfig()
 
     def __post_init__(self) -> None:
+        if self.stop.patience < 0:
+            raise ValueError(f"stop.patience {self.stop.patience} is negative; 0 trains every epoch")
+        if self.stop.patience and self.keeps_last:
+            raise ValueError(
+                f"stop.patience {self.stop.patience} needs an epoch selected on validation, but this run keeps its "
+                "last (refit, optim.last, or heads 0)"
+            )
         if self.data.projected and (self.context.encoder.cached or self.context.conv.merger):
             raise ValueError(
                 f"encoder {self.context.encoder} with merger {self.context.conv.merger} reads the 306 sensors, which "
                 "a projected config does not keep"
             )
 
+    @property
+    def keeps_last(self) -> bool:
+        """Whether the run keeps its last epoch: val was trained on, or the heads it would select on are not."""
+        return self.data.refit is not Refit.NONE or self.optim.last or not self.optim.heads
+
     def selected(self, history: list[Epoch]) -> Epoch:
         """The epoch whose weights the run keeps: the best on validation, or the last when val was trained on."""
-        return (
-            history[-1]
-            if self.data.refit is not Refit.NONE or self.optim.last or not self.optim.heads
-            else max(history, key=lambda row: row.macro.bacc10)
-        )
+        return history[-1] if self.keeps_last else max(history, key=lambda row: row.macro.bacc10)
 
     @classmethod
     def saved(cls, directory: Path) -> "RunConfig":

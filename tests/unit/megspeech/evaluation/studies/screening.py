@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +24,23 @@ def family() -> Family:
 
 def test_of(tmp_path: Path) -> None:
     assert Run.of(tmp_path) is None
+    history = [{"macro": {"bacc10": v}} for v in (0.2, 0.5, 0.4)]
+    record = {"config": {"optim": {"epochs": 5}}, "history": history}
+    (tmp_path / "metrics.json").write_text(json.dumps(record))
+    assert Run.of(tmp_path) is None
+    (tmp_path / "metrics.json").write_text(json.dumps({**record, "stopped": True}))
+    stopped = Run.of(tmp_path)
+    assert stopped is not None
+    assert stopped.val.tolist() == [0.2, 0.5, 0.4, 0.5, 0.5]
+    (tmp_path / "metrics.json").write_text(json.dumps({**record, "history": history + history[:2], "stopped": False}))
+    full = Run.of(tmp_path)
+    assert full is not None
+    assert len(full.val) == 5
+
+
+def test_padded() -> None:
+    assert Run.padded([0.2, 0.5, 0.4], 5).tolist() == [0.2, 0.5, 0.4, 0.5, 0.5]
+    assert Run.padded([0.2, 0.5], 2).tolist() == [0.2, 0.5]
 
 
 def test_family_of() -> None:
