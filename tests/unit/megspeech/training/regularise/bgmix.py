@@ -28,7 +28,7 @@ def pair(labels: list[int]) -> tuple[Split, Batch, torch.Tensor]:
     return split, batch, x
 
 
-def test_of() -> None:
+def test_b_g_mix_of() -> None:
     labels = [3] * MIN_CELL + [4] * 2
     split, _, _ = pair(labels)
     x = split.windows(torch.arange(len(labels)))
@@ -54,13 +54,17 @@ def test_rows() -> None:
     assert BGMix.rows(batch, split).tolist() == [1, IGNORE, 2]
 
 
-def test_apply_p0_is_identity_and_untouched_is_too() -> None:
+def test_apply_p0_is_identity() -> None:
     split, batch, x = pair([1, 2, 3, 4])
     assert torch.equal(BGMix(0.0, table()).apply(x, batch, split), x)
+
+
+def test_untouched_apply() -> None:
+    split, batch, x = pair([1, 2, 3, 4])
     assert torch.equal(Untouched().apply(x, batch, split), x)
 
 
-def test_apply_p1_is_template_plus_the_partners_residual() -> None:
+def test_b_g_mix_apply() -> None:
     torch.manual_seed(0)
     split, batch, x = pair([1, 2, 3, 4])
     mixer = BGMix(1.0, table())
@@ -84,13 +88,21 @@ def test_apply_leaves_unlabelled_rows_and_never_partners_with_them() -> None:
     assert torch.allclose(out[2] - 2.0, x[0] - 1.0, atol=1e-5)
 
 
-def test_drained() -> None:
+def test_untouched_drained() -> None:
+    assert Untouched().drained() == 0
+
+
+def test_words() -> None:
+    _, batch, _ = pair([1, IGNORE, 2])
+    assert BGMix.words(batch).tolist() == [0, 1, 2]
+
+
+def test_b_g_mix_drained() -> None:
     split, batch, x = pair([1, 2, 3, 4])
     mixer = BGMix(1.0, table())
     mixer.apply(x, batch, split)
     assert mixer.drained() == 4
     assert mixer.drained() == 0
-    assert Untouched().drained() == 0
 
 
 def sourced(labels: list[int], sources: list[int]) -> tuple[Split, Batch, torch.Tensor]:
@@ -98,7 +110,7 @@ def sourced(labels: list[int], sources: list[int]) -> tuple[Split, Batch, torch.
     return dataclasses.replace(split, source=torch.tensor(sources)), batch, x
 
 
-def test_key_of() -> None:
+def test_b_g_mix_key_of() -> None:
     split, _, _ = sourced([1, 2], [3, 4])
     assert BGMixKey.SUBJECT.of(split).tolist() == [0, 0]
     assert BGMixKey.SOURCE.of(split).tolist() == [3, 4]
