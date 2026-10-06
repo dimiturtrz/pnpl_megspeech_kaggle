@@ -6,7 +6,7 @@ multi-subject, which val). Per group: where the best epoch falls and what patien
 across runs differing only in `optim.seed` (c). Selected val only: a run's local test score is not in its record
 (megspeech-iuh).
 
-    uv run python -m megspeech.evaluation.studies.screening
+    uv run python -m megspeech.training.screening
 """
 
 import argparse
