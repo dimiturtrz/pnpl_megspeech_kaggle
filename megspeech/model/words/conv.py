@@ -57,6 +57,10 @@ class ConvConfig:
     sensorwise_out: int = 0
     """Channels each site (or sensor) is reduced to by a 1x1 convolution before fusion, shrinking the fuse layer;
     0 keeps `sensorwise`."""
+    sensorwise_attend: int = 0
+    """Pre-norm transformer layers across the sites (after the site embedding, per time step); 0 = none."""
+    sensorwise_heads: int = 2
+    """Attention heads of the site-axis layers; must divide the site width."""
     gated: bool = False
     """GLU-gate every dilated block in place of its GELU (`DilatedBlock`), d'Ascoli et al.'s trunk activation."""
     head: WordHead = WordHead.LINEAR
@@ -74,10 +78,7 @@ class ConvConfig:
             raise ValueError(f"merger={self.merger} and sensorwise={self.sensorwise} are two spatial front ends")
         if self.sensorwise_depth > len(self.dilations):
             raise ValueError(f"sensorwise_depth={self.sensorwise_depth} exceeds the {len(self.dilations)} dilations")
-        if self.sensorwise_site and not self.sensorwise:
-            raise ValueError(f"sensorwise_site={self.sensorwise_site} needs sensorwise")
-        if self.sensorwise_out and not self.sensorwise:
-            raise ValueError(f"sensorwise_out={self.sensorwise_out} needs sensorwise")
+        self._check_sensorwise()
         if self.lora:
             raise ValueError(f"lora={self.lora}: the end-to-end MEG-XL encoder it adapted is retired")
         if list(self.stages) != sorted(set(self.stages)) or any(
@@ -86,6 +87,14 @@ class ConvConfig:
             raise ValueError(f"stages {self.stages} must increase strictly within 1..{len(self.dilations) - 1}")
         if self.growth < 1:
             raise ValueError(f"growth={self.growth} must be at least 1")
+
+    def _check_sensorwise(self) -> None:
+        for name in ("site", "out", "attend"):
+            value = getattr(self, f"sensorwise_{name}")
+            if value and not self.sensorwise:
+                raise ValueError(f"sensorwise_{name}={value} needs sensorwise")
+        if self.sensorwise_attend and (self.sensorwise_out or self.sensorwise) % self.sensorwise_heads:
+            raise ValueError(f"sensorwise_heads={self.sensorwise_heads} must divide the site width")
 
     @property
     def widths(self) -> tuple[int, ...]:
@@ -148,7 +157,13 @@ class ConvWords(WordEncoder):
                 config.sensorwise,
                 config.hidden,
                 stack,
-                Grouping(config.sensorwise_site or 1, config.sensorwise_out),
+                Grouping(
+                    config.sensorwise_site or 1,
+                    config.sensorwise_out,
+                    config.sensorwise_attend,
+                    config.sensorwise_heads,
+                    config.dropout,
+                ),
             )
         if config.merger:
             return nn.Sequential(SpatialAttention(config.merger), nn.Conv1d(config.merger, config.hidden, 1))

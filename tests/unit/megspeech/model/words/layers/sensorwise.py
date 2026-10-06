@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from megspeech.model.words.layers.dilated import DilatedBlock
-from megspeech.model.words.layers.sensorwise import Grouping, Sensorwise
+from megspeech.model.words.layers.sensorwise import Grouping, Sensorwise, SiteAttention
 
 CHANNELS = 5
 WIDTH = 4
@@ -71,3 +71,21 @@ def test_out() -> None:
     assert net.sensor.shape == (102, 2, 1)
     assert net.forward(torch.randn(2, 306, SAMPLES, generator=GENERATOR)).shape == (2, 256, SAMPLES)
     assert isinstance(Sensorwise(306, 16, 256, ()).reduce, torch.nn.Identity)
+
+
+def test_attend() -> None:
+    net = Sensorwise(306, 8, 256, (), Grouping(3, 16, 1, 2)).eval()
+    x = torch.randn(2, 306, SAMPLES, generator=GENERATOR)
+    assert net.forward(x).shape == (2, 256, SAMPLES)
+    assert isinstance(net.attend, SiteAttention)
+    plain = Sensorwise(306, 8, 256, (), Grouping(3, 16))
+    assert isinstance(plain.attend, torch.nn.Identity)
+    assert [k for k in net.state_dict() if not k.startswith("attend.")] == list(plain.state_dict())
+    assert sum(p.numel() for p in plain.parameters()) < sum(p.numel() for p in net.parameters())
+
+
+def test_attend_equivariant() -> None:
+    net = Sensorwise(6, WIDTH, HIDDEN, (DilatedBlock(WIDTH, 1, 0.0),), Grouping(3, 4, 1, 2, 0.0)).eval()
+    x = torch.randn(3, 6, SAMPLES, generator=GENERATOR)
+    assert net.features(x[:, [3, 4, 5, 0, 1, 2]]).shape == (3, 2, WIDTH, SAMPLES)
+    assert torch.allclose(net.features(x[:, [3, 4, 5, 0, 1, 2]]), net.features(x).flip(1), atol=1e-6)

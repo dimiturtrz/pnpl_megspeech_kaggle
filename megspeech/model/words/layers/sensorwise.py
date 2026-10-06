@@ -9,6 +9,7 @@ from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
 from megspeech.model.words.layers.dilated import DilatedBlock
+from megspeech.model.words.layers.siteattention import SiteAttention
 
 
 @dataclass(frozen=True)
@@ -17,13 +18,20 @@ class Grouping:
     """Contiguous channels entering together as one site; 1 = each sensor alone."""
     out: int = 0
     """Channels each site is reduced to before fusion; 0 keeps the stack's width."""
+    attend: int = 0
+    """Pre-norm transformer layers across the site axis, after the site embedding; 0 = none."""
+    heads: int = 2
+    """Attention heads of each site-axis layer; must divide `out`."""
+    dropout: float = 0.1
+    """Dropout inside the site-axis layers."""
 
 
 class Sensorwise(nn.Module):
     """Time first, space second: each site's `site` contiguous channels (1 = each sensor alone, 3 = a Neuromag
     magnetometer and its two gradiometers) run together through the same dilated `stack` (weights shared across
     sites), an optional 1x1 convolution reduces each site's `width` to `out`, a learned per-site embedding names
-    the site, and a 1x1 convolution fuses all `channels // site * out` features into `hidden`."""
+    the site, optional `attend` transformer layers let the sites exchange information at each time step, and a 1x1
+    convolution fuses all `channels // site * out` features into `hidden`."""
 
     def __init__(
         self, channels: int, width: int, hidden: int, stack: Iterable[DilatedBlock], grouping: Grouping | None = None
@@ -40,6 +48,9 @@ class Sensorwise(nn.Module):
         out = grouping.out or width
         self.reduce = nn.Conv1d(width, out, 1) if out != width else nn.Identity()
         self.sensor = nn.Parameter(torch.zeros(sites, out, 1))
+        self.attend = (
+            SiteAttention(out, grouping.attend, grouping.heads, grouping.dropout) if grouping.attend else nn.Identity()
+        )
         self.fuse = nn.Conv1d(sites * out, hidden, 1)
 
     def features(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b s w t"]:
@@ -58,4 +69,4 @@ class Sensorwise(nn.Module):
         h = self.features(x, valid)
         b, sites, width, t = h.shape
         h = self.reduce(h.reshape(b * sites, width, t)).reshape(b, sites, -1, t) + self.sensor
-        return self.fuse(h.flatten(1, 2))
+        return self.fuse(self.attend(h).flatten(1, 2))

@@ -8,6 +8,7 @@ from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.words.conv import ConvConfig, ConvWords
 from megspeech.model.words.layers.sensorwise import Sensorwise
+from megspeech.model.words.layers.siteattention import SiteAttention
 from megspeech.model.words.layers.spatial import SpatialAttention
 
 SMALL = ConvConfig(hidden=8, dilations=(1, 2))
@@ -180,3 +181,25 @@ def test_sensorwise_out() -> None:
     assert cast(Sensorwise, ConvWords.front(config, 6)).fuse.in_channels == 12
     with pytest.raises(ValueError, match="sensorwise_out"):
         ConvConfig(sensorwise_out=2)
+
+
+def test_sensorwise_attend() -> None:
+    config = ConvConfig(
+        hidden=8, dilations=(1, 2), sensorwise=4, sensorwise_site=3, sensorwise_out=4, sensorwise_attend=1
+    )
+    front = cast(Sensorwise, ConvWords.front(config, 6))
+    assert isinstance(front.attend, SiteAttention)
+    assert front(torch.randn(2, 6, SAMPLES, generator=GENERATOR)).shape == (2, 8, SAMPLES)
+    assert isinstance(cast(Sensorwise, ConvWords.front(ConvConfig(hidden=8, sensorwise=4), 6)).attend, nn.Identity)
+    with pytest.raises(ValueError, match="sensorwise_attend"):
+        ConvConfig(sensorwise_attend=1)
+    with pytest.raises(ValueError, match="sensorwise_heads"):
+        ConvConfig(sensorwise=4, sensorwise_attend=1, sensorwise_heads=3)
+
+
+def test_sensorwise_attend_front() -> None:
+    kwargs = {"sensorwise": 3, "sensorwise_site": 3, "sensorwise_depth": 3, "sensorwise_out": 16}
+    base = ConvWords.front(ConvConfig(**kwargs), 306)
+    attended = ConvWords.front(ConvConfig(**kwargs, sensorwise_attend=1, sensorwise_heads=2), 306)
+    assert sum(p.numel() for p in attended.parameters()) > sum(p.numel() for p in base.parameters())
+    assert attended(torch.randn(2, 306, SAMPLES, generator=GENERATOR)).shape == (2, 256, SAMPLES)
