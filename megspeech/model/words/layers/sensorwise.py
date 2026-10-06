@@ -9,7 +9,11 @@ from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
 from megspeech.model.words.layers.dilated import DilatedBlock
+from megspeech.model.words.layers.flattenfuse import FlattenFuse
+from megspeech.model.words.layers.noattention import NoAttention
+from megspeech.model.words.layers.setpool import SetPool
 from megspeech.model.words.layers.siteattention import SiteAttention
+from megspeech.model.words.layers.sitedrop import SiteDrop
 
 
 @dataclass(frozen=True)
@@ -24,6 +28,10 @@ class Grouping:
     """Attention heads of each site-axis layer; must divide `out`."""
     dropout: float = 0.1
     """Dropout inside the site-axis layers."""
+    pool: int = 0
+    """Learned queries of a set pool replacing the flatten fuse (`SetPool`); 0 = flatten."""
+    drop: float = 0.0
+    """Training-only share of sites dropped per window."""
 
 
 class Sensorwise(nn.Module):
@@ -49,9 +57,14 @@ class Sensorwise(nn.Module):
         self.reduce = nn.Conv1d(width, out, 1) if out != width else nn.Identity()
         self.sensor = nn.Parameter(torch.zeros(sites, out, 1))
         self.attend = (
-            SiteAttention(out, grouping.attend, grouping.heads, grouping.dropout) if grouping.attend else nn.Identity()
+            SiteAttention(out, grouping.attend, grouping.heads, grouping.dropout) if grouping.attend else NoAttention()
         )
-        self.fuse = nn.Conv1d(sites * out, hidden, 1)
+        self.drop = SiteDrop(grouping.drop)
+        self.fuse = (
+            SetPool(out, grouping.pool, grouping.heads, hidden)
+            if grouping.pool
+            else FlattenFuse(sites, out, hidden, grouping.drop)
+        )
 
     def features(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b s w t"]:
         """Every site's temporal features, before the site embedding; row-wise over sites, so equivariant to
@@ -69,4 +82,5 @@ class Sensorwise(nn.Module):
         h = self.features(x, valid)
         b, sites, width, t = h.shape
         h = self.reduce(h.reshape(b * sites, width, t)).reshape(b, sites, -1, t) + self.sensor
-        return self.fuse(self.attend(h).flatten(1, 2))
+        keep = self.drop(h)
+        return self.fuse(self.attend(h, keep), keep)

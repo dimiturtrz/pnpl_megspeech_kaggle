@@ -2,12 +2,13 @@
 
 from typing import override
 
-from jaxtyping import Float
+from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
 
 class SiteAttention(nn.Module):
-    """Transformer layers over the site axis, each time step attending across sites independently."""
+    """Transformer layers over the site axis, each time step attending across sites independently; dropped sites
+    (`keep` False) are masked out as keys."""
 
     def __init__(self, dim: int, layers: int, heads: int, dropout: float) -> None:
         super().__init__()
@@ -15,7 +16,8 @@ class SiteAttention(nn.Module):
         self.layers = nn.TransformerEncoder(layer, layers, enable_nested_tensor=False)
 
     @override
-    def forward(self, h: Float[Tensor, "b s d t"]) -> Float[Tensor, "b s d t"]:
+    def forward(self, h: Float[Tensor, "b s d t"], keep: Bool[Tensor, "b s"] | None = None) -> Float[Tensor, "b s d t"]:
         b, sites, dim, t = h.shape
         rows = h.permute(0, 3, 1, 2).reshape(b * t, sites, dim)
-        return self.layers(rows).reshape(b, t, sites, dim).permute(0, 2, 3, 1)
+        mask = None if keep is None else ~keep.repeat_interleave(t, 0)
+        return self.layers(rows, src_key_padding_mask=mask).reshape(b, t, sites, dim).permute(0, 2, 3, 1)

@@ -61,6 +61,12 @@ class ConvConfig:
     """Pre-norm transformer layers across the sites (after the site embedding, per time step); 0 = none."""
     sensorwise_heads: int = 2
     """Attention heads of the site-axis layers; must divide the site width."""
+    sensorwise_pool: int = 0
+    """Learned queries cross-attending over the site tokens in place of the flatten fuse (`SetPool`), layout-agnostic
+    and maskable; 0 = flatten."""
+    sensorwise_drop: float = 0.0
+    """Training-only share of sites dropped per window (masked out of the pool's attention, or zeroed and the
+    survivors rescaled under the flatten fuse); 0 = none."""
     gated: bool = False
     """GLU-gate every dilated block in place of its GELU (`DilatedBlock`), d'Ascoli et al.'s trunk activation."""
     head: WordHead = WordHead.LINEAR
@@ -89,11 +95,15 @@ class ConvConfig:
             raise ValueError(f"growth={self.growth} must be at least 1")
 
     def _check_sensorwise(self) -> None:
-        for name in ("site", "out", "attend"):
+        for name in ("site", "out", "attend", "pool", "drop"):
             value = getattr(self, f"sensorwise_{name}")
             if value and not self.sensorwise:
                 raise ValueError(f"sensorwise_{name}={value} needs sensorwise")
-        if self.sensorwise_attend and (self.sensorwise_out or self.sensorwise) % self.sensorwise_heads:
+        if not 0 <= self.sensorwise_drop < 1:
+            raise ValueError(f"sensorwise_drop={self.sensorwise_drop} must be in [0, 1)")
+        if (self.sensorwise_attend or self.sensorwise_pool) and (
+            self.sensorwise_out or self.sensorwise
+        ) % self.sensorwise_heads:
             raise ValueError(f"sensorwise_heads={self.sensorwise_heads} must divide the site width")
 
     @property
@@ -163,6 +173,8 @@ class ConvWords(WordEncoder):
                     config.sensorwise_attend,
                     config.sensorwise_heads,
                     config.dropout,
+                    config.sensorwise_pool,
+                    config.sensorwise_drop,
                 ),
             )
         if config.merger:

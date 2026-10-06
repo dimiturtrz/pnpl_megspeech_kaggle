@@ -1,8 +1,14 @@
+from typing import cast
+
 import pytest
 import torch
 
 from megspeech.model.words.layers.dilated import DilatedBlock
-from megspeech.model.words.layers.sensorwise import Grouping, Sensorwise, SiteAttention
+from megspeech.model.words.layers.flattenfuse import FlattenFuse
+from megspeech.model.words.layers.noattention import NoAttention
+from megspeech.model.words.layers.sensorwise import Grouping, Sensorwise
+from megspeech.model.words.layers.setpool import SetPool
+from megspeech.model.words.layers.siteattention import SiteAttention
 
 CHANNELS = 5
 WIDTH = 4
@@ -79,7 +85,7 @@ def test_attend() -> None:
     assert net.forward(x).shape == (2, 256, SAMPLES)
     assert isinstance(net.attend, SiteAttention)
     plain = Sensorwise(306, 8, 256, (), Grouping(3, 16))
-    assert isinstance(plain.attend, torch.nn.Identity)
+    assert isinstance(plain.attend, NoAttention)
     assert [k for k in net.state_dict() if not k.startswith("attend.")] == list(plain.state_dict())
     assert sum(p.numel() for p in plain.parameters()) < sum(p.numel() for p in net.parameters())
 
@@ -89,3 +95,36 @@ def test_attend_equivariant() -> None:
     x = torch.randn(3, 6, SAMPLES, generator=GENERATOR)
     assert net.features(x[:, [3, 4, 5, 0, 1, 2]]).shape == (3, 2, WIDTH, SAMPLES)
     assert torch.allclose(net.features(x[:, [3, 4, 5, 0, 1, 2]]), net.features(x).flip(1), atol=1e-6)
+
+
+def build(grouping: Grouping) -> Sensorwise:
+    torch.manual_seed(0)
+    return Sensorwise(6, WIDTH, HIDDEN, (DilatedBlock(WIDTH, 1, 0.0),), grouping)
+
+
+def test_default_matches_flatten() -> None:
+    net = build(Grouping(3, 4)).train()
+    x = torch.randn(3, 6, SAMPLES, generator=GENERATOR)
+    h = net.features(x)
+    b, sites, width, t = h.shape
+    h = net.reduce(h.reshape(b * sites, width, t)).reshape(b, sites, -1, t) + net.sensor
+    fuse = cast(FlattenFuse, net.fuse)
+    expected = torch.nn.functional.conv1d(h.flatten(1, 2), fuse.weight, fuse.bias)
+    assert torch.equal(net.forward(x), expected)
+    assert type(net.fuse) is FlattenFuse
+    assert list(net.state_dict())[-2:] == ["fuse.weight", "fuse.bias"]
+    assert torch.equal(build(Grouping(3, 4, pool=0, drop=0.0)).forward(x), build(Grouping(3, 4)).forward(x))
+
+
+def test_pool_and_drop() -> None:
+    x = torch.randn(3, 6, SAMPLES, generator=GENERATOR)
+    groupings = (Grouping(3, 4, drop=0.5), Grouping(3, 4, pool=2, drop=0.5), Grouping(3, 4, 1, 2, pool=2, drop=0.5))
+    for grouping in groupings:
+        net = build(grouping)
+        assert net.forward(x).shape == (3, HIDDEN, SAMPLES)
+        net = net.eval()
+        assert torch.equal(net.forward(x), net.forward(x))
+        assert not torch.equal(net.train().forward(x), net.train().forward(x))
+    pooled = build(Grouping(3, 4, pool=2))
+    assert isinstance(pooled.fuse, SetPool)
+    assert pooled.eval().forward(x).shape == (3, HIDDEN, SAMPLES)

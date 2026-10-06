@@ -7,7 +7,10 @@ from torch import nn
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.words.conv import ConvConfig, ConvWords
+from megspeech.model.words.layers.flattenfuse import FlattenFuse
+from megspeech.model.words.layers.noattention import NoAttention
 from megspeech.model.words.layers.sensorwise import Sensorwise
+from megspeech.model.words.layers.setpool import SetPool
 from megspeech.model.words.layers.siteattention import SiteAttention
 from megspeech.model.words.layers.spatial import SpatialAttention
 
@@ -194,7 +197,7 @@ def test_sensorwise_attend() -> None:
     front = cast(Sensorwise, ConvWords.front(config, 6))
     assert isinstance(front.attend, SiteAttention)
     assert front(torch.randn(2, 6, SAMPLES, generator=GENERATOR)).shape == (2, 8, SAMPLES)
-    assert isinstance(cast(Sensorwise, ConvWords.front(ConvConfig(hidden=8, sensorwise=4), 6)).attend, nn.Identity)
+    assert isinstance(cast(Sensorwise, ConvWords.front(ConvConfig(hidden=8, sensorwise=4), 6)).attend, NoAttention)
     with pytest.raises(ValueError, match="sensorwise_attend"):
         ConvConfig(sensorwise_attend=1)
     with pytest.raises(ValueError, match="sensorwise_heads"):
@@ -207,3 +210,24 @@ def test_sensorwise_attend_front() -> None:
     attended = ConvWords.front(ConvConfig(**kwargs, sensorwise_attend=1, sensorwise_heads=2), 306)
     assert sum(p.numel() for p in attended.parameters()) > sum(p.numel() for p in base.parameters())
     assert attended(torch.randn(2, 306, SAMPLES, generator=GENERATOR)).shape == (2, 256, SAMPLES)
+
+
+def test_sensorwise_pool_drop() -> None:
+    config = ConvConfig(
+        hidden=8, dilations=(1, 2), sensorwise=4, sensorwise_site=3, sensorwise_pool=2, sensorwise_drop=0.3
+    )
+    front = cast(Sensorwise, ConvWords.front(config, 6))
+    assert isinstance(front.fuse, SetPool)
+    assert front.drop.p == 0.3
+    assert front(torch.randn(2, 6, SAMPLES, generator=GENERATOR)).shape == (2, 8, SAMPLES)
+    assert isinstance(cast(Sensorwise, ConvWords.front(ConvConfig(hidden=8, sensorwise=4), 6)).fuse, FlattenFuse)
+    with pytest.raises(ValueError, match="sensorwise_pool"):
+        ConvConfig(sensorwise_pool=2)
+    with pytest.raises(ValueError, match="sensorwise_drop"):
+        ConvConfig(sensorwise_drop=0.2)
+    with pytest.raises(ValueError, match="sensorwise_drop"):
+        ConvConfig(sensorwise=4, sensorwise_drop=1.0)
+    with pytest.raises(ValueError, match="sensorwise_drop"):
+        ConvConfig(sensorwise=4, sensorwise_drop=-0.1)
+    with pytest.raises(ValueError, match="sensorwise_heads"):
+        ConvConfig(sensorwise=4, sensorwise_pool=2, sensorwise_heads=3)
