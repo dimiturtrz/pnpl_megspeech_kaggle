@@ -34,6 +34,10 @@ class Curriculum(Protocol):
         """Training's context-head `logits` on the words of `spans`, for a curriculum that draws by its loss."""
         ...
 
+    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
+        """How `weights`, this epoch's draw, sit against the curriculum's own: empty where nothing tilts them."""
+        ...
+
 
 class Natural:
     """Every span at its own weight, whichever subject heard it: the mix the corpus holds."""
@@ -43,6 +47,10 @@ class Natural:
 
     def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
         """Nothing: the draw ignores the loss."""
+
+    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
+        """Nothing to report: the draw is not tilted by a loss."""
+        return {}
 
 
 @dataclass(frozen=True)
@@ -74,6 +82,10 @@ class Annealed:
 
     def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
         """Nothing: the schedule ignores the loss."""
+
+    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
+        """Nothing to report: the draw is not tilted by a loss."""
+        return {}
 
 
 @dataclass
@@ -135,6 +147,10 @@ class Robust:
         self.counts.zero_()
         return self.base.weights(train, epoch, epochs) * self.tilt[self.strata]
 
+    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
+        """Nothing to report: the stratum tilts are already logged by their effect on the loss."""
+        return {}
+
 
 @dataclass
 class Prioritised:
@@ -185,3 +201,18 @@ class Prioritised:
         scaled = base * (1 + self.seen).pow(-self.visibility) * relative.pow(self.power)
         bounded = torch.minimum(torch.maximum(scaled, FLOOR * base), CEILING * base)
         return torch.where(self.capped, torch.minimum(bounded, base), bounded)
+
+    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
+        """`weights` over `base`'s: the 5th, 50th and 95th percentile of the ratio, the share of spans on `FLOOR` and on
+        `CEILING` (a tilt saturating its clamps), and the effective sample size over the span count."""
+        ratio = weights / self.base.weights(train, epoch, epochs)
+        low, mid, high = torch.quantile(ratio, torch.tensor([0.05, 0.5, 0.95], device=ratio.device)).tolist()
+        total = weights.double()
+        return {
+            "ratio_p05": low,
+            "ratio_p50": mid,
+            "ratio_p95": high,
+            "at_floor": ratio.isclose(torch.tensor(FLOOR, device=ratio.device)).float().mean().item(),
+            "at_ceiling": ratio.isclose(torch.tensor(CEILING, device=ratio.device)).float().mean().item(),
+            "ess": (total.sum() ** 2 / total.square().sum() / len(weights)).item(),
+        }

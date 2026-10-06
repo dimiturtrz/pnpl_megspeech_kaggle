@@ -176,3 +176,21 @@ def test_prioritised_weights_negative_power_and_ceiling() -> None:
     boosted = prioritised(power=5.0, visibility=0.0)
     boosted.difficulty = torch.tensor([1.0, 1.0, 1.0, 100.0])
     assert boosted.weights(TRAIN, 0, 10)[3].item() == pytest.approx(20.0)
+
+
+def test_summary() -> None:
+    """Untilted curricula report nothing; a prioritised one reports the ratio quantiles, clamp shares and ESS."""
+    for plain in (Natural(), Annealed(0.9), robust([0, 1, 0, 1])):
+        assert plain.summary(TRAIN, 0, 10, plain.weights(TRAIN, 0, 10)) == {}
+    made = prioritised(power=1.0, visibility=0.0)
+    flat = made.summary(TRAIN, 0, 10, made.weights(TRAIN, 0, 10))
+    assert flat["ratio_p50"] == pytest.approx(1.0)
+    assert flat["at_floor"] == 0.0
+    assert flat["ess"] == pytest.approx((11.0**2 / (1 + 9 + 4 + 25)) / 4)
+    made.seen = torch.tensor([100.0, 0.0, 0.0, 0.0])
+    tilted = prioritised(power=0.0, visibility=3.0)
+    tilted.seen = made.seen
+    out = tilted.summary(TRAIN, 0, 10, tilted.weights(TRAIN, 0, 10))
+    assert out["at_floor"] == pytest.approx(0.25)
+    assert out["at_ceiling"] == 0.0
+    assert out["ratio_p95"] == pytest.approx(1.0)

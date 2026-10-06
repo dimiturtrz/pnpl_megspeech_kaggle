@@ -228,6 +228,8 @@ class Trainer:
         for epoch in range(optim.epochs):
             model.train()
             weights = curriculum.weights(train, epoch, optim.epochs)
+            if summary := curriculum.summary(train, epoch, optim.epochs, weights):
+                LOG.info("epoch %d draw weights against base %s", epoch, summary)
             draws = torch.multinomial(weights, per_epoch * optim.batch, replacement=True)
             terms = torch.stack([self.step(state, train, spans) for spans in draws.split(optim.batch)]).mean(0)
             value = terms.sum().item()
