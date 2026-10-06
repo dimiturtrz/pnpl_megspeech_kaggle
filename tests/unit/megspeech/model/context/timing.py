@@ -2,6 +2,7 @@ import math
 
 import torch
 
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.context.timing import FEATURES, KAGGLE_GAP, Clock, Intervals, Jitter, TimingHead
 
 MASK = torch.tensor([[True, True, True, False]])
@@ -69,6 +70,11 @@ def test_timing_head_forward() -> None:
     inactive = TimingHead(5, active=False)
     assert inactive.forward(ONSET, MASK).shape == ()
     assert not inactive.state_dict()
+
+
+def test_over_vocabulary() -> None:
+    assert TimingHead.over_vocabulary().forward(ONSET, MASK).shape == (1, 4, VOCAB_SIZE)
+    assert not TimingHead.over_vocabulary(active=False).state_dict()
 
 
 def test_frozen() -> None:

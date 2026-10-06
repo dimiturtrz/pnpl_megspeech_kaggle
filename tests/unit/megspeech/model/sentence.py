@@ -9,7 +9,6 @@ from torch import nn
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import ContextConfig
-from megspeech.model.context.span import SpanConformer
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer
 from megspeech.model.sentence import SentenceNet
@@ -220,19 +219,6 @@ def test_features_read_each_subject_through_its_layer() -> None:
     other, _ = model.features(x, torch.zeros(2, 3), slot, torch.tensor([0, 0, 1]))
     assert torch.allclose(deep[0], other[0], atol=1e-6)
     assert not torch.allclose(deep[1, 0], other[1, 0], atol=1e-3)
-
-
-def test_mixer() -> None:
-    assert isinstance(SentenceNet.mixer(CONTEXT), nn.TransformerEncoder)
-    assert isinstance(SentenceNet.mixer(replace(CONTEXT, mixing=3)), SpanConformer)
-    alone = SentenceNet.mixer(replace(CONTEXT, layers=0))
-    h = torch.randn(2, 3, CONTEXT.width, generator=GENERATOR)
-    assert torch.equal(alone(h, src_key_padding_mask=torch.zeros(2, 3, dtype=torch.bool)), h)
-    assert not list(alone.parameters())
-    assert cast("nn.TransformerEncoder", SentenceNet.mixer(CONTEXT)).norm is None
-    assert isinstance(
-        cast("nn.TransformerEncoder", SentenceNet.mixer(replace(CONTEXT, final_norm=True))).norm, nn.LayerNorm
-    )
 
 
 def test_padding_rows_change_nothing_mixing() -> None:

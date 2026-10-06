@@ -8,16 +8,12 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from megspeech.data.constants import CHANNELS
-from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
-from megspeech.model.context.droplayer import DropPathLayer
-from megspeech.model.context.droppath import DropPath
 from megspeech.model.context.masking import WordMask
-from megspeech.model.context.span import SpanConformer
+from megspeech.model.context.mixer import Mixer
 from megspeech.model.context.timing import Jitter, TimingHead
-from megspeech.model.input.scaler import Scaler
-from megspeech.model.input.subjects import SubjectLayer, Unseen
-from megspeech.model.input.whitener import Whitener
+from megspeech.model.input.stem import Stem
+from megspeech.model.input.subjects import Unseen
 from megspeech.model.words.layers.mean_max import MeanMax
 
 LATENCY_INIT = 0.02
@@ -51,9 +47,9 @@ class SentenceNet(nn.Module):
         """`unseen` reads a subject the subject layer has no matrix for (`SubjectLayer`); `channels` are the rows a
         recording reaches the model in: the sensors, or a `Projection`'s components."""
         super().__init__()
-        self.scale = scale
-        self.whiten = Whitener(channels, active=context.whiten)
-        self.subjects = SubjectLayer.of(context.subjects, channels, unseen)
+        self.scale, self.whiten, self.subjects = Stem.of(
+            scale, channels, whiten=context.whiten, subjects=context.subjects, unseen=unseen
+        )
         self.words = context.encoder.build(context, channels)
         self.reading = context.conv.head
         self.reading.attach(self.words.head, context.width)
@@ -64,9 +60,9 @@ class SentenceNet(nn.Module):
         self.intervals = context.intervals
         self.jitter = Jitter(context.onset_jitter)
         self.masking = WordMask(context.width, context.word_mask)
-        self.context = self.mixer(context)
+        self.context = Mixer.of(context)
         self.head = context.objective.head(context.width, prototypes)
-        self.timing = TimingHead(VOCAB_SIZE, active=context.rhythm)
+        self.timing = TimingHead.over_vocabulary(active=context.rhythm)
         self._tag(context)
 
     @classmethod
@@ -76,24 +72,11 @@ class SentenceNet(nn.Module):
         channels."""
         state = torch.load(path, map_location="cpu")
         channels = state[SCALE_MEDIAN].shape[0]
-        placeholder = Scaler(torch.zeros(1, channels, 1))
-        model = cls(placeholder, context=ContextConfig.load(path.parent), unseen=unseen, channels=channels)
+        model = cls(
+            Stem.placeholder(channels), context=ContextConfig.load(path.parent), unseen=unseen, channels=channels
+        )
         model.load_state_dict(state)
         return model
-
-    @staticmethod
-    def mixer(context: ContextConfig) -> nn.Module:
-        """The layers that refine word embeddings across the span: a transformer, conformer when `mixing`; with no
-        `layers` none, each word read alone."""
-        if context.mixing or not context.layers:
-            conformer = SpanConformer(context.width, context.heads, context.layers, context.dropout, context.mixing)
-            conformer.ramp(context.drop_path)
-            return conformer
-        layer = SpanConformer.layer(context.width, context.heads, context.dropout)
-        norm = nn.LayerNorm(context.width) if context.final_norm else None
-        encoder = nn.TransformerEncoder(layer, context.layers, norm=norm, enable_nested_tensor=False)
-        DropPath.ramp((block.path for block in encoder.layers if isinstance(block, DropPathLayer)), context.drop_path)
-        return encoder
 
     def _tag(self, context: ContextConfig) -> None:
         """Each latency token's learned tag as `latency`; with one token per word a zero outside the state, so the

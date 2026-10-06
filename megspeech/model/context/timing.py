@@ -8,6 +8,8 @@ import torch
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
+
 KAGGLE_GAP = 0.21
 """Median seconds between consecutive vocabulary words in a Kaggle test sentence."""
 
@@ -97,6 +99,11 @@ class TimingHead(nn.Module):
         self.active = active
         layers = (nn.Linear(FEATURES, HIDDEN), nn.GELU(), nn.Linear(HIDDEN, HIDDEN), nn.GELU())
         self.layers = nn.Sequential(*layers, nn.Linear(HIDDEN, vocabulary)) if active else nn.Sequential()
+
+    @classmethod
+    def over_vocabulary(cls, *, active: bool = True) -> "TimingHead":
+        """A head whose logits cover the whole vocabulary."""
+        return cls(VOCAB_SIZE, active=active)
 
     @staticmethod
     def neighbour(onset: Float[Tensor, "g w"], mask: Bool[Tensor, "g w"], step: int) -> Float[Tensor, "g w 2"]:
