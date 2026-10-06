@@ -13,7 +13,7 @@ from megspeech.model.words.layers.attention_pool import AttentionPool
 from megspeech.model.words.layers.conformer import TimeConformer
 from megspeech.model.words.layers.dilated import DilatedBlock
 from megspeech.model.words.layers.mean_max import MeanMax
-from megspeech.model.words.layers.sensorwise import Sensorwise
+from megspeech.model.words.layers.sensorwise import Grouping, Sensorwise
 from megspeech.model.words.layers.spatial import SpatialAttention
 from megspeech.model.words.layers.ssm import Ssm
 
@@ -50,6 +50,12 @@ class ConvConfig:
     time first, space second, weights shared across sensors; 0 mixes the sensors first."""
     sensorwise_depth: int = 0
     """Dilated blocks in the per-sensor stack, the first `sensorwise_depth` of `dilations`; 0 = all."""
+    sensorwise_site: int = 0
+    """Sensors grouped per site, the triplet entering together as `sensorwise_site` channels
+    (3 = Neuromag's magnetometer and two gradiometers per site, contiguous in the 306); 0 = each sensor alone."""
+    sensorwise_out: int = 0
+    """Channels each site (or sensor) is reduced to by a 1x1 convolution before fusion, shrinking the fuse layer;
+    0 keeps `sensorwise`."""
     gated: bool = False
     """GLU-gate every dilated block in place of its GELU (`DilatedBlock`), d'Ascoli et al.'s trunk activation."""
     head: WordHead = WordHead.LINEAR
@@ -62,6 +68,10 @@ class ConvConfig:
             raise ValueError(f"merger={self.merger} and sensorwise={self.sensorwise} are two spatial front ends")
         if self.sensorwise_depth > len(self.dilations):
             raise ValueError(f"sensorwise_depth={self.sensorwise_depth} exceeds the {len(self.dilations)} dilations")
+        if self.sensorwise_site and not self.sensorwise:
+            raise ValueError(f"sensorwise_site={self.sensorwise_site} needs sensorwise")
+        if self.sensorwise_out and not self.sensorwise:
+            raise ValueError(f"sensorwise_out={self.sensorwise_out} needs sensorwise")
         if self.lora:
             raise ValueError(f"lora={self.lora}: the end-to-end MEG-XL encoder it adapted is retired")
 
@@ -100,7 +110,13 @@ class ConvWords(WordEncoder):
                 DilatedBlock(config.sensorwise, d, config.dropout, config.kernels, gated=config.gated)
                 for d in config.dilations[: config.sensorwise_depth or None]
             )
-            return Sensorwise(channels, config.sensorwise, config.hidden, stack)
+            return Sensorwise(
+                channels,
+                config.sensorwise,
+                config.hidden,
+                stack,
+                Grouping(config.sensorwise_site or 1, config.sensorwise_out),
+            )
         if config.merger:
             return nn.Sequential(SpatialAttention(config.merger), nn.Conv1d(config.merger, config.hidden, 1))
         return nn.Conv1d(channels, config.hidden, 1)

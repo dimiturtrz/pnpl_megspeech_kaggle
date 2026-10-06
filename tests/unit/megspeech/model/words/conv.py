@@ -124,3 +124,17 @@ def test_sensorwise_depth() -> None:
     assert len(full.stack) == 3
     with pytest.raises(ValueError, match="sensorwise_depth"):
         ConvConfig(dilations=(1, 2), sensorwise=4, sensorwise_depth=3)
+
+
+def test_sensorwise_site() -> None:
+    config = ConvConfig(hidden=8, dilations=(1, 2), sensorwise=4, sensorwise_site=3)
+    assert cast(Sensorwise, ConvWords.front(config, 6)).site == 3
+    with pytest.raises(ValueError, match="needs sensorwise"):
+        ConvConfig(sensorwise_site=3)
+
+
+def test_sensorwise_out() -> None:
+    config = ConvConfig(hidden=8, dilations=(1, 2), sensorwise=4, sensorwise_out=2)
+    assert cast(Sensorwise, ConvWords.front(config, 6)).fuse.in_channels == 12
+    with pytest.raises(ValueError, match="sensorwise_out"):
+        ConvConfig(sensorwise_out=2)
