@@ -8,7 +8,7 @@ import torch
 
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.cache.kaggle import Track
-from megspeech.data.cache.run_cache import DIRECTORY, WORD_TABLE, DeviceRecording
+from megspeech.data.cache.run_cache import DIRECTORY, WORD_TABLE, DeviceRecording, RunCache
 from megspeech.data.config import DataConfig, Val
 from megspeech.data.constants import CHANNELS, RATE
 from megspeech.data.corpus import Corpus
@@ -70,7 +70,7 @@ def source(tmp_path: Path) -> DeviceRecording:
 
 def test_split(tmp_path: Path) -> None:
     loaded = source(tmp_path)
-    words = Grouping.SENTENCE.carried(loaded.words)
+    words = RunCache.carried(loaded.words, Grouping.SENTENCE)
     split = Corpus.split(loaded, words, DataConfig(val=Val.OFFICIAL), np.arange(5.0))
     assert split.y.tolist() == [THE, IGNORE, A, THE, A]
     assert split.index.tolist() == [[0, 1, 2] + [-1] * 6, [3, 4] + [-1] * 7]
@@ -94,12 +94,14 @@ def test_split(tmp_path: Path) -> None:
     assert led[0, :, :5].eq(0).all()
     assert led[1, :, :5].ne(0).all()
     gap = DataConfig(grouping=Grouping.GAP, window=2.0)
-    assert Corpus.split(loaded, Grouping.GAP.carried(loaded.words), gap, np.ones(4)).windows(first).ne(0).all()
+    assert (
+        Corpus.split(loaded, RunCache.carried(loaded.words, Grouping.GAP), gap, np.ones(4)).windows(first).ne(0).all()
+    )
 
 
 def test_domains(tmp_path: Path) -> None:
     loaded = source(tmp_path)
-    words = Grouping.SENTENCE.carried(loaded.words)
+    words = RunCache.carried(loaded.words, Grouping.SENTENCE)
     validation = Corpus.domains(
         loaded, words, {"Sherlock1": [Run(tmp_path / HELD)], "Sherlock+": []}, DataConfig(val=Val.OFFICIAL)
     )

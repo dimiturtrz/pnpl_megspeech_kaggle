@@ -12,7 +12,9 @@ from megspeech.data.cache.alignment import Geometry, Projection
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.run_cache import DIRECTORY, NO_SENTENCE, TAIL, WORD_TABLE, DeviceRecording, RunCache, main
 from megspeech.data.constants import DECIMATE, HALF, RATE, SFREQ
+from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.raw.runs import Run
+from megspeech.data.spans.grouping import Grouping
 
 CHANNELS = 3
 SECONDS = 4
@@ -194,6 +196,13 @@ def test_inside() -> None:
     table = pd.DataFrame({"sample": [-1, 0, 150, 151], "samples": SAMPLES})
     assert RunCache.inside(table).tolist() == [False, True, True, False]
     assert RunCache.inside(table, length=10, offset=-5).tolist() == [False, False, True, True]
+
+
+def test_carried() -> None:
+    table = pd.DataFrame({"word": ["the", "zebra", "a"], "sample": [0, 10, 20], "samples": [SAMPLES] * 3})
+    assert RunCache.carried(table, Grouping.SENTENCE)["word"].tolist() == ["the", "zebra", "a"]
+    assert RunCache.carried(table, Grouping.GAP)["word"].tolist() == ["the", "a"]
+    assert RunCache.carried(table, Grouping.SENTENCE)["target"].tolist()[1] == IGNORE
 
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

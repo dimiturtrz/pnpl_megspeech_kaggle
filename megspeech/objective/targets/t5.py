@@ -129,7 +129,7 @@ class Lexicon:
         """Every word of every cached run's table, as the sentence path reads them."""
         cache = RunCache.under(root.processed())
         names = sorted(path.stem for path in cache.cache.glob("*.npy"))
-        lexicon = cls.encode(Grouping.SENTENCE.carried(cache.table(names)), tokenizer, encoder, LAYER)
+        lexicon = cls.encode(RunCache.carried(cache.table(names), Grouping.SENTENCE), tokenizer, encoder, LAYER)
         LOG.info("%d distinct words from %d runs", len(lexicon.keys), len(names))
         return lexicon.save(cls.path(root))
 

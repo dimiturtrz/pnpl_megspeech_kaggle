@@ -10,10 +10,10 @@ from torch import Tensor, nn
 from megspeech.data.constants import CHANNELS
 from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.context.masking import WordMask
-from megspeech.model.context.mixer import Mixer
 from megspeech.model.context.timing import Jitter, TimingHead
 from megspeech.model.input.stem import Stem
 from megspeech.model.input.subjects import Unseen
+from megspeech.model.mixer import Mixer
 from megspeech.model.words.layers.mean_max import MeanMax
 
 LATENCY_INIT = 0.02

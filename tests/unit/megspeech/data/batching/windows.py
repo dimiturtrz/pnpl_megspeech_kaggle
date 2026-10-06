@@ -169,7 +169,7 @@ def test_call_reproduces_the_epoch_window(tmp_path: Path, monkeypatch: pytest.Mo
     cache = RunCache(tmp_path / "cache")
     cache.build([run])
     source = DeviceRecording.load(cache, "cpu")
-    words = Grouping.GAP.carried(source.words)
+    words = RunCache.carried(source.words, Grouping.GAP)
     gathered = Corpus.split(source, words, DataConfig(grouping=Grouping.GAP), np.ones(len(words))).windows(
         torch.arange(len(words))
     )

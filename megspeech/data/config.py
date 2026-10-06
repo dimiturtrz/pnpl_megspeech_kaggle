@@ -355,7 +355,7 @@ class DataConfig:
 
     def carried(self, table: pd.DataFrame) -> pd.DataFrame:
         """The words of `table` the grouping carries, at this config's rate (`Grouping.carried`)."""
-        return self.grouping.carried(table, self.rate)
+        return RunCache.carried(table, self.grouping, self.rate)
 
     def ruled(self, runs: Sequence[Run], partition: Partition) -> dict[str, list[Run]]:
         """The domains `partition` is scored over: validation's (`held`) or test's (`tested`)."""

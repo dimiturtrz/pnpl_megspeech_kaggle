@@ -9,6 +9,7 @@ from torch import nn
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import ContextConfig
+from megspeech.model.context.droplayer import DropPathLayer
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer
 from megspeech.model.sentence import SentenceNet
@@ -283,4 +284,6 @@ def test_word_mask() -> None:
 
 def test_drop_path() -> None:
     model = SentenceNet(nn.Identity(), replace(CONTEXT, layers=2, drop_path=0.2))
-    assert [layer.path.rate for layer in model.context.layers] == pytest.approx([0.1, 0.2])
+    assert [
+        cast("DropPathLayer", layer).path.rate for layer in cast("nn.TransformerEncoder", model.context).layers
+    ] == pytest.approx([0.1, 0.2])

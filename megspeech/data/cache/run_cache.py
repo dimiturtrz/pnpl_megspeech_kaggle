@@ -34,7 +34,9 @@ from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.cache.cleaning import Cleaner, Cleaning
 from megspeech.data.constants import DECIMATE, HALF, MISSING, PICO, RATE, SFREQ, WORKERS
+from megspeech.data.labels.vocabulary import ABSENT, IGNORE, PRIMARY, Vocabulary
 from megspeech.data.raw.runs import Run
+from megspeech.data.spans.grouping import Grouping
 
 LOG = logging.getLogger(__name__)
 FORMAT = "%(asctime)s %(message)s"
@@ -187,6 +189,16 @@ class RunCache:
         next_onset = table.groupby(["run", "sentence"])["sample"].shift(-1)
         table["following"] = next_onset.fillna(table["stop"]).astype(np.int64)
         return table
+
+    @staticmethod
+    def carried(table: pd.DataFrame, grouping: Grouping, rate: float = RATE) -> pd.DataFrame:
+        """The words of `table` (sampled at `rate`) that `grouping` carries and whose 1 s window fits in their run, with
+        their `target` and `token` (the lower-cased word, hashed)."""
+        labels = PRIMARY.labels(table["word"])
+        target = np.where(labels == ABSENT, IGNORE, labels)
+        return table.assign(target=target, token=Vocabulary.token(table["word"]))[
+            grouping.keep(target) & RunCache.inside(table, round(rate))
+        ]
 
     @staticmethod
     def inside(table: pd.DataFrame, length: int = RATE, offset: int = 0) -> Bool[np.ndarray, " n"]:

@@ -5,8 +5,8 @@ import torch
 from torch import nn
 
 from megspeech.model.config import ContextConfig
-from megspeech.model.context.mixer import Mixer
 from megspeech.model.context.span import SpanConformer
+from megspeech.model.mixer import Mixer
 from megspeech.model.words.conv import ConvConfig
 
 CONTEXT = ContextConfig(width=16, heads=2, layers=1, conv=ConvConfig(hidden=8, dilations=(1, 2)))

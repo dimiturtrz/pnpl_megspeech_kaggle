@@ -1,12 +1,9 @@
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.spans.grouping import Grouping
 from megspeech.data.spans.spans import PAD
-from tests.unit.megspeech.data.corpus import THE, A, source
 
 WORDS = pd.DataFrame({"run": ["a", "a", "a", "b"], "sentence": [0, 0, 1, 0], "onset": [0.0, 0.2, 0.4, 0.1]})
 
@@ -21,14 +18,6 @@ def test_keep() -> None:
     target = np.array([3, IGNORE, 0])
     assert Grouping.GAP.keep(target).tolist() == [True, False, True]
     assert Grouping.SENTENCE.keep(target).tolist() == [True, True, True]
-
-
-def test_carried(tmp_path: Path) -> None:
-    table = source(tmp_path).words
-    sentence = Grouping.SENTENCE.carried(table)
-    assert sentence["word"].tolist() == ["the", "zebra", "a", "the", "a"]
-    assert sentence["target"].tolist() == [THE, IGNORE, A, THE, A]
-    assert Grouping.GAP.carried(table)["word"].tolist() == ["the", "a", "the", "a"]
 
 
 def test_spans() -> None:

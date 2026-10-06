@@ -8,9 +8,7 @@ import numpy as np
 import pandas as pd
 from jaxtyping import Bool, Int
 
-from megspeech.data.cache.run_cache import RunCache
-from megspeech.data.constants import RATE
-from megspeech.data.labels.vocabulary import ABSENT, IGNORE, PRIMARY, Vocabulary
+from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.spans.pieces import Pieces
 from megspeech.data.spans.sentences import Sentences
 from megspeech.data.spans.spans import Spans
@@ -51,15 +49,6 @@ class Grouping(StrEnum):
     def keep(self, target: Int[np.ndarray, " n"]) -> Bool[np.ndarray, " n"]:
         """Of words with these targets (`IGNORE` outside the vocabulary), the ones this grouping carries."""
         return (target != IGNORE) | self.rule.unlabelled
-
-    def carried(self, table: pd.DataFrame, rate: float = RATE) -> pd.DataFrame:
-        """The words of `table` (sampled at `rate`) this grouping carries and whose 1 s window fits in their run,
-        with their `target` and `token` (the lower-cased word, hashed)."""
-        labels = PRIMARY.labels(table["word"])
-        target = np.where(labels == ABSENT, IGNORE, labels)
-        return table.assign(target=target, token=Vocabulary.token(table["word"]))[
-            self.keep(target) & RunCache.inside(table, round(rate))
-        ]
 
     def spans(self, words: pd.DataFrame) -> Spans:
         """Spans over `words` (a word table in run order: `run`, `sentence`, `onset`)."""
