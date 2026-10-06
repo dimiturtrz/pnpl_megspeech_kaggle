@@ -157,6 +157,10 @@ class SentenceNet(nn.Module):
         set any batch statistics."""
         return self.words.embed(self.prepare(x, subject), valid)
 
+    def word_logits(self, embeddings: Float[Tensor, "r e"]) -> Float[Tensor, "r v"]:
+        """The stage-1 word head on `embeddings`."""
+        return self.words.head(embeddings)
+
     def prepare(self, x: Float[Tensor, "r c t"], subject: Int[Tensor, " r"]) -> Float[Tensor, "r c t"]:
         """Each window as the word encoder reads it: scaled, whitened, in its subject's space, normalised."""
         sensors = self.subjects(self.whiten(self.scale(x)), subject)

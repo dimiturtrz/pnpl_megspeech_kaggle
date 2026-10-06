@@ -136,7 +136,7 @@ class Encoder:
         """The model's word head on `embeddings`, logit-adjusted by `tau` (`TAU`: the balanced metric's)."""
         device = self.loaded.log_prior.device
         with torch.no_grad():
-            logits = self.network.words.head(embeddings.to(device)).float().log_softmax(-1)
+            logits = self.network.word_logits(embeddings.to(device)).float().log_softmax(-1)
         return (logits - tau * self.loaded.log_prior).cpu()
 
     def centroids(self, runs: list[Run]) -> Centroids:

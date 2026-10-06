@@ -41,6 +41,12 @@ def test_embed() -> None:
     assert torch.allclose(slots[0], embedded, atol=1e-6)
 
 
+def test_word_logits() -> None:
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
+    embeddings = torch.randn(3, CONTEXT.conv.width, generator=GENERATOR)
+    assert torch.equal(model.word_logits(embeddings), model.words.head(embeddings))
+
+
 def test_prepare() -> None:
     model = SentenceNet(nn.Identity(), CONTEXT).eval()
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)

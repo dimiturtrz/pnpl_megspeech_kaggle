@@ -21,21 +21,18 @@ class Reader(nn.Module):
         return nn.functional.one_hot(embeddings[:, 0].long(), VOCAB_SIZE).float() * 10
 
 
-class Words(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.head = Reader()
-
-
 class Embedding(nn.Module):
     """A word encoder embedding each window as its row index repeated."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.words = Words()
+        self.reader = Reader()
 
     def embed(self, x: torch.Tensor, subject: torch.Tensor, valid: torch.Tensor) -> torch.Tensor:
         return torch.arange(len(x), dtype=torch.float32)[:, None].expand(-1, WIDTH)
+
+    def word_logits(self, embeddings: torch.Tensor) -> torch.Tensor:
+        return self.reader(embeddings)
 
 
 class Holder(nn.Module):

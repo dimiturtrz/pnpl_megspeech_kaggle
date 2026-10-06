@@ -70,7 +70,7 @@ def test_saved_flat_optim_sampler(tmp_path: Path) -> None:
     assert (config.sampler.priority, config.sampler.base, config.sampler.alpha) == (0.5, Base.UNIFORM, 2.0)
 
 
-def test_stalled() -> None:
+def test_stop_config_stalled() -> None:
     rising = [epoch(i, 0.1 * i) for i in range(6)]
     peaked = [epoch(0, 0.2), epoch(1, 0.5), epoch(2, 0.5), epoch(3, 0.4), epoch(4, 0.3)]
     assert not StopConfig().stalled(peaked)
@@ -78,6 +78,12 @@ def test_stalled() -> None:
     assert not StopConfig(4).stalled(peaked)
     assert StopConfig(3).stalled(peaked)
     assert StopConfig(1).stalled(peaked[:3])
+
+
+def test_run_config_stalled() -> None:
+    peaked = [epoch(0, 0.2), epoch(1, 0.4), epoch(2, 0.3), epoch(3, 0.3)]
+    assert RunConfig(stop=StopConfig(2)).stalled(peaked)
+    assert not RunConfig().stalled(peaked)
 
 
 def test_keeps_last() -> None:

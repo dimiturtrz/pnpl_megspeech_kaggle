@@ -177,6 +177,10 @@ class RunConfig:
         """The epoch whose weights the run keeps: the best on validation, or the last when val was trained on."""
         return history[-1] if self.keeps_last else max(history, key=lambda row: row.macro.bacc10)
 
+    def stalled(self, history: list[Epoch]) -> bool:
+        """Whether the run stops early after `history`."""
+        return self.stop.stalled(history)
+
     @classmethod
     def saved(cls, directory: Path) -> "RunConfig":
         """The config a run in `directory` recorded, flat records from before the tree included, its data section

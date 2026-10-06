@@ -242,7 +242,7 @@ class Trainer:
                 if self.config.selected(history) is row:
                     best_state = {k: v.clone() for k, v in net.state_dict().items()}
                     self.heads = {k: v.clone() for k, v in self.auxiliary_state(model).items()}
-            if self.config.stop.stalled(history):
+            if self.config.stalled(history):
                 best = self.config.selected(history)
                 LOG.info("stopped early at epoch %d (best %d)", epoch, best.epoch)
                 break
