@@ -48,6 +48,8 @@ class ConvConfig:
     sensorwise: int = 0
     """Channels per sensor of a temporal stack shared by every sensor, run before the sensors are fused (`Sensorwise`):
     time first, space second, weights shared across sensors; 0 mixes the sensors first."""
+    sensorwise_depth: int = 0
+    """Dilated blocks in the per-sensor stack, the first `sensorwise_depth` of `dilations`; 0 = all."""
     gated: bool = False
     """GLU-gate every dilated block in place of its GELU (`DilatedBlock`), d'Ascoli et al.'s trunk activation."""
     head: WordHead = WordHead.LINEAR
@@ -58,6 +60,8 @@ class ConvConfig:
             raise ValueError(f"kernels {self.kernels} must be odd to keep the time axis")
         if self.merger and self.sensorwise:
             raise ValueError(f"merger={self.merger} and sensorwise={self.sensorwise} are two spatial front ends")
+        if self.sensorwise_depth > len(self.dilations):
+            raise ValueError(f"sensorwise_depth={self.sensorwise_depth} exceeds the {len(self.dilations)} dilations")
         if self.lora:
             raise ValueError(f"lora={self.lora}: the end-to-end MEG-XL encoder it adapted is retired")
 
@@ -94,7 +98,7 @@ class ConvWords(WordEncoder):
         if config.sensorwise:
             stack = (
                 DilatedBlock(config.sensorwise, d, config.dropout, config.kernels, gated=config.gated)
-                for d in config.dilations
+                for d in config.dilations[: config.sensorwise_depth or None]
             )
             return Sensorwise(channels, config.sensorwise, config.hidden, stack)
         if config.merger:

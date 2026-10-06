@@ -2,6 +2,7 @@ from typing import cast
 
 import pytest
 import torch
+from torch import nn
 
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
@@ -113,3 +114,13 @@ def test_sensorwise() -> None:
 def test_front() -> None:
     assert isinstance(ConvWords.front(ConvConfig(hidden=8, sensorwise=4), 5), Sensorwise)
     assert isinstance(ConvWords.front(SMALL, 5), torch.nn.Conv1d)
+
+
+def test_sensorwise_depth() -> None:
+    config = ConvConfig(hidden=8, dilations=(1, 2, 4), sensorwise=4, sensorwise_depth=2)
+    front = cast(Sensorwise, ConvWords.front(config, 5))
+    assert [cast(nn.Conv1d, cast(nn.Sequential, block.body)[0]).dilation for block in front.stack] == [(1,), (2,)]
+    full = cast(Sensorwise, ConvWords.front(ConvConfig(hidden=8, dilations=(1, 2, 4), sensorwise=4), 5))
+    assert len(full.stack) == 3
+    with pytest.raises(ValueError, match="sensorwise_depth"):
+        ConvConfig(dilations=(1, 2), sensorwise=4, sensorwise_depth=3)
