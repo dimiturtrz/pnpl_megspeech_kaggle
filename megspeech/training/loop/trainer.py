@@ -186,14 +186,14 @@ class Trainer:
             model.readouts(),
             ema,
             (anchor, schedule, ema, ramp),
-            Sampler.of(self.config.optim, train),
+            Sampler.of(self.config.sampler, train),
             BGMix.of(train, self.config.augment.bgmix, self.config.augment.bgmix_key),
         )
 
     def rows(self, train: Split) -> int:
         """Word rows for one batch at the curriculum's draw weights in whichever epoch draws the most words."""
         optim = self.config.optim
-        curriculum = Sampler.scheduled(optim, train)
+        curriculum = Sampler.scheduled(self.config.sampler, train)
         epochs = range(optim.epochs)
         return max(train.capacity(optim.batch, curriculum.weights(train, epoch, optim.epochs)) for epoch in epochs)
 

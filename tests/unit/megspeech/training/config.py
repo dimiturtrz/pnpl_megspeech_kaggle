@@ -12,6 +12,7 @@ from megspeech.model.context.timing import Clock
 from megspeech.model.words.conv import ConvConfig
 from megspeech.training.config import METRICS, OptimConfig, RunConfig
 from megspeech.training.regularise.augment import Augment
+from megspeech.training.sampling.curriculum import Base
 
 
 def test_saved_retired_data_fields(tmp_path: Path) -> None:
@@ -57,3 +58,12 @@ def test_projected_needs_sensor_free_encoder(context: ContextConfig) -> None:
         with pytest.raises(ValueError, match="306 sensors"):
             RunConfig(data=data, context=context)
         assert RunConfig(data=data).data.projected
+
+
+def test_saved_flat_optim_sampler(tmp_path: Path) -> None:
+    """A run saved with the sampler knobs under `optim` loads them into `sampler`."""
+    old = {"optim": {"epochs": 3, "priority": 0.5, "sampler": "uniform", "stratified": 2.0}}
+    (tmp_path / METRICS).write_text(json.dumps({"config": old}))
+    config = RunConfig.saved(tmp_path)
+    assert config.optim.epochs == 3
+    assert (config.sampler.priority, config.sampler.base, config.sampler.alpha) == (0.5, Base.UNIFORM, 2.0)

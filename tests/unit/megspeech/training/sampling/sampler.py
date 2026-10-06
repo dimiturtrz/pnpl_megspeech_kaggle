@@ -1,5 +1,3 @@
-from dataclasses import replace
-
 import numpy as np
 import pytest
 import torch
@@ -7,9 +5,8 @@ import torch
 from megspeech.data.batching.split import Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.spans.spans import Spans
-from megspeech.training.config import OptimConfig
 from megspeech.training.sampling.curriculum import Annealed, Base, Natural, Prioritised, Robust, Uniform
-from megspeech.training.sampling.sampler import Sampler
+from megspeech.training.sampling.sampler import Sampler, SamplerConfig
 
 TRAIN = Split.of(
     Windows.stacked(torch.zeros(6, 1, 2)),
@@ -29,7 +26,7 @@ def draw(weights: torch.Tensor) -> list[int]:
 
 def test_of() -> None:
     """The default config's chain is today's `Natural`: bit-identical weights, so bit-identical draws."""
-    made = Sampler.of(OptimConfig(), TRAIN)
+    made = Sampler.of(SamplerConfig(), TRAIN)
     assert isinstance(made, Natural)
     old = TRAIN.weight[TRAIN.index[:, 0]]
     assert torch.equal(made.weights(TRAIN, 3, 10), old)
@@ -38,7 +35,7 @@ def test_of() -> None:
 
 def test_scheduled_matches_annealed_natural() -> None:
     """Annealed over the default base is today's `Annealed`: the pre-refactor formula, recomputed here."""
-    made = Sampler.scheduled(replace(OptimConfig(), curriculum=0.9), TRAIN)
+    made = Sampler.scheduled(SamplerConfig(curriculum=0.9), TRAIN)
     assert isinstance(made, Annealed)
     first = TRAIN.index[:, 0]
     weight, subject = TRAIN.weight[first], TRAIN.subject[first]
@@ -55,7 +52,7 @@ def test_scheduled_matches_annealed_natural() -> None:
 def test_of_robust_and_prioritised_match_the_old_chain() -> None:
     """Robust then Prioritised over Natural: the new chain's first draw weights equal the old stack's, and a
     prioritised-only config reproduces the old floor/ceiling formula on the same observed losses."""
-    optim = replace(OptimConfig(), robust=1.0, priority=1.0, visibility=1.0)
+    optim = SamplerConfig(robust=1.0, priority=1.0, visibility=1.0)
     made = Sampler.of(optim, TRAIN)
     assert isinstance(made, Prioritised)
     assert isinstance(made.base, Robust)
@@ -70,11 +67,22 @@ def test_of_robust_and_prioritised_match_the_old_chain() -> None:
 
 
 def test_of_base_options() -> None:
-    assert Sampler.of(replace(OptimConfig(), sampler=Base.UNIFORM), TRAIN) == Uniform()
-    assert Sampler.of(replace(OptimConfig(), sampler=Base.STRATIFIED), TRAIN).weights(TRAIN, 0, 10).shape == (3,)
+    assert Sampler.of(SamplerConfig(base=Base.UNIFORM), TRAIN) == Uniform()
+    assert Sampler.of(SamplerConfig(base=Base.STRATIFIED), TRAIN).weights(TRAIN, 0, 10).shape == (3,)
 
 
 @pytest.mark.parametrize("sampler", list(Base))
 def test_scheduled(sampler: Base) -> None:
-    made = Sampler.scheduled(replace(OptimConfig(), sampler=sampler), TRAIN)
+    made = Sampler.scheduled(SamplerConfig(base=sampler), TRAIN)
     assert (made.weights(TRAIN, 0, 10) > 0).all()
+
+
+def test_migrated() -> None:
+    flat = {"optim": {"epochs": 3, "priority": 0.5, "visibility": 1.0, "sampler": "uniform", "stratified": 2.0}}
+    assert SamplerConfig.migrated(flat) == {
+        "optim": {"epochs": 3},
+        "sampler": {"priority": 0.5, "visibility": 1.0, "base": "uniform", "alpha": 2.0},
+    }
+    assert SamplerConfig.migrated({"epochs": 3, "robust": 1.0}) == {"epochs": 3, "sampler": {"robust": 1.0}}
+    nested = {"optim": {"epochs": 3}, "sampler": {"base": "uniform", "priority": 0.5}}
+    assert SamplerConfig.migrated(nested) == nested

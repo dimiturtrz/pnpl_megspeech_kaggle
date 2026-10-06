@@ -1,5 +1,4 @@
 import math
-from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -33,6 +32,7 @@ from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.sampling.curriculum import Annealed, Natural, Robust
+from megspeech.training.sampling.sampler import SamplerConfig
 from megspeech.training.timing_expert import TimingExpert
 
 SAMPLES = 50
@@ -172,7 +172,7 @@ def test_state() -> None:
     assert len(state.terms) == len(state.readouts)
     assert state.rows == made.rows(split())
     assert isinstance(state.curriculum, Natural)
-    tilted = trainer(RunConfig(optim=replace(optim, robust=1.0))).state(net, split(), 10)
+    tilted = trainer(RunConfig(optim=optim, sampler=SamplerConfig(robust=1.0))).state(net, split(), 10)
     assert isinstance(tilted.curriculum, Robust)
 
 
@@ -180,7 +180,7 @@ def test_rows() -> None:
     train = split()
     natural = trainer(RunConfig(optim=OptimConfig(epochs=3)))
     assert natural.rows(train) == train.capacity(natural.config.optim.batch, train.weight[train.index[:, 0]])
-    annealed = trainer(RunConfig(optim=OptimConfig(epochs=3, curriculum=0.9)))
+    annealed = trainer(RunConfig(optim=OptimConfig(epochs=3), sampler=SamplerConfig(curriculum=0.9)))
     epochs = range(3)
     draws = (Annealed(0.9, Natural()).weights(train, epoch, 3) for epoch in epochs)
     assert annealed.rows(train) == max(train.capacity(annealed.config.optim.batch, draw) for draw in draws)

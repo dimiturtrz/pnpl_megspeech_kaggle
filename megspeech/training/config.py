@@ -2,6 +2,7 @@
 
 import json
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from megspeech.evaluation.scoring.score import Epoch, SelectionConfig
 from megspeech.model.auxiliary import Tap
 from megspeech.model.config import CONTEXT, ContextConfig
 from megspeech.training.regularise.augment import Augment
-from megspeech.training.sampling.curriculum import Base
+from megspeech.training.sampling.sampler import SamplerConfig
 
 
 @dataclass(frozen=True)
@@ -87,30 +88,6 @@ class OptimConfig:
     mean 1, so 0.5 is 1/sqrt(count) (the PNPL 2025 phoneme winner's). The metric is balanced accuracy, and the
     ruler's `tau` already corrects the class prior after training (Menon et al. 2021 logit adjustment); balancing
     during training overlaps it, so an arm asks whether it adds beyond `tau`. SigLIP's context loss is unweighted."""
-    sampler: Base = Base.NATURAL
-    """The distribution spans are drawn from before any tilt (`megspeech.training.sampling.curriculum.Base`): `natural`
-    draws each span at its words' run weight (`DataConfig.read_weight`, `narrator_weight`, `repeat_power`, all 1 unless
-    set, so uniform by default), `uniform` at 1 whatever those say, `stratified` balanced across source, subject, span
-    length and word rate by `stratified`."""
-    stratified: float = 1.0
-    """Exponent of `sampler = stratified`: each span draws at `count ** -stratified` of its stratum's span count, so 1
-    gives every stratum an equal share and 0 draws every span alike."""
-    curriculum: float = 0.0
-    """The Deep subject's share of the spans drawn at the last epoch, annealed linearly from an equal share per
-    subject at the first (`megspeech.training.sampling.curriculum`); 0 draws every subject's spans at the sampler's
-    own weight. Only meaningful when `DataConfig.subjects` trains on more than the Deep subject."""
-    robust: float = 0.0
-    """Power of the tilt toward the strata (subject x span length x word rate) whose training loss ran highest last
-    epoch (`megspeech.training.sampling.curriculum.Robust`): a stratum at twice the mean loss draws `2 ** robust` times
-    its weight, and none draws below its own; 0 draws at the curriculum's weights alone."""
-    priority: float = 0.0
-    """Power of each span's difficulty (the EMA of its training loss) over the mean, tilting its draw weight
-    (`megspeech.training.sampling.curriculum.Prioritised`); an unseen span counts at the highest difficulty so far,
-    and none draws below a quarter or above four times its weight. Negative is self-paced, drawing the hard least
-    (noisy trials may be unlearnable). 0 turns the tilt off; composes with `robust`."""
-    visibility: float = 0.0
-    """Exponent `beta` of a span's draw weight `(1 + seen) ** -beta` in the times training has drawn it, so unseen spans
-    draw first and the corpus is rotated through; 0 turns it off; composes with `robust`."""
     anchor: float = 1.0
     """Share of each subject matrix's deviation from the Deep subject's that the run's decay leaves by its end, were
     its gradient never to restore it (`megspeech.training.regularise.anchor`); 1 decays the matrices toward 0 like
@@ -154,6 +131,7 @@ class RunConfig:
     context: ContextConfig = CONTEXT
     augment: Augment = Augment()
     optim: OptimConfig = OptimConfig()
+    sampler: SamplerConfig = SamplerConfig()
     selection: SelectionConfig = SelectionConfig()
 
     def __post_init__(self) -> None:
@@ -174,6 +152,8 @@ class RunConfig:
     @classmethod
     def saved(cls, directory: Path) -> "RunConfig":
         """The config a run in `directory` recorded, flat records from before the tree included, its data section
-        under the retired `extra`/`share`/`stratify` fields migrated to `val` and `refit`."""
-        record = json.loads((directory / METRICS).read_text())["config"]
-        return Tree(cls).load({**record, "data": Val.migrated(record.get("data", {}))})
+        under the retired `extra`/`share`/`stratify` fields migrated to `val` and `refit`, its sampler knobs from
+        `optim` to `sampler`."""
+        record = SamplerConfig.migrated(json.loads((directory / METRICS).read_text())["config"])
+        data = record.get("data")
+        return Tree(cls).load({**record, "data": Val.migrated(data if isinstance(data, Mapping) else {})})
