@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from megspeech.model.context.span import SpanConformer
@@ -20,3 +21,13 @@ def test_forward() -> None:
     changed = h.clone()
     changed[PADDING] = 100.0
     assert torch.allclose(model.forward(changed, PADDING)[~PADDING], out[~PADDING], atol=1e-5)
+
+
+def test_ramp() -> None:
+    model = SpanConformer(8, 2, 2, 0.0, 3)
+    model.ramp(0.2)
+    assert [p.rate for p in model.paths] == pytest.approx([0.1, 0.2])
+    assert [a.path.rate for a in model.attend] == pytest.approx([0.1, 0.2])
+    h = torch.randn(2, 3, 8, generator=GENERATOR)
+    assert torch.equal(model.eval().forward(h, PADDING), model.eval().forward(h, PADDING))
+    assert model.train().forward(h, PADDING).shape == h.shape

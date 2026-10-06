@@ -70,6 +70,12 @@ class ContextConfig:
     heads: int = 4
     layers: int = 4
     dropout: float = 0.1
+    word_mask: float = 0.0
+    """Probability, in training only, that a word's tokens enter the transformer as one learned mask embedding (its
+    timing kept) and are predicted from its neighbours; 0 hides none (`context.masking.WordMask`)."""
+    drop_path: float = 0.0
+    """Stochastic depth (Huang et al. 2016): each sample's attention, feed-forward and mixing branches dropped in
+    training at a rate rising linearly to this at the last layer; 0 drops none (`context.droppath.DropPath`)."""
     shortest: float = 0.04
     longest: float = 8.0
     """Onset periods span two 50 Hz samples up to a nine-word span at the Kaggle test's widest gap."""

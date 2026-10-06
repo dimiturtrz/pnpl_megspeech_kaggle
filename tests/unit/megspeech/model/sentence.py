@@ -262,3 +262,24 @@ def test_subspace_channels(tmp_path: Path) -> None:
     assert loaded.state_dict()["whiten.matrix"].shape == (components, components)
     again, _ = loaded.forward(x, onsets, slot, torch.zeros(len(x), dtype=torch.long))
     assert torch.allclose(again, context_logits)
+
+
+def test_word_mask() -> None:
+    """The mask enters before the timing is added, so a masked word still differs by position; with rate 0 there is
+    no parameter and the state is the old one."""
+    assert not any(key.startswith("masking") for key in SentenceNet(nn.Identity(), CONTEXT).state_dict())
+    model = SentenceNet(nn.Identity(), replace(CONTEXT, word_mask=1.0)).train()
+    assert any(key == "masking.token" for key in model.state_dict())
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
+    onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
+    h, _ = model.features(x, onset, slot, torch.zeros(len(x), dtype=torch.long))
+    assert not torch.allclose(h[0, 0], h[0, 1])
+    model.eval()
+    h_eval, _ = model.features(x, onset, slot, torch.zeros(len(x), dtype=torch.long))
+    assert not torch.allclose(h_eval[0, 0], h[0, 0])
+
+
+def test_drop_path() -> None:
+    model = SentenceNet(nn.Identity(), replace(CONTEXT, layers=2, drop_path=0.2))
+    assert [layer.path.rate for layer in model.context.layers] == pytest.approx([0.1, 0.2])

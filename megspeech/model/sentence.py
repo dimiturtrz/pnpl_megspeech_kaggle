@@ -10,6 +10,8 @@ from torch import Tensor, nn
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
+from megspeech.model.context.droppath import DropPath, DropPathLayer
+from megspeech.model.context.masking import WordMask
 from megspeech.model.context.span import SpanConformer
 from megspeech.model.context.timing import Jitter, TimingHead
 from megspeech.model.input.scaler import Scaler
@@ -60,6 +62,7 @@ class SentenceNet(nn.Module):
         self.onsets = OnsetEncoding(context)
         self.intervals = context.intervals
         self.jitter = Jitter(context.onset_jitter)
+        self.masking = WordMask(context.width, context.word_mask)
         self.context = self.mixer(context)
         self.head = context.objective.head(context.width, prototypes)
         self.timing = TimingHead(VOCAB_SIZE, active=context.rhythm)
@@ -82,10 +85,14 @@ class SentenceNet(nn.Module):
         """The layers that refine word embeddings across the span: a transformer, conformer when `mixing`; with no
         `layers` none, each word read alone."""
         if context.mixing or not context.layers:
-            return SpanConformer(context.width, context.heads, context.layers, context.dropout, context.mixing)
+            conformer = SpanConformer(context.width, context.heads, context.layers, context.dropout, context.mixing)
+            conformer.ramp(context.drop_path)
+            return conformer
         layer = SpanConformer.layer(context.width, context.heads, context.dropout)
         norm = nn.LayerNorm(context.width) if context.final_norm else None
-        return nn.TransformerEncoder(layer, context.layers, norm=norm, enable_nested_tensor=False)
+        encoder = nn.TransformerEncoder(layer, context.layers, norm=norm, enable_nested_tensor=False)
+        DropPath.ramp((block.path for block in encoder.layers if isinstance(block, DropPathLayer)), context.drop_path)
+        return encoder
 
     def _tag(self, context: ContextConfig) -> None:
         """Each latency token's learned tag as `latency`; with one token per word a zero outside the state, so the
@@ -138,7 +145,8 @@ class SentenceNet(nn.Module):
         mask = slot < rows
         onset = self.jitter.apply(onset, mask) if self.training else onset
         timing = self.onsets(self.clock.times(onset, mask), self.intervals.features(onset, mask))
-        chunks = self.project(MeanMax.segmented(slots, self.tokens)) + timing[..., None, :] + self.latency
+        content = self.masking(self.project(MeanMax.segmented(slots, self.tokens)), mask)
+        chunks = content + timing[..., None, :] + self.latency
         return chunks.flatten(1, 2), slots
 
     def embed(
