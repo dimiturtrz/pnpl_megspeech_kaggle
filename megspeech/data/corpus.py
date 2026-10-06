@@ -21,7 +21,7 @@ from megspeech.data.config import DataConfig
 from megspeech.data.constants import RATE
 from megspeech.data.labels.vocabulary import ABSENT, IGNORE, PRIMARY, Vocabulary
 from megspeech.data.raw.runs import Run
-from megspeech.data.spans.spans import Grouping
+from megspeech.data.spans.grouping import Grouping
 
 LOG = logging.getLogger(__name__)
 

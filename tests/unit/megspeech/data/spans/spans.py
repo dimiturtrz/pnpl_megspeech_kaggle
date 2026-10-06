@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from megspeech.data.labels.vocabulary import IGNORE
-from megspeech.data.spans.spans import KAGGLE_WORDS, MAX_WORDS, PAD, Grouping, Pieces, Sentences, Spans
+from megspeech.data.spans.grouping import KAGGLE_WORDS
+from megspeech.data.spans.spans import MAX_WORDS, PAD, Spans
 
 
 def test_by_gap() -> None:
@@ -72,47 +72,3 @@ def test_assemble() -> None:
 
 def test_lengths() -> None:
     assert Spans.by_gap(np.array([0.0, 5.0, 5.1])).lengths.tolist() == [1, 2]
-
-
-WORDS = pd.DataFrame({"run": ["a", "a", "a", "b"], "sentence": [0, 0, 1, 0], "onset": [0.0, 0.2, 0.4, 0.1]})
-
-
-def test_rule() -> None:
-    assert (Grouping.GAP.rule.stop, Grouping.GAP.rule.unlabelled) == ("samples", False)
-    assert (Grouping.SENTENCE.rule.stop, Grouping.SENTENCE.rule.unlabelled) == ("stop", True)
-    assert Grouping.GAP.rule.cut(WORDS).lengths.tolist() == [3, 1]
-
-
-def test_keep() -> None:
-    target = np.array([3, IGNORE, 0])
-    assert Grouping.GAP.keep(target).tolist() == [True, False, True]
-    assert Grouping.SENTENCE.keep(target).tolist() == [True, True, True]
-
-
-def test_spans() -> None:
-    assert Grouping.SENTENCE.spans(WORDS).index[:, :2].tolist() == [[0, 1], [2, PAD], [3, PAD]]
-    assert Grouping.GAP.spans(WORDS).index[:, :3].tolist() == [[0, 1, 2], [3, PAD, PAD]]
-    nine = pd.DataFrame({"run": ["a"] * 9, "sentence": [0] * 9, "onset": np.arange(9) * 0.3})
-    assert Grouping.KAGGLE.spans(nine).lengths.tolist() == [5, 4]
-    assert Grouping.SENTENCE.spans(nine).lengths.tolist() == [9]
-
-
-def test_sentences() -> None:
-    """A sentence cut keys sentences by run too: the same sentence number in two runs is two spans."""
-    assert Sentences()(WORDS).lengths.tolist() == [2, 1, 1]
-    assert Sentences(KAGGLE_WORDS).words == KAGGLE_WORDS
-
-
-def test_pieces() -> None:
-    long = pd.DataFrame({"run": ["a"] * 40, "sentence": [0] * 40, "onset": np.arange(40) * 0.3})
-    spans = Pieces()(long)
-    assert spans.lengths.sum() == 40
-    assert spans.lengths.max() <= MAX_WORDS
-    assert (Grouping.SPEC.spans(long).index == spans.index).all()
-    assert Grouping.SPEC.rule.unlabelled
-
-
-def test_bound() -> None:
-    words = pd.DataFrame({"start": [0, 100], "samples": [80, 80], "stop": [60, 70]})
-    assert Grouping.SENTENCE.bound(words).tolist() == [60, 170]
-    assert Grouping.GAP.bound(words).tolist() == [80, 180]

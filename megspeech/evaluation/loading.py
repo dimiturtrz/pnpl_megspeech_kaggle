@@ -8,7 +8,7 @@ from core.paths import DataRoot
 from megspeech.data.cache.alignment import Geometry
 from megspeech.data.config import DataConfig
 from megspeech.data.raw.runs import Partition
-from megspeech.data.spans.spans import Grouping
+from megspeech.data.spans.grouping import Grouping
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.reader import Reader

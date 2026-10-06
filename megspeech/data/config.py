@@ -22,7 +22,7 @@ from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
 from megspeech.data.raw.runs import DEEP, Partition, Run
-from megspeech.data.spans.spans import Grouping
+from megspeech.data.spans.grouping import Grouping
 from megspeech.data.stratify import SEED, Picked, Stratify
 
 METRICS = "metrics.json"

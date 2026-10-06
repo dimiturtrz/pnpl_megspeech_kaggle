@@ -15,7 +15,7 @@ from megspeech.data.config import METRICS, READING, DataConfig, Refit, Val
 from megspeech.data.constants import RATE
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.data.spans.spans import Grouping
+from megspeech.data.spans.grouping import Grouping
 from megspeech.data.stratify import Picked, Stratify
 
 TRAIN = "sub-0_ses-1_task-Sherlock1_run-1_meg.h5"

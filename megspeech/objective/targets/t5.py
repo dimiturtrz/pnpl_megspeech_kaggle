@@ -22,7 +22,7 @@ from core.paths import DataRoot
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import PRIMARY
-from megspeech.data.spans.spans import Grouping
+from megspeech.data.spans.grouping import Grouping
 
 MODEL = "google-t5/t5-large"
 STEM = MODEL.split("/")[-1]

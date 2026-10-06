@@ -16,7 +16,7 @@ from megspeech.data.constants import DECIMATE, PICO, RATE, SFREQ, WINDOW
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import PRIMARY
 from megspeech.data.raw.runs import Run
-from megspeech.data.spans.spans import Grouping
+from megspeech.data.spans.grouping import Grouping
 
 CHANNELS = 4
 SECONDS = 6

@@ -14,7 +14,7 @@ from megspeech.data.constants import CHANNELS, RATE
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import IGNORE, PRIMARY
 from megspeech.data.raw.runs import Run
-from megspeech.data.spans.spans import Grouping
+from megspeech.data.spans.grouping import Grouping
 from tests.unit.megspeech.data.cache.kaggle import ONSETS, WORD_EPOCHS, kaggle
 from tests.unit.megspeech.data.config import HELD, OTHER, TRAIN
 
