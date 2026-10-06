@@ -226,6 +226,27 @@ class Split:
         scale = self.text.repeats(power)
         return replace(self, weight=self.weight * torch.from_numpy(scale).float().to(self.weight.device))
 
+    def spanned(self, spans: Int[Tensor, " b"]) -> "Split":
+        """This split reduced to `spans`: words keep their ids, so only the words `heard` names are read."""
+        return replace(self, index=self.index[spans], onset=self.onset[spans])
+
+    def heard(self) -> Int[Tensor, " k"]:
+        """Labelled words that some span of this split reads."""
+        words = self.index[self.index != PAD]
+        return words[self.y[words] != IGNORE]
+
+    def permuted(self, seed: int) -> "Split":
+        """This split with every word's window (start, end, first readable sample, next onset) another word's, onsets
+        untouched: what a model's timing alone reads."""
+        order = torch.randperm(len(self.y), generator=torch.Generator().manual_seed(seed)).to(self.y.device)
+        windows = self.windows
+        moved = {
+            name: getattr(windows, name)[order]
+            for name in ("at", "end", "begin", "following")
+            if getattr(windows, name) is not None
+        }
+        return replace(self, windows=replace(windows, **moved))
+
     def kaggle_like(self) -> Int[Tensor, " d"]:
         """Labelled words in spans at least `DENSE` long — the Kaggle-test-like subset."""
         long = self.index[(self.index != PAD).sum(dim=1) >= DENSE]

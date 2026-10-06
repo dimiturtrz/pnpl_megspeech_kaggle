@@ -22,6 +22,7 @@ from megspeech.evaluation.rulers.base import TrackRuler
 from megspeech.evaluation.rulers.broad import BroadRuler
 from megspeech.evaluation.rulers.deep import DeepRuler
 from megspeech.evaluation.rulers.localtest import LocalTest
+from megspeech.evaluation.scoring.probabilities import PROBS
 from megspeech.model.input.subjects import Fallback, Unseen
 from megspeech.submission.config import ReportConfig
 from megspeech.submission.writer import KaggleWriter
@@ -61,11 +62,14 @@ class Report:
     name: str
     device: torch.device
     geometry: Geometry
+    probabilities: bool = False
+    """Save the local test's per-word probabilities into the run's `probs.pt`."""
 
     def run(self) -> None:
         runs = Run.discover(self.root.raw())
         if self.config.local:
-            LocalTest(self.loaded(SCORING), runs).report(self.name)
+            saved = self.root.models() / self.name / PROBS if self.probabilities else None
+            LocalTest(self.loaded(SCORING), runs).report(self.name, saved)
         for track in self.config.tracks:
             scoring = replace(SCORING, aligned=self.config.aligned and track is Track.BROAD)
             written = Submission(track).write(self.loaded(scoring), runs, self.root.models() / f"{self.name}-{track}")

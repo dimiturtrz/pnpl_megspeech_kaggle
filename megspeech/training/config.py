@@ -9,6 +9,7 @@ from pathlib import Path
 from core.tree import Tree
 from megspeech.data.config import METRICS, DataConfig, Refit, Val
 from megspeech.evaluation.scoring.score import Epoch, SelectionConfig
+from megspeech.evaluation.scoring.telemetry import TelemetryConfig
 from megspeech.model.auxiliary import Tap
 from megspeech.model.config import CONTEXT, ContextConfig
 from megspeech.submission.config import ReportConfig
@@ -151,6 +152,7 @@ class RunConfig:
     selection: SelectionConfig = SelectionConfig()
     stop: StopConfig = StopConfig()
     report: ReportConfig = ReportConfig()
+    telemetry: TelemetryConfig = TelemetryConfig()
 
     def __post_init__(self) -> None:
         if self.stop.patience < 0:

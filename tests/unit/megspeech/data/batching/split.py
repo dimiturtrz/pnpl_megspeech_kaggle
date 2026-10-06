@@ -128,6 +128,35 @@ def test_capacity() -> None:
     assert s.capacity(100, longest.float()) > s.capacity(100, natural)
 
 
+def test_permuted() -> None:
+    """Window starts are moved together, the labels and onsets stay."""
+    original = split(6)
+    moved = original.permuted(0)
+    order = torch.randperm(6, generator=torch.Generator().manual_seed(0))
+    assert sorted(moved.windows.at.tolist()) == sorted(original.windows.at.tolist())
+    assert not torch.equal(moved.windows.at, original.windows.at)
+    assert torch.equal(moved.windows.end - moved.windows.at, original.windows.end[order] - original.windows.at[order])
+    assert torch.equal(moved.y, original.y)
+    assert torch.equal(moved.onset, original.onset)
+    assert torch.equal(original.permuted(0).windows.at, moved.windows.at)
+
+
+def test_spanned() -> None:
+    original = split(6)
+    kept = original.spanned(torch.tensor([2, 0]))
+    assert torch.equal(kept.index, original.index[[2, 0]])
+    assert torch.equal(kept.onset, original.onset[[2, 0]])
+    assert torch.equal(kept.y, original.y)
+
+
+def test_heard() -> None:
+    original = split(6)
+    heard = original.heard()
+    assert set(heard.tolist()) <= set(original.index[original.index != PAD].tolist())
+    assert (original.y[heard] != IGNORE).all()
+    assert torch.equal(original.spanned(torch.tensor([], dtype=torch.long)).heard(), heard[:0])
+
+
 def test_kaggle_like() -> None:
     assert split().kaggle_like().tolist() == list(range(DENSE))
     unknown = dataclasses.replace(split(), y=torch.where(torch.arange(12) == 0, IGNORE, split().y))

@@ -29,6 +29,7 @@ dependencies = [
     "matplotlib",
     "cupy-cuda13x>=14.2.0",
     "en-core-web-trf",
+    "captum>=0.9.0",
 ]
 
 [project.optional-dependencies]
