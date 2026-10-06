@@ -152,9 +152,13 @@ def test_stages() -> None:
 def test_widths() -> None:
     config = ConvConfig(dilations=(1, 2, 4, 8, 1, 2), stages=(2, 4))
     assert config.widths == (256, 256, 256, 384, 384, 576, 576)
-    assert config.out == 576
-    assert ConvConfig(hidden=8, stages=(1,)).out == 16
     assert ConvConfig(hidden=8, dilations=()).widths == (8,)
+
+
+def test_out() -> None:
+    assert ConvConfig(dilations=(1, 2, 4, 8, 1, 2), stages=(2, 4)).out == 576
+    assert ConvConfig(hidden=8, stages=(1,)).out == 16
+    assert ConvConfig().out == 256
 
 
 def test_grown() -> None:
