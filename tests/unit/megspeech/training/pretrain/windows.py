@@ -50,6 +50,16 @@ def test_of() -> None:
     assert all(r.partition is Partition.TRAIN for r in chosen.runs)
 
 
+def test_carving() -> None:
+    carving = Sessions.carving(DataConfig())
+    assert carving.subjects == (0,)
+    assert carving.train_share == 1.0
+    assert not carving.tasks
+    held = {r.name for r in carving.carved(runs())}
+    assert held
+    assert not held & set(Sessions.of(DataConfig(), runs()).names)
+
+
 def test_assert_clean() -> None:
     data = DataConfig()
     everything = runs()

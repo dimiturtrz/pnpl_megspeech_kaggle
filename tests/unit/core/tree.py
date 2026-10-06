@@ -20,6 +20,17 @@ class Inner:
 
 
 @dataclass(frozen=True)
+class Pair:
+    name: str
+    count: int = 1
+
+    @classmethod
+    def parse(cls, text: str) -> "Pair":
+        name, _, count = text.partition(":")
+        return cls(name, int(count) if count else 1)
+
+
+@dataclass(frozen=True)
 class Outer:
     inner: Inner = Inner()
     other: Inner = Inner(rate=2.0)
@@ -99,6 +110,9 @@ def test_coerce() -> None:
     assert Tree.coerce(bool, False) is False
     assert Tree.coerce(bool, "false") is False
     assert Tree.coerce(bool, "True") is True
+    assert Tree.coerce(Pair, "a:2") == Pair("a", 2)
+    assert Tree.coerce(tuple[Pair, ...], ["a", "b:3"]) == (Pair("a", 1), Pair("b", 3))
+    assert Tree.coerce(Pair, Pair("c", 4)) == Pair("c", 4)
 
 
 def test_truth() -> None:

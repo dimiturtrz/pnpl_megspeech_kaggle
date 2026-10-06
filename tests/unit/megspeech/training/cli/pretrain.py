@@ -18,6 +18,7 @@ from megspeech.training.pretrain.windows import Pool
 
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    torch.manual_seed(0)
     recording = DeviceRecording(torch.randn(CHANNELS, 400).half(), np.array([0, 400]), ("a",), pd.DataFrame())
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))
     monkeypatch.setattr(

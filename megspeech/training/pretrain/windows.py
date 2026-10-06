@@ -27,10 +27,15 @@ class Sessions:
     def of(cls, data: DataConfig, runs: Sequence[Run]) -> "Sessions":
         """Subject 0's `TRAIN`-partition sessions less the carved val: the narrowest training set any recipe uses, so
         no session a carved or an official validation selects on, nor any a local test reports on, is ever read."""
-        carved = replace(data, val=Val.CARVED, refit=Refit.NONE, subjects=(DEEP,), train_share=1.0, tasks=())
+        carved = cls.carving(data)
         chosen = cls(tuple(carved.trained(runs)))
         chosen.assert_clean(carved, runs)
         return chosen
+
+    @staticmethod
+    def carving(data: DataConfig) -> DataConfig:
+        """`data` as the narrowest recipe reads it: subject 0, the carved val, no refit, nothing held back else."""
+        return replace(data, val=Val.CARVED, refit=Refit.NONE, subjects=(DEEP,), train_share=1.0, tasks=())
 
     def assert_clean(self, data: DataConfig, runs: Sequence[Run]) -> None:
         """Raise `PartitionError` unless every session is subject 0's, `TRAIN`, and neither carved val nor official

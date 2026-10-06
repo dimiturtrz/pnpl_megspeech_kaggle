@@ -1,27 +1,30 @@
 """Self-supervised pretraining of the word encoder by masked latent prediction (data2vec, Baevski et al. 2022; BYOL's
 slow target, Grill et al. 2020): a student reads a window with patches of it hidden and predicts what an EMA teacher
-of itself reads, at those patches, from the whole window. The encoder is `SentenceNet`'s own, so the run it leaves is a
-`--optim.stem`."""
+of itself reads, at those patches, from the whole window. The loss is a weighted sum of `Objective`s, which add
+iBOT's, DINO's and DINOv2's prototype distillation and spread regulariser. The encoder is `SentenceNet`'s own, so the
+run it leaves is a `--optim.stem`."""
 
 import copy
 import json
 import logging
 import math
 import time
-from collections.abc import Callable
-from dataclasses import asdict, dataclass
-from enum import StrEnum
+from dataclasses import asdict, dataclass, field
+from functools import reduce
+from operator import add
 from pathlib import Path
 from typing import override
 
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 from torch.nn import functional
 
 from core.paths import DataRoot
 from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.config import METRICS, DataConfig
+from megspeech.data.raw.fetch import NEUROMAG
+from megspeech.data.raw.masc import Neuromag
 from megspeech.data.raw.runs import DEEP, Run
 from megspeech.model.config import CONTEXT, ContextConfig, Covariance
 from megspeech.model.input.scaler import Scaler
@@ -29,23 +32,17 @@ from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvWords
 from megspeech.model.words.layers.norm import MaskedBatchNorm1d
 from megspeech.training.loop.ema import Ema
-from megspeech.training.pretrain.masking import Masking
+from megspeech.training.pretrain.masking import Channels, Masking, Region
+from megspeech.training.pretrain.objectives import Batch, Kind, Loss, Objective, Readings, Setup, Term
+from megspeech.training.pretrain.progress import Probing, Progress
+from megspeech.training.pretrain.prototypes import Prototypes
 from megspeech.training.pretrain.windows import Pool, Sessions
 
 LOG = logging.getLogger(__name__)
 
 PREDICTOR = "predictor.pt"
-
-
-class Loss(StrEnum):
-    SMOOTH_L1 = "smooth_l1"
-    COSINE = "cosine"
-
-
-LOSSES: dict[Loss, Callable[[Tensor, Tensor], Tensor]] = {
-    Loss.SMOOTH_L1: functional.smooth_l1_loss,
-    Loss.COSINE: lambda pred, target: (1 - functional.cosine_similarity(pred, target, dim=-1)).mean(),
-}
+MIN_PEERS = 2
+"""Windows a batch needs for a term that compares them."""
 
 
 class CollapseError(RuntimeError):
@@ -57,6 +54,9 @@ class PretrainConfig:
     data: DataConfig = DataConfig()
     context: ContextConfig = CONTEXT
     masking: Masking = Masking()
+    objectives: tuple[Objective, ...] = (Objective(Kind.REGRESSION),)
+    """The loss is the sum of these terms, each scaled by its weight. The default is data2vec's regression alone."""
+    prototypes: Prototypes = Prototypes()
     epochs: int = 20
     batch: int = 128
     lr: float = 5e-4
@@ -80,18 +80,26 @@ class PretrainConfig:
     top: int = 3
     """Last blocks whose layer-normalised feature maps the target averages."""
     loss: Loss = Loss.SMOOTH_L1
+    """The regression objective's distance."""
     monitor: int = 200
     """Steps between collapse checks."""
     collapse_floor: float = 0.05
     """Spread (1 isotropic, 0 collapsed) under which the run aborts."""
     teacher: bool = False
     """Keep the teacher's weights, not the student's."""
+    probe: Probing = Probing()
+    """The frozen-encoder k-NN probe on carved-val words that tracks progress, which the loss cannot."""
 
     def __post_init__(self) -> None:
         if self.context.covariance is Covariance.NOISE:
             raise ValueError("a noise covariance is fit on labelled residuals, which pretraining never reads")
         if not 0 < self.top <= len(self.context.conv.dilations):
             raise ValueError(f"top {self.top} is not among the {len(self.context.conv.dilations)} blocks")
+        kinds = [objective.kind for objective in self.objectives]
+        if not kinds or len(set(kinds)) != len(kinds):
+            raise ValueError(f"objectives {kinds} must be a non-empty list of distinct kinds")
+        if self.batch < MIN_PEERS and {Kind.DINO, Kind.KOLEO} & set(kinds):
+            raise ValueError("cross-view and KoLeo terms compare windows in a batch")
         if not self.ema_start <= self.ema < 1:
             raise ValueError(f"ema {self.ema} must be in [ema_start {self.ema_start}, 1)")
 
@@ -107,6 +115,14 @@ class Predictor(nn.Module):
     @override
     def forward(self, maps: Float[Tensor, "b h t"]) -> Float[Tensor, "b t h"]:
         return self.body(maps).transpose(1, 2)
+
+
+@dataclass(frozen=True)
+class Student:
+    """What a step trains besides the objectives' heads: the encoder and the predictor that reads it."""
+
+    net: SentenceNet
+    predictor: Predictor
 
 
 @dataclass(frozen=True)
@@ -138,20 +154,32 @@ class Target:
         Ema(decay, Ema.state(self.net)).step(net, 0.0)
 
     @torch.no_grad()
-    def read(self, x: Float[Tensor, "b c t"], subject: Int[Tensor, " b"]) -> Float[Tensor, "b t h"]:
-        """The mean over the last `top` blocks of each one's feature map, layer-normalised at every time step."""
-        maps = self.convolutional(self.net).taps(self.net.prepare(x, subject))[-self.top :]
-        return torch.stack([functional.layer_norm(m.transpose(1, 2).float(), m.shape[1:2]) for m in maps]).mean(0)
+    def maps(self, shown: Float[Tensor, "b c t"]) -> list[Float[Tensor, "b h t"]]:
+        """The feature map of each block over `shown`, a window as the encoder reads it."""
+        return self.convolutional(self.net).taps(shown)
+
+    @torch.no_grad()
+    def prepare(self, x: Float[Tensor, "b c t"], subject: Int[Tensor, " b"]) -> Float[Tensor, "b c t"]:
+        return self.net.prepare(x, subject)
+
+    def target(self, maps: list[Float[Tensor, "b h t"]]) -> Float[Tensor, "b t h"]:
+        """The mean over the last `top` of `maps`, each layer-normalised at every time step."""
+        return torch.stack(
+            [functional.layer_norm(m.transpose(1, 2).float(), m.shape[1:2]) for m in maps[-self.top :]]
+        ).mean(0)
 
 
 @dataclass(frozen=True)
 class Round:
     epoch: int
     loss: float
-    spread: float
-    target_spread: float
-    target_centre: float
+    """The weighted total, as a mean over the epoch's steps."""
+    stats: dict[str, float]
+    """The epoch's mean of each term's loss (`loss/<term>`) and each diagnostic it read."""
     seconds: float
+    probe: dict[str, float] = field(default_factory=dict)
+    """The frozen-encoder probe's BAcc@10 of the student and teacher after the epoch, when read. Epoch -1 is the
+    random-init floor, read before any step."""
 
 
 @dataclass
@@ -159,6 +187,15 @@ class Pretrainer:
     config: PretrainConfig
     device: torch.device
     pool: Pool
+    region: Region = field(default_factory=Region)
+    progress: Progress | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            self.config.masking.channels is Channels.REGION
+            and self.region.nearest.shape[0] != self.pool.recording.meg.shape[0]
+        ):
+            raise ValueError("region masking needs the sensor positions of every recorded channel")
 
     @classmethod
     def of(cls, config: PretrainConfig, root: DataRoot, device: torch.device) -> "Pretrainer":
@@ -174,7 +211,18 @@ class Pretrainer:
             geometry=data.geometry(root, where),
         )
         LOG.info("pretraining on %d sessions, %.2f GB on %s", len(sessions.runs), recording.gigabytes, where)
-        return cls(config, device, Pool(recording, data.samples))
+        progress = None
+        if config.probe.every:
+            progress = Progress.load(data, root, recording, config.probe, device)
+        return cls(config, device, Pool(recording, data.samples), cls.sensors(config, root, device), progress)
+
+    @staticmethod
+    def sensors(config: PretrainConfig, root: DataRoot, device: torch.device) -> Region:
+        """The Neuromag-306 neighbourhoods region masking silences; none for another channel strategy."""
+        if config.masking.channels is not Channels.REGION:
+            return Region()
+        positions = torch.from_numpy(Neuromag.of(NEUROMAG.home(root)).positions).float().to(device)
+        return Region.of(positions, config.masking.region)
 
     def net(self, generator: torch.Generator) -> SentenceNet:
         """A fresh model whose scaler and whitener are fit on random windows."""
@@ -183,76 +231,129 @@ class Pretrainer:
         model.whiten.fit(model.scale(sample))
         return model
 
-    @staticmethod
-    def spread(rows: Float[Tensor, "n h"]) -> Float[Tensor, " 2"]:
-        """How varied unit-normalised `rows` are: their per-dimension std over `n` against an isotropic cloud's
-        `h ** -0.5` (1 there, 0 when every row is the same), and the norm of their mean."""
-        unit = functional.normalize(rows.float(), dim=-1)
-        return torch.stack([unit.std(dim=0).mean() * math.sqrt(unit.shape[-1]), unit.mean(dim=0).norm()])
-
     def decay(self, step: int, steps: int) -> float:
         """The teacher's decay at `step` of `steps`."""
         config = self.config
         ramp = min(1.0, step / max(1.0, config.ema_ramp * steps))
         return config.ema_start + (config.ema - config.ema_start) * ramp
 
+    def show(
+        self,
+        student: Student,
+        x: Float[Tensor, "b c t"],
+        subject: Int[Tensor, " b"],
+        generator: torch.Generator,
+    ) -> tuple[Float[Tensor, "b c t"], Bool[Tensor, "b t"]]:
+        """One masked view of `x`: time patches to hide drawn, sensors silenced on the raw window if the strategy
+        says so, then the model's own preparation, then the patches hidden behind the predictor's token; and the
+        hidden samples."""
+        masking = self.config.masking
+        hidden = masking.draw(len(x), x.shape[-1], self.config.data.rate, generator).to(self.device)
+        prepared = student.net.prepare(masking.silence(x, self.region, generator), subject)
+        return masking.apply(prepared, hidden, student.predictor.token, generator), hidden
+
     def step(
-        self, net: SentenceNet, predictor: Predictor, teacher: Target, generator: torch.Generator
-    ) -> Float[Tensor, " 4"]:
-        """One window batch's loss, the prediction's and target's spread, and the target's centre, not yet synced to
-        the host; the gradients are left on the parameters."""
+        self,
+        student: Student,
+        teacher: Target,
+        terms: list[Term],
+        generator: torch.Generator,
+        progress: float = 0.0,
+    ) -> Readings:
+        """One window batch's weighted loss, each term's and its diagnostics, not yet synced to the host; the
+        gradients are left on the parameters."""
         config = self.config
         x = self.pool.sample(config.batch, generator).to(self.device)
         subject = torch.full((config.batch,), DEEP, dtype=torch.long, device=self.device)
-        hidden = config.masking.draw(config.batch, x.shape[-1], config.data.rate, generator).to(self.device)
         with torch.autocast(self.device.type, dtype=torch.bfloat16):
-            target = teacher.read(x, subject)
-            shown = config.masking.apply(net.prepare(x, subject), hidden, predictor.token, generator)
-            pred = predictor(teacher.convolutional(net).taps(shown)[-1])
-        loss = LOSSES[config.loss](pred[hidden].float(), target[hidden])
-        net.zero_grad(set_to_none=True)
-        predictor.zero_grad(set_to_none=True)
-        loss.backward()
-        spread, (target_spread, centre) = self.spread(pred[hidden].detach()), self.spread(target[hidden])
-        return torch.stack([loss.detach(), spread[0], target_spread, centre])
+            clean = teacher.maps(teacher.prepare(x, subject))
+            shown, hidden = zip(
+                *(self.show(student, x, subject, generator) for _ in range(max(t.views for t in terms))),
+                strict=True,
+            )
+            convolutional = teacher.convolutional(student.net)
+            taps = [convolutional.taps(view)[-1] for view in shown]
+            across = [teacher.maps(view)[-1] for view in shown] if any(t.cross for t in terms) else []
+            batch = Batch(taps, list(hidden), clean[-1], teacher.target(clean), across, progress)
+            scored = [(term, *term.loss(batch)) for term in terms]
+        total = reduce(add, (term.weight * loss for term, loss, _ in scored))
+        self.clear(student, terms)
+        total.backward()
+        losses = {f"loss/{term.name}": loss.detach() for term, loss, _ in scored}
+        return {"loss": total.detach(), **losses, **{k: v.detach() for _, _, read in scored for k, v in read.items()}}
 
-    def watch(self, stats: Float[Tensor, " 4"]) -> None:
-        """Raise when `stats` (a mean over steps) show a non-finite loss or a spread under the floor."""
-        loss, spread, target_spread, _ = stats.tolist()
-        if not math.isfinite(loss):
+    @staticmethod
+    def clear(student: Student, terms: list[Term]) -> None:
+        """Drop every gradient the step is about to recompute."""
+        student.net.zero_grad(set_to_none=True)
+        student.predictor.zero_grad(set_to_none=True)
+        for term in terms:
+            for parameter in term.parameters():
+                parameter.grad = None
+
+    @staticmethod
+    def average(stats: list[Readings]) -> dict[str, float]:
+        """The mean over steps of each reading, synced to the host once."""
+        keys = list(stats[0])
+        means = torch.stack([torch.stack([s[k] for k in keys]) for s in stats]).mean(0)
+        return dict(zip(keys, means.tolist(), strict=True))
+
+    @staticmethod
+    def watch(stats: dict[str, float], floors: dict[str, float]) -> None:
+        """Raise when `stats` (a mean over steps) show a non-finite loss or a diagnostic under its floor."""
+        if not math.isfinite(stats["loss"]):
             raise FloatingPointError("non-finite pretraining loss")
-        floor = self.config.collapse_floor
-        if min(spread, target_spread) < floor:
-            raise CollapseError(f"spread {spread:.4f} (prediction), {target_spread:.4f} (target) under {floor}")
+        collapsed = {name: stats[name] for name, floor in floors.items() if stats[name] < floor}
+        if collapsed:
+            raise CollapseError(f"under their floors {floors}: {collapsed}")
+
+    def probed(self, net: SentenceNet, teacher: Target, epoch: int) -> dict[str, float]:
+        """The probe's readings after `epoch` if it is due, every `probe.every` epochs and the last; else none."""
+        every = self.config.probe.every
+        if not self.progress or not every or not ((epoch + 1) % every == 0 or epoch + 1 == self.config.epochs):
+            return {}
+        return self.progress.read(net, teacher.net)
 
     def fit(self, net: SentenceNet, predictor: Predictor, generator: torch.Generator) -> tuple[Target, list[Round]]:
-        """Train `net` and `predictor`; returns the teacher and each epoch's record."""
+        """Train `net`, `predictor` and the objectives' heads; returns the teacher and each epoch's record."""
         config = self.config
         teacher = Target.of(net, config.top)
+        setup = Setup(
+            predictor, config.context.conv.hidden, config.prototypes, config.loss, config.collapse_floor, self.device
+        )
+        terms = [objective.build(setup) for objective in config.objectives]
+        floors = {name: floor for term in terms for name, floor in term.floors().items()}
         per_epoch = math.ceil((config.windows or self.pool.total // self.pool.length) / config.batch)
         steps = per_epoch * config.epochs
-        params = [*net.encoder(), *predictor.parameters()]
+        params = [*net.encoder(), *predictor.parameters(), *(p for term in terms for p in term.parameters())]
         optimizer = torch.optim.AdamW(
             params, lr=config.lr, weight_decay=config.weight_decay, fused=self.device.type == "cuda"
         )
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, config.lr, total_steps=steps)
         history: list[Round] = []
+        if self.progress:
+            history.append(Round(-1, math.nan, {}, 0.0, self.progress.read(net, teacher.net)))
+            LOG.info("%s", asdict(history[-1]))
         for epoch in range(config.epochs):
             net.train()
             began = time.perf_counter()
-            stats: list[Tensor] = []
+            stats: list[Readings] = []
             for step in range(per_epoch):
-                stats.append(self.step(net, predictor, teacher, generator))
+                done = epoch * per_epoch + step
+                stats.append(self.step(Student(net, predictor), teacher, terms, generator, done / steps))
                 nn.utils.clip_grad_norm_(params, config.clip)
                 optimizer.step()
                 schedule.step()
-                teacher.follow(net, self.decay(epoch * per_epoch + step, steps))
+                decay = self.decay(done, steps)
+                teacher.follow(net, decay)
+                for term in terms:
+                    term.follow(decay)
                 if (step + 1) % config.monitor == 0:
-                    self.watch(torch.stack(stats[-config.monitor :]).mean(0))
-            mean = torch.stack(stats).mean(0)
-            self.watch(mean)
-            loss, spread, target_spread, centre = mean.tolist()
-            history.append(Round(epoch, loss, spread, target_spread, centre, time.perf_counter() - began))
+                    self.watch(self.average(stats[-config.monitor :]), floors)
+            mean = self.average(stats)
+            self.watch(mean, floors)
+            seconds = time.perf_counter() - began
+            history.append(Round(epoch, mean["loss"], mean, seconds, self.probed(net, teacher, epoch)))
             LOG.info("%s", asdict(history[-1]))
         return teacher, history
 

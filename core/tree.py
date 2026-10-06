@@ -106,9 +106,13 @@ class Tree[T: DataclassInstance]:
 
     @classmethod
     def coerce(cls, kind: object, value: object) -> object:
-        """A JSON or command-line value as the leaf's declared type: text parsed, enums by value, lists as tuples."""
+        """A JSON or command-line value as the leaf's declared type: text parsed (by the kind's own `parse` if it has
+        one), enums by value, lists as tuples."""
         if get_origin(kind) is tuple and isinstance(value, Iterable) and not isinstance(value, str):
             return tuple(cls.coerce(get_args(kind)[0], item) for item in value)
+        parse = getattr(kind, "parse", None)
+        if parse is not None and isinstance(value, str):
+            return parse(value)
         if kind is bool and isinstance(value, str):
             return cls.truth(value)
         scalar = isinstance(kind, type) and issubclass(kind, StrEnum | int | float | str)
