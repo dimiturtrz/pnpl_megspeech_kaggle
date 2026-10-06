@@ -421,3 +421,8 @@ def test_weight(tmp_path: Path) -> None:
 def test_sources() -> None:
     names = pd.Series([f"sub-0_ses-1_task-{task}_run-1" for task in ("Sherlock2", "Alpha", "Sherlock1", "Alpha")])
     assert DataConfig.sources(names).tolist() == [1, 0, 1, 0]
+
+
+def test_reads() -> None:
+    names = pd.Series([f"sub-0_ses-1_task-{task}_run-1" for task in ("TIMIT3", "Sherlock2", "MOCHATIMIT", "TheMoth")])
+    assert DataConfig.reads(names).tolist() == [True, False, True, False]

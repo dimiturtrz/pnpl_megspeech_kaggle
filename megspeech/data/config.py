@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Int
+from jaxtyping import Bool, Int
 
 from core.paths import DataRoot
 from core.tree import Tree
@@ -260,6 +260,11 @@ class DataConfig:
         """Each run `name`'s dataset (`stratum` of its task) as an index into the sorted datasets present."""
         strata = Run.tasks(names).map(cls.stratum)
         return pd.factorize(strata, sort=True)[0].astype(np.int64)
+
+    @classmethod
+    def reads(cls, names: "pd.Series[str]") -> Bool[np.ndarray, " n"]:
+        """Whether each run `name`'s task is read sentences (`READ`) rather than narrative."""
+        return Run.tasks(names).map(cls.stratum).isin(READ).to_numpy()
 
     def source(self, run: Run) -> tuple[str, tuple[str, int, int]]:
         return self.stratum(run.key[0]), run.key

@@ -83,6 +83,9 @@ def test_split(tmp_path: Path) -> None:
     assert split.y.tolist() == [THE, IGNORE, A, THE, A]
     assert split.index.tolist() == [[0, 1, 2] + [-1] * 6, [3, 4] + [-1] * 7]
     assert split.weight.tolist() == [0.0, 1.0, 2.0, 3.0, 4.0]
+    assert split.reads().tolist() == [False, False]
+    assert split.read is not None
+    assert split.read.tolist() == DataConfig.reads(loaded.words["run"].loc[words.index]).tolist()
     window = split.windows(torch.tensor([4]))
     assert window.shape == (1, CHANNELS, RATE)
     assert window.float().abs().tolist() == [[[0.5] * RATE] * CHANNELS]

@@ -244,3 +244,11 @@ def test_split(tmp_path: Path):
     read = saved(tmp_path).split(TRAIN, split)
     assert read.windows.length == 1
     assert read.y is split.y
+
+
+def test_reads() -> None:
+    """A span is read by its first word's run; unknown reads leave every span uncapped."""
+    base = split()
+    assert not base.reads().any()
+    flagged = dataclasses.replace(base, read=torch.arange(12) < DENSE)
+    assert flagged.reads().tolist() == [True] + [False] * (len(base.index) - 1)

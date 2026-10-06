@@ -102,7 +102,11 @@ class Corpus:
         )
         labels = (words["target"].to_numpy(), words["token"].to_numpy())
         held = Split.of(windows, labels, data.grouping.spans(words), weight, Run.subjects(words["run"]))
-        return replace(held, source=torch.tensor(data.sources(words["run"]), device=windows.device))
+        return replace(
+            held,
+            source=torch.tensor(data.sources(words["run"]), device=windows.device),
+            read=torch.tensor(data.reads(words["run"]), device=windows.device),
+        )
 
     @classmethod
     def domains(

@@ -196,7 +196,9 @@ class Trainer:
         if optim.robust and (optim.priority or optim.visibility):
             raise ValueError("optim.robust and optim.priority/optim.visibility each tilt the draw by loss; set one")
         base = Annealed.of(optim.curriculum)
-        return Prioritised.of(Robust.of(base, train, optim.robust), train, optim.priority, optim.visibility)
+        return Prioritised.of(
+            Robust.of(base, train, optim.robust), train, optim.priority, optim.visibility, train.reads()
+        )
 
     def rows(self, train: Split) -> int:
         """Word rows for one batch at the curriculum's draw weights in whichever epoch draws the most words."""
