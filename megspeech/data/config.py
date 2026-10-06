@@ -35,31 +35,45 @@ NARRATOR = "Sherlock"
 """The stratum read by one voice throughout; every TheMoth story and read sentence has its own speaker."""
 
 
-class LocalRuler(StrEnum):
-    """The two local rulers; their scores never compare. `OFFICIAL`: pnpl's labelled partitions, official validation
-    selects epoch and adjustment, official test reports. `BALANCED`: a stratified 80/10/10 session split of subject 0's
-    training sessions (`Stratify`), each source's validation selecting and test reporting, the official runs joining
-    theirs: ~30k scored words per partition against the official ~2.5k, whose interval spans +-0.03 (megspeech-7gf.81,
-    megspeech-7gf.103)."""
+class Refit(StrEnum):
+    """Which held-out sessions a final fit of an already selected recipe also trains on; whatever trains no longer
+    scores. `VAL` trains val, `ALL` the local test too, subject 0's only."""
 
+    NONE = "none"
+    VAL = "val"
+    ALL = "all"
+
+
+class Val(StrEnum):
+    """Which sessions are VAL, selecting epoch and tau; the labelled sessions that report are the LOCAL TEST. `CARVED`:
+    10% of each source's subject-0 training sessions, stratified (`Stratify`: source, sentence length, word
+    diversity); the local test is pnpl's validation and test partitions pooled. `OFFICIAL`, the legacy full-data
+    models': val is pnpl's validation partition, the local test its test partition
+    (megspeech-7gf.122)."""
+
+    CARVED = "carved"
     OFFICIAL = "official"
-    BALANCED = "balanced"
 
     @property
     def share(self) -> float:
-        """Of each source's sessions, the share held out for validation and as much for test."""
-        return {self.OFFICIAL: 0.0, self.BALANCED: 0.1}[self]
+        """Of each source's sessions, the share carved out as val."""
+        return {self.CARVED: 0.1, self.OFFICIAL: 0.0}[self]
 
     @classmethod
     def migrated(cls, record: Mapping[str, object]) -> dict[str, object]:
-        """A saved data config under the retired `extra`/`share`/`stratify` fields as one under `ruler`; the retired
+        """A saved data config as one under `val` and `Refit`: the retired `ruler`, `extra`/`share`/`stratify` fields
+        and boolean `refit` mapped, a balanced or carved run to `CARVED` and the rest to `OFFICIAL`; the retired
         strided split and extra validation domains are refused."""
-        kept = {k: v for k, v in record.items() if k not in {"extra", "share", "stratify"}}
+        retired = {"extra", "share", "stratify", "ruler"}
+        kept = {k: v for k, v in record.items() if k not in retired}
         share, stratified = float(str(record.get("share", 0.0))), bool(record.get("stratify", False))
         if int(str(record.get("extra", 0))) or (share and not stratified):
             raise ValueError("this run trained under a retired ruler (strided share or extra validation runs)")
-        ruled: dict[str, object] = {"ruler": cls.BALANCED} if share else {}
-        return kept | ruled
+        carved = bool(share) or record.get("ruler") == "balanced"
+        chosen = record.get("val", cls.CARVED if carved else cls.OFFICIAL)
+        refit = record.get("refit")
+        refitted: dict[str, object] = {"refit": Refit.VAL if refit else Refit.NONE} if isinstance(refit, bool) else {}
+        return kept | {"val": chosen} | refitted
 
 
 @dataclass(frozen=True)
@@ -76,9 +90,9 @@ class DataConfig:
     """A span heard `k` times in training is drawn with weight `k ** -repeat_power`; 1 draws each sentence once."""
     grouping: Grouping = Grouping.SENTENCE
     """`sentence`: every word of each PNPL sentence; `gap`: vocabulary words only, spans by onset gap."""
-    refit: bool = False
-    """Train on the validation runs too, for a final fit of an already selected recipe; validation then scores
-    words training heard, so it can no longer select."""
+    refit: Refit = Refit.NONE
+    """Train on val (and with `ALL` the local test) too, for a final fit of an already selected recipe; what trained
+    scores words training heard, so it can no longer select or report."""
     window: float = 1.0
     """Seconds of MEG from each word's onset; a model is scored and submitted at the window it trained on."""
     standardised: bool = False
@@ -88,9 +102,8 @@ class DataConfig:
     train_share: float = 1.0
     """Of each source's training sessions the ruler leaves, the share that train: whole sessions, the same seeded order
     per source so a smaller share is a subset of a larger one (the data-scaling curve, megspeech-7gf.104)."""
-    ruler: LocalRuler = LocalRuler.OFFICIAL
-    """The local ruler the model trains under: which sessions are withheld for validation (selects epoch and tau) and
-    test (reports); see `LocalRuler`."""
+    val: Val = Val.CARVED
+    """Which sessions are withheld as val (selects epoch and tau) and which are the local test (reports); see `Val`."""
     baseline: float = 0.0
     """Seconds from each window's start its centring mean is taken over; 0 centres on the whole window. The
     reference pipeline baselines on 0-0.5 s, the pre-response stretch, so the word's evoked field is kept whole."""
@@ -151,7 +164,7 @@ class DataConfig:
     def saved(cls, directory: Path) -> "DataConfig":
         """The data config a run in `directory` recorded; a record without one, or a flat one, falls to defaults."""
         config = json.loads((directory / METRICS).read_text())["config"]
-        return Tree(cls).load(LocalRuler.migrated(config.get("data", {})))
+        return Tree(cls).load(Val.migrated(config.get("data", {})))
 
     @classmethod
     def shared(cls, directories: Sequence[Path], grouping: Grouping) -> "DataConfig":
@@ -196,15 +209,6 @@ class DataConfig:
         cut = windows.following + self.to_samples(self.span_lag)
         return replace(windows, end=torch.minimum(windows.end, cut).clamp(min=windows.at + 1))
 
-    def under(self, ruler: "LocalRuler") -> "DataConfig":
-        """This config scored under `ruler`: the official one needs no carved sessions, so it also reads a model trained
-        on the balanced split; the balanced one only reads a model trained on it (megspeech-7gf.103)."""
-        if ruler is self.ruler:
-            return self
-        if ruler is not LocalRuler.OFFICIAL:
-            raise ValueError(f"a model trained under the {self.ruler} ruler cannot be scored under {ruler}")
-        return replace(self, ruler=ruler, folds=1, fold=0)
-
     @property
     def recoloured(self) -> bool:
         """Whether recordings are re-coloured (`alignment`): every one when `aligned`, the other subjects' whenever
@@ -244,11 +248,19 @@ class DataConfig:
         weights = {**dict.fromkeys(READ, self.read_weight), NARRATOR: self.narrator_weight}
         return weights.get(self.stratum(run.key[0]), 1.0)
 
+    @property
+    def refitted(self) -> tuple[Partition, ...]:
+        """The official partitions of subject 0 that train too: val's under `OFFICIAL`, both under `Refit.ALL`."""
+        official = (Partition.VALIDATION,) if self.val is Val.OFFICIAL else ()
+        return {Refit.NONE: (), Refit.VAL: official, Refit.ALL: (Partition.VALIDATION, Partition.TEST)}[self.refit]
+
     def trains_on(self, run: Run) -> bool:
-        trained = (Partition.TRAIN, Partition.VALIDATION) if self.refit else (Partition.TRAIN,)
-        return (
-            run.partition in trained and run.subject in self.subjects and (not self.tasks or run.key[0] in self.tasks)
+        """Whether `run` trains: a `TRAIN` run of a subject in `subjects`, or one of the `refitted` partitions of
+        subject 0; never another subject's validation or test runs."""
+        reads = (run.partition is Partition.TRAIN and run.subject in self.subjects) or (
+            run.partition in self.refitted and run.subject == DEEP and DEEP in self.subjects
         )
+        return reads and (not self.tasks or run.key[0] in self.tasks)
 
     @staticmethod
     def stratum(task: str) -> str:
@@ -275,7 +287,7 @@ class DataConfig:
         deep = sorted((r for r in runs if r.partition is Partition.TRAIN and r.subject == DEEP), key=self.source)
         sources = [tuple(group) for _, group in itertools.groupby(deep, key=lambda r: self.source(r)[0])]
         held_out = [
-            self.folded(source, Stratify.split(source, round(self.ruler.share * len(source)))) for source in sources
+            self.folded(source, Stratify.split(source, round(self.val.share * len(source)))) for source in sources
         ]
         return {
             partition: [run for chosen in held_out for run in chosen[at]]
@@ -290,12 +302,14 @@ class DataConfig:
         tested = {r.name for r in test}
         return [r for r in source if r.name not in tested][self.fold :: self.folds], test
 
+    def carved(self, runs: Sequence[Run]) -> list[Run]:
+        """Subject 0's sessions `Val.CARVED` holds out as val: `split`'s validation half, the fold when `folds` > 1;
+        none under `OFFICIAL`. The one place val's membership is chosen."""
+        return self.split(runs)[Partition.VALIDATION]
+
     def trained(self, runs: Sequence[Run]) -> list[Run]:
-        """The runs training reads: `trains_on`, less the held-out test runs, and less the held-out validation runs
-        unless refitting on validation."""
-        held_out = self.split(runs)
-        held: list[Run] = [] if self.refit else held_out[Partition.VALIDATION]
-        excluded = {r.name for r in [*held, *held_out[Partition.TEST]]}
+        """The runs training reads: `trains_on`, less the carved val sessions unless refitting."""
+        excluded = {r.name for r in self.carved(runs)} if self.refit is Refit.NONE else set()
         return self.thinned([r for r in runs if self.trains_on(r) and r.name not in excluded])
 
     def thinned(self, runs: Sequence[Run]) -> list[Run]:
@@ -312,20 +326,31 @@ class DataConfig:
         return [r for r in runs if r.name in kept]
 
     def domain(self, run: Run) -> str:
-        """The domain `run` is scored in: its source once `share` or `folds` holds out sessions, else its task."""
-        return self.stratum(run.key[0]) if self.ruler is LocalRuler.BALANCED or self.folds > 1 else run.key[0]
+        """The domain `run` is scored in: its source under `CARVED` or `folds`, else its task."""
+        return self.stratum(run.key[0]) if self.val is Val.CARVED or self.folds > 1 else run.key[0]
+
+    def official(self, runs: Sequence[Run], *partitions: Partition) -> list[Run]:
+        """Subject 0's runs of the official `partitions`; other subjects' never count."""
+        return [r for r in runs if r.partition in partitions and r.subject == DEEP]
 
     def scored(self, runs: Sequence[Run], partition: Partition) -> dict[str, list[Run]]:
-        """`partition`'s domains: subject 0's official runs of it with the sessions held out for it, under `domain`."""
-        chosen = [r for r in runs if r.partition is partition and r.subject == DEEP] + self.split(runs)[partition]
+        """The domains of val (`Partition.VALIDATION`) or of the local test (`Partition.TEST`), under `domain`: val is
+        the carved sessions, or pnpl's validation partition under `OFFICIAL`; the local test pnpl's test partition,
+        with its validation partition too under `CARVED`."""
+        carved = self.val is Val.CARVED
+        if partition is Partition.VALIDATION:
+            chosen = self.carved(runs) if carved else [*self.official(runs, partition), *self.carved(runs)]
+        else:
+            chosen = self.official(runs, Partition.TEST, *([Partition.VALIDATION] if carved else []))
         names = sorted({self.domain(r) for r in chosen})
         return {name: [r for r in chosen if self.domain(r) == name] for name in names}
 
     def tested(self, runs: Sequence[Run]) -> dict[str, list[Run]]:
+        """The local test's domains, which report."""
         return self.scored(runs, Partition.TEST)
 
     def held(self, runs: Sequence[Run]) -> dict[str, list[Run]]:
-        """The validation domains' runs, which select epoch and adjustment."""
+        """Val's domains' runs, which select epoch and adjustment."""
         return self.scored(runs, Partition.VALIDATION)
 
     def ruled(self, runs: Sequence[Run], partition: Partition) -> dict[str, list[Run]]:

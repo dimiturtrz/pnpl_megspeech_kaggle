@@ -36,7 +36,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("names", nargs="+", help="trained models under models/, averaged as one")
     parser.add_argument("--out", required=True)
-    parser.add_argument("--local", action="store_true", help="report val and official test at val tau; write nothing")
+    parser.add_argument("--local", action="store_true", help="report val and local test at val tau; write nothing")
     parser.add_argument(
         "--memorisation", action="store_true", help="with --local, tally test hits by what training heard"
     )

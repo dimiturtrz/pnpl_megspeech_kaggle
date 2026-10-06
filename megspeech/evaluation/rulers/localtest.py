@@ -1,6 +1,6 @@
-"""A model's local test: the official labelled test partition scored at the adjustment official validation selects.
+"""A model's local test: the labelled sessions kept out of val scored at the adjustment val selects.
 
-Validation picks tau (as `megspeech.submission` does); test only reports, once, at that tau. Every counted domain's
+Val picks tau (as `megspeech.submission` does); the local test only reports, once, at that tau. Every counted domain's
 balanced accuracy and unseen-span word count, the macro and its bootstrap interval, under each span cut.
 
     uv run python -m megspeech.submission ens-sent40-s0123 --out x --local [--grouping kaggle]
@@ -15,10 +15,12 @@ from megspeech.evaluation.metric.ruler import Graded, Ruler
 
 LOG = logging.getLogger(__name__)
 
+SCORED = {Partition.VALIDATION: "val", Partition.TEST: "local test"}
+
 
 @dataclass(frozen=True)
 class LocalTest:
-    """`loaded` scored on both official partitions of `runs`, at the tau its validation macro selects."""
+    """`loaded` scored on val and on the local test of `runs`, at the tau its val macro selects."""
 
     loaded: LoadedModel
     runs: list[Run]
@@ -43,11 +45,4 @@ class LocalTest:
     def report(self, label: str) -> None:
         tau = self.tau()
         for partition in (Partition.VALIDATION, Partition.TEST):
-            LOG.info(
-                "%s ruler=%s %s tau %s: %s",
-                label,
-                self.loaded.ruler,
-                partition,
-                tau,
-                self.summary(self.graded(partition, tau)),
-            )
+            LOG.info("%s %s tau %s: %s", label, SCORED[partition], tau, self.summary(self.graded(partition, tau)))

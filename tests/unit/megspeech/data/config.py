@@ -11,7 +11,7 @@ import torch
 from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.cleaning import Cleaning
-from megspeech.data.config import METRICS, READING, DataConfig, LocalRuler
+from megspeech.data.config import METRICS, READING, DataConfig, Refit, Val
 from megspeech.data.constants import RATE
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.runs import Partition, Run
@@ -24,6 +24,10 @@ OTHER = "sub-3_ses-12_task-Sherlock1_run-1_meg.h5"
 POOLED = "sub-3_ses-11_task-Sherlock1_run-1_meg.h5"
 
 
+OFFICIAL = DataConfig(val=Val.OFFICIAL)
+CARVED = DataConfig()
+
+
 def test_trains_on(tmp_path: Path) -> None:
     sherlock = Run(tmp_path / TRAIN)
     timit = Run(tmp_path / "sub-0_ses-1_task-TIMIT_run-1_meg.h5")
@@ -31,11 +35,18 @@ def test_trains_on(tmp_path: Path) -> None:
     only = DataConfig(tasks=("Sherlock1",))
     assert [only.trains_on(r) for r in (sherlock, timit, held)] == [True, False, False]
     assert DataConfig().trains_on(timit)
-    assert [DataConfig(refit=True).trains_on(r) for r in (sherlock, held)] == [True, True]
+    assert [DataConfig(val=Val.OFFICIAL, refit=Refit.VAL).trains_on(r) for r in (sherlock, held)] == [True, True]
+    assert [DataConfig(refit=Refit.VAL).trains_on(r) for r in (sherlock, held)] == [True, False]
     other, pooled = Run(tmp_path / OTHER), Run(tmp_path / POOLED)
     assert [DataConfig().trains_on(r) for r in (other, pooled)] == [False, False]
     assert [DataConfig(subjects=(0, 3)).trains_on(r) for r in (sherlock, other, pooled)] == [True, False, False]
-    assert not any(DataConfig(subjects=(0, 3), refit=True).trains_on(r) for r in (other, pooled))
+    assert not any(DataConfig(subjects=(0, 3), refit=Refit.ALL).trains_on(r) for r in (other, pooled))
+
+
+def test_refitted() -> None:
+    both = (Partition.VALIDATION, Partition.TEST)
+    cases = [DataConfig(val=v, refit=r).refitted for v in Val for r in Refit]
+    assert cases == [(), (), both, (), (Partition.VALIDATION,), both]
 
 
 def runs(path: Path) -> list[Run]:
@@ -75,79 +86,106 @@ def first_sessions(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Stratify, "split", staticmethod(stand_in))
 
 
-BALANCED = DataConfig(ruler=LocalRuler.BALANCED)
-
-
 def sessions(path: Path) -> list[Run]:
     """Twenty Sherlock1 sessions of subject 0 and an official validation run: a 10% share holds two out of each."""
     return [Run(path / f"sub-0_ses-{s}_task-Sherlock1_run-1_meg.h5") for s in range(1, 21)] + runs(path)[3:4]
 
 
 def test_split(tmp_path: Path) -> None:
-    """The balanced ruler holds out `round(0.1 n)` of a source's sessions per partition, disjointly; official, none."""
-    held = BALANCED.split(sessions(tmp_path))
+    """Carved val holds out `round(0.1 n)` of a source's sessions per half, disjointly; official, none."""
+    held = CARVED.split(sessions(tmp_path))
     names = {p: {r.name for r in chosen} for p, chosen in held.items()}
     assert [len(names[p]) for p in (Partition.VALIDATION, Partition.TEST)] == [2, 2]
     assert names[Partition.VALIDATION].isdisjoint(names[Partition.TEST])
-    assert BALANCED.split(subjects(tmp_path) + sessions(tmp_path)) == BALANCED.split(
-        runs(tmp_path) + sessions(tmp_path)
-    )
-    assert not any(DataConfig().split(sessions(tmp_path)).values())
+    assert CARVED.split(subjects(tmp_path) + sessions(tmp_path)) == CARVED.split(runs(tmp_path) + sessions(tmp_path))
+    assert not any(OFFICIAL.split(sessions(tmp_path)).values())
+
+
+def test_carved(tmp_path: Path) -> None:
+    """Val's carved sessions are the old balanced validation half alone; official carves none; a fold only its own."""
+    every = sessions(tmp_path)
+    halves = CARVED.split(every)
+    assert CARVED.carved(every) == halves[Partition.VALIDATION]
+    assert len(CARVED.carved(every)) == 2
+    assert OFFICIAL.carved(every) == []
+    assert DataConfig(folds=2).carved(every) == DataConfig(folds=2).split(every)[Partition.VALIDATION]
 
 
 def test_trained_split(tmp_path: Path) -> None:
-    """Held-out sessions never train; refitting takes the validation ones back, never the test ones."""
+    """Carved sessions never train; refitting on val takes them back, the official local test stays out until ALL."""
     every = sessions(tmp_path)
-    held = BALANCED.split(every)
-    val, test = ({r.name for r in held[p]} for p in (Partition.VALIDATION, Partition.TEST))
-    assert {r.name for r in BALANCED.trained(every)}.isdisjoint(val | test)
-    refit = {r.name for r in dataclasses.replace(BALANCED, refit=True).trained(every)}
-    assert val <= refit
-    assert refit.isdisjoint(test)
+    carved = {r.name for r in CARVED.carved(every)}
+    assert {r.name for r in CARVED.trained(every)}.isdisjoint(carved)
+    old_test = {r.name for r in CARVED.split(every)[Partition.TEST]}
+    assert old_test <= {r.name for r in CARVED.trained(every)}
+    refit = DataConfig(refit=Refit.VAL).trained(every)
+    assert carved <= {r.name for r in refit}
+    assert all(r.partition is Partition.TRAIN for r in refit)
+    assert {r.name for r in DataConfig(refit=Refit.ALL).trained(every)} == {r.name for r in every}
+
+
+def test_trained_other_subjects_never(tmp_path: Path) -> None:
+    """Refitting on everything still never trains subjects 1-32's validation or test partitions."""
+    every = subjects(tmp_path)
+    trained = DataConfig(subjects=(0, 3, 4), refit=Refit.ALL).trained(every)
+    assert not [r for r in trained if r.subject]
+    assert {r.name for r in trained} == {r.name for r in every if r.subject == 0}
 
 
 def test_domain(tmp_path: Path) -> None:
-    assert [DataConfig(ruler=r).domain(Run(tmp_path / TRAIN)) for r in LocalRuler] == ["Sherlock1", "Sherlock"]
-    assert DataConfig(folds=2).domain(Run(tmp_path / TRAIN)) == "Sherlock"
+    assert [DataConfig(val=v).domain(Run(tmp_path / TRAIN)) for v in (Val.OFFICIAL, Val.CARVED)] == [
+        "Sherlock1",
+        "Sherlock",
+    ]
+    assert DataConfig(val=Val.OFFICIAL, folds=2).domain(Run(tmp_path / TRAIN)) == "Sherlock"
+
+
+def test_official(tmp_path: Path) -> None:
+    every = subjects(tmp_path)
+    assert {r.key for r in OFFICIAL.official(every, Partition.VALIDATION)} == {("Sherlock1", 11, 2), ("TheMoth", 29, 1)}
+    assert all(r.subject == 0 for r in OFFICIAL.official(every, Partition.VALIDATION, Partition.TEST))
 
 
 def test_scored(tmp_path: Path) -> None:
-    """Under the balanced ruler the official runs join their source's held-out sessions; other subjects' never count."""
+    """Carved val is the carved sessions alone; the local test pools pnpl's validation and test; other subjects' never
+    count. Official val is pnpl's validation partition."""
     every = sessions(tmp_path)
-    scored = BALANCED.scored(every, Partition.VALIDATION)
-    assert list(scored) == ["Sherlock"]
-    assert ("Sherlock1", 11, 2) in {r.key for r in scored["Sherlock"]}
-    assert len(scored["Sherlock"]) == 3
-    assert keyed(DataConfig().scored(runs(tmp_path), Partition.VALIDATION)) == {
+    val, test = CARVED.scored(every, Partition.VALIDATION), CARVED.scored(every, Partition.TEST)
+    assert list(val) == ["Sherlock"]
+    assert len(val["Sherlock"]) == 2
+    assert ("Sherlock1", 11, 2) not in {r.key for r in val["Sherlock"]}
+    assert [r.key for r in test["Sherlock"]] == [("Sherlock1", 11, 2)]
+    assert keyed(OFFICIAL.scored(runs(tmp_path), Partition.VALIDATION)) == {
         "Sherlock1": [("Sherlock1", 11, 2)],
         "TheMoth": [("TheMoth", 29, 1)],
     }
-    assert DataConfig().scored(subjects(tmp_path), Partition.TEST) == {}
+    assert OFFICIAL.scored(subjects(tmp_path), Partition.TEST) == {}
 
 
 def test_tested(tmp_path: Path) -> None:
     official = Run(tmp_path / "sub-0_ses-12_task-Sherlock1_run-2_meg.h5")
-    assert keyed(DataConfig().tested([*runs(tmp_path), official])) == {"Sherlock1": [("Sherlock1", 12, 2)]}
-    assert len(BALANCED.tested(sessions(tmp_path))["Sherlock"]) == 2
+    assert keyed(OFFICIAL.tested([*runs(tmp_path), official])) == {"Sherlock1": [("Sherlock1", 12, 2)]}
+    pooled = CARVED.tested([*sessions(tmp_path), official])
+    assert sorted(r.key for r in pooled["Sherlock"]) == [("Sherlock1", 11, 2), ("Sherlock1", 12, 2)]
 
 
 def test_trained(tmp_path: Path) -> None:
     every = runs(tmp_path)
-    assert len(DataConfig().trained(every)) == len(every) - 2
-    assert len(DataConfig(refit=True).trained(every)) == len(every)
-    pooled = DataConfig(subjects=(0, 3)).trained(subjects(tmp_path))
+    assert len(OFFICIAL.trained(every)) == len(every) - 2
+    assert len(DataConfig(val=Val.OFFICIAL, refit=Refit.VAL).trained(every)) == len(every)
+    pooled = DataConfig(subjects=(0, 3), val=Val.OFFICIAL).trained(subjects(tmp_path))
     assert not [r for r in pooled if r.subject]
 
 
 def test_thinned(tmp_path: Path) -> None:
     """A share keeps `ceil(share * n)` whole sessions of each source, nested across shares; 1 keeps every run."""
     every = sessions(tmp_path)
-    full = DataConfig().trained(every)
-    half, quarter = (DataConfig(train_share=s).thinned(full) for s in (0.5, 0.25))
+    full = OFFICIAL.trained(every)
+    half, quarter = (DataConfig(train_share=s, val=Val.OFFICIAL).thinned(full) for s in (0.5, 0.25))
     assert len(half) == 10 and len(quarter) == 5
     assert {r.name for r in quarter} < {r.name for r in half} < {r.name for r in full}
-    assert DataConfig().thinned(full) == full
-    assert DataConfig(train_share=0.5).trained(every) == half
+    assert OFFICIAL.thinned(full) == full
+    assert DataConfig(train_share=0.5, val=Val.OFFICIAL).trained(every) == half
 
 
 def test_train_share_range() -> None:
@@ -158,13 +196,15 @@ def test_train_share_range() -> None:
 
 def test_trained_folds(tmp_path: Path) -> None:
     """Each member trains on all but its validation fold, and the folds tile subject 0's training sessions."""
-    every = {r.name for r in DataConfig().trained(runs(tmp_path))}
-    configs = [DataConfig(folds=3, fold=f) for f in range(3)]
+    every = {r.name for r in OFFICIAL.trained(runs(tmp_path))}
+    configs = [DataConfig(val=Val.OFFICIAL, folds=3, fold=f) for f in range(3)]
     held = [{r.name for r in config.split(runs(tmp_path))[Partition.VALIDATION]} for config in configs]
     assert [every - {r.name for r in c.trained(runs(tmp_path))} for c in configs] == held
     assert set().union(*held) == every
     assert sum(map(len, held)) == len(every)
-    assert DataConfig(folds=3, subjects=(0, 3, 4)).trained(subjects(tmp_path)) == configs[0].trained(runs(tmp_path))
+    assert DataConfig(val=Val.OFFICIAL, folds=3, subjects=(0, 3, 4)).trained(subjects(tmp_path)) == configs[0].trained(
+        runs(tmp_path)
+    )
 
 
 def test_folded(tmp_path: Path) -> None:
@@ -178,37 +218,36 @@ def test_folded(tmp_path: Path) -> None:
 
 
 def test_held(tmp_path: Path) -> None:
-    assert keyed(DataConfig().held(runs(tmp_path))) == {
+    assert keyed(OFFICIAL.held(runs(tmp_path))) == {
         "Sherlock1": [("Sherlock1", 11, 2)],
         "TheMoth": [("TheMoth", 29, 1)],
     }
-    assert DataConfig(subjects=(0, 3, 4)).held(subjects(tmp_path)) == DataConfig().held(runs(tmp_path))
+    assert DataConfig(subjects=(0, 3, 4), val=Val.OFFICIAL).held(subjects(tmp_path)) == OFFICIAL.held(runs(tmp_path))
 
 
 def test_ruled(tmp_path: Path) -> None:
     every = sessions(tmp_path)
-    assert BALANCED.ruled(every, Partition.VALIDATION) == BALANCED.held(every)
-    assert BALANCED.ruled(every, Partition.TEST) == BALANCED.tested(every)
-    assert BALANCED.ruled(every, Partition.TEST) != BALANCED.ruled(every, Partition.VALIDATION)
+    assert CARVED.ruled(every, Partition.VALIDATION) == CARVED.held(every)
+    assert CARVED.ruled(every, Partition.TEST) == CARVED.tested(every)
+    assert CARVED.ruled(every, Partition.TEST) != CARVED.ruled(every, Partition.VALIDATION)
 
 
 def test_migrated() -> None:
-    assert LocalRuler.migrated({"window": 2.0}) == {"window": 2.0}
-    assert LocalRuler.migrated({"share": 0.1, "stratify": True, "extra": 0}) == {"ruler": LocalRuler.BALANCED}
+    assert Val.migrated({"window": 2.0}) == {"window": 2.0, "val": Val.OFFICIAL}
+    assert Val.migrated({"ruler": "official"}) == {"val": Val.OFFICIAL}
+    assert Val.migrated({"ruler": "balanced"}) == {"val": Val.CARVED}
+    assert Val.migrated({"share": 0.1, "stratify": True, "extra": 0}) == {"val": Val.CARVED}
+    assert Val.migrated({"val": "carved"}) == {"val": "carved"}
+    assert Val.migrated({"refit": True}) == {"val": Val.OFFICIAL, "refit": Refit.VAL}
+    assert Val.migrated({"refit": False}) == {"val": Val.OFFICIAL, "refit": Refit.NONE}
+    assert Val.migrated({"refit": "all"}) == {"val": Val.OFFICIAL, "refit": "all"}
     for retired in ({"extra": 1}, {"share": 0.1}):
         with pytest.raises(ValueError, match="retired"):
-            LocalRuler.migrated(retired)
+            Val.migrated(retired)
 
 
 def test_share() -> None:
-    assert [ruler.share for ruler in LocalRuler] == [0.0, 0.1]
-
-
-def test_under() -> None:
-    assert BALANCED.under(LocalRuler.OFFICIAL) == DataConfig(ruler=LocalRuler.OFFICIAL)
-    assert DataConfig().under(LocalRuler.OFFICIAL) == DataConfig()
-    with pytest.raises(ValueError, match="cannot be scored"):
-        DataConfig().under(LocalRuler.BALANCED)
+    assert [v.share for v in Val] == [0.1, 0.0]
 
 
 def test_samples() -> None:
@@ -319,17 +358,18 @@ def record(directory: Path, config: dict[str, object]) -> Path:
 def test_saved(tmp_path: Path) -> None:
     data = DataConfig(grouping=Grouping.GAP, window=2.0)
     assert DataConfig.saved(record(tmp_path / "nested", {"data": dataclasses.asdict(data)})) == data
-    assert DataConfig.saved(record(tmp_path / "flat", {"epochs": 3})) == DataConfig()
+    assert DataConfig.saved(record(tmp_path / "flat", {"epochs": 3})) == OFFICIAL
 
 
 def test_shared(tmp_path: Path) -> None:
     one = record(tmp_path / "one", {})
     two = record(tmp_path / "two", {"data": {"window": 2.0}})
     scaled = record(tmp_path / "scaled", {"data": {"standardised": True}})
-    assert DataConfig.shared([one, one], Grouping.GAP) == DataConfig(grouping=Grouping.GAP)
+    assert DataConfig.shared([one, one], Grouping.GAP) == DataConfig(val=Val.OFFICIAL, grouping=Grouping.GAP)
     assert DataConfig.shared([scaled], Grouping.SENTENCE).standardised
-    balanced = record(tmp_path / "balanced", {"data": {"ruler": "balanced"}})
-    assert DataConfig.shared([balanced], Grouping.SENTENCE).ruler is LocalRuler.BALANCED
+    balanced = record(tmp_path / "balanced", {"data": {"ruler": "balanced", "refit": True}})
+    legacy = DataConfig.shared([balanced], Grouping.SENTENCE)
+    assert (legacy.val, legacy.refit) == (Val.CARVED, Refit.VAL)
     based = record(tmp_path / "based", {"data": {"baseline": 0.5}})
     assert DataConfig.shared([based], Grouping.SENTENCE).baseline == 0.5
     assert DataConfig.shared([record(tmp_path / "fast", {"data": {"decimate": 2}})], Grouping.SENTENCE).decimate == 2
@@ -346,7 +386,7 @@ def test_shared(tmp_path: Path) -> None:
     ("field", "value"),
     [
         ("subjects", [0, 3]),
-        ("refit", True),
+        ("refit", "all"),
         ("features", "frozen"),
         ("read_weight", 0.5),
         ("repeat_power", 0.5),

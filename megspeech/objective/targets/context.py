@@ -23,7 +23,7 @@ from transformers import AutoTokenizer, GPT2Model
 
 from core.paths import DataRoot
 from megspeech.data.cache.run_cache import RunCache
-from megspeech.data.config import DataConfig
+from megspeech.data.config import DataConfig, Val
 from megspeech.data.raw.runs import Run
 from megspeech.objective.targets.speech import Targets
 from megspeech.objective.targets.t5 import Encoder
@@ -91,7 +91,7 @@ class Transcript:
     def write(root: DataRoot, tokenizer: Tokenizer, encoder: Encoder, device: torch.device) -> Path:
         """Every trained run's words' targets under processed/speech/gpt2-large, those already there kept."""
         directory = Targets.directory(root, MODEL)
-        for run in DataConfig().trained(Run.discover(root.raw())):
+        for run in DataConfig(val=Val.OFFICIAL).trained(Run.discover(root.raw())):
             path = directory / f"{run.name}.npy"
             if path.exists():
                 continue

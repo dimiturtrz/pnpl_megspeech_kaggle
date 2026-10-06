@@ -140,16 +140,17 @@ tests — this repo's tests cover only ITS packages. Consumer-specific detector 
   parameterised (pyrefly: `list[dict[str, object]]`, not `list[dict]`).
 - **Competition loop** — data comes from `python -m megspeech.data.raw.fetch` (the `pnpl/*` HF repos are public, so it
   fetches with `token=False`; a stale local HF token cannot break it). Spend a Kaggle submission only on a
-  model scored on the official ruler's local test, and record public vs local in its beads issue. The GPU is
+  model scored on the local test, and record public vs local in its beads issue. The GPU is
   shared with other projects — check `nvidia-smi` before launching.
 - **Three tests** — *local test*: our labelled report set, never used to select. *Public test*: the Kaggle
   public-leaderboard rows (~434). A real measurement, not noise to dismiss: SE ≈ 0.023 bounds one score, but two models scored on the same rows differ by far less sampling noise — explain a public move before discounting it. *Final test*:
   the organisers' ranking set, stimuli entirely different from anything released. Never call any of them
   "holdout".
-- **Two rulers** — scores never compare across them. *Official*: pnpl's labelled partitions — official val
-  selects epoch and tau, official test reports. *Balanced*: the stratified 80/10/10 session split
-  (`--ruler balanced`; `--ruler official` is the default, `--grouping` cuts spans) — its val selects, its test reports; it ranks recipes, and the winning
-  recipe is refit on all data for submission. A score on the split that also selected is val, not a test.
+- **Two partitions** — *VAL*: 10% of each source's subject-0 sessions, stratified (source, sentence length, word diversity),
+  selects epoch and tau. *LOCAL TEST*: pnpl's official validation + test partitions pooled, reports. The winning
+  recipe is refit (`data.refit`: val, or val + local test) for submission. A score on what selected is val, not a
+  test. Legacy full-data models (val = official) keep pnpl's validation as val, its test as local test; scoring
+  follows the model's saved config (`--grouping` cuts spans).
 
 
 

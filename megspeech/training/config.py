@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.tree import Tree
-from megspeech.data.config import METRICS, DataConfig, LocalRuler
+from megspeech.data.config import METRICS, DataConfig, Refit, Val
 from megspeech.evaluation.scoring.score import Epoch, SelectionConfig
 from megspeech.model.auxiliary import Tap
 from megspeech.model.config import CONTEXT, ContextConfig
@@ -155,16 +155,16 @@ class RunConfig:
             )
 
     def selected(self, history: list[Epoch]) -> Epoch:
-        """The epoch whose weights the run keeps: the best on validation, or the last when validation was trained on."""
+        """The epoch whose weights the run keeps: the best on validation, or the last when val was trained on."""
         return (
             history[-1]
-            if self.data.refit or self.optim.last or not self.optim.heads
+            if self.data.refit is not Refit.NONE or self.optim.last or not self.optim.heads
             else max(history, key=lambda row: row.macro.bacc10)
         )
 
     @classmethod
     def saved(cls, directory: Path) -> "RunConfig":
         """The config a run in `directory` recorded, flat records from before the tree included, its data section
-        under the retired `extra`/`share`/`stratify` fields migrated to `ruler`."""
+        under the retired `extra`/`share`/`stratify` fields migrated to `val` and `refit`."""
         record = json.loads((directory / METRICS).read_text())["config"]
-        return Tree(cls).load({**record, "data": LocalRuler.migrated(record.get("data", {}))})
+        return Tree(cls).load({**record, "data": Val.migrated(record.get("data", {}))})

@@ -31,7 +31,7 @@ from torch import Tensor, nn
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
-from megspeech.data.config import DataConfig
+from megspeech.data.config import DataConfig, Val
 from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
 from megspeech.data.raw.runs import Partition, Run
@@ -378,7 +378,7 @@ class Experiment:
     seed: int = 0
 
     def reader(self, partition: Partition = Partition.VALIDATION) -> Reader:
-        return Reader(self.root, DataConfig(), self.device, partition=partition)
+        return Reader(self.root, DataConfig(val=Val.OFFICIAL), self.device, partition=partition)
 
     @staticmethod
     def chunks(reader: Reader, runs: list[Run]) -> Iterator[tuple[str, pd.DataFrame, Split]]:

@@ -9,7 +9,7 @@ import torch
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.cache.run_cache import DIRECTORY, WORD_TABLE, DeviceRecording
-from megspeech.data.config import DataConfig
+from megspeech.data.config import DataConfig, Refit, Val
 from megspeech.data.constants import CHANNELS, RATE
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import IGNORE, PRIMARY
@@ -65,7 +65,7 @@ def corpus_root(tmp_path: Path) -> DataRoot:
 
 def source(tmp_path: Path) -> DeviceRecording:
     names = [Run(tmp_path / name).name for name in (TRAIN, HELD)]
-    return DeviceRecording.load(DataConfig().run_cache(corpus_root(tmp_path)), CPU, names)
+    return DeviceRecording.load(DataConfig(val=Val.OFFICIAL).run_cache(corpus_root(tmp_path)), CPU, names)
 
 
 def test_words(tmp_path: Path) -> None:
@@ -79,7 +79,7 @@ def test_words(tmp_path: Path) -> None:
 def test_split(tmp_path: Path) -> None:
     loaded = source(tmp_path)
     words = Corpus.words(loaded.words, Grouping.SENTENCE)
-    split = Corpus.split(loaded, words, DataConfig(), np.arange(5.0))
+    split = Corpus.split(loaded, words, DataConfig(val=Val.OFFICIAL), np.arange(5.0))
     assert split.y.tolist() == [THE, IGNORE, A, THE, A]
     assert split.index.tolist() == [[0, 1, 2] + [-1] * 6, [3, 4] + [-1] * 7]
     assert split.weight.tolist() == [0.0, 1.0, 2.0, 3.0, 4.0]
@@ -108,7 +108,9 @@ def test_split(tmp_path: Path) -> None:
 def test_domains(tmp_path: Path) -> None:
     loaded = source(tmp_path)
     words = Corpus.words(loaded.words, Grouping.SENTENCE)
-    validation = Corpus.domains(loaded, words, {"Sherlock1": [Run(tmp_path / HELD)], "Sherlock+": []}, DataConfig())
+    validation = Corpus.domains(
+        loaded, words, {"Sherlock1": [Run(tmp_path / HELD)], "Sherlock+": []}, DataConfig(val=Val.OFFICIAL)
+    )
     assert list(validation) == ["Sherlock1", "Sherlock+"]
     assert validation["Sherlock1"].y.tolist() == [THE, A]
     assert validation["Sherlock+"].y.tolist() == []
@@ -117,9 +119,9 @@ def test_domains(tmp_path: Path) -> None:
 def test_heard(tmp_path: Path) -> None:
     root = corpus_root(tmp_path)
     found = Run.discover(root.raw())
-    heard = Corpus.heard(DataConfig().run_cache(root), found, DataConfig())
+    heard = Corpus.heard(DataConfig(val=Val.OFFICIAL).run_cache(root), found, DataConfig(val=Val.OFFICIAL))
     assert heard["word"].tolist() == ["the", "zebra", "a"]
-    pooled = Corpus.heard(DataConfig().run_cache(root), found, DataConfig(subjects=(0, 3)))
+    pooled = Corpus.heard(DataConfig(val=Val.OFFICIAL).run_cache(root), found, DataConfig(subjects=(0, 3)))
     assert pooled["word"].tolist() == ["the", "zebra", "a"]
     assert pooled["weight"].tolist() == [1.0] * 3
 
@@ -127,7 +129,7 @@ def test_heard(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("data", "words"),
     [
-        (DataConfig(refit=True), ["the", "a", "the", "zebra", "a"]),
+        (DataConfig(val=Val.OFFICIAL, refit=Refit.VAL), ["the", "a", "the", "zebra", "a"]),
         (DataConfig(tasks=("Sherlock2",)), []),
         (DataConfig(folds=2, fold=0), []),
         (DataConfig(folds=2, fold=1), ["the", "zebra", "a"]),
@@ -141,7 +143,9 @@ def test_heard_trained(tmp_path: Path, data: DataConfig, words: list[str]) -> No
     assert {r.name for r in data.trained(found)} >= set(Corpus.heard(data.run_cache(root), found, data)["run"])
 
 
-@pytest.mark.parametrize("data", [DataConfig(), DataConfig(repeat_power=0.5), DataConfig(subjects=(0, 3))])
+@pytest.mark.parametrize(
+    "data", [DataConfig(val=Val.OFFICIAL), DataConfig(repeat_power=0.5), DataConfig(subjects=(0, 3))]
+)
 def test_prior(tmp_path: Path, data: DataConfig) -> None:
     """The prior read from the word table alone is the one training's split counts."""
     root = corpus_root(tmp_path)
@@ -151,19 +155,21 @@ def test_prior(tmp_path: Path, data: DataConfig) -> None:
 
 def test_sequences(tmp_path: Path) -> None:
     root = corpus_root(tmp_path)
-    heard = Corpus.heard(DataConfig().run_cache(root), Run.discover(root.raw()), DataConfig(grouping=Grouping.GAP))
+    heard = Corpus.heard(
+        DataConfig(val=Val.OFFICIAL).run_cache(root), Run.discover(root.raw()), DataConfig(grouping=Grouping.GAP)
+    )
     assert Corpus.sequences(heard, Grouping.GAP) == {tokens("the", "a")}
     assert Corpus.sequences(heard.iloc[:0], Grouping.GAP) == frozenset()
 
 
 def test_load(tmp_path: Path) -> None:
-    corpus = Corpus.load(DataConfig(), corpus_root(tmp_path), CPU)
+    corpus = Corpus.load(DataConfig(val=Val.OFFICIAL), corpus_root(tmp_path), CPU)
     assert corpus.train.y.tolist() == [THE, IGNORE, A]
     assert corpus.positions["position"].tolist() == [0, 1, 2]
     assert set(corpus.positions["run"]) == {Run(tmp_path / TRAIN).name}
     assert set(corpus.validation) == {"Sherlock1"}
     assert corpus.seen == {tokens("the", "zebra", "a")}
-    pooled = Corpus.load(DataConfig(subjects=(0, 3)), corpus_root(tmp_path / "pooled"), CPU)
+    pooled = Corpus.load(DataConfig(subjects=(0, 3), val=Val.OFFICIAL), corpus_root(tmp_path / "pooled"), CPU)
     assert pooled.train.y.tolist() == [THE, IGNORE, A]
     assert set(pooled.validation) == {"Sherlock1"}
 

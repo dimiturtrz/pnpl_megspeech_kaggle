@@ -5,7 +5,7 @@ from dataclasses import dataclass, fields
 import torch
 
 from core.paths import DataRoot
-from megspeech.data.config import DataConfig, LocalRuler
+from megspeech.data.config import DataConfig
 from megspeech.data.raw.runs import Partition
 from megspeech.data.spans.spans import Grouping
 from megspeech.evaluation.loaded import LoadedModel
@@ -38,11 +38,8 @@ class Scoring:
     """Hz above which every window read is zeroed (`LowPass`); 0 reads the full band. ema9998-s0 at 25/18/12/8/4 Hz:
     0.6445/0.6468/0.6389/0.6248/0.5924 (n=2512): the 12-25 Hz top of the 50 Hz cache carries ~0.006 (4te.5)."""
     partition: Partition = Partition.VALIDATION
-    """The labelled partition scored (`DataConfig.ruled`): validation selects; test only reports, once, on a model
+    """The labelled partition scored (`DataConfig.ruled`): val selects; the local test only reports, once, on a model
     already chosen (megspeech-7gf.81)."""
-    ruler: LocalRuler = LocalRuler.OFFICIAL
-    """The local ruler every score is read under (`DataConfig.under`); a model trained on the balanced split reads under
-    either, one trained on the official split only under the official (megspeech-7gf.103)."""
 
 
 class Loader:
@@ -58,7 +55,7 @@ class Loader:
         data = DataConfig.shared(directories, scoring.grouping)
         model = LowPass(model, data.rate, scoring.lowpass) if scoring.lowpass else model
         geometry = data.geometry(root, device, aligned=scoring.aligned)
-        reader = Reader(root, data, device, scoring.reading, geometry, scoring.partition, scoring.ruler)
+        reader = Reader(root, data, device, scoring.reading, geometry, scoring.partition)
         sequences, prior = reader.heard()
         evaluator = Evaluator(
             device,

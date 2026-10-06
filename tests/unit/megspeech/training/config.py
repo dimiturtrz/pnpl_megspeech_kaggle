@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from megspeech.data.config import DataConfig
+from megspeech.data.config import DataConfig, Refit, Val
 from megspeech.evaluation.metric.ruler import Interval
 from megspeech.evaluation.scoring.score import Epoch, Score
 from megspeech.model.config import ContextConfig, Encoder
@@ -15,9 +15,14 @@ from megspeech.training.regularise.augment import Augment
 
 
 def test_saved_retired_data_fields(tmp_path: Path) -> None:
-    """A record still carrying the retired `extra`/`share`/`stratify` loads under its `ruler`."""
+    """A record with the retired `extra`/`share`/`stratify`/`ruler` or boolean `refit` loads under `val`/`refit`."""
     (tmp_path / METRICS).write_text(json.dumps({"config": {"data": {"extra": 0, "read_weight": 2.0}}}))
-    assert RunConfig.saved(tmp_path).data.read_weight == 2.0
+    legacy = RunConfig.saved(tmp_path).data
+    assert (legacy.read_weight, legacy.val, legacy.refit) == (2.0, Val.OFFICIAL, Refit.NONE)
+    old = {"ruler": "balanced", "refit": True}
+    (tmp_path / METRICS).write_text(json.dumps({"config": {"data": old}}))
+    balanced = RunConfig.saved(tmp_path).data
+    assert (balanced.val, balanced.refit) == (Val.CARVED, Refit.VAL)
 
 
 def test_saved(tmp_path: Path) -> None:
@@ -40,7 +45,7 @@ def epoch(at: int, bacc10: float) -> Epoch:
 def test_selected() -> None:
     history = [epoch(0, 0.2), epoch(1, 0.4), epoch(2, 0.4), epoch(3, 0.3)]
     assert RunConfig().selected(history) is history[1]
-    assert RunConfig(data=DataConfig(refit=True)).selected(history) is history[-1]
+    assert RunConfig(data=DataConfig(refit=Refit.VAL)).selected(history) is history[-1]
     assert RunConfig(optim=OptimConfig(heads=0.0)).selected(history) is history[-1]
     assert RunConfig(optim=OptimConfig(last=True)).selected(history) is history[-1]
 

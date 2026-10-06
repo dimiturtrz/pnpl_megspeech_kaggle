@@ -1,4 +1,4 @@
-"""The local Deep ruler: subject 0's validation domains, the macro over their unseen spans selecting the adjustment."""
+"""The local Deep ruler: subject 0's val domains, the macro over their unseen spans selecting the adjustment."""
 
 import logging
 
@@ -17,9 +17,7 @@ class DeepRuler:
         LOG.info(
             "%s", {task: (round(r.context.bacc10, 4), round(r.novel.bacc10, 4)) for task, r in report.domains.items()}
         )
-        LOG.info(
-            "%s ruler macro %.4f tau %s over %d words", loaded.ruler, report.macro.bacc10, report.tau, report.macro.n
-        )
+        LOG.info("val macro %.4f tau %s over %d words", report.macro.bacc10, report.tau, report.macro.n)
         novel = [r.novel for r in report.domains.values()]
         LOG.info(
             "novel-text macro %.4f over %d words", sum(s.bacc10 for s in novel) / len(novel), sum(s.n for s in novel)

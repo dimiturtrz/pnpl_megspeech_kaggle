@@ -16,7 +16,7 @@ from jaxtyping import Int
 
 from core.paths import DataRoot
 from megspeech.data.cache.run_cache import NO_SENTENCE, RunCache
-from megspeech.data.config import DataConfig
+from megspeech.data.config import DataConfig, Val
 from megspeech.data.raw.runs import Run
 from megspeech.objective.targets.speech import Targets
 
@@ -43,7 +43,7 @@ class Sentences:
     def write(root: DataRoot, source: str) -> Path:
         """`source`'s targets of every trained run, sentence-pooled, under `source` + `SUFFIX`; those there kept."""
         origin, directory = Targets.directory(root, source), Targets.directory(root, source + SUFFIX)
-        for run in DataConfig().trained(Run.discover(root.raw())):
+        for run in DataConfig(val=Val.OFFICIAL).trained(Run.discover(root.raw())):
             path, kept = origin / f"{run.name}.npy", directory / f"{run.name}.npy"
             if path.exists() and not kept.exists():
                 Sentences(RunCache.words(run)["sentence"].to_numpy()).pool(Targets(np.load(path))).save(kept)

@@ -23,7 +23,7 @@ from torch import Tensor
 from transformers import Wav2Vec2Model
 
 from core.paths import DataRoot
-from megspeech.data.config import DataConfig
+from megspeech.data.config import DataConfig, Val
 from megspeech.data.constants import MISSING
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.objective.targets.t5 import Encoder
@@ -196,7 +196,7 @@ class Heard:
     @staticmethod
     def trained(runs: list[Run]) -> list["Heard"]:
         """The default config's training runs whose chapter audio is present: never a validation or test run."""
-        heard = [Heard(run) for run in DataConfig().trained(runs) if run.partition is Partition.TRAIN]
+        heard = [Heard(run) for run in DataConfig(val=Val.OFFICIAL).trained(runs) if run.partition is Partition.TRAIN]
         return [entry for entry in heard if entry.chapters()]
 
     @staticmethod

@@ -22,7 +22,7 @@ from torch import Tensor
 from torch.nn import functional
 
 from core.paths import DataRoot
-from megspeech.data.config import DataConfig, LocalRuler
+from megspeech.data.config import DataConfig
 from megspeech.data.raw.runs import DEEP, Partition, Run
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.studies.expertcheck import Probe
@@ -330,7 +330,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), torch.device("cuda")
     directory = root.models() / args.run
-    data = DataConfig.saved(directory).under(LocalRuler.OFFICIAL)
+    data = DataConfig.saved(directory)
     reader = Reader(root, data, device, geometry=data.geometry(root, device))
     embedded = Embedded.load(directory / "model.pt", device)
     runs = [run for run in Run.everywhere(root) if run.subject == DEEP]

@@ -12,7 +12,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.cache.run_cache import WORD_TABLE as TABLE
-from megspeech.data.config import DataConfig
+from megspeech.data.config import DataConfig, Val
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
@@ -51,7 +51,7 @@ class Favourite(nn.Module):
 
 
 def runs(tmp_path: Path) -> list[Run]:
-    cache = DataConfig().run_cache(DataRoot(tmp_path)).ready()
+    cache = DataConfig(val=Val.OFFICIAL).run_cache(DataRoot(tmp_path)).ready()
     rows = []
     for name in NAMES:
         np.save(cache / f"{name}.npy", np.ones((CHANNELS, SAMPLES), dtype=np.float16))
@@ -65,7 +65,7 @@ def loaded(tmp_path: Path, reading: Reading = Reading.OWN) -> LoadedModel:
     evaluator = Evaluator(CPU, min_novel=1)
     return LoadedModel(
         DataRoot(tmp_path),
-        DataConfig(),
+        DataConfig(val=Val.OFFICIAL),
         CPU,
         reading,
         model=Favourite(),
