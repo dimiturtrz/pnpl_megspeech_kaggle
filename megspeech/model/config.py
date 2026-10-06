@@ -15,12 +15,14 @@ from torch import Tensor, nn
 
 from core.tree import Tree
 from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.context.timing import Clock, Intervals
 from megspeech.model.words.base import WordEncoder
 from megspeech.model.words.conv import CONV, ConvConfig, ConvWords
 from megspeech.model.words.expert import Crop
 from megspeech.model.words.experts import ExpertWords
 from megspeech.model.words.megxl import POOLED, RESOLVED, FeatureWords
+from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective
 
 
@@ -86,6 +88,14 @@ class ContextConfig:
     """Seconds of Gaussian error added to every word onset the timing input reads, in training only (`Jitter`)."""
     """Added beside the clock: `log` tells each word its gaps to its neighbours' onsets."""
     objective: Objective = Objective.SOFTMAX
+    anchor: Source = Source.NONE
+    """Where the context head's fixed per-word anchors come from (`objective.anchors`): its logits are then a scaled
+    cosine to them; none keeps the objective's own head."""
+    anchor_train: bool = False
+    """The anchors train from their initial values rather than staying frozen."""
+    anchor_dim: int = 0
+    """Principal components of the centred anchors kept (at most one fewer than the words they span); 0 keeps the
+    anchors whole."""
     conv: ConvConfig = CONV
     """The per-word encoder the transformer reads."""
     encoder: Encoder = Encoder.CONV
@@ -114,6 +124,10 @@ class ContextConfig:
     """Samples each `experts` encoder's crop runs, one per `starts`."""
 
     def __post_init__(self) -> None:
+        if self.anchor.active and self.objective is Objective.SIGLIP:
+            raise ValueError("an anchored head and the siglip head are both the context head's scorer")
+        if not 0 <= self.anchor_dim < VOCAB_SIZE or (self.anchor_dim and not self.anchor.active):
+            raise ValueError(f"anchor_dim {self.anchor_dim} needs an anchor source and at most {VOCAB_SIZE - 1}")
         if len(self.starts) != len(self.lengths) or (self.encoder is Encoder.EXPERTS) != bool(self.starts):
             raise ValueError(
                 f"the experts encoder, and it alone, reads one crop per expert: starts={self.starts}, "

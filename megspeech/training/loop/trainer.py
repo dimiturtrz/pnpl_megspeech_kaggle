@@ -21,6 +21,7 @@ from megspeech.evaluation.scoring.score import Epoch
 from megspeech.evaluation.scoring.telemetry import Telemetry
 from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.sentence import SentenceNet
+from megspeech.objective.anchors import Anchors
 from megspeech.objective.context import Objective
 from megspeech.objective.targets.t5 import Prototypes
 from megspeech.objective.term import ContextTerm, LabelTerm, Term, WordTerm
@@ -85,6 +86,10 @@ class Trainer:
         start its run's weights."""
         siglip = config.context.objective is Objective.SIGLIP
         prototypes = Prototypes.load(Prototypes.path(root)).vectors if siglip else None
+        anchored = Anchors.of(config.context.anchor, root, corpus.positions, corpus.train.y)
+        if anchored is not None:
+            anchored.report(config.context.anchor)
+            prototypes = anchored.reduce(config.context.anchor_dim).vectors
         device = corpus.train.y.device
         evaluator = Evaluator(device, corpus.seen, config.selection.min_novel)
         warm = config.optim.warm

@@ -14,6 +14,10 @@ from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig, ConvWords
+from megspeech.objective.anchored import AnchoredHead
+from megspeech.objective.anchors import Source
+from megspeech.objective.context import Objective
+from megspeech.objective.scorer import DIM
 
 CONTEXT = ContextConfig(width=16, heads=2, layers=1, conv=ConvConfig(hidden=8, dilations=(1, 2)))
 SAMPLES = 50
@@ -244,6 +248,29 @@ def test_load(tmp_path: Path) -> None:
     CONTEXT.save(tmp_path)
     loaded = SentenceNet.load(tmp_path / "model.pt")
     assert all(torch.equal(loaded.state_dict()[key], value) for key, value in model.state_dict().items())
+
+
+def test_readout(tmp_path: Path) -> None:
+    anchors = torch.randn(VOCAB_SIZE, DIM, generator=GENERATOR)
+    torch.manual_seed(0)
+    plain = cast("nn.Linear", SentenceNet.readout(CONTEXT, None))
+    torch.manual_seed(0)
+    assert torch.equal(plain.weight, cast("nn.Linear", Objective.SOFTMAX.head(CONTEXT.width, None)).weight)
+    anchored = replace(CONTEXT, anchor=Source.AUDIO)
+    head = cast("AnchoredHead", SentenceNet.readout(anchored, anchors))
+    assert torch.equal(head.anchors, anchors)
+    trained = cast("AnchoredHead", SentenceNet.readout(replace(anchored, anchor_train=True), anchors))
+    assert isinstance(trained.anchors, nn.Parameter)
+    model = SentenceNet(Scaler(torch.randn(4, CHANNELS, SAMPLES, generator=GENERATOR)), anchored, anchors)
+    torch.save(model.state_dict(), tmp_path / "model.pt")
+    anchored.save(tmp_path)
+    loaded = SentenceNet.load(tmp_path / "model.pt")
+    assert torch.equal(cast("AnchoredHead", loaded.head).anchors, anchors)
+    reduced = replace(anchored, anchor_dim=8)
+    small = SentenceNet(Scaler(torch.randn(4, CHANNELS, SAMPLES, generator=GENERATOR)), reduced, anchors[:, :8])
+    torch.save(small.state_dict(), tmp_path / "small.pt")
+    reduced.save(tmp_path)
+    assert cast("AnchoredHead", SentenceNet.load(tmp_path / "small.pt").head).anchors.shape == (VOCAB_SIZE, 8)
 
 
 def test_subspace_channels(tmp_path: Path) -> None:

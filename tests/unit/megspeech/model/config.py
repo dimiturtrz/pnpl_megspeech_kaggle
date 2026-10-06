@@ -12,6 +12,7 @@ from megspeech.model.words.conv import ConvConfig, ConvWords
 from megspeech.model.words.expert import Crop
 from megspeech.model.words.experts import ExpertWords
 from megspeech.model.words.megxl import POOLED, RESOLVED
+from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective
 
 CONTEXT = ContextConfig(width=16, timescales=4)
@@ -56,6 +57,15 @@ def test_combination() -> None:
         ContextConfig(latency=True, conv=ConvConfig(queries=2))
     with pytest.raises(ValueError, match="whiten"):
         ContextConfig(whiten=True, encoder=Encoder.TRAINED)
+    with pytest.raises(ValueError, match="siglip"):
+        ContextConfig(anchor=Source.AUDIO, objective=Objective.SIGLIP)
+    assert ContextConfig(anchor=Source.TEXT).anchor is Source.TEXT
+    for bad in (-1, 50):
+        with pytest.raises(ValueError, match="anchor_dim"):
+            ContextConfig(anchor=Source.AUDIO, anchor_dim=bad)
+    with pytest.raises(ValueError, match="anchor_dim"):
+        ContextConfig(anchor_dim=8)
+    assert ContextConfig(anchor=Source.AUDIO, anchor_dim=49).anchor_dim == 49
 
 
 def test_tokens() -> None:

@@ -8,6 +8,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from megspeech.data.constants import CHANNELS
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.context.masking import WordMask
 from megspeech.model.context.timing import Jitter, TimingHead
@@ -15,6 +16,8 @@ from megspeech.model.input.stem import Stem
 from megspeech.model.input.subjects import Unseen
 from megspeech.model.mixer import Mixer
 from megspeech.model.words.layers.mean_max import MeanMax
+from megspeech.objective.anchored import AnchoredHead
+from megspeech.objective.scorer import DIM
 
 LATENCY_INIT = 0.02
 """Spread of each latency tag at initialisation, a transformer's usual position-embedding scale (BERT, GPT-2)."""
@@ -61,7 +64,7 @@ class SentenceNet(nn.Module):
         self.jitter = Jitter(context.onset_jitter)
         self.masking = WordMask(context.width, context.word_mask)
         self.context = Mixer.of(context)
-        self.head = context.objective.head(context.width, prototypes)
+        self.head = self.readout(context, prototypes)
         self.timing = TimingHead.over_vocabulary(active=context.rhythm)
         self._tag(context)
 
@@ -77,6 +80,15 @@ class SentenceNet(nn.Module):
         )
         model.load_state_dict(state)
         return model
+
+    @staticmethod
+    def readout(context: ContextConfig, prototypes: Float[Tensor, "v d"] | None) -> nn.Module:
+        """The context head over the fixed per-word `prototypes` (None stands in zeros for a checkpoint that will
+        overwrite them): cosine to them as anchors when the config names a source, else the objective's own."""
+        if not context.anchor.active:
+            return context.objective.head(context.width, prototypes)
+        placeholder = torch.zeros(VOCAB_SIZE, context.anchor_dim or DIM) if prototypes is None else prototypes
+        return AnchoredHead(context.width, placeholder, trainable=context.anchor_train)
 
     def _tag(self, context: ContextConfig) -> None:
         """Each latency token's learned tag as `latency`; with one token per word a zero outside the state, so the
