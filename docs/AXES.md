@@ -198,7 +198,7 @@ SATURATED.
 | synthetic mixing syn05 / syn15 | 5e6 | syn05 .6141/.6851, .6106/.6640; syn15 .6126/.6706 (K) | DIRECTIONAL (test) | no why recorded | 5e6 |
 | combo3 composition | 5e6 | .6133/.6542 (K) | CLOSED-null | the knobs are not independent; no deeper why recorded | 5e6 |
 | window / dropout grid w02d00, w02d02, w04d04 | 5e6 / 7gf.117 | .5568/.5800, .5543/.5993, .5568/.5911 (K) | CLOSED-null | the source does not decode the names; ≈ −.05 on both splits | einstein-check memory |
-| w15 | 7gf.117 (likely the wm15 rerun without patience; naming not confirmed) | .6206/.6955 = +.018/+.037 vs ctrl; +.007/+.041 vs floor mean (K) | OPEN | single seed, above the bar vs the control; needs seeds before any claim | 7gf.117 |
+| w15 | 7gf.117 (likely the wm15 rerun without patience; naming not confirmed) | .6206/.6955 = +.018/+.037 vs ctrl; +.007/+.041 vs floor mean (pre-c731c56 K) | SUPERSEDED | the gain was MEG past the piece end; see the piece-bounded w15 row | 7gf.117 |
 | word mask (wm15/wm30, pat8) | 7gf.117 | truncated by patience 8 | OPEN | harness bug, not a refutation | 7gf.117 |
 | wd10, win03 | 5e6 | .6056/.6653, .6125/.6563 (K) | CLOSED-null | no why recorded | 5e6 |
 | amask / noise / spatial dropout / aspat / adrop | blq, 7gf.91 | amask5 LT −.025; spatial dropout −1.6 pt (OV) | SATURATED (blq never validly run) | no why recorded | blq |
