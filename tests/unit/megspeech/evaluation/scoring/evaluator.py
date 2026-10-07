@@ -135,6 +135,13 @@ def test_graded() -> None:
     assert torch.equal(hits, labels.eq(0))
 
 
+def test_eligible() -> None:
+    domains = {"a": split(), "b": split(n=8, seed=1)}
+    sizes = {name: len(s.novel(frozenset())) for name, s in domains.items()}
+    kept = Evaluator(CPU, min_novel=max(sizes.values())).eligible(domains)
+    assert set(kept) == {name for name, size in sizes.items() if size == max(sizes.values())}
+
+
 def test_point() -> None:
     domains = {"a": split()}
     study = Evaluator(CPU, min_novel=1)

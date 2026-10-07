@@ -120,9 +120,13 @@ class Evaluator:
 
     def graded(self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], tau: float) -> Graded:
         """The context head's per-word hits on the unseen spans of every domain that counts toward selection."""
-        counted = {name: split for name, split in domains.items() if len(split.novel(self.seen)) >= self.min_novel}
+        counted = self.eligible(domains)
         context = {name: self.logits(model, split)[Head.CONTEXT] for name, split in counted.items()}
         return self.grade(context, counted, log_prior, tau)
+
+    def eligible(self, domains: dict[str, Split]) -> dict[str, Split]:
+        """The `domains` with enough unseen-span words to count toward selection."""
+        return {name: split for name, split in domains.items() if len(split.novel(self.seen)) >= self.min_novel}
 
     def point(self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], tau: float) -> float:
         """The selection macro of `graded` at `tau`."""
