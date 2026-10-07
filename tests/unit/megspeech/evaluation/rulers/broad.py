@@ -28,3 +28,27 @@ def test_graded(tmp_path: Path) -> None:
     tool = loaded(tmp_path)
     strict = replace(tool, evaluator=replace(tool.evaluator, min_novel=len(SPOKEN) + 1))
     assert BroadRuler.graded(strict, runs(tmp_path), 0.5).domains == {}
+
+
+def test_scored(tmp_path: Path) -> None:
+    """Session 11 by default and under `adapt=12`; session 12 once the model adapts on 11."""
+    every = runs(tmp_path)
+    tool = loaded(tmp_path)
+    keys = {
+        adapt: [r.key[1] for r in BroadRuler.scored(replace(tool, data=replace(tool.data, adapt=adapt)), every)]
+        for adapt in (0, 11, 12)
+    }
+    assert keys == {0: [11], 11: [12], 12: [11]}
+
+
+def test_select_held_out(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """An adapted model's mean over the subjects outside `data.subjects` is logged; a default model's is not."""
+    tool = loaded(tmp_path)
+    adapted = replace(tool, data=replace(tool.data, adapt=11, subjects=(0, 2)))
+    with caplog.at_level(logging.INFO, logger=module.__name__):
+        BroadRuler.select(adapted, runs(tmp_path))
+    assert "held-out subjects 1  bacc10 0.0000" in caplog.text
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger=module.__name__):
+        BroadRuler.select(tool, runs(tmp_path))
+    assert "held-out" not in caplog.text

@@ -529,3 +529,29 @@ def test_cut() -> None:
     assert DataConfig().cut() == (RATE, 0)
     assert DataConfig(window=2.0, lead=0.1).cut() == (2 * RATE + 5, -5)
     assert DataConfig(window=0.2, delay=0.2).cut() == (round(0.2 * RATE), round(0.2 * RATE))
+
+
+def test_trains_on_adapt(tmp_path: Path) -> None:
+    """`adapt` trains that Sherlock1 session of the listed subjects 1-32 alone: not the other session, not an unlisted
+    subject, not by default."""
+    other, pooled = Run(tmp_path / OTHER), Run(tmp_path / POOLED)
+    outsider = Run(tmp_path / OTHER.replace("sub-3", "sub-4"))
+    twelve, eleven = DataConfig(subjects=(0, 3), adapt=12), DataConfig(subjects=(0, 3), adapt=11)
+    assert [twelve.trains_on(r) for r in (other, pooled, outsider)] == [True, False, False]
+    assert [eleven.trains_on(r) for r in (other, pooled, outsider)] == [False, True, False]
+    assert [DataConfig(subjects=(0,), adapt=12).trains_on(r) for r in (other, pooled)] == [False, False]
+    assert [DataConfig(subjects=(0, 3)).trains_on(r) for r in (other, pooled)] == [False, False]
+
+
+def test_trained_adapt_discovered(tmp_path: Path) -> None:
+    """Over discovered runs, `adapt=12` selects exactly the listed subjects' session-12 runs."""
+    for subject in range(1, 5):
+        for session in (11, 12):
+            name = f"sub-{subject}_ses-{session}_task-Sherlock1_run-1"
+            (tmp_path / "events").mkdir(exist_ok=True)
+            (tmp_path / "meg").mkdir(exist_ok=True)
+            (tmp_path / "meg" / f"{name}_meg.h5").write_bytes(b"x")
+            (tmp_path / "events" / f"{name}_events.tsv").write_text("onset")
+    runs = Run.discover(tmp_path)
+    trained = DataConfig(subjects=(1, 2, 3), adapt=12).trained(runs)
+    assert sorted(r.name for r in trained) == [f"sub-{s}_ses-12_task-Sherlock1_run-1" for s in (1, 2, 3)]

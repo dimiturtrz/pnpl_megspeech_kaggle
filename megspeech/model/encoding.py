@@ -44,9 +44,11 @@ class Encoding(nn.Module):
         return [*stem, *self.words.backbone()]
 
     def adopt(self, state: dict[str, Tensor]) -> None:
-        """The stage-1 entries of another run's `state` loaded in, every other weight left as it is."""
+        """The stage-1 entries of another run's `state` loaded in, every other weight left as it is; a subject layer
+        the state has none of (a single-subject stem) stays at its identity initialisation."""
         own = {key: value for key, value in state.items() if key.split(".")[0] in ENCODER}
         missing, _ = self.load_state_dict(own, strict=False)
-        stale = [key for key in missing if key.split(".")[0] in ENCODER]
+        exempt = () if any(key.startswith("subjects.") for key in own) else ("subjects",)
+        stale = [key for key in missing if key.split(".")[0] in ENCODER and key.split(".")[0] not in exempt]
         if stale:
             raise KeyError(f"stem state lacks encoder entries {stale}")

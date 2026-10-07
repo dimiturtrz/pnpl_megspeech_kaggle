@@ -75,7 +75,8 @@ def main() -> None:
         evaluator=evaluator,
         log_prior=log_prior,
     )
-    KaggleWriter(Track.DEEP).write(loaded, best.tau, out / "submission.csv")
+    if not config.data.adapt:
+        KaggleWriter(Track.DEEP).write(loaded, best.tau, out / "submission.csv")
     Report(config.report, root, args.name, evaluator.device, corpus.geometry, config.telemetry.probs).run()
 
 

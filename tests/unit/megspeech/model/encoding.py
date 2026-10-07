@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 import torch
 from torch import nn
@@ -39,5 +41,20 @@ def test_adopt() -> None:
     made = Encoding(Scaler(torch.randn(4, CHANNELS, SAMPLES, generator=GENERATOR)), CONTEXT, CHANNELS, Unseen.IDENTITY)
     made.adopt(donor.state_dict())
     assert all(torch.equal(a, b) for a, b in zip(made.encoder(), donor.encoder(), strict=True))
+    with pytest.raises(KeyError, match="lacks encoder entries"):
+        made.adopt({})
+
+
+def test_adopt_stem_without_subject_layer() -> None:
+    """A state without `subjects.*` leaves a model's subject layer at identity, so subject 0 reads as the stem does."""
+    donor = Encoding(Scaler(torch.randn(4, CHANNELS, SAMPLES, generator=GENERATOR)), CONTEXT, CHANNELS, Unseen.IDENTITY)
+    plain = replace(CONTEXT, subjects=0)
+    stem = Encoding(donor.scale, plain, CHANNELS, Unseen.IDENTITY).eval()
+    stem.adopt(donor.state_dict())
+    made = Encoding(donor.scale, replace(CONTEXT, subjects=33), CHANNELS, Unseen.IDENTITY).eval()
+    made.adopt(stem.state_dict())
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    zero = torch.zeros(3, dtype=torch.long)
+    assert torch.equal(made.embed(x, zero), stem.embed(x, zero))
     with pytest.raises(KeyError, match="lacks encoder entries"):
         made.adopt({})

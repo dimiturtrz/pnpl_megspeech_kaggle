@@ -31,6 +31,9 @@ METRICS = "metrics.json"
 READ = frozenset({"TIMIT", "MOCHATIMIT"})
 """Tasks of read sentences, the Kaggle test's domain; the rest is narrative (Sherlock, TheMoth)."""
 
+ADAPTED = "Sherlock1"
+"""The task whose sessions 11 and 12 subjects 1-32 each hear once."""
+
 NARRATOR = "Sherlock"
 """The stratum read by one voice throughout; every TheMoth story and read sentence has its own speaker."""
 
@@ -135,7 +138,10 @@ class DataConfig:
     dropped: int = -1
     """The `crossfit` fold removed from training, so a teacher scores it out of sample; -1 trains on every fold."""
     subjects: tuple[int, ...] = (DEEP,)
-    """Subjects whose training runs train; validation is always subject 0's, and pooled runs never train."""
+    """Subjects whose training runs train; validation is always subject 0's, and pooled runs train only as `adapt`."""
+    adapt: int = 0
+    """The Sherlock1 session (11 or 12) of `subjects` 1-32 that also trains, as labelled Broad data allows; 0 trains
+    none. Its text is subject 0's validation (11) or local-test (12) text, so such a model is never a Deep model."""
     features: str = ""
     """Features a frozen encoder saved under models/features/<name> (`megspeech.data.batching.split`), read in
     place of every split's MEG; `a+b` joins several encoders' per word (megspeech-7gf.77); empty reads the MEG."""
@@ -280,9 +286,12 @@ class DataConfig:
 
     def trains_on(self, run: Run) -> bool:
         """Whether `run` trains: a `TRAIN` run of a subject in `subjects`, or one of the `refitted` partitions of
-        subject 0; never another subject's validation or test runs."""
-        reads = (run.partition is Partition.TRAIN and run.subject in self.subjects) or (
-            run.partition in self.refitted and run.subject == DEEP and DEEP in self.subjects
+        subject 0; the `adapt` session of every other subject in `subjects`; never another subject's other runs."""
+        adapted = run.subject in self.subjects and run.subject != DEEP and run.key == (ADAPTED, self.adapt, 1)
+        reads = (
+            (run.partition is Partition.TRAIN and run.subject in self.subjects)
+            or (run.partition in self.refitted and run.subject == DEEP and DEEP in self.subjects)
+            or adapted
         )
         return reads and (not self.tasks or run.key[0] in self.tasks)
 

@@ -74,3 +74,19 @@ def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert written["p"].shape == (3, VOCAB_SIZE)
     assert (written["p"].argmax(axis=1) == VOCAB_SIZE - 1).all()
     assert np.allclose(written["s"], 1 / len(SECONDARY.words))
+
+
+def test_write_refuses_adapted_deep(tmp_path: Path) -> None:
+    """A model that trained on `adapt` is refused on the Deep track, before any Kaggle row is read."""
+    data = DataConfig(subjects=(0, 1), adapt=12)
+    loaded = LoadedModel(
+        DataRoot(tmp_path),
+        data,
+        CPU,
+        Reading.UNSEEN,
+        model=Favourite(),
+        evaluator=Evaluator(CPU),
+        log_prior=torch.zeros(VOCAB_SIZE),
+    )
+    with pytest.raises(ValueError, match="cannot be submitted to the Deep track"):
+        KaggleWriter(Track.DEEP).write(loaded, 0.5, tmp_path / "s.csv")
