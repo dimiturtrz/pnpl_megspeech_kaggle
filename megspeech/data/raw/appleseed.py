@@ -228,7 +228,7 @@ class Recording:
         """The recording's words and phonemes in pnpl's columns: sentences are each story's words split at pauses,
         counted through the recording; a word's index counts its place in its sentence, a phoneme's in its word."""
         table = pd.read_csv(self.sidecar("events.tsv"), sep="\t", dtype={"stimulus": str})
-        trials = table[table["trial_type"] == "onset"]
+        trials = table[(table["trial_type"] == "onset") & table["stimulus"].notna()]
         stories = [
             Story(TextGrid.read(self.stimuli / f"{stimulus}.TextGrid")).events(onset)
             for stimulus, onset in zip(trials["stimulus"], trials["onset"].astype(float), strict=True)

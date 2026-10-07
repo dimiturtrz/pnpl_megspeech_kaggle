@@ -59,9 +59,9 @@ def recording(tmp_path: Path) -> Recording:
     fif.with_name("sub-08_task-Appleseed_meg.json").write_text('{"PowerLineFrequency": 50.0}')
     table = pd.DataFrame(
         {
-            "onset": [10.0, 20.0, 30.0, 40.0],
-            "trial_type": ["onset", "offset", "onset", "offset"],
-            "stimulus": ["1", "n/a", "11b", "n/a"],
+            "onset": [10.0, 20.0, 30.0, 40.0, 50.0],
+            "trial_type": ["onset", "offset", "onset", "offset", "onset"],
+            "stimulus": ["1", "n/a", "11b", "n/a", "n/a"],
         }
     )
     table.to_csv(fif.with_name("sub-08_task-Appleseed_events.tsv"), sep="\t", index=False)
