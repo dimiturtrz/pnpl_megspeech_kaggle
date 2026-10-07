@@ -25,6 +25,7 @@ from megspeech.objective.auxiliary.semantic import SemanticTerm
 from megspeech.objective.auxiliary.speech import SpeechTerm
 from megspeech.objective.auxiliary.syntactic import SyntacticTerm
 from megspeech.objective.auxiliary.tagging import TagTerm
+from megspeech.objective.auxiliary.window import WindowTerm
 from megspeech.objective.scorer import DIM
 from megspeech.objective.targets.speech import Targets
 from megspeech.objective.targets.t5 import Lexicon
@@ -107,6 +108,9 @@ def test_of(tmp_path: Path) -> None:
     assert [type(t) for t in worded.terms] == [SemanticTerm, LexicalTerm]
     neighbours = Auxiliary.of(OptimConfig(next_word=0.3, prev_word=0.2), root, CPU, WORDS)
     assert [(type(t), t.weight) for t in neighbours.terms] == [(NextWordTerm, 0.3), (PreviousWordTerm, 0.2)]
+    windowed = Auxiliary.of(OptimConfig(semantic=0.5, window=0.3), root, CPU, WORDS)
+    assert [type(t) for t in windowed.terms] == [SemanticTerm, WindowTerm]
+    assert windowed.terms[1].weight == 0.3
     spelled = Auxiliary.of(OptimConfig(phonetic=1.0, positions=2), root, CPU, WORDS)
     assert cast("PhoneticTerm", spelled.terms[0]).positions == 2
     with pytest.raises(FileNotFoundError):

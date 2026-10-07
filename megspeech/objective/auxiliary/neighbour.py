@@ -29,6 +29,15 @@ class NeighbourTerm(AuxiliaryTerm):
 
     local: ClassVar[bool] = True
 
+    @staticmethod
+    def beside(target: Int[Tensor, "g w"], offset: int) -> Int[Tensor, "g w"]:
+        """Each position's entry of `target` `offset` words on in its span (negative: before), `IGNORE` past the
+        span's edge."""
+        length = target.shape[1]
+        padded = functional.pad(target, (max(-offset, 0), max(offset, 0)), value=IGNORE)
+        start = max(offset, 0)
+        return padded[:, start : start + length]
+
     @abstractmethod
     def shift(self, target: Int[Tensor, "g w"]) -> Int[Tensor, "g w"]:
         """Each position's neighbour's entry of `target`, `IGNORE` past the span's edge."""
@@ -64,7 +73,7 @@ class NextWordTerm(NeighbourTerm):
 
     @override
     def shift(self, target: Int[Tensor, "g w"]) -> Int[Tensor, "g w"]:
-        return functional.pad(target[:, 1:], (0, 1), value=IGNORE)
+        return self.beside(target, 1)
 
 
 @dataclass(frozen=True)
@@ -73,4 +82,4 @@ class PreviousWordTerm(NeighbourTerm):
 
     @override
     def shift(self, target: Int[Tensor, "g w"]) -> Int[Tensor, "g w"]:
-        return functional.pad(target[:, :-1], (1, 0), value=IGNORE)
+        return self.beside(target, -1)

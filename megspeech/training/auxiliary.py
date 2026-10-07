@@ -24,6 +24,7 @@ from megspeech.objective.auxiliary.semantic import SemanticTerm
 from megspeech.objective.auxiliary.speech import SpeechTerm
 from megspeech.objective.auxiliary.syntactic import SyntacticTerm
 from megspeech.objective.auxiliary.tagging import TagTerm
+from megspeech.objective.auxiliary.window import WindowTerm
 from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import AuxiliaryTerm
@@ -75,6 +76,7 @@ class Auxiliary(ABC):
             (optim.next_word, lambda: NextWordTerm(weight=optim.next_word)),
             (optim.prev_word, lambda: PreviousWordTerm(weight=optim.prev_word)),
             (optim.adversary, lambda: TimingTerm.of(1.0, words, device)),
+            (optim.window, lambda: WindowTerm(optim.window, Lexicon.load(Lexicon.path(root)).to(device))),
         )
         terms = tuple(replace(build(), vocab_weight=optim.vocab_weight) for weight, build in builders if weight)
         return Joint(terms, optim.tap) if terms else NoAuxiliary()

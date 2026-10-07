@@ -23,6 +23,13 @@ def test_labels() -> None:
     assert NextWordTerm(weight=1.0).labels(split).tolist() == [4, OUTSIDE, 0]
 
 
+def test_beside() -> None:
+    target = torch.tensor([[1, 2, 3]])
+    assert NextWordTerm.beside(target, 2).tolist() == [[3, IGNORE, IGNORE]]
+    assert NextWordTerm.beside(target, 0).tolist() == [[1, 2, 3]]
+    assert NextWordTerm.beside(target, -1).tolist() == [[IGNORE, 1, 2]]
+
+
 def test_shift() -> None:
     assert NextWordTerm(weight=1.0).shift(TARGET).tolist() == [
         [OUTSIDE, 7, IGNORE, IGNORE],
