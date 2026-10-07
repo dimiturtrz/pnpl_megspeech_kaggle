@@ -45,6 +45,15 @@ def test_truncated() -> None:
     assert np.allclose(np.linalg.norm(head.vectors, axis=1), 1.0)
 
 
+def test_centred() -> None:
+    shifted = Geometry(random_geometry().vectors + 50.0)
+    assert shifted.cosine().min() > 0.9
+    centred = shifted.centred()
+    assert np.allclose(centred.vectors.mean(axis=0), 0.0)
+    assert centred.min_distance() < 0.5
+    assert np.isclose(centred.min_distance(), random_geometry().centred().min_distance())
+
+
 def test_one_hot() -> None:
     assert np.array_equal(Geometry.one_hot().cosine(), np.eye(VOCAB_SIZE))
 
@@ -102,16 +111,17 @@ def test_markdown() -> None:
     meg = Meg(random_geometry().cosine(), np.ones(VOCAB_SIZE, dtype=int))
     line = Row.of("teacher", random_geometry(), meg, DRAWS).markdown()
     assert line.startswith(f"| teacher | {DIM} | {VOCAB_SIZE} | ")
-    assert line.count("|") == len(line.split("|")) - 1 == 7
+    assert line.count("|") == 10
 
 
 def test_row_of() -> None:
     meg = Meg(random_geometry().cosine(), np.ones(VOCAB_SIZE, dtype=int))
     row = Row.of("self", random_geometry(), meg, DRAWS)
-    assert row.rsa.rho == 1.0
+    assert row.rsa_raw.rho == 1.0
+    assert row.rsa_centred.rho > 0.9
     null = Row.of("one-hot", Geometry.one_hot(), meg, DRAWS)
-    assert null.rsa.rho == 0.0
-    assert (null.rsa.low, null.rsa.high) == (0.0, 0.0)
+    assert null.rsa_raw.rho == 0.0
+    assert (null.rsa_raw.low, null.rsa_raw.high) == (0.0, 0.0)
 
 
 def test_pooled() -> None:

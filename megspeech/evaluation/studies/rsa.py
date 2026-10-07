@@ -36,6 +36,8 @@ LOG = logging.getLogger(__name__)
 
 SEED = 0
 DRAWS = 1000
+FLAT = 1e-9
+"""Spread under which a side is constant: a centred one-hot differs only by float rounding."""
 INTERVAL = (2.5, 97.5)
 GEMMA = "google/embeddinggemma-2"
 GEMMA_PREFIX = "task: sentence similarity | query: "
@@ -49,7 +51,10 @@ CACHED = (
     "whisper-medium-L20",
     "whisper-medium-L24",
 )
-HEADER = "| teacher | dims | words | RSA (Spearman) | 95% CI (bootstrap over words) | min pairwise cosine distance |"
+HEADER = (
+    "| teacher | dims | words | RSA raw | 95% CI raw | min cos dist raw "
+    "| RSA centred | 95% CI centred | min cos dist centred |"
+)
 
 
 @dataclass(frozen=True)
@@ -72,6 +77,11 @@ class Geometry:
         """The smallest cosine distance between two distinct present words."""
         similarity = self.cosine()[np.ix_(self.present, self.present)]
         return float(1.0 - np.max(similarity[np.triu_indices(len(similarity), k=1)]))
+
+    def centred(self) -> "Geometry":
+        """Less the mean of the present words' vectors: the direction every word shares removed before the cosine."""
+        mean = self.vectors[self.present].mean(axis=0)
+        return Geometry(np.where(self.present[:, None], self.vectors - mean, 0.0))
 
     def truncated(self, dims: int) -> "Geometry":
         """The first `dims` coordinates of a Matryoshka embedding, re-normalised."""
@@ -118,7 +128,7 @@ class Rsa:
     @staticmethod
     def spearman(meg: Float[np.ndarray, " p"], teacher: Float[np.ndarray, " p"]) -> float:
         """Spearman correlation; 0 where either side is constant (a one-hot teacher has no geometry to correlate)."""
-        if np.ptp(meg) == 0 or np.ptp(teacher) == 0:
+        if np.ptp(meg) < FLAT or np.ptp(teacher) < FLAT:
             return 0.0
         return float(spearmanr(meg, teacher).statistic)
 
@@ -151,22 +161,35 @@ class Rsa:
 
 @dataclass(frozen=True)
 class Row:
-    """One teacher's line of the report."""
+    """One teacher's line of the report: raw and centred."""
 
     name: str
-    geometry: Geometry
-    rsa: Rsa
+    raw: Geometry
+    centred: Geometry
+    rsa_raw: Rsa
+    rsa_centred: Rsa
 
     def markdown(self) -> str:
         return (
-            f"| {self.name} | {self.geometry.vectors.shape[1]} | {self.rsa.words} | {self.rsa.rho:+.3f} "
-            f"| [{self.rsa.low:+.3f}, {self.rsa.high:+.3f}] | {self.geometry.min_distance():.3f} |"
+            f"| {self.name} | {self.raw.vectors.shape[1]} | {self.rsa_raw.words} "
+            f"| {self.rsa_raw.rho:+.3f} | [{self.rsa_raw.low:+.3f}, {self.rsa_raw.high:+.3f}] "
+            f"| {self.raw.min_distance():.3f} "
+            f"| {self.rsa_centred.rho:+.3f} | [{self.rsa_centred.low:+.3f}, {self.rsa_centred.high:+.3f}] "
+            f"| {self.centred.min_distance():.3f} |"
         )
 
     @classmethod
     def of(cls, name: str, geometry: Geometry, meg: Meg, draws: int = DRAWS) -> "Row":
+        centred = geometry.centred()
         shared = meg.present & geometry.present
-        return cls(name, geometry, Rsa.of(meg.similarity(), geometry.cosine(), shared, draws))
+        similarity = meg.similarity()
+        return cls(
+            name,
+            geometry,
+            centred,
+            Rsa.of(similarity, geometry.cosine(), shared, draws),
+            Rsa.of(similarity, centred.cosine(), shared, draws),
+        )
 
 
 @dataclass(frozen=True)
@@ -257,7 +280,7 @@ class Study:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run", default="ema-cd25-syn05-s1")
+    parser.add_argument("--run", nargs="+", default=["ema-cd25-syn05-s1"])
     parser.add_argument("--write-gemma", action="store_true", help="embed the 50 words with EmbeddingGemma 2 and stop")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -265,13 +288,21 @@ def main() -> None:
     if args.write_gemma:
         LOG.info("wrote %s", GemmaWords.encode(PRIMARY.words).save(root))
         return
-    study = Study(root, Loader.of(root, [args.run], Scoring(), torch.device("cpu")))
-    meg = study.meg()
-    LOG.info("MEG matrix: %d of %d words, %d scored words", int(meg.present.sum()), VOCAB_SIZE, int(meg.counts.sum()))
-    LOG.info(HEADER)
-    LOG.info("|---|---|---|---|---|---|")
-    for name, geometry in study.teachers().items():
-        LOG.info(Row.of(name, geometry, meg).markdown())
+    studies = {name: Study(root, Loader.of(root, [name], Scoring(), torch.device("cpu"))) for name in args.run}
+    teachers = next(iter(studies.values())).teachers()
+    for name, study in studies.items():
+        meg = study.meg()
+        LOG.info(
+            "%s: MEG matrix %d of %d words, %d scored words",
+            name,
+            int(meg.present.sum()),
+            VOCAB_SIZE,
+            int(meg.counts.sum()),
+        )
+        LOG.info(HEADER)
+        LOG.info("|---|---|---|---|---|---|---|---|---|")
+        for teacher, geometry in teachers.items():
+            LOG.info(Row.of(teacher, geometry, meg).markdown())
 
 
 if __name__ == "__main__":
