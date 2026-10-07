@@ -139,6 +139,7 @@ class ConvWords(WordEncoder):
         if config.merger and channels != CHANNELS:
             raise ValueError(f"a {config.merger}-channel spatial merger lays out {CHANNELS} sensors, not {channels}")
         super().__init__(config.width, instance=config.instance)
+        self.hidden = config.out
         self.pool = AttentionPool(config.out, config.queries) if config.queries else MeanMax(config.segments)
         self.spatial = self.front(config, channels)
         self.blocks = nn.ModuleList()
@@ -194,3 +195,14 @@ class ConvWords(WordEncoder):
     @override
     def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:
         return self.pool(self.taps(x, valid)[-1])
+
+    @override
+    def time_width(self) -> int:
+        return self.hidden
+
+    @override
+    def embed_timed(
+        self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None
+    ) -> tuple[Float[Tensor, "b e"], Float[Tensor, "b h s"]]:
+        times = self.taps(x, valid)[-1]
+        return self.pool(times), times

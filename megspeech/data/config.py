@@ -207,15 +207,19 @@ class DataConfig:
         """The window in samples at the cache's `rate`."""
         return self.to_samples(self.window)
 
+    def cut(self) -> tuple[int, int]:
+        """The frames each word's window spans and its start's offset from the word's onset, at the cache's `rate`."""
+        lead = self.to_samples(self.lead)
+        return self.samples + lead, self.to_samples(self.delay) - lead
+
     def reading(self, windows: Windows) -> Windows:
         """`windows` cut as this config reads them: `lead` before each onset, `window` from `delay` after it, centred
         on `baseline` (0 centres on the whole window)."""
-        lead = self.to_samples(self.lead)
-        offset = self.to_samples(self.delay) - lead
+        length, offset = self.cut()
         spanned = self.spanned(windows)
         return replace(
             spanned,
-            length=self.samples + lead,
+            length=length,
             offset=offset,
             baseline=self.to_samples(self.baseline),
             segment=self.to_samples(self.segment),

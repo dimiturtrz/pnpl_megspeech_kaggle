@@ -39,6 +39,25 @@ class WordEncoder(nn.Module, ABC):
         valid = torch.zeros(rows + 1, dtype=torch.bool, device=x.device).index_fill_(0, slot.flatten(), value=True)
         return nn.functional.pad(self.embed(x, valid[:rows]), (0, 0, 0, 1))[slot]
 
+    def time_width(self) -> int:
+        """Channels of the per-timestep features `embed_timed` returns."""
+        raise NotImplementedError(f"{type(self).__name__} keeps no per-timestep features")
+
+    def embed_timed(
+        self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None
+    ) -> tuple[Float[Tensor, "b e"], Float[Tensor, "b h s"]]:
+        """`embed`, and the per-timestep features it pooled."""
+        raise NotImplementedError(f"{type(self).__name__} keeps no per-timestep features")
+
+    def positions_timed(
+        self, x: Float[Tensor, "r c t"], slot: Int[Tensor, "g w"]
+    ) -> tuple[Float[Tensor, "g w e"], Float[Tensor, "g w h s"]]:
+        """`positions`, and each span position's per-timestep features, zeros where `slot == len(x)` marks it empty."""
+        rows = len(x)
+        valid = torch.zeros(rows + 1, dtype=torch.bool, device=x.device).index_fill_(0, slot.flatten(), value=True)
+        embedded, times = self.embed_timed(x, valid[:rows])
+        return nn.functional.pad(embedded, (0, 0, 0, 1))[slot], nn.functional.pad(times, (0, 0, 0, 0, 0, 1))[slot]
+
     def backbone(self) -> tuple[nn.Parameter, ...]:
         """The parameters `OptimConfig.encoder_lr` scales: everything, but for an encoder over a pretrained trunk."""
         return tuple(self.parameters())

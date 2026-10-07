@@ -198,3 +198,7 @@ def test_auxiliary_loss_vocab_weight() -> None:
     assert emphasised.loss(nn.Identity(), inside_logits(), TOKEN_PAIR, INSIDE).item() == pytest.approx(flat.item() / 5)
     assert emphasised.loss(nn.Identity(), inside_logits(), TOKEN_PAIR, torch.zeros(1, 2, dtype=torch.bool)) == flat
     assert torch.equal(emphasised.loss(nn.Identity(), inside_logits(), TOKEN_PAIR), flat)
+
+
+def test_auxiliary_term_timed() -> None:
+    assert not lexical().timed

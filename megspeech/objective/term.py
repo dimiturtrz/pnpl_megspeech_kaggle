@@ -143,6 +143,8 @@ class AuxiliaryTerm(Term):
 
     local: ClassVar[bool] = False
     """Whether the head reads the word's local embedding, before the span transformer, whatever tap the run sets."""
+    timed: ClassVar[bool] = False
+    """Whether the head reads the window's per-timestep encoder features (`Tap.TIME`), not a per-word vector."""
     vocab_weight: float = field(default=1.0, kw_only=True)
     """Each row of a word in the 50 weighs this against 1 for the others, in a mean normalised by the weights."""
 

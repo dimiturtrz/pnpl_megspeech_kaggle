@@ -16,6 +16,7 @@ from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.labels.syntax import PartsOfSpeech
 from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.sentence import SentenceNet
+from megspeech.objective.auxiliary.acoustic import AcousticTerm
 from megspeech.objective.auxiliary.adversarial import TimingTerm
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
@@ -25,6 +26,7 @@ from megspeech.objective.auxiliary.speech import SpeechTerm
 from megspeech.objective.auxiliary.syntactic import SyntacticTerm
 from megspeech.objective.auxiliary.tagging import TagTerm
 from megspeech.objective.auxiliary.window import WindowTerm
+from megspeech.objective.targets.loudness import Loudness
 from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import AuxiliaryTerm
@@ -77,6 +79,10 @@ class Auxiliary(ABC):
             (optim.prev_word, lambda: PreviousWordTerm(weight=optim.prev_word)),
             (optim.adversary, lambda: TimingTerm.of(1.0, words, device)),
             (optim.window, lambda: WindowTerm(optim.window, Lexicon.load(Lexicon.path(root)).to(device))),
+            (
+                optim.acoustic,
+                lambda: AcousticTerm(optim.acoustic, Speech.gather(Loudness.directory(root), words).to(device)),
+            ),
         )
         terms = tuple(replace(build(), vocab_weight=optim.vocab_weight) for weight, build in builders if weight)
         return Joint(terms, optim.tap) if terms else NoAuxiliary()
@@ -101,9 +107,16 @@ class Joint(Auxiliary):
 
     @override
     def trained(self, net: SentenceNet, compiled: Callable[[WithAuxiliary], WithAuxiliary]) -> WithAuxiliary:
-        taps = tuple(Tap.WORD if term.local else self.tap for term in self.terms)
+        taps = tuple(self.tapped(term) for term in self.terms)
         heads = nn.ModuleList(
             term.readout(net.words.head, tap.width(net)) for term, tap in zip(self.terms, taps, strict=True)
         )
         heads.to(next(net.parameters()).device)
         return compiled(WithAuxiliary(net, heads, self.tap, taps))
+
+    def tapped(self, term: AuxiliaryTerm) -> Tap:
+        """What `term`'s head reads: the window's time course if it is timed, the word embedding if local, else the
+        run's `tap`."""
+        if term.timed:
+            return Tap.TIME
+        return Tap.WORD if term.local else self.tap

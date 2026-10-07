@@ -523,3 +523,9 @@ def test_dropped_range() -> None:
         with pytest.raises(ValueError, match="crossfit folds"):
             DataConfig(crossfit=crossfit, dropped=dropped)
     assert "dropped" not in READING
+
+
+def test_cut() -> None:
+    assert DataConfig().cut() == (RATE, 0)
+    assert DataConfig(window=2.0, lead=0.1).cut() == (2 * RATE + 5, -5)
+    assert DataConfig(window=0.2, delay=0.2).cut() == (round(0.2 * RATE), round(0.2 * RATE))

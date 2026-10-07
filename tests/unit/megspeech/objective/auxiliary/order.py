@@ -10,3 +10,4 @@ def test_position() -> None:
     assert HeadOrder.position({"next_word": 0.3, "prev_word": 0.3}, "prev_word") == 1
     with pytest.raises(ValueError, match="no head was trained"):
         HeadOrder.position({"next_word": 0.3}, "prev_word")
+    assert HeadOrder.position({"adversary": 1.0, "window": 0.3, "acoustic": 0.2}, "acoustic") == 2

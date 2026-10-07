@@ -17,6 +17,7 @@ from megspeech.model.config import ContextConfig
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig
 from megspeech.model.words.heads import WordHead
+from megspeech.objective.auxiliary.acoustic import Acoustic, AcousticTerm
 from megspeech.objective.auxiliary.adversarial import TimingTerm
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
@@ -27,7 +28,8 @@ from megspeech.objective.auxiliary.syntactic import SyntacticTerm
 from megspeech.objective.auxiliary.tagging import TagTerm
 from megspeech.objective.auxiliary.window import WindowTerm
 from megspeech.objective.scorer import DIM
-from megspeech.objective.targets.speech import Targets
+from megspeech.objective.targets.loudness import LENGTH, Loudness
+from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.training.auxiliary import Auxiliary, Joint, NoAuxiliary
 from megspeech.training.config import OptimConfig
@@ -131,6 +133,12 @@ def test_of(tmp_path: Path) -> None:
     heard = Auxiliary.of(OptimConfig(speech=1.0, semantic=0.5), root, CPU, WORDS)
     assert [type(t) for t in heard.terms] == [SpeechTerm, SemanticTerm]
     assert cast("SpeechTerm", heard.terms[0]).speech.rows.tolist() == [0, -1]
+    with pytest.raises(FileNotFoundError):
+        Auxiliary.of(OptimConfig(acoustic=1.0), root, CPU, WORDS)
+    Targets(np.ones((2, LENGTH), np.float16)).save(Loudness.directory(root) / "a.npy")
+    loud = Auxiliary.of(OptimConfig(acoustic=0.4), root, CPU, WORDS)
+    assert [(type(t), t.weight) for t in loud.terms] == [(AcousticTerm, 0.4)]
+    assert cast("AcousticTerm", loud.terms[0]).speech.rows.tolist() == [0, -1]
 
 
 def test_joint_trained_tagged() -> None:
@@ -143,3 +151,19 @@ def test_joint_trained_tagged() -> None:
     assert {id(p) for p in trained.heads.parameters()} <= {id(p) for p in tagged.parameters()}
     with pytest.raises(ValueError, match="tagged"):
         Joint((TagTerm(1.0, torch.tensor([3, -1])),)).trained(net(), identity)
+
+
+def test_joint_acoustic_taps_the_time_course() -> None:
+    model = net()
+    loud = AcousticTerm(1.0, Speech(torch.tensor([0, -1]), torch.zeros(1, LENGTH)))
+    trained = Joint((loud, semantic()), Tap.CONTEXT).trained(model, identity)
+    assert trained.taps == (Tap.TIME, Tap.CONTEXT)
+    assert isinstance(trained.heads[0], Acoustic)
+
+
+def test_tapped() -> None:
+    joint = Joint((), Tap.CONTEXT)
+    loud = AcousticTerm(1.0, Speech(torch.tensor([0]), torch.zeros(1, LENGTH)))
+    assert joint.tapped(loud) is Tap.TIME
+    assert joint.tapped(NextWordTerm(weight=1.0)) is Tap.WORD
+    assert joint.tapped(semantic()) is Tap.CONTEXT

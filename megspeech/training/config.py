@@ -54,6 +54,12 @@ class OptimConfig:
     """Weight of the syntactic auxiliary: every heard word's window, in or out of the 50, classified into its 17-way
     universal part of speech as spaCy tags it in its sentence (`megspeech.data.labels.syntax`): dense placeholder
     classes for the windows the 50 leave unlabelled, where the ~25k-way lexical target is sparse; 0 never reads it."""
+    acoustic: float = 0.0
+    """Weight of the acoustic auxiliary (`megspeech.objective.auxiliary.acoustic`): every training word whose chapter
+    audio is aligned, its window's per-timestep encoder features read through a learned channel mix and lag into
+    the 50 Hz speech envelope heard over the window, contrasted chunk by chunk against the batch's true chunks
+    (Défossez et al. 2023); a dense target the 50 labels' and the word-level targets' sparse supervision lacks. 0
+    creates no head and reads no envelope (megspeech-7gf.125.1)."""
     speech: float = 0.0
     """Weight of the speech auxiliary (`megspeech.objective.auxiliary.speech`): every training word whose chapter audio
     is aligned, SigLIP-aligned to the wav2vec2 latent of its 0.5 s of heard speech (Défossez et al. 2023), one target
@@ -178,6 +184,14 @@ class RunConfig:
     def __post_init__(self) -> None:
         if self.optim.fused_lr and len(self.optim.fused_lr) != len(self.context.fused):
             raise ValueError(f"fused_lr {self.optim.fused_lr} gives a rate for each of the fused {self.context.fused}")
+        if self.optim.tap is Tap.TIME:
+            raise ValueError("optim.tap time reads the window's time course, which only the acoustic head asks for")
+        if self.optim.acoustic and self.context.encoder is not Encoder.CONV:
+            raise ValueError(
+                f"optim.acoustic reads the conv encoder's time features, not encoder {self.context.encoder}"
+            )
+        if self.optim.acoustic and self.data.cut() != DataConfig().cut():
+            raise ValueError(f"optim.acoustic's envelopes are cut {DataConfig().cut()}, not {self.data.cut()}")
         if self.stop.patience < 0:
             raise ValueError(f"stop.patience {self.stop.patience} is negative; 0 trains every epoch")
         if self.stop.patience and self.keeps_last:

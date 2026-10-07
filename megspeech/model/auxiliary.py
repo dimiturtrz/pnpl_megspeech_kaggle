@@ -16,13 +16,30 @@ class Tap(StrEnum):
     """The encoder's word embedding, before the span transformer."""
     CONTEXT = "context"
     """The span transformer's output at the word, what the context head reads (d'Ascoli et al.'s loss placement)."""
+    TIME = "time"
+    """The encoder's per-timestep features before pooling, `[h t]` a word, for the heads that read the window's time
+    course."""
+
+    @staticmethod
+    def pooled() -> tuple["Tap", ...]:
+        """The taps that hold one vector per word."""
+        return Tap.WORD, Tap.CONTEXT
 
     def width(self, net: SentenceNet) -> int:
         """Width of the representation this tap reads off `net`."""
-        return {Tap.WORD: net.words.width, Tap.CONTEXT: net.width}[self]
+        return {Tap.WORD: net.words.width, Tap.CONTEXT: net.width, Tap.TIME: net.words.time_width()}[self]
 
-    def pick(self, slots: Float[Tensor, "g w e"], refined: Float[Tensor, "g w h"]) -> Float[Tensor, "g w _"]:
-        """This tap's representation of every span position."""
+    def pick(
+        self,
+        slots: Float[Tensor, "g w e"],
+        refined: Float[Tensor, "g w h"],
+        times: Float[Tensor, "g w k t"] | None = None,
+    ) -> Float[Tensor, "g w _"] | Float[Tensor, "g w k t"]:
+        """This tap's representation of every span position; `times` is read only by `TIME`."""
+        if self is Tap.TIME:
+            if times is None:
+                raise ValueError("the time tap reads the window's time course: pass `times`")
+            return times
         return {Tap.WORD: slots, Tap.CONTEXT: refined}[self]
 
 
@@ -49,8 +66,15 @@ class WithAuxiliary(nn.Module):
     ) -> tuple[Float[Tensor, "g w _"], ...]:
         """`SentenceNet`'s two heads, then each auxiliary head's reading of every span position's tapped
         representation."""
-        refined, slots, context, word = self.net.heard(x, onset, slot, subject)
-        return context, word, *(head(tap.pick(slots, refined)) for head, tap in zip(self.heads, self.taps, strict=True))
+        if Tap.TIME in self.taps:
+            refined, slots, context, word, times = self.net.heard_timed(x, onset, slot, subject)
+        else:
+            (refined, slots, context, word), times = self.net.heard(x, onset, slot, subject), None
+        return (
+            context,
+            word,
+            *(head(tap.pick(slots, refined, times)) for head, tap in zip(self.heads, self.taps, strict=True)),
+        )
 
     def readouts(self) -> tuple[nn.Module, ...]:
         """The modules reading each of `forward`'s outputs, in order: `SentenceNet`'s, then the auxiliary heads."""

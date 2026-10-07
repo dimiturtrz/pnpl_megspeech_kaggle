@@ -231,3 +231,16 @@ def test_sensorwise_pool_drop() -> None:
         ConvConfig(sensorwise=4, sensorwise_drop=-0.1)
     with pytest.raises(ValueError, match="sensorwise_heads"):
         ConvConfig(sensorwise=4, sensorwise_pool=2, sensorwise_heads=3)
+
+
+def test_time_width() -> None:
+    assert ConvWords(SMALL).time_width() == SMALL.hidden
+
+
+def test_embed_timed() -> None:
+    words = ConvWords(SMALL).eval()
+    x = torch.randn(2, CHANNELS, SAMPLES, generator=GENERATOR)
+    embedded, times = words.embed_timed(x)
+    assert torch.equal(embedded, words.embed(x))
+    assert times.shape == (2, words.time_width(), SAMPLES)
+    assert torch.equal(times, words.taps(x)[-1])

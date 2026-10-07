@@ -73,7 +73,7 @@ class Readings:
             duration, position = cls.targets(words)
             pieces.append((embedded(split), words["run"].to_numpy(), duration, position))
         read, names, duration, position = zip(*pieces, strict=True)
-        embeddings = {tap: np.concatenate([r[tap] for r in read]) for tap in Tap}
+        embeddings = {tap: np.concatenate([r[tap] for r in read]) for tap in Tap.pooled()}
         return cls(embeddings, np.concatenate(names), np.concatenate(duration), np.concatenate(position))
 
     def target(self, name: str) -> Float[np.ndarray, " n"]:
@@ -94,7 +94,7 @@ class Probe:
     def report(self) -> dict[str, tuple[float, int]]:
         """R^2 and word count per (`tap`, target, `folds` or `valid`) reading."""
         out = {}
-        for tap in Tap:
+        for tap in Tap.pooled():
             for name in ("duration", "position"):
                 x, y = self.train.embeddings[tap], self.train.target(name)
                 known = ~np.isnan(y)

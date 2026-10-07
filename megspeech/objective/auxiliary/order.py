@@ -16,6 +16,8 @@ class HeadOrder:
         "next_word",
         "prev_word",
         "adversary",
+        "window",
+        "acoustic",
     )
     """The `OptimConfig` weights in the order their terms are built."""
 

@@ -358,3 +358,37 @@ def test_fuse() -> None:
     net = SentenceNet(Scaler(torch.randn(4, CHANNELS, SAMPLES)), CONTEXT)
     assert net.fusion.names() == ("primary",)
     assert net.fuse(Fusion([], 0.3)) is net
+
+
+def test_heard_timed() -> None:
+    """`heard`'s outputs exactly, and the encoder's time course at each position, zeros where it is empty."""
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
+    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
+    subject = torch.zeros(len(x), dtype=torch.long)
+    *heard, times = model.heard_timed(x, onset, slot, subject)
+    assert all(torch.equal(a, b) for a, b in zip(heard, model.heard(x, onset, slot, subject), strict=True))
+    assert times.shape == (2, 3, model.words.time_width(), SAMPLES)
+    assert times[slot == len(x)].eq(0).all()
+
+
+def test_finish() -> None:
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
+    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    onset = torch.zeros(2, 3)
+    subject = torch.zeros(len(x), dtype=torch.long)
+    h, slots = model.features(x, onset, slot, subject)
+    finished = model.finish(h, slots, onset, slot < len(x))
+    assert all(torch.equal(a, b) for a, b in zip(finished, model.heard(x, onset, slot, subject), strict=True))
+
+
+def test_chunked() -> None:
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
+    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    onset = torch.zeros(2, 3)
+    subject = torch.zeros(len(x), dtype=torch.long)
+    h, slots = model.features(x, onset, slot, subject)
+    assert torch.equal(model.chunked(x, onset, slot, subject, slots), h)

@@ -125,8 +125,36 @@ class SentenceNet(Encoding):
     ) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"], Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
         """The refined positions and the word embeddings, then the context head's logits with the timing head's
         added, and the word head's."""
-        mask = slot < len(x)
         h, slots = self.features(x, onset, slot, subject)
+        return self.finish(h, slots, onset, slot < len(x))
+
+    def heard_timed(
+        self,
+        x: Float[Tensor, "r c t"],
+        onset: Float[Tensor, "g w"],
+        slot: Int[Tensor, "g w"],
+        subject: Int[Tensor, " r"],
+    ) -> tuple[
+        Float[Tensor, "g w h"],
+        Float[Tensor, "g w e"],
+        Float[Tensor, "g w v"],
+        Float[Tensor, "g w v"],
+        Float[Tensor, "g w k t"],
+    ]:
+        """`heard`'s outputs and, last, the encoder's per-timestep features at each position: `heard` itself, the
+        encoder read once."""
+        slots, times = self.words.positions_timed(self.prepare(x, subject), slot)
+        h = self.chunked(x, onset, slot, subject, slots)
+        return *self.finish(h, slots, onset, slot < len(x)), times
+
+    def finish(
+        self,
+        h: Float[Tensor, "g w h"],
+        slots: Float[Tensor, "g w e"],
+        onset: Float[Tensor, "g w"],
+        mask: Bool[Tensor, "g w"],
+    ) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"], Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
+        """`heard`'s outputs from the transformer's input `h` and the word embeddings `slots`."""
         refined = self.refine(h, mask)
         context, word = self.read(refined, slots)
         return refined, slots, context + self.timing(onset, mask), word
@@ -140,14 +168,24 @@ class SentenceNet(Encoding):
     ) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"]]:
         """The transformer's input at each span position, and the position's word embedding (zeros when empty)."""
         slots = self.words.positions(self.prepare(x, subject), onset, slot)
+        return self.chunked(x, onset, slot, subject, slots), slots
+
+    def chunked(
+        self,
+        x: Float[Tensor, "r c t"],
+        onset: Float[Tensor, "g w"],
+        slot: Int[Tensor, "g w"],
+        subject: Int[Tensor, " r"],
+        slots: Float[Tensor, "g w e"],
+    ) -> Float[Tensor, "g w h"]:
+        """The transformer's input at each span position from the word embeddings `slots`."""
         mask = slot < len(x)
         onset = self.jitter.apply(onset, mask) if self.training else onset
         timing = self.onsets(self.clock.times(onset, mask), self.intervals.features(onset, mask))
         own = self.project(MeanMax.segmented(slots, self.tokens))
         others = (b.projected(x, subject, onset, slot, self.tokens) for b in self.fusion.branches)
         content = self.masking(self.fusion.mix([own, *others]), mask)
-        chunks = content + timing[..., None, :] + self.latency
-        return chunks.flatten(1, 2), slots
+        return (content + timing[..., None, :] + self.latency).flatten(1, 2)
 
     def word_logits(self, embeddings: Float[Tensor, "r e"]) -> Float[Tensor, "r v"]:
         """The stage-1 word head on `embeddings`."""

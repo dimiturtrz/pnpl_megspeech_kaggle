@@ -144,7 +144,7 @@ class Embedded:
         neighbours' MEG and timing too), in word order."""
         words, rows = len(split.y), EVAL_SPANS * split.index.shape[1]
         device = split.index.device
-        out = {tap: torch.zeros(words + 1, tap.width(self.net), device=device) for tap in Tap}
+        out = {tap: torch.zeros(words + 1, tap.width(self.net), device=device) for tap in Tap.pooled()}
         self.net.eval()
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
             for spans in torch.arange(len(split.index), device=device).split(EVAL_SPANS):

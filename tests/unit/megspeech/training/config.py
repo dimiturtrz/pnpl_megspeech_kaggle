@@ -7,6 +7,7 @@ import pytest
 from megspeech.data.config import DataConfig, Refit, Val
 from megspeech.evaluation.metric.ruler import Interval
 from megspeech.evaluation.scoring.score import Epoch, Score
+from megspeech.model.auxiliary import Tap
 from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.context.timing import Clock
 from megspeech.model.words.conv import ConvConfig
@@ -126,3 +127,13 @@ def test_report_defaults_off(tmp_path: Path) -> None:
     (tmp_path / METRICS).write_text(json.dumps({"config": {"optim": {"epochs": 3}}}))
     assert RunConfig.saved(tmp_path).report == ReportConfig()
     assert RunConfig().report == ReportConfig(local=False, tracks=(), aligned=False)
+
+
+def test_acoustic_needs_the_envelope_geometry() -> None:
+    assert RunConfig(optim=OptimConfig(acoustic=0.5)).optim.acoustic == 0.5
+    with pytest.raises(ValueError, match="encoder"):
+        RunConfig(optim=OptimConfig(acoustic=0.5), context=ContextConfig(encoder=Encoder.CACHED))
+    with pytest.raises(ValueError, match="cut"):
+        RunConfig(optim=OptimConfig(acoustic=0.5), data=DataConfig(window=2.0))
+    with pytest.raises(ValueError, match="acoustic head"):
+        RunConfig(optim=OptimConfig(tap=Tap.TIME))
