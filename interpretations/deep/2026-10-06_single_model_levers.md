@@ -89,7 +89,9 @@ disagreement, so at ρ ≈ .97 it is about one point. The gap to the public lead
 | Deep submission | Local test | Public |
 |---|---|---|
 | ens-cd25-8 | .6961 | **.6572** (best Deep) |
+| ens-cd25-8lf6 (8 seeds + 6 label-free) | .7021 | .6547 |
 | ema-cdrop25-s1 | .7013 | .6477 |
+| ema-cdrop25-rfall-s1 (refit on all) | — | .6165 |
 | ema-cdrop25-s7 | .6649 | .6438 |
 | ens-E0 (instrument) | .6940 | .6203 |
 | bgmix05-s0 / s1 | .6168 / .6264 | .5274 / .5891 |
@@ -98,9 +100,18 @@ The s1/s7 local gap of .036 shrinks to .004 on public: per-seed local-test sprea
 bgmix seeds 0.01 apart locally sit 0.06 apart on public, consistent with the public SE ≈ .023 for one score
 plus seed variance.
 
-Broad best: R1 aligned .5879, then ens-bgmix05-s0to5 .5837, then ens-cd25-8 (Deep-trained, aligned) .5714.
+Broad best: R1 aligned .5879, then ens-cd25-8lf6 aligned .5873, then ens-bgmix05-s0to5 .5837, then ens-cd25-8
+aligned .5714. On Broad the label-free members add +.016 public over ens-cd25-8. On Deep they move it by -.003.
+Both are within one public SE.
 
-## The open bet tonight: label-free encoders
+Refit on all data (refit truncates the schedule to the selected epoch) dropped public on both tracks:
+
+- Deep: rfall-s1 .6165 vs s1 .6477.
+- Broad: bg90-cd25-rfall-s0 .5410 vs bg90-cd25-s0 .5592.
+
+The cause is not isolated. The refit's compressed schedule and seed-scale scatter both fit.
+
+## Label-free encoders (7gf.127): parity, not a gain
 
 Owner hypothesis (7gf.127): every 50-label objective pulls the encoder into one basin. The proposed test is to
 train the encoder from label-free terms alone, then probe it.
@@ -122,6 +133,29 @@ If it fails, check the harness first. The suspects:
 - Does the frozen probe have enough head capacity?
 
 Only after those check out does the failure count against the idea.
+
+**Outcome.** Stage 1 converged, the stem loaded, and the frozen probe reached seed level. Single models landed at
+**parity** with the supervised seeds (controls val .603–.613, test .659–.686), well above the .55–.59
+pre-registration.
+
+| Stage-1 target | Stage 2 | Val | Test |
+|---|---|---|---|
+| speech + semantic | frz / lr10 / ft (s1) | .6128 / .6287 / .6189 | .6727 / .6620 / .6791 |
+| speech + semantic | lr10 s0 / s2 | .6099 / .6156 | .6586 / .6704 |
+| speech + phonetic | frz / lr10 / ft (s1) | .5986 / .6123 / .6197 | .6755 / .6651 / .6611 |
+| GPT-2 text, stem A | frz s0 / s1 / s2 | .6317 / .6347 / .6262 | .6774 / .6735 / .6531 |
+| GPT-2 text, stem B | frz s2 / s0 | .6077 / .6282 | .6656 / .6731 |
+
+The GPT-2 val gain over the controls (~+.02) came from stem A. A second stage-1 seed (stem B) does not reproduce it.
+Labels add roughly nothing to the encoder, but label-free is not better.
+
+Diversity is the asset:
+
+- Correlation to seeds is .935–.948, against .9735 between seeds.
+- The best seed + label-free pair reaches .621 val, against a seed-pair mean of .6132. That misses the > .015 gate.
+- A greedy-6 ensemble scores val .6306 and test .6759.
+
+GPT-2-target models stay unsubmitted until the owner clears the pretrained-LM prior.
 
 ## What this does not rule out
 
