@@ -141,6 +141,43 @@ def test_permuted() -> None:
     assert torch.equal(original.permuted(0).windows.at, moved.windows.at)
 
 
+def test_ordered() -> None:
+    """Words are dealt within their own span only, PAD slots stay, onsets and word data stay."""
+    original = split(12)
+    moved = original.ordered(0)
+    valid = original.index != PAD
+    assert torch.equal(moved.index == PAD, original.index == PAD)
+    assert torch.equal(moved.index[1:], original.index[1:])
+    assert sorted(moved.index[0][valid[0]].tolist()) == sorted(original.index[0][valid[0]].tolist())
+    assert any(not torch.equal(original.ordered(seed).index[0], original.index[0]) for seed in range(8))
+    assert torch.equal(moved.onset, original.onset)
+    assert torch.equal(moved.y, original.y)
+    assert moved.windows is original.windows
+
+
+def test_ordered_travels() -> None:
+    """A word's label and window follow it: reading a word's slot through the new index gives its own data."""
+    original = split(12)
+    moved = original.ordered(3)
+    words = moved.index[moved.index != PAD]
+    assert torch.equal(moved.y[words], original.y[words])
+    assert torch.equal(moved.windows.at[words], original.windows.at[words])
+
+
+def test_ordered_seeded() -> None:
+    original = split(12)
+    assert torch.equal(original.ordered(1).index, original.ordered(1).index)
+
+
+def test_ordered_interior_pad() -> None:
+    """A PAD between words keeps its slot."""
+    original = dataclasses.replace(split(12), index=torch.tensor([[0, PAD, 1, 2], [3, 4, PAD, PAD]]))
+    moved = original.ordered(0)
+    assert torch.equal(moved.index == PAD, original.index == PAD)
+    assert sorted(moved.index[0][moved.index[0] != PAD].tolist()) == [0, 1, 2]
+    assert sorted(moved.index[1][moved.index[1] != PAD].tolist()) == [3, 4]
+
+
 def test_spanned() -> None:
     original = split(6)
     kept = original.spanned(torch.tensor([2, 0]))

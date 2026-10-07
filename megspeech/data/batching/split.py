@@ -247,6 +247,16 @@ class Split:
         }
         return replace(self, windows=replace(windows, **moved))
 
+    def ordered(self, seed: int) -> "Split":
+        """This split with each span's words dealt among its own word slots in a random order, onsets untouched: every
+        word keeps its window and label but meets another position's timing and other neighbours, what a model's
+        memory of sentence text reads."""
+        valid = self.index != PAD
+        keys = torch.rand(self.index.shape, generator=torch.Generator().manual_seed(seed)).to(self.index.device)
+        slots = (~valid).int().argsort(dim=1, stable=True)
+        dealt = self.index.gather(1, torch.where(valid, keys, 2.0).argsort(dim=1))
+        return replace(self, index=self.index.scatter(1, slots, dealt))
+
     def kaggle_like(self) -> Int[Tensor, " d"]:
         """Labelled words in spans at least `DENSE` long — the Kaggle-test-like subset."""
         long = self.index[(self.index != PAD).sum(dim=1) >= DENSE]
