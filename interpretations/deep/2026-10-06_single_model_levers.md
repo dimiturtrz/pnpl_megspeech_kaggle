@@ -88,7 +88,8 @@ disagreement, so at ρ ≈ .97 it is about one point. The gap to the public lead
 
 | Deep submission | Local test | Public |
 |---|---|---|
-| ens-cd25-8 | .6961 | **.6572** (best Deep) |
+| ens-cd8lf16 (8 seeds + 16 label-free, uniform) | .7182 | **.6638** (best Deep) |
+| ens-cd25-8 | .6961 | .6572 |
 | ens-cd25-8lf6 (8 seeds + 6 label-free) | .7021 | .6547 |
 | ema-cdrop25-s1 | .7013 | .6477 |
 | ema-cdrop25-rfall-s1 (refit on all) | — | .6165 |
@@ -156,6 +157,23 @@ Diversity is the asset:
 - A greedy-6 ensemble scores val .6306 and test .6759.
 
 GPT-2-target models stay unsubmitted until the owner clears the pretrained-LM prior.
+
+**Pool growth saturates (2026-10-07).** Uniform ensembles, `--local` val / test:
+
+| Ensemble | Members | Val | Test |
+|---|---|---|---|
+| cd8 | 8 seeds | .6368 | .6961 |
+| lf16 | 16 label-free ft/frz | .6395 | .7129 |
+| cd8lf16 | 24 | .6471 | .7182 |
+| cd14 | 14 seeds | .6440 | .7026 |
+| lf23 | 23 label-free | .6432 | .7105 |
+| all37 | 37 | .6453 | .7030 |
+
+Adding 13 more members (six new seeds, seven more label-free arms) lowers test by .015. The 24 set was a
+favourable draw; the plateau sits near .70–.71. Greedy-on-val selection over the 24 pool (val .64) lands test
+.658–.670, below uniform: val overfits selection, so members stay uniform. cd8lf16 public .6638 is +.0067 over
+ens-cd25-8, inside the pre-registered 0..+.015. On Broad, the same set aligned scores .5866 (R1 .5879): parity.
+Broad label-free stems: frozen transfers worse across subjects (ruler −.027), fine-tuned reaches parity.
 
 ## What this does not rule out
 
