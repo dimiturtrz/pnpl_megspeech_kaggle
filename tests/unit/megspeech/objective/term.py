@@ -202,3 +202,20 @@ def test_auxiliary_loss_vocab_weight() -> None:
 
 def test_auxiliary_term_timed() -> None:
     assert not lexical().timed
+
+
+def test_context_term_labels() -> None:
+    """The context head's labels hide muted words; the word head's keep them."""
+    train = split()
+    muted = replace(train, muted=torch.tensor([True] + [False] * (len(train.y) - 1)))
+    assert ContextTerm(0.0, None).labels(train).tolist() == train.y.tolist()
+    assert ContextTerm(0.0, None).labels(muted).tolist() == [IGNORE, *train.y[1:].tolist()]
+    assert WordTerm(0.0, None).labels(muted).tolist() == train.y.tolist()
+
+
+def test_distilled_term_labels_muted() -> None:
+    """A muted word is `IGNORE` for the label and the teacher alike, even with `unlabelled` matching."""
+    train = split()
+    muted = replace(train, muted=torch.tensor([True] + [False] * (len(train.y) - 1)))
+    term = DistilledTerm(0.0, None, taught=torch.zeros(len(train.y), VOCAB_SIZE), y=train.y, share=0.5, unlabelled=True)
+    assert term.labels(muted).tolist() == [IGNORE, *range(1, len(train.y))]

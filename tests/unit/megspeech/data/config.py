@@ -555,3 +555,18 @@ def test_trained_adapt_discovered(tmp_path: Path) -> None:
     runs = Run.discover(tmp_path)
     trained = DataConfig(subjects=(1, 2, 3), adapt=12).trained(runs)
     assert sorted(r.name for r in trained) == [f"sub-{s}_ses-12_task-Sherlock1_run-1" for s in (1, 2, 3)]
+
+
+def test_muted() -> None:
+    """Only the `adapt` session of subjects 1-32 is muted, and `adapt_context` or no `adapt` mutes nothing."""
+    names = pd.Series(
+        [
+            "sub-3_ses-12_task-Sherlock1_run-1",
+            "sub-3_ses-11_task-Sherlock1_run-1",
+            "sub-0_ses-12_task-Sherlock1_run-1",
+            "sub-0_ses-1_task-Sherlock1_run-1",
+        ]
+    )
+    assert DataConfig(subjects=(0, 3), adapt=12).muted(names).tolist() == [True, False, False, False]
+    assert DataConfig(subjects=(0, 3), adapt=12, adapt_context=True).muted(names).tolist() == [False] * 4
+    assert DataConfig().muted(names).tolist() == [False] * 4

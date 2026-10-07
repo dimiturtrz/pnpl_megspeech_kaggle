@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from jaxtyping import Int
+from jaxtyping import Bool, Int
 
 from core.paths import DataRoot
 from megspeech.data.raw.fetch import MASC
@@ -73,6 +73,13 @@ class Run:
     def tasks(names: "pd.Series[str]") -> "pd.Series[str]":
         """The task of each run `name` (as `Run.name` spells it)."""
         return (names + "_").str.extract(NAME)["task"]
+
+    @staticmethod
+    def matching(names: "pd.Series[str]", key: tuple[str, int, int]) -> Bool[np.ndarray, " n"]:
+        """Whether each run `name` (as `Run.name` spells it) is of the (task, session, run) `key`."""
+        parts = (names + "_").str.extract(NAME)
+        task, session, run = key
+        return ((parts["task"] == task) & (parts["session"] == str(session)) & (parts["run"] == str(run))).to_numpy()
 
     @property
     def key(self) -> tuple[str, int, int]:

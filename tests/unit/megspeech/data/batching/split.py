@@ -334,3 +334,11 @@ def test_reads() -> None:
     assert not base.reads().any()
     flagged = dataclasses.replace(base, read=torch.arange(12) < DENSE)
     assert flagged.reads().tolist() == [True] + [False] * (len(base.index) - 1)
+
+
+def test_unmuted() -> None:
+    held = split(4)
+    assert held.unmuted(held.y) is held.y
+    muted = dataclasses.replace(held, muted=torch.tensor([True, False, False, True]))
+    assert muted.unmuted(muted.y).tolist() == [IGNORE, muted.y[1].item(), muted.y[2].item(), IGNORE]
+    assert muted.y.tolist() == held.y.tolist()

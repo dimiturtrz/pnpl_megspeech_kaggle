@@ -57,6 +57,10 @@ class Corpus:
         heard = Heard.of(cache, runs, data)
         LOG.info("cache %.2f GB on %s", source.gigabytes, device)
         LOG.info("train %d words (%d labelled) / %d spans", len(train.y), len(train.labelled()), len(train.index))
+        muted = train.muted
+        LOG.info(
+            "context targets masked on %d of %d train words", 0 if muted is None else int(muted.sum()), len(train.y)
+        )
         LOG.info("validation %s", {task: len(split.labelled()) for task, split in validation.items()})
         if len(positions) != len(train.y):
             raise ValueError(f"{len(positions)} train positions against {len(train.y)} train words")
@@ -98,6 +102,7 @@ class Corpus:
             held,
             source=torch.tensor(data.sources(words["run"]), device=windows.device),
             read=torch.tensor(data.reads(words["run"]), device=windows.device),
+            muted=torch.tensor(data.muted(words["run"]), device=windows.device),
         )
 
     @classmethod

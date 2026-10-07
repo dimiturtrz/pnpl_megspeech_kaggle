@@ -84,3 +84,11 @@ def test_subjects() -> None:
 def test_tasks() -> None:
     names = pd.Series(["sub-0_ses-1_task-Sherlock1_run-2", "sub-0_ses-3_task-TheMoth_run-1"])
     assert Run.tasks(names).tolist() == ["Sherlock1", "TheMoth"]
+
+
+def test_matching() -> None:
+    names = pd.Series(
+        ["sub-3_ses-12_task-Sherlock1_run-1", "sub-3_ses-12_task-Sherlock1_run-2", "sub-3_ses-11_task-Sherlock1_run-1"]
+    )
+    assert Run.matching(names, ("Sherlock1", 12, 1)).tolist() == [True, False, False]
+    assert Run.matching(names, ("TheMoth", 12, 1)).tolist() == [False, False, False]

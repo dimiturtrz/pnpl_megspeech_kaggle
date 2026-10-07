@@ -78,6 +78,10 @@ class ContextTerm(LabelTerm):
     objective: Objective = Objective.SOFTMAX
 
     @override
+    def labels(self, split: Split) -> Int[Tensor, " n"]:
+        return split.unmuted(split.y)
+
+    @override
     def unweighted(
         self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
     ) -> Float[Tensor, ""]:
@@ -102,7 +106,7 @@ class DistilledTerm(ContextTerm):
     def labels(self, split: Split) -> Int[Tensor, " n"]:
         if len(split.y) != len(self.y):
             raise ValueError(f"{len(split.y)} words against {len(self.y)} taught rows")
-        return torch.arange(len(self.y), device=self.y.device)
+        return split.unmuted(torch.arange(len(self.y), device=self.y.device))
 
     @override
     def unweighted(

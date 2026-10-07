@@ -110,6 +110,8 @@ class Split:
     """Each word's recording source, an index into the sorted sources of the split; None where unknown."""
     read: Bool[Tensor, " n"] | None = None
     """Whether each word is of a read-sentence run (`DataConfig.reads`); None where unknown."""
+    muted: Bool[Tensor, " n"] | None = None
+    """Whether each word's label is kept from the context head (`DataConfig.muted`); None mutes none."""
 
     @classmethod
     def from_arrays(
@@ -165,6 +167,10 @@ class Split:
     def labelled(self) -> Int[Tensor, " k"]:
         """Words with a vocabulary label — the ones a score counts."""
         return torch.nonzero(self.y != IGNORE).flatten()
+
+    def unmuted(self, labels: Int[Tensor, " n"]) -> Int[Tensor, " n"]:
+        """`labels` of the words the context head may train on: `IGNORE` where a word is `muted`."""
+        return labels if self.muted is None else torch.where(self.muted, IGNORE, labels)
 
     def reads(self) -> Bool[Tensor, " g"]:
         """Each span's read flag, from its first word's; no span is read where `read` is unknown."""

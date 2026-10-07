@@ -99,6 +99,19 @@ def test_split(tmp_path: Path) -> None:
     )
 
 
+def test_split_muted(tmp_path: Path) -> None:
+    """Every split carries its `muted` flags; subject 0's words are never muted, `adapt` or not."""
+    loaded = source(tmp_path)
+    words = RunCache.carried(loaded.words, Grouping.SENTENCE)
+    plain = Corpus.split(loaded, words, DataConfig(val=Val.OFFICIAL), np.ones(5))
+    assert plain.muted is not None
+    assert plain.muted.tolist() == [False] * 5
+    adapt = DataConfig(val=Val.OFFICIAL, subjects=(0, 3), adapt=11)
+    adapted = Corpus.split(loaded, words, adapt, np.ones(5)).muted
+    assert adapted is not None
+    assert adapted.tolist() == [False] * 5
+
+
 def test_domains(tmp_path: Path) -> None:
     loaded = source(tmp_path)
     words = RunCache.carried(loaded.words, Grouping.SENTENCE)
