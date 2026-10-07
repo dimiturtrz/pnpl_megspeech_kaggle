@@ -129,3 +129,13 @@ def test_kaggle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     windows = Corpus.kaggle(root, DataConfig(lead=0.1, baseline=0.5), Track.DEEP, "cpu")
     assert len(windows) == 1 + len(ONSETS) + WORD_EPOCHS
     assert (windows.length, windows.offset, windows.baseline) == (RATE + 5, -5, round(0.5 * RATE))
+
+
+def test_kaggle_delay_past_epoch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
+    root = DataRoot.from_config()
+    kaggle(root.raw())
+    delayed = Corpus.kaggle(root, DataConfig(window=0.2, delay=0.2), Track.DEEP, "cpu")
+    assert (delayed.length, delayed.offset) == (round(0.2 * RATE), round(0.2 * RATE))
+    with pytest.raises(ValueError, match="start past their epoch's end"):
+        Corpus.kaggle(root, DataConfig(window=0.2, delay=SECONDS * 10.0), Track.DEEP, "cpu")

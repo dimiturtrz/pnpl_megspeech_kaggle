@@ -54,6 +54,10 @@ class Windows:
         """Every window read `samples` later, its bounds kept."""
         return replace(self, at=self.at + samples)
 
+    def unread(self) -> Int[Tensor, " m"]:
+        """The words whose window holds no valid sample: it starts at or past the word's `end`."""
+        return torch.nonzero(self.at + self.offset >= self.end).flatten()
+
     @property
     def device(self) -> torch.device:
         return self.meg.device

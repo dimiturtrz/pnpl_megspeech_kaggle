@@ -70,7 +70,14 @@ class Corpus:
         in `geometry`."""
         cache = KaggleCache.of(root, data.decimate, track, data.cleaning)
         cache.build()
-        return data.reading(cache.windows(device, data.samples, standardised=data.standardised, geometry=geometry))
+        windows = data.reading(cache.windows(device, data.samples, standardised=data.standardised, geometry=geometry))
+        unread = windows.unread()
+        if len(unread):
+            raise ValueError(
+                f"{len(unread)} of {len(windows)} Kaggle test windows start past their epoch's end: "
+                f"delay {data.delay} s (+ window {data.window} s) outruns what the test holds per word"
+            )
+        return windows
 
     @staticmethod
     def split(source: DeviceRecording, words: pd.DataFrame, data: DataConfig, weight: Float[np.ndarray, " n"]) -> Split:

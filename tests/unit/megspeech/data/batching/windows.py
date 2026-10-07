@@ -211,3 +211,11 @@ class Pool:
 
     def map(self, function: Callable[[Run], Path], items: list[Run]) -> list[Path]:
         return [function(item) for item in items]
+
+
+def test_unread() -> None:
+    at = torch.tensor([0, 4])
+    end = torch.tensor([3, 9])
+    meg = torch.zeros(1, 9)
+    assert Windows(meg, at, end, 2, offset=2).unread().tolist() == []
+    assert Windows(meg, at, end, 2, offset=3).unread().tolist() == [0]
