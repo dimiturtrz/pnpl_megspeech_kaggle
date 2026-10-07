@@ -1,6 +1,12 @@
 # megspeech — agent instructions
 
 Keep this file and `CLAUDE.md` IN SYNC (different harnesses read each; same content).
+
+## Competition rules — read before any data-use or submission call
+
+The owner-supplied Kaggle tabs live in `docs/competition/`: `rules.md` (Rules tab, identical for both tracks),
+`overview.md` (Overview + Evaluation), `announcements.md` (organiser notices, cross-track leakage). Quote them;
+never cite "per rules" without a line from them. A restriction that is ours, not theirs, says so.
 ## Issue tracking — beads (bd)
 
 This project uses **bd (beads)** for issue tracking. Run `bd init` once, then `bd prime` for the full

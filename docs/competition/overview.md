@@ -1,8 +1,13 @@
-# PNPL Competition 2026 — Overview + Evaluation (Deep track)
+# PNPL Competition 2026 — Overview + Evaluation (both tracks)
 
 Verbatim copy of the Kaggle `pnpl-competition-2026-deep` Overview and Evaluation tabs, pasted by the owner on
-2026-10-05 (close: 2026-10-16). The Kaggle CLI `competitions pages` subcommand could not fetch it. Data and
-Rules tabs: not yet captured.
+2026-10-05 (close: 2026-10-16). The Kaggle CLI `competitions pages` subcommand could not fetch it. The
+`pnpl-competition-2026-broad` tabs (pasted 2026-10-07) are the same text except the landing line below and the
+leaderboard announcement in [announcements.md](announcements.md). Rules: [rules.md](rules.md). Data tab: not
+captured.
+
+Broad landing line: "This is the landing page for the Broad (i.e., multi-subject) track. If you want to try
+maximizing performance on a single subject, take a look at the Deep track here."
 
 ## Overview
 
