@@ -35,12 +35,21 @@ class Augment:
     word's residual (`megspeech.training.regularise.bgmix`, trial-level BGMix), the label kept; 0 mixes none."""
     bgmix_key: BGMixKey = BGMixKey.SUBJECT
     """What a BGMix template is per word: its subject, or the dataset it was recorded in (`BGMixKey`)."""
+    average: int = 1
+    """Windows of the same (subject, label) each labelled training word's window is averaged with
+    (`megspeech.training.regularise.average`, MEGConformer's dynamic grouping), itself included; 1 averages none."""
+    average_chance: float = 1.0
+    """Probability a labelled training word's window is averaged, when `average` is above 1."""
     spatial: float = 0.0
     """Radius of the sensor patch each window loses (`Regional`), as a share of the array's widest extent."""
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.chance <= 1.0:
             raise ValueError(f"chance must lie in [0, 1], got {self.chance}")
+        if self.average < 1 or not 0.0 <= self.average_chance <= 1.0:
+            raise ValueError(
+                f"average must be >= 1, average_chance in [0, 1]; got {self.average}, {self.average_chance}"
+            )
 
     def __call__(self, x: Float[Tensor, "n c t"]) -> Float[Tensor, "n c t"]:
         """The perturbed windows in float32: the half-precision cache's largest values sit near its overflow."""

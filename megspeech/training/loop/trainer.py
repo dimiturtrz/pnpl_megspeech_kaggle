@@ -32,6 +32,7 @@ from megspeech.training.hook import Scheduled, StepHook
 from megspeech.training.loop.ema import Ema
 from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
+from megspeech.training.regularise.average import GroupAverage
 from megspeech.training.regularise.bgmix import BGMix, Untouched
 from megspeech.training.regularise.noise import SAMPLES
 from megspeech.training.regularise.regional import Regional
@@ -58,6 +59,7 @@ class TrainState:
     hooks: tuple[StepHook, ...]
     curriculum: Curriculum = field(default_factory=Natural)
     bgmix: Untouched = field(default_factory=Untouched)
+    average: Untouched = field(default_factory=Untouched)
 
 
 @dataclass
@@ -158,7 +160,7 @@ class Trainer:
         """One optimiser step on the words of `spans`; returns each term's loss without syncing it to the host."""
         batch = train.batch(spans, state.rows, self.config.augment.jitter)
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            mixed = state.bgmix.apply(batch.x, batch, train)
+            mixed = state.bgmix.apply(state.average.apply(batch.x, batch, train), batch, train)
             outputs = state.model(self.regional(self.config.augment(mixed)), batch.onset, batch.slot, batch.subject)
             parts = zip(state.terms, state.readouts, outputs, strict=True)
             inside = batch.target(train.y) != IGNORE
@@ -198,6 +200,7 @@ class Trainer:
             (anchor, schedule, ema, ramp),
             Sampler.of(self.config.sampler, train),
             BGMix.of(train, self.config.augment.bgmix, self.config.augment.bgmix_key),
+            GroupAverage.of(train, self.config.augment.average, self.config.augment.average_chance),
         )
 
     def rows(self, train: Split) -> int:
@@ -240,6 +243,7 @@ class Trainer:
                 {type(t).__name__: v for t, v in zip(state.terms, terms.tolist(), strict=True)},
             )
             LOG.info("epoch %d bgmix mixed words %d", epoch, state.bgmix.drained())
+            LOG.info("epoch %d averaged words %d", epoch, state.average.drained())
             if not math.isfinite(value):
                 raise FloatingPointError(f"non-finite loss at epoch {epoch}")
             with state.ema.applied(model):
