@@ -51,29 +51,46 @@ class Val(StrEnum):
     """Which sessions are VAL, selecting epoch and tau; the labelled sessions that report are the LOCAL TEST. `CARVED`:
     10% of each source's subject-0 training sessions, stratified (`Stratify`: source, sentence length, word
     diversity); the local test is pnpl's validation and test partitions pooled. `OFFICIAL`, the legacy full-data
-    models': val is pnpl's validation partition, the local test its test partition
-    (megspeech-7gf.122)."""
+    models': val is pnpl's validation partition, the local test its test partition. `BALANCED`, the retired
+    80/10/10 ruler's runs only (`migrated` maps them here): the carved test half stays out of training and reports,
+    val and the local test each add pnpl's own partition (megspeech-7gf.122)."""
 
     CARVED = "carved"
     OFFICIAL = "official"
+    BALANCED = "balanced"
 
     @property
     def share(self) -> float:
         """Of each source's sessions, the share carved out as val."""
-        return {self.CARVED: 0.1, self.OFFICIAL: 0.0}[self]
+        return {self.CARVED: 0.1, self.OFFICIAL: 0.0, self.BALANCED: 0.1}[self]
+
+    @property
+    def stratified(self) -> bool:
+        """Whether domains are the sources, as the carved sessions are drawn from them."""
+        return self is not Val.OFFICIAL
+
+    @property
+    def official_val(self) -> bool:
+        """Whether pnpl's validation partition is val (and so trains under a val refit) rather than the local test."""
+        return self is not Val.CARVED
+
+    @property
+    def tests_carved(self) -> bool:
+        """Whether `split`'s test half is withheld from training and scored as local test."""
+        return self is Val.BALANCED
 
     @classmethod
     def migrated(cls, record: Mapping[str, object]) -> dict[str, object]:
         """A saved data config as one under `val` and `Refit`: the retired `ruler`, `extra`/`share`/`stratify` fields
-        and boolean `refit` mapped, a balanced or carved run to `CARVED` and the rest to `OFFICIAL`; the retired
+        and boolean `refit` mapped, a balanced run to `BALANCED` and the rest to `OFFICIAL`; the retired
         strided split and extra validation domains are refused."""
         retired = {"extra", "share", "stratify", "ruler"}
         kept = {k: v for k, v in record.items() if k not in retired}
         share, stratified = float(str(record.get("share", 0.0))), bool(record.get("stratify", False))
         if int(str(record.get("extra", 0))) or (share and not stratified):
             raise ValueError("this run trained under a retired ruler (strided share or extra validation runs)")
-        carved = bool(share) or record.get("ruler") == "balanced"
-        chosen = record.get("val", cls.CARVED if carved else cls.OFFICIAL)
+        balanced = bool(share) or record.get("ruler") == "balanced"
+        chosen = record.get("val", cls.BALANCED if balanced else cls.OFFICIAL)
         refit = record.get("refit")
         refitted: dict[str, object] = {"refit": Refit.VAL if refit else Refit.NONE} if isinstance(refit, bool) else {}
         return kept | {"val": chosen} | refitted
@@ -295,7 +312,7 @@ class DataConfig:
     @property
     def refitted(self) -> tuple[Partition, ...]:
         """The official partitions of subject 0 that train too: val's under `OFFICIAL`, both under `Refit.ALL`."""
-        official = (Partition.VALIDATION,) if self.val is Val.OFFICIAL else ()
+        official = (Partition.VALIDATION,) if self.val.official_val else ()
         return {Refit.NONE: (), Refit.VAL: official, Refit.ALL: (Partition.VALIDATION, Partition.TEST)}[self.refit]
 
     def trains_on(self, run: Run) -> bool:
@@ -360,6 +377,10 @@ class DataConfig:
         none under `OFFICIAL`. The one place val's membership is chosen."""
         return self.split(runs)[Partition.VALIDATION]
 
+    def tested_carved(self, runs: Sequence[Run]) -> list[Run]:
+        """Subject 0's sessions `Val.BALANCED` also holds out as local test: `split`'s test half; none otherwise."""
+        return self.split(runs)[Partition.TEST] if self.val.tests_carved else []
+
     def trained(self, runs: Sequence[Run]) -> list[Run]:
         """The runs training reads: `trains_on`, less the carved val sessions unless refitting."""
         pool = self.pooled(runs)
@@ -371,6 +392,7 @@ class DataConfig:
     def pooled(self, runs: Sequence[Run]) -> list[Run]:
         """`trained` before any `dropped` fold leaves."""
         excluded = {r.name for r in self.carved(runs)} if self.refit is Refit.NONE else set()
+        excluded |= {r.name for r in self.tested_carved(runs)}
         return self.thinned([r for r in runs if self.trains_on(r) and r.name not in excluded])
 
     def fold_of(self, runs: Sequence[Run], folds: int) -> dict[str, int]:
@@ -399,7 +421,7 @@ class DataConfig:
 
     def domain(self, run: Run) -> str:
         """The domain `run` is scored in: its source under `CARVED` or `folds`, else its task."""
-        return self.stratum(run.key[0]) if self.val is Val.CARVED or self.folds > 1 else run.key[0]
+        return self.stratum(run.key[0]) if self.val.stratified or self.folds > 1 else run.key[0]
 
     def official(self, runs: Sequence[Run], *partitions: Partition) -> list[Run]:
         """Subject 0's runs of the official `partitions`; other subjects' never count."""
@@ -408,12 +430,13 @@ class DataConfig:
     def scored(self, runs: Sequence[Run], partition: Partition) -> dict[str, list[Run]]:
         """The domains of val (`Partition.VALIDATION`) or of the local test (`Partition.TEST`), under `domain`: val is
         the carved sessions, or pnpl's validation partition under `OFFICIAL`; the local test pnpl's test partition,
-        with its validation partition too under `CARVED`."""
-        carved = self.val is Val.CARVED
+        with its validation partition too under `CARVED`, and under `BALANCED` the
+        carved test half as well."""
         if partition is Partition.VALIDATION:
-            chosen = self.carved(runs) if carved else [*self.official(runs, partition), *self.carved(runs)]
+            chosen = [*self.official(runs, *([partition] if self.val.official_val else [])), *self.carved(runs)]
         else:
-            chosen = self.official(runs, Partition.TEST, *([Partition.VALIDATION] if carved else []))
+            pooled = [] if self.val.official_val else [Partition.VALIDATION]
+            chosen = [*self.official(runs, partition, *pooled), *self.tested_carved(runs)]
         names = sorted({self.domain(r) for r in chosen})
         return {name: [r for r in chosen if self.domain(r) == name] for name in names}
 

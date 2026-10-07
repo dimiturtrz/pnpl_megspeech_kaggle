@@ -46,7 +46,7 @@ def test_trains_on(tmp_path: Path) -> None:
 def test_refitted() -> None:
     both = (Partition.VALIDATION, Partition.TEST)
     cases = [DataConfig(val=v, refit=r).refitted for v in Val for r in Refit]
-    assert cases == [(), (), both, (), (Partition.VALIDATION,), both]
+    assert cases == [(), (), both, (), (Partition.VALIDATION,), both, (), (Partition.VALIDATION,), both]
 
 
 def runs(path: Path) -> list[Run]:
@@ -138,6 +138,38 @@ def test_domain(tmp_path: Path) -> None:
         "Sherlock",
     ]
     assert DataConfig(val=Val.OFFICIAL, folds=2).domain(Run(tmp_path / TRAIN)) == "Sherlock"
+
+
+def test_trained_balanced(tmp_path: Path) -> None:
+    """A legacy balanced record withholds both carved halves from training as it did; a new carved record only val,
+    an official one nothing."""
+    every = sessions(tmp_path)
+    balanced = DataConfig.saved(record(tmp_path / "legacy", {"data": {"ruler": "balanced"}}))
+    halves = CARVED.split(every)
+    names = {r.name for r in balanced.trained(every)}
+    assert balanced.val is Val.BALANCED
+    assert names.isdisjoint({r.name for chosen in halves.values() for r in chosen})
+    assert {r.name for r in halves[Partition.TEST]} <= {r.name for r in CARVED.trained(every)}
+    assert {r.name for r in OFFICIAL.trained(every)} == {r.name for r in every if r.partition is Partition.TRAIN}
+
+
+def test_tested_carved(tmp_path: Path) -> None:
+    every = sessions(tmp_path)
+    balanced = DataConfig(val=Val.BALANCED)
+    assert balanced.tested_carved(every) == CARVED.split(every)[Partition.TEST]
+    assert CARVED.tested_carved(every) == OFFICIAL.tested_carved(every) == []
+
+
+def test_scored_balanced(tmp_path: Path) -> None:
+    """The retired ruler scored official + carved for both val and test, never pnpl's validation as test."""
+    every = sessions(tmp_path)
+    balanced = DataConfig(val=Val.BALANCED)
+    halves = CARVED.split(every)
+    val, test = balanced.held(every), balanced.tested(every)
+    assert {r.name for r in val["Sherlock"]} == {r.name for r in halves[Partition.VALIDATION]} | {
+        r.name for r in every if r.partition is Partition.VALIDATION
+    }
+    assert {r.name for r in test["Sherlock"]} == {r.name for r in halves[Partition.TEST]}
 
 
 def test_official(tmp_path: Path) -> None:
@@ -241,8 +273,8 @@ def test_carried() -> None:
 def test_migrated() -> None:
     assert Val.migrated({"window": 2.0}) == {"window": 2.0, "val": Val.OFFICIAL}
     assert Val.migrated({"ruler": "official"}) == {"val": Val.OFFICIAL}
-    assert Val.migrated({"ruler": "balanced"}) == {"val": Val.CARVED}
-    assert Val.migrated({"share": 0.1, "stratify": True, "extra": 0}) == {"val": Val.CARVED}
+    assert Val.migrated({"ruler": "balanced"}) == {"val": Val.BALANCED}
+    assert Val.migrated({"share": 0.1, "stratify": True, "extra": 0}) == {"val": Val.BALANCED}
     assert Val.migrated({"val": "carved"}) == {"val": "carved"}
     assert Val.migrated({"refit": True}) == {"val": Val.OFFICIAL, "refit": Refit.VAL}
     assert Val.migrated({"refit": False}) == {"val": Val.OFFICIAL, "refit": Refit.NONE}
@@ -253,7 +285,7 @@ def test_migrated() -> None:
 
 
 def test_share() -> None:
-    assert [v.share for v in Val] == [0.1, 0.0]
+    assert [v.share for v in Val] == [0.1, 0.0, 0.1]
 
 
 def test_samples() -> None:
@@ -393,7 +425,7 @@ def test_shared(tmp_path: Path) -> None:
     assert DataConfig.shared([scaled], Grouping.SENTENCE).standardised
     balanced = record(tmp_path / "balanced", {"data": {"ruler": "balanced", "refit": True}})
     legacy = DataConfig.shared([balanced], Grouping.SENTENCE)
-    assert (legacy.val, legacy.refit) == (Val.CARVED, Refit.VAL)
+    assert (legacy.val, legacy.refit) == (Val.BALANCED, Refit.VAL)
     based = record(tmp_path / "based", {"data": {"baseline": 0.5}})
     assert DataConfig.shared([based], Grouping.SENTENCE).baseline == 0.5
     assert DataConfig.shared([record(tmp_path / "fast", {"data": {"decimate": 2}})], Grouping.SENTENCE).decimate == 2

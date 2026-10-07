@@ -25,7 +25,7 @@ def test_saved_retired_data_fields(tmp_path: Path) -> None:
     old = {"ruler": "balanced", "refit": True}
     (tmp_path / METRICS).write_text(json.dumps({"config": {"data": old}}))
     balanced = RunConfig.saved(tmp_path).data
-    assert (balanced.val, balanced.refit) == (Val.CARVED, Refit.VAL)
+    assert (balanced.val, balanced.refit) == (Val.BALANCED, Refit.VAL)
 
 
 def test_saved(tmp_path: Path) -> None:
