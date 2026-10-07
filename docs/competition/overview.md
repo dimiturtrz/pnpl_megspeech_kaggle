@@ -9,6 +9,13 @@ captured.
 Broad landing line: "This is the landing page for the Broad (i.e., multi-subject) track. If you want to try
 maximizing performance on a single subject, take a look at the Deep track here."
 
+Deep tab as re-pasted 2026-10-07 (no announcement on it): host Gereon Elvers; "Kudos — Does not award Points or
+Medals"; 164 entrants, 94 participants, 73 teams, 3,024 submissions; tag "Custom Metric". Citation: Francesco
+Mantegna, Gereon Elvers, Dulhan Jayalath, Gilad Landau, Tasha Kim, Miran Özdogan, Luisa Kurth, Teyun Kwon, SungJun
+Cho, Benjamin Ballyk, Alex Fung, Pratik Somaiya, Yorguin-Jose Mantilla-Ramos, Hamza Abdelhedi, Karim Jerbi, Gregory
+Farquhar, Brendan Shillingford, Mark Woolrich, and Oiwi Parker Jones. PNPL Competition 2026: Deep Track.
+https://www.kaggle.com/competitions/pnpl-competition-2026-deep, 2026. Kaggle.
+
 ## Overview
 
 Welcome to the PNPL Competition 2026! Our goal is to advance the societal impact of speech decoding technologies by tackling a new large-scale word classification benchmark.
