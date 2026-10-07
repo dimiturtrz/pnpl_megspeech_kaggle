@@ -48,6 +48,30 @@ def test_positions() -> None:
     assert timing().positions() == "0:0.150(n=2) 1:0.300(n=1)"
 
 
+def test_places() -> None:
+    """Spans of three, two and one word: places from the start and from the end, by word id."""
+    start, end = timing().places(torch.arange(6))
+    assert start.tolist() == [0, 1, 2, 0, 1, 0]
+    assert end.tolist() == [2, 1, 0, 1, 0, 0]
+
+
+def test_buckets() -> None:
+    """Each word is its own class; the last bucket pools every later place; an empty bucket is NaN."""
+    start, end = torch.tensor([0, 1, 2, 3]), torch.tensor([3, 2, 1, 0])
+    hits, labels = torch.tensor([True, False, True, True]), torch.arange(4)
+    report = Timing.buckets(start, end, hits, labels)
+    assert "last=1.0000 n=1 second-last=1.0000 n=1 third-last=0.0000 n=1 earlier=1.0000 n=1" in report
+    assert "first=1.0000 n=1 second=0.0000 n=1 rest=1.0000 n=2" in report
+    assert "nan n=0" in Timing.buckets(start, end * 0 + 3, hits, labels)
+
+
+def test_positioned() -> None:
+    base = timing()
+    graded = Graded({"d": (torch.tensor([True] * 5), torch.arange(5))})
+    report = Timing.positioned({"d": base.split}, frozenset(), graded)
+    assert "last=1.0000 n=2 second-last=1.0000 n=2 third-last=1.0000 n=1 earlier=nan n=0" in report
+
+
 def test_replaced() -> None:
     """Onsets are rebuilt from the new gaps, each span starting at zero."""
     gaps = torch.tensor([[1.0, 2.0, 0, 0, 0, 0, 0, 0]] * 3)

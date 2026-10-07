@@ -15,7 +15,7 @@ from enum import StrEnum
 
 import numpy as np
 import torch
-from jaxtyping import Bool, Float
+from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 from core.paths import DataRoot
@@ -153,6 +153,48 @@ class Timing:
         domains = {name: f"{ruler.balanced(hits, y):.4f} n={len(y)}" for name, (hits, y) in graded.domains.items()}
         return f"macro {ruler.point(graded):.4f} [{interval.low:.4f}, {interval.high:.4f}] {domains}"
 
+    def places(self, words: Int[Tensor, " n"]) -> tuple[Int[Tensor, " n"], Int[Tensor, " n"]]:
+        """Each of `words` (ids into the split's word rows) by its place counted from its span's start and end."""
+        index = self.split.index
+        present = index != PAD
+        start = torch.arange(index.shape[1], device=index.device).expand_as(index)
+        end = present.sum(dim=1, keepdim=True) - 1 - start
+        from_start, from_end = (torch.zeros(len(self.split.y), dtype=torch.long, device=index.device) for _ in range(2))
+        from_start[index[present]] = start[present]
+        from_end[index[present]] = end[present]
+        return from_start[words], from_end[words]
+
+    @staticmethod
+    def buckets(
+        start: Int[Tensor, " n"], end: Int[Tensor, " n"], hits: Bool[Tensor, " n"], labels: Int[Tensor, " n"]
+    ) -> str:
+        """Top-k balanced accuracy (per-class recall averaged over the classes present in the bucket) and word count
+        of each place from the span's end, then from its start; the last bucket of each pools every later place."""
+        ruler = Ruler()
+        arms = {
+            "from-end": (end, ("last", "second-last", "third-last", "earlier")),
+            "from-start": (start, ("first", "second", "rest")),
+        }
+        parts = []
+        for arm, (place, names) in arms.items():
+            capped = place.clamp(max=len(names) - 1)
+            cells = []
+            for k, name in enumerate(names):
+                mask = capped == k
+                accuracy = ruler.balanced(hits[mask], labels[mask]) if mask.any() else float("nan")
+                cells.append(f"{name}={accuracy:.4f} n={int(mask.sum())}")
+            parts.append(f"{arm} " + " ".join(cells))
+        return " | ".join(parts)
+
+    @staticmethod
+    def positioned(domains: dict[str, Split], seen: frozenset[tuple[int, ...]], graded: Graded) -> str:
+        """`buckets` over the scored (unseen-span) words of every graded domain pooled."""
+        placed = [Timing(domains[name]).places(domains[name].novel(seen)) for name in graded.domains]
+        starts, ends = (torch.cat([place[k] for place in placed]) for k in range(2))
+        hits = torch.cat([hit for hit, _ in graded.domains.values()])
+        labels = torch.cat([label for _, label in graded.domains.values()])
+        return Timing.buckets(starts, ends, hits, labels)
+
     def replaced(self, gaps: Float[Tensor, "g k"]) -> Split:
         """`split` whose onsets are rebuilt from `gaps` after each span's first word."""
         onset = torch.cat([gaps.new_zeros(len(gaps), 1), gaps.cumsum(dim=1)], dim=1)
@@ -177,6 +219,7 @@ def main() -> None:
     parser.add_argument("names", nargs="+")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--grid", action="store_true", help="report the sample grid and gap quantiles instead")
+    parser.add_argument("--positions", action="store_true", help="score words by place in their span instead")
     parser.add_argument("--blur", action="store_true", help="score jittered and quantised onsets instead")
     tree = Tree(Scoring, Scoring(fallback=Fallback(Unseen.DEEP)))
     tree.arguments(parser)
@@ -195,6 +238,16 @@ def main() -> None:
             LOG.info("kaggle-test %s", kaggle.grid())
             for name, split in domains.items():
                 LOG.info("%s %s %s", partition, name, Timing(split).grid())
+            continue
+        if args.positions:
+            graded = held.evaluator.graded(held.model, domains, held.log_prior, tau)
+            report = Timing.positioned(domains, held.evaluator.seen, graded)
+            LOG.info(
+                "%s tau %s balanced top-10 (per-class recall over classes present in bucket): %s",
+                partition,
+                tau,
+                report,
+            )
             continue
         if args.blur:
             for label, blur in Timing.blurs(args.seed).items():
