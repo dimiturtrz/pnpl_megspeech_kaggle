@@ -43,8 +43,21 @@ Per-epoch telemetry for ema-cd25-xsp10sem05-ft-s1:
 - **About 80% of the score is the context/text prior.** MEG adds ~.11.
 - **The word head alone is weak.** On MOCHA it scores .29, against .875 for the context head.
 - **The fit–val gap grows to .21 after epoch 24**, while val stays flat.
-- **Where the gap sits is unknown.** It could be text memorisation or MEG memorisation; 7gf.128, the order-shuffled
-  gap locator, is being built to tell them apart.
+- **The gap is mostly MEG memorisation** (7gf.128, `studies.gap`, 10:18). Fit and val each scored real,
+  MEG-shuffled and order-shuffled:
+
+  | Model | Real fit / val (gap) | MEG-shuffled gap | Order-shuffled gap |
+  |---|---|---|---|
+  | ema-cdrop25-s1 | .776 / .603 (.174) | .031 | .058 |
+  | xsp10sem05-ft-s1 | .776 / .619 (.157) | .005 | .068 |
+
+  - With MEG removed, the text prior alone generalises: the fit-val gap collapses to .03 or below.
+  - The MEG share is .22–.24 on training spans against .075–.086 on val. The encoder reads trial-specific MEG
+    of words it trained on.
+  - Caveat: the fit-side MEG shuffle draws windows from all sources (the val shuffle stays within a domain), so the
+    MEG share on fit may be somewhat overstated.
+  - The levers this points to are on the MEG side: SNR and trial-level regularisation, such as trial averaging
+    (5e6 arm 3, now running), rather than more text-side masking.
 - **Front-end arms that lower the MEG share score worse.** The set-pool d25 arm has a neural share of .049.
 
 ## The ledger: ~110 ideas
