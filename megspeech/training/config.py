@@ -110,6 +110,10 @@ class OptimConfig:
     teacher: str = ""
     """A trained run or ensemble under models/ whose context-head distribution on every labelled training word the
     context head is also trained toward (`megspeech.training.teacher`); empty trains on the labels alone."""
+    teacher_folds: int = 1
+    """Cross-fitted teacher: `teacher` names `<teacher>-f0 ... <teacher>-f{K-1}`, each trained at `data.crossfit` K with
+    `data.dropped` its own fold, and a training word is taught by the model that never trained on its session
+    (megspeech-7gf.130); 1 reads `teacher` alone."""
     distil: float = 0.5
     """Share of the context loss that is the KL to the `teacher`'s distribution, the rest the label's; read only
     with a teacher."""

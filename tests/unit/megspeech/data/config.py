@@ -481,3 +481,45 @@ def test_sources() -> None:
 def test_reads() -> None:
     names = pd.Series([f"sub-0_ses-1_task-{task}_run-1" for task in ("TIMIT3", "Sherlock2", "MOCHATIMIT", "TheMoth")])
     assert DataConfig.reads(names).tolist() == [True, False, True, False]
+
+
+def test_pooled(tmp_path: Path) -> None:
+    """Without a dropped fold the pool is what trains, byte for byte."""
+    every = sessions(tmp_path)
+    assert CARVED.trained(every) == CARVED.pooled(every)
+    assert DataConfig(crossfit=4).trained(every) == CARVED.trained(every)
+
+
+def test_fold_of(tmp_path: Path) -> None:
+    """The folds partition the pool by recording key, deterministically, and every subject of a key shares a fold."""
+    every = subjects(tmp_path) + sessions(tmp_path)
+    fold = DataConfig(subjects=(0, 3, 4)).fold_of(every, 3)
+    assert fold == DataConfig(subjects=(0, 3, 4)).fold_of(list(reversed(every)), 3)
+    assert set(fold) == {r.name for r in DataConfig(subjects=(0, 3, 4)).pooled(every)}
+    assert set(fold.values()) == {0, 1, 2}
+    by_key: dict[tuple[str, int, int], set[int]] = {}
+    for r in every:
+        if r.name in fold:
+            by_key.setdefault(r.key, set()).add(fold[r.name])
+    assert all(len(folds) == 1 for folds in by_key.values())
+
+
+def test_trained_dropped(tmp_path: Path) -> None:
+    """Dropping fold j removes exactly its sessions from training; val, the local test and the other folds stay."""
+    every = sessions(tmp_path)
+    pool = {r.name for r in CARVED.trained(every)}
+    fold = CARVED.fold_of(every, 3)
+    dropped = [DataConfig(crossfit=3, dropped=j) for j in range(3)]
+    for j, config in enumerate(dropped):
+        assert {r.name for r in config.trained(every)} == pool - {n for n, f in fold.items() if f == j}
+        assert config.held(every) == CARVED.held(every)
+        assert config.tested(every) == CARVED.tested(every)
+    assert sorted(n for c in dropped for n in pool - {r.name for r in c.trained(every)}) == sorted(pool)
+
+
+def test_dropped_range() -> None:
+    assert DataConfig(crossfit=3, dropped=2).dropped == 2
+    for crossfit, dropped in ((3, 3), (3, -2), (1, 0)):
+        with pytest.raises(ValueError, match="crossfit folds"):
+            DataConfig(crossfit=crossfit, dropped=dropped)
+    assert "dropped" not in READING

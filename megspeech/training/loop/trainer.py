@@ -104,7 +104,7 @@ class Trainer:
         timing = TimingExpert.load(root, config.optim.timing)
         stem = config.optim.stem
         stemmed = torch.load(root.models() / stem / "model.pt", map_location=device, weights_only=True) if stem else {}
-        taught = Teacher.of(config.optim, root)
+        taught = Teacher.of(config.optim, root, config.data, corpus.positions)
         return cls(config, evaluator, prototypes, auxiliary, initial, taught, regional, timing, stem=stemmed)
 
     def model(self, train: Split) -> SentenceNet:

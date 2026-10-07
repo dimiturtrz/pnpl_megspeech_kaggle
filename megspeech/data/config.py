@@ -129,6 +129,11 @@ class DataConfig:
     fixed `window` (megspeech-7gf.98)."""
     fold: int = 0
     """The fold held out as validation when `folds` > 1; the members over every fold ensemble into one."""
+    crossfit: int = 1
+    """Cross-fitted distillation (megspeech-7gf.130): the training recordings' keys, in order within each source, dealt
+    round-robin into this many folds (`fold_of`). Unlike `folds`, val and the local test are untouched."""
+    dropped: int = -1
+    """The `crossfit` fold removed from training, so a teacher scores it out of sample; -1 trains on every fold."""
     subjects: tuple[int, ...] = (DEEP,)
     """Subjects whose training runs train; validation is always subject 0's, and pooled runs never train."""
     features: str = ""
@@ -157,6 +162,8 @@ class DataConfig:
             raise ValueError(f"train_share {self.train_share} is not in (0, 1]")
         if not 0 <= self.fold < self.folds:
             raise ValueError(f"fold {self.fold} is not one of the {self.folds} folds")
+        if not -1 <= self.dropped < self.crossfit or (self.dropped >= 0 and self.crossfit == 1):
+            raise ValueError(f"dropped fold {self.dropped} is not one of the {self.crossfit} crossfit folds")
         if self.subspace and self.regions:
             raise ValueError("a recording keeps either subspace components or region sensors, not both")
         if self.segment < 0 or (self.segment and self.features):
@@ -322,8 +329,27 @@ class DataConfig:
 
     def trained(self, runs: Sequence[Run]) -> list[Run]:
         """The runs training reads: `trains_on`, less the carved val sessions unless refitting."""
+        pool = self.pooled(runs)
+        if self.dropped < 0:
+            return pool
+        fold = self.fold_of(runs, self.crossfit)
+        return [r for r in pool if fold[r.name] != self.dropped]
+
+    def pooled(self, runs: Sequence[Run]) -> list[Run]:
+        """`trained` before any `dropped` fold leaves."""
         excluded = {r.name for r in self.carved(runs)} if self.refit is Refit.NONE else set()
         return self.thinned([r for r in runs if self.trains_on(r) and r.name not in excluded])
+
+    def fold_of(self, runs: Sequence[Run], folds: int) -> dict[str, int]:
+        """Each pooled run's name to its fold of `folds`: a source's distinct recording keys, sorted, dealt round-robin,
+        every run (subject) of a key in its fold, so neighbouring words of a session never straddle folds."""
+        pool = sorted(self.pooled(runs), key=self.source)
+        fold: dict[str, int] = {}
+        for _, group in itertools.groupby(pool, key=lambda r: self.source(r)[0]):
+            members = list(group)
+            dealt = {key: at % folds for at, key in enumerate(sorted({r.key for r in members}))}
+            fold |= {r.name: dealt[r.key] for r in members}
+        return fold
 
     def thinned(self, runs: Sequence[Run]) -> list[Run]:
         """`runs` cut to `train_share` of each source's sessions: the leading `ceil(share * n)` of a seeded permutation
@@ -375,6 +401,8 @@ class DataConfig:
         return {Partition.VALIDATION: self.held, Partition.TEST: self.tested}[partition](runs)
 
 
-READING = tuple(field.name for field in fields(DataConfig) if field.name not in {"grouping", "fold"})
+UNREAD = frozenset({"grouping", "fold", "crossfit", "dropped"})
+READING = tuple(field.name for field in fields(DataConfig) if field.name not in UNREAD)
 """The `DataConfig` fields an ensemble's members must agree on: how each reads the MEG, which runs trained it and at
-what weight. The rest are `grouping`, the scorer's own, and `fold`, which bagged members differ in by design."""
+what weight. The rest are `grouping`, the scorer's own, and `fold`, `crossfit` and `dropped`, which members differ in
+by design."""
