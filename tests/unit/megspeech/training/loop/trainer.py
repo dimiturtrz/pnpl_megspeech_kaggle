@@ -283,3 +283,37 @@ def test_model_timing(tmp_path: Path) -> None:
     model = made.model(split())
     assert all(torch.equal(model.timing.state_dict()[k], v) for k, v in expert.state_dict().items())
     assert not any(parameter.requires_grad for parameter in model.timing.parameters())
+
+
+@pytest.mark.parametrize("shares", [(0.0, 0.5), ()])
+def test_optimizer_fused_shares(shares: tuple[float, ...]) -> None:
+    context = ContextConfig(fused=("a", "b"))
+    made = trainer(RunConfig(context=context, optim=OptimConfig(lr=0.01, fused_lr=shares)))
+    net = made.model(split())
+    params = list(net.parameters())
+    first, second = params[:2], params[2:4]
+    optimizer = made.optimizer(net, Anchor(), (), (first, second))
+    rate = {id(p): group["lr"] for group in optimizer.param_groups for p in group["params"]}
+    expected = shares or (1.0, 1.0)
+    assert {rate[id(p)] for p in first} == {0.01 * expected[0]}
+    assert {rate[id(p)] for p in second} == {0.01 * expected[1]}
+
+
+def test_model_fused(tmp_path: Path) -> None:
+    root = DataRoot(tmp_path)
+    saved = trainer(RunConfig(optim=OptimConfig(compiled=False))).model(split())
+    (root.models() / "a").mkdir(parents=True)
+    torch.save(saved.state_dict(), root.models() / "a" / "model.pt")
+    config = RunConfig(context=ContextConfig(fused=("a",)), optim=OptimConfig(compiled=False, fused_lr=(0.0,)))
+    made = Trainer.of(Corpus(split(), {"a": split(seed=1)}, frozenset()), config, root)
+    net = made.model(split(seed=2))
+    assert net.fusion.names() == ("primary", "a")
+    assert all(torch.equal(a, b) for a, b in zip(net.fusion.encoders()[0], saved.encoder(), strict=True))
+    optimizer = made.optimizer(net, Anchor(), tuple(net.encoder()), net.fusion.encoders())
+    frozen = {id(p) for p in net.fusion.encoders()[0]}
+    assert {g["lr"] for g in optimizer.param_groups for p in g["params"] if id(p) in frozen} == {0.0}
+
+
+def test_run_config_fused_rates() -> None:
+    with pytest.raises(ValueError, match="fused_lr"):
+        RunConfig(context=ContextConfig(fused=("a", "b")), optim=OptimConfig(fused_lr=(0.0,)))

@@ -11,6 +11,7 @@ from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.context.droplayer import DropPathLayer
+from megspeech.model.fusion import Fusion
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer
 from megspeech.model.sentence import SentenceNet
@@ -351,3 +352,9 @@ def test_drop_path() -> None:
     assert [
         cast("DropPathLayer", layer).path.rate for layer in cast("nn.TransformerEncoder", model.context).layers
     ] == pytest.approx([0.1, 0.2])
+
+
+def test_fuse() -> None:
+    net = SentenceNet(Scaler(torch.randn(4, CHANNELS, SAMPLES)), CONTEXT)
+    assert net.fusion.names() == ("primary",)
+    assert net.fuse(Fusion([], 0.3)) is net

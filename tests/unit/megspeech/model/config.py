@@ -139,3 +139,8 @@ def test_noise_covariance_needs_whiten() -> None:
     with pytest.raises(ValueError, match="noise covariance"):
         ContextConfig(covariance=Covariance.NOISE)
     assert ContextConfig(whiten=True, covariance=Covariance.NOISE).covariance is Covariance.NOISE
+
+
+def test_branch_drop_is_a_probability() -> None:
+    with pytest.raises(ValueError, match="branch_drop"):
+        ContextConfig(branch_drop=1.0)

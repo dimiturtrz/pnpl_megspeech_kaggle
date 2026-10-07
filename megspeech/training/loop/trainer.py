@@ -7,6 +7,7 @@ the embeddings across the span, and both the isolated-word head and the context 
 import logging
 import math
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import cast
 
 import torch
@@ -20,6 +21,8 @@ from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Epoch
 from megspeech.evaluation.scoring.telemetry import Telemetry
+from megspeech.model.branch import Branch
+from megspeech.model.fusion import Fusion
 from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.anchors import Anchors
@@ -79,6 +82,8 @@ class Trainer:
     """The auxiliary heads' weights at the kept epoch, which the model's own state does not hold."""
     stem: dict[str, Tensor] = field(default_factory=dict)
     """The trained run's state whose encoder the model starts from, when the run names one."""
+    fused: tuple[Path, ...] = ()
+    """The saved runs whose encoders the model reads beside its own (`ContextConfig.fused`)."""
 
     @staticmethod
     def corpus(config: RunConfig, root: DataRoot, device: torch.device) -> Corpus:
@@ -105,14 +110,18 @@ class Trainer:
         stem = config.optim.stem
         stemmed = torch.load(root.models() / stem / "model.pt", map_location=device, weights_only=True) if stem else {}
         taught = Teacher.of(config.optim, root, config.data, corpus.positions)
-        return cls(config, evaluator, prototypes, auxiliary, initial, taught, regional, timing, stem=stemmed)
+        fused = tuple(root.models() / name for name in config.context.fused)
+        return cls(
+            config, evaluator, prototypes, auxiliary, initial, taught, regional, timing, stem=stemmed, fused=fused
+        )
 
     def model(self, train: Split) -> SentenceNet:
         """A fresh model, or the warm start's weights when there is one."""
         sample = train.sample(SCALER_SAMPLE)
-        model = SentenceNet(
-            Scaler(sample), context=self.config.context, prototypes=self.prototypes, channels=sample.shape[1]
-        )
+        context = self.config.context
+        channels = sample.shape[1]
+        model = SentenceNet(Scaler(sample), context=context, prototypes=self.prototypes, channels=channels)
+        model.fuse(Fusion(Branch.many(self.fused, context, channels), context.branch_drop))
         model.whiten.fit(model.scale(SAMPLES[self.config.context.covariance].windows(train, sample)))
         if self.initial:
             model.load_state_dict(self.initial)
@@ -128,20 +137,27 @@ class Trainer:
             model.compile(mode="reduce-overhead")
         return model
 
-    def optimizer(self, model: nn.Module, anchor: Anchor, encoder: tuple[nn.Parameter, ...] = ()) -> torch.optim.AdamW:
+    def optimizer(
+        self,
+        model: nn.Module,
+        anchor: Anchor,
+        encoder: tuple[nn.Parameter, ...] = (),
+        branches: tuple[list[nn.Parameter], ...] = (),
+    ) -> torch.optim.AdamW:
         """AdamW as one fused kernel on the GPU; per-parameter launches were most of a step's device time. Each of the
-        anchor's groups splits off its `encoder` parameters at `encoder_lr` times the rate."""
+        anchor's groups splits off its `encoder` parameters at `encoder_lr` times the rate, and each fused branch's at
+        its `fused_lr`'s."""
         optim = self.config.optim
         fused = self.evaluator.device.type == "cuda"
-        ids = {id(p) for p in encoder}
-        rates = {False: optim.lr, True: optim.lr * optim.encoder_lr}
+        shares = {id(p): optim.encoder_lr for p in encoder}
+        for params, share in zip(branches, optim.fused_lr or (1.0,) * len(branches), strict=True):
+            shares |= {id(p): share for p in params}
         kept: list[dict[str, object]] = []
         for group in anchor.groups(model, optim.weight_decay):
-            params = cast("list[nn.Parameter]", group["params"])
-            for inside, lr in rates.items():
-                part = [p for p in params if (id(p) in ids) == inside]
-                if part:
-                    kept.append({**group, "params": part, "lr": lr})
+            by_rate: dict[float, list[nn.Parameter]] = {}
+            for p in cast("list[nn.Parameter]", group["params"]):
+                by_rate.setdefault(optim.lr * shares.get(id(p), 1.0), []).append(p)
+            kept.extend({**group, "params": part, "lr": lr} for lr, part in by_rate.items())
         LOG.info(
             "optimiser groups (lr, params) %s", [(g["lr"], len(cast("list[nn.Parameter]", g["params"]))) for g in kept]
         )
@@ -186,7 +202,7 @@ class Trainer:
         optim = self.config.optim
         model = self.auxiliary.trained(net, self.compiled)
         anchor = Anchor.of(optim.anchor, optim.lr, total)
-        optimizer = self.optimizer(model, anchor, tuple(net.encoder()))
+        optimizer = self.optimizer(model, anchor, tuple(net.encoder()), net.fusion.encoders())
         peaks = [group["lr"] for group in optimizer.param_groups]
         schedule = Scheduled(torch.optim.lr_scheduler.OneCycleLR(optimizer, peaks, total_steps=total))
         ema = Ema.of(model, optim.ema)

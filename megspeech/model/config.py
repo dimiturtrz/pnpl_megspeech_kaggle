@@ -133,6 +133,15 @@ class ContextConfig:
     """Samples each `experts` encoder's crop runs, one per `starts`."""
     spanned: SpannedConfig = SPANNED
     """The `spanned` encoder's read of the trunk's tokens."""
+    fused: tuple[str, ...] = ()
+    """Saved runs under models/ whose word encoders read every window beside the model's own, their features
+    projected and summed into the transformer's input (`model.fusion`, megspeech-7gf.131); each keeps the weights it
+    was saved with, at the rate `OptimConfig.fused_lr` gives. Empty fuses none."""
+    branch_drop: float = 0.3
+    """Chance, in training, that a source of features (the model's own encoder or a fused one) is dropped from a span,
+    the survivors rescaled so each source's expected weight is 1 and a span never losing every source; read only with
+    `fused`. A frozen encoder's features fit the training words better than the validation's, and a head that
+    sees them always learns to trust them."""
 
     def __post_init__(self) -> None:
         if self.anchor.active and self.objective is Objective.SIGLIP:
@@ -156,6 +165,8 @@ class ContextConfig:
             )
         if self.whiten and self.encoder.cached:
             raise ValueError(f"encoder {self.encoder} reads saved features, not sensors, so there is nothing to whiten")
+        if not 0 <= self.branch_drop < 1:
+            raise ValueError(f"branch_drop {self.branch_drop} is a probability below 1")
         if self.covariance is Covariance.NOISE and not self.whiten:
             raise ValueError("a noise covariance is only inverted by whiten")
 

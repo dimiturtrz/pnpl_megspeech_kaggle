@@ -132,6 +132,9 @@ class OptimConfig:
     encoder_lr: float = 1.0
     """The encoder's learning rate as a share of `lr`, its decay alike; 0 freezes it: a `stem` encoder kept while the
     span transformer trains on top of it."""
+    fused_lr: tuple[float, ...] = ()
+    """Each `context.fused` encoder's learning rate as a share of `lr`, its decay alike, one per encoder; 0 freezes it.
+    Empty trains them all at `lr`."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
     pretrained: float = 0.1
@@ -168,6 +171,8 @@ class RunConfig:
     telemetry: TelemetryConfig = TelemetryConfig()
 
     def __post_init__(self) -> None:
+        if self.optim.fused_lr and len(self.optim.fused_lr) != len(self.context.fused):
+            raise ValueError(f"fused_lr {self.optim.fused_lr} gives a rate for each of the fused {self.context.fused}")
         if self.stop.patience < 0:
             raise ValueError(f"stop.patience {self.stop.patience} is negative; 0 trains every epoch")
         if self.stop.patience and self.keeps_last:

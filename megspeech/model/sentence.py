@@ -1,7 +1,7 @@
 """The sentence-context model: per-word embeddings, onset timing, and a transformer across the span."""
 
 from pathlib import Path
-from typing import override
+from typing import Self, override
 
 import torch
 from jaxtyping import Bool, Float, Int
@@ -9,9 +9,12 @@ from torch import Tensor, nn
 
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.model.branch import Branch
 from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.context.masking import WordMask
 from megspeech.model.context.timing import Jitter, TimingHead
+from megspeech.model.encoding import Encoding
+from megspeech.model.fusion import Fusion
 from megspeech.model.input.stem import Stem
 from megspeech.model.input.subjects import Unseen
 from megspeech.model.mixer import Mixer
@@ -25,11 +28,8 @@ LATENCY_INIT = 0.02
 SCALE_MEDIAN = "scale.median"
 """A SentenceNet state's per-channel scaler median: one entry per channel the model reads."""
 
-ENCODER = ("scale", "whiten", "subjects", "words")
-"""The stage-1 modules: everything between a window and its word embedding, and the word head the CNN owns."""
 
-
-class SentenceNet(nn.Module):
+class SentenceNet(Encoding):
     """Per-word embeddings refined by a transformer over the span of words heard together.
 
     Returns the context head's logits and the word head's, both per word slot, so one model is both the
@@ -49,15 +49,12 @@ class SentenceNet(nn.Module):
     ) -> None:
         """`unseen` reads a subject the subject layer has no matrix for (`SubjectLayer`); `channels` are the rows a
         recording reaches the model in: the sensors, or a `Projection`'s components."""
-        super().__init__()
-        self.scale, self.whiten, self.subjects = Stem.of(
-            scale, channels, whiten=context.whiten, subjects=context.subjects, unseen=unseen
-        )
-        self.words = context.encoder.build(context, channels)
+        super().__init__(scale, context, channels, unseen)
         self.reading = context.conv.head
         self.reading.attach(self.words.head, context.width)
         self.tokens = context.tokens
         self.project = nn.Linear(self.words.width // self.tokens, context.width)
+        self.fusion = Fusion((), context.branch_drop)
         self.clock = context.clock
         self.onsets = OnsetEncoding(context)
         self.intervals = context.intervals
@@ -75,11 +72,19 @@ class SentenceNet(nn.Module):
         channels."""
         state = torch.load(path, map_location="cpu")
         channels = state[SCALE_MEDIAN].shape[0]
-        model = cls(
-            Stem.placeholder(channels), context=ContextConfig.load(path.parent), unseen=unseen, channels=channels
+        context = ContextConfig.load(path.parent)
+        branches = Branch.many([path.parent.parent / name for name in context.fused], context, channels, unseen)
+        model = cls(Stem.placeholder(channels), context=context, unseen=unseen, channels=channels).fuse(
+            Fusion(branches, context.branch_drop)
         )
         model.load_state_dict(state)
         return model
+
+    def fuse(self, fusion: Fusion) -> Self:
+        """This model reading `fusion`'s encoders beside its own: their features join its at the transformer's
+        input."""
+        self.fusion = fusion
+        return self
 
     @staticmethod
     def readout(context: ContextConfig, prototypes: Float[Tensor, "v d"] | None) -> nn.Module:
@@ -138,25 +143,15 @@ class SentenceNet(nn.Module):
         mask = slot < len(x)
         onset = self.jitter.apply(onset, mask) if self.training else onset
         timing = self.onsets(self.clock.times(onset, mask), self.intervals.features(onset, mask))
-        content = self.masking(self.project(MeanMax.segmented(slots, self.tokens)), mask)
+        own = self.project(MeanMax.segmented(slots, self.tokens))
+        others = (b.projected(x, subject, onset, slot, self.tokens) for b in self.fusion.branches)
+        content = self.masking(self.fusion.mix([own, *others]), mask)
         chunks = content + timing[..., None, :] + self.latency
         return chunks.flatten(1, 2), slots
-
-    def embed(
-        self, x: Float[Tensor, "r c t"], subject: Int[Tensor, " r"], valid: Bool[Tensor, " r"] | None = None
-    ) -> Float[Tensor, "r e"]:
-        """Each window's word embedding through the scaler, the subject layer and the encoder; `valid` rows alone
-        set any batch statistics."""
-        return self.words.embed(self.prepare(x, subject), valid)
 
     def word_logits(self, embeddings: Float[Tensor, "r e"]) -> Float[Tensor, "r v"]:
         """The stage-1 word head on `embeddings`."""
         return self.words.head(embeddings)
-
-    def prepare(self, x: Float[Tensor, "r c t"], subject: Int[Tensor, " r"]) -> Float[Tensor, "r c t"]:
-        """Each window as the word encoder reads it: scaled, whitened, in its subject's space, normalised."""
-        sensors = self.subjects(self.whiten(self.scale(x)), subject)
-        return self.words.normalise(sensors, x.ne(0).any(dim=1, keepdim=True))
 
     def classify(
         self, h: Float[Tensor, "g w h"], slots: Float[Tensor, "g w e"], mask: Bool[Tensor, "g w"]
@@ -180,21 +175,6 @@ class SentenceNet(nn.Module):
     def width(self) -> int:
         """Width of the refined positions the context head reads."""
         return self.project.out_features
-
-    def encoder(self) -> list[nn.Parameter]:
-        """The stage-1 parameters, every one a word's embedding and word-head logits depend on: the subject layer, the
-        word CNN and its head, or for an encoder over a pretrained trunk (`WordEncoder.backbone`) the trunk alone, its
-        read layers training with the span transformer and context head, the rest."""
-        stem = [p for name in ENCODER if name != "words" for p in getattr(self, name).parameters()]
-        return [*stem, *self.words.backbone()]
-
-    def adopt(self, state: dict[str, Tensor]) -> None:
-        """The stage-1 entries of another run's `state` loaded in, every other weight left as it is."""
-        own = {key: value for key, value in state.items() if key.split(".")[0] in ENCODER}
-        missing, _ = self.load_state_dict(own, strict=False)
-        stale = [key for key in missing if key.split(".")[0] in ENCODER]
-        if stale:
-            raise KeyError(f"stem state lacks encoder entries {stale}")
 
     def readouts(self) -> tuple[nn.Module, ...]:
         """The modules reading each of `forward`'s outputs, in order: the context head, then the word head."""
