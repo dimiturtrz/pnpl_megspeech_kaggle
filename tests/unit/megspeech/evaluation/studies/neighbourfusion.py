@@ -80,8 +80,8 @@ def test_load(tmp_path: Path) -> None:
     heads = nn.ModuleList([NextWordTerm(weight=0.3).head(width), PreviousWordTerm(weight=0.2).head(width)])
     torch.save({f"heads.{k}": v for k, v in heads.state_dict().items()}, directory / HEADS)
     loaded = Member.load(net, directory, CPU)
-    assert torch.equal(loaded.after[1].weight, heads[0][1].weight)
-    assert torch.equal(loaded.before[1].weight, heads[1][1].weight)
+    for mine, theirs in ((loaded.after, heads[0]), (loaded.before, heads[1])):
+        assert all(torch.equal(a, b) for a, b in zip(mine.parameters(), theirs.parameters(), strict=True))
     assert loaded.net is net
     bare = tmp_path / "bare"
     saved(bare, OptimConfig(next_word=0.3))
