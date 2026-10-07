@@ -376,6 +376,15 @@ def test_saved(tmp_path: Path) -> None:
     assert DataConfig.saved(record(tmp_path / "flat", {"epochs": 3})) == OFFICIAL
 
 
+def test_partitioned(tmp_path: Path) -> None:
+    """Members group by `READING` in first-seen order; bagged folds of one `folds` stay together."""
+    one = record(tmp_path / "one", {})
+    two = record(tmp_path / "two", {"data": {"subjects": [0, 1], "adapt": 12}})
+    bagged = [record(tmp_path / f"f{f}", {"data": {"folds": 2, "fold": f}}) for f in range(2)]
+    assert DataConfig.partitioned([bagged[0], one, two, bagged[1]]) == [bagged, [one], [two]]
+    assert DataConfig.partitioned([two]) == [[two]]
+
+
 def test_shared(tmp_path: Path) -> None:
     one = record(tmp_path / "one", {})
     two = record(tmp_path / "two", {"data": {"window": 2.0}})

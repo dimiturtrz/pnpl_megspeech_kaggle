@@ -11,6 +11,7 @@ from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.evaluation import reader as reader_module
+from megspeech.evaluation.blended import Blended
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.scoring import config as module
@@ -59,3 +60,15 @@ def test_of_geometry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert Loader.of(DataRoot(tmp_path), ["a"], Scoring(), CPU, built).geometry is built and not asked
     assert Loader.of(DataRoot(tmp_path), ["a"], Scoring(aligned=True), CPU, built).geometry is AS_RECORDED
     assert asked == [True]
+
+
+def test_of_blended(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Members that read differently load as one group each, blended; a single reading stays a plain model."""
+    members(tmp_path, monkeypatch, {"a": 5, "b": 5})
+    other = DataRoot(tmp_path).models() / "b" / METRICS
+    other.write_text(json.dumps({"config": {"data": {"subjects": [0, 1], "adapt": 12}, "selection": {"min_novel": 5}}}))
+    blended = Loader.of(DataRoot(tmp_path), ["a", "b"], Scoring(), CPU, Geometry(None, None))
+    assert isinstance(blended, Blended)
+    assert (blended.names, blended.weights) == (("a", "b"), (0.5, 0.5))
+    assert blended.adapted_on == 12
+    assert not isinstance(Loader.of(DataRoot(tmp_path), ["a"], Scoring(), CPU, AS_RECORDED), Blended)

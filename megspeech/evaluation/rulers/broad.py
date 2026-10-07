@@ -53,12 +53,9 @@ class BroadRuler:
     @staticmethod
     def graded(loaded: LoadedModel, runs: list[Run], tau: float) -> Graded:
         """Each counted subject a domain, its run loaded alone as `select` loads it."""
-        return Graded(
-            {
-                name: hits
-                for run in BroadRuler.scored(loaded, runs)
-                for name, hits in loaded.evaluator.graded(
-                    loaded.model, {str(run.subject): loaded.splits([run])[run][1]}, loaded.log_prior, tau
-                ).domains.items()
-            }
-        )
+        parts: list[Graded] = []
+        for run in BroadRuler.scored(loaded, runs):
+            split, context = loaded.run_context(run)
+            counted = loaded.evaluator.eligible({str(run.subject): split})
+            parts.append(loaded.evaluator.grade(dict.fromkeys(counted, context), counted, loaded.log_prior, tau))
+        return Graded({name: hits for part in parts for name, hits in part.domains.items()})

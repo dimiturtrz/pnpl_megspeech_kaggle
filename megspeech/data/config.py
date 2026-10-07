@@ -191,6 +191,16 @@ class DataConfig:
         return Tree(cls).load(Val.migrated(config.get("data", {})))
 
     @classmethod
+    def partitioned(cls, directories: Sequence[Path]) -> list[list[Path]]:
+        """`directories` split by the `READING` each run trained at, each group in first-seen order: the members that
+        can share one set of test windows and one prior, which `shared` requires of all of them."""
+        groups: dict[tuple[object, ...], list[Path]] = {}
+        for directory in directories:
+            saved = cls.saved(directory)
+            groups.setdefault(tuple(getattr(saved, name) for name in READING), []).append(directory)
+        return list(groups.values())
+
+    @classmethod
     def shared(cls, directories: Sequence[Path], grouping: Grouping) -> "DataConfig":
         """The `READING` every run in `directories` trained at, spans cut by `grouping`: members that read MEG
         differently cannot share one set of Kaggle test windows, nor members trained on different runs one prior. Bagged
