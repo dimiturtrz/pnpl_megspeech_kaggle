@@ -36,7 +36,8 @@ from megspeech.data.cache.cleaning import Cleaner, Cleaning
 from megspeech.data.constants import DECIMATE, HALF, MISSING, PICO, RATE, SFREQ, WORKERS
 from megspeech.data.labels.vocabulary import ABSENT, IGNORE, PRIMARY, Vocabulary
 from megspeech.data.raw.runs import Run
-from megspeech.data.spans.grouping import Grouping
+from megspeech.data.spans.grouping import KAGGLE_WORDS, Grouping
+from megspeech.data.spans.spans import Spans
 
 LOG = logging.getLogger(__name__)
 FORMAT = "%(asctime)s %(message)s"
@@ -132,7 +133,8 @@ class RunCache:
     @staticmethod
     def words(run: Run) -> pd.DataFrame:
         """A run's heard words: onset in seconds into the run, the word as spoken, its sentence in the run, and the
-        `end` its window stops at — `TAIL` after its sentence's last word ends, as a Kaggle test sentence epoch does."""
+        `end` its window stops at — `TAIL` after its sentence's last word ends, as a Kaggle test sentence epoch does —
+        and the `finish` of its own."""
         events = pd.read_csv(
             run.events,
             sep="\t",
@@ -150,6 +152,7 @@ class RunCache:
                 "word": heard["segment"].to_numpy(),
                 "sentence": sentence,
                 "end": finish.to_numpy(dtype=np.float64) + TAIL,
+                "finish": (heard["timemeg"] + heard["duration"].fillna(0.0)).to_numpy(dtype=np.float64),
             }
         )
 
@@ -175,7 +178,9 @@ class RunCache:
     def table(self, names: Sequence[str]) -> pd.DataFrame:
         """The named runs' words, run by run in `names` order, with each word's onset `sample` in its run, the
         run's length in `samples` — read from the cache's headers, so no signal is loaded — and the exclusive
-        `stop` sample of its `end`, never before its 1 s window nor past its run, all at the cache's `rate`."""
+        `stop` sample of its `end`, never before its 1 s window nor past its run, all at the cache's `rate`; and the
+        same `opening`, `stop` and `following` under a `piece_` prefix for its piece of the Kaggle test's length,
+        ending `TAIL` after the piece's last word ends."""
         samples = {name: np.load(self.path(name), mmap_mode="r").shape[1] for name in names}
         table = self.published()
         table = table[table["run"].isin(samples)]
@@ -184,11 +189,22 @@ class RunCache:
         table["sample"] = np.round(table["onset"] * self.rate).astype(np.int64)
         table["opening"] = table.groupby(["run", "sentence"])["sample"].transform("min")
         table["samples"] = table["run"].map(samples).astype(np.int64)
-        stop = np.round(table["end"].to_numpy() * self.rate).astype(np.int64)
-        table["stop"] = np.minimum(np.maximum(stop, table["sample"] + round(self.rate)), table["samples"])
-        next_onset = table.groupby(["run", "sentence"])["sample"].shift(-1)
-        table["following"] = next_onset.fillna(table["stop"]).astype(np.int64)
+        self.bounded(table, "", "end", ["run", "sentence"])
+        piece, _ = Spans.piece_codes(table.groupby(["run", "sentence"], sort=False).ngroup().to_numpy(), KAGGLE_WORDS)
+        table["piece"] = piece
+        finish = table["finish"] if "finish" in table else table["end"] - TAIL
+        table["piece_end"] = finish.groupby(piece).transform("max") + TAIL
+        self.bounded(table, "piece_", "piece_end", ["piece"])
         return table
+
+    def bounded(self, table: pd.DataFrame, prefix: str, end: str, group: list[str]) -> None:
+        """`table`'s `{prefix}opening`, `{prefix}stop` and `{prefix}following` samples: the first onset of each `group`,
+        the `end` second there, never before a word's 1 s window nor past its run, and the next onset in the group."""
+        table[f"{prefix}opening"] = table.groupby(group)["sample"].transform("min")
+        stop = np.round(table[end].to_numpy() * self.rate).astype(np.int64)
+        table[f"{prefix}stop"] = np.minimum(np.maximum(stop, table["sample"] + round(self.rate)), table["samples"])
+        next_onset = table.groupby(group)["sample"].shift(-1)
+        table[f"{prefix}following"] = next_onset.fillna(table[f"{prefix}stop"]).astype(np.int64)
 
     @staticmethod
     def carried(table: pd.DataFrame, grouping: Grouping, rate: float = RATE) -> pd.DataFrame:

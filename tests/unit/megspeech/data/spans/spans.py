@@ -18,6 +18,14 @@ def test_by_gap_chunks_long_runs() -> None:
     assert np.allclose(spans.onset[1, :2], [0.0, 0.1])
 
 
+def test_piece_codes() -> None:
+    group = np.r_[[0] * 3, [1] * 10, [5]]
+    piece, slot = Spans.piece_codes(group)
+    assert piece.tolist() == [0] * 3 + [1] * 5 + [2] * 5 + [3]
+    assert slot.tolist() == [0, 1, 2, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0]
+    assert Spans.piece_codes(group, 5.56)[0].tolist() == piece.tolist()
+
+
 def test_by_sentence() -> None:
     group = np.r_[[0] * 3, [1] * 10, [2] * 19, [5]]
     spans = Spans.by_sentence(group, np.arange(len(group)) * 0.5)

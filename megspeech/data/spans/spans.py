@@ -60,6 +60,14 @@ class Spans:
         Equal pieces rather than nines-then-a-remainder: a 10-word sentence is 5 + 5, not 9 + 1, so no span
         loses its context to a cut.
         """
+        span, slot = cls.piece_codes(group, words)
+        return cls.assemble(span, slot, onset)
+
+    @staticmethod
+    def piece_codes(
+        group: Int[np.ndarray, " n"], words: float = MAX_WORDS
+    ) -> tuple[Int[np.ndarray, " n"], Int[np.ndarray, " n"]]:
+        """Each word's piece (unique across `group`) and its slot in it, as `by_sentence` cuts them."""
         new = np.r_[True, group[1:] != group[:-1]][: len(group)]
         sentence = np.cumsum(new) - 1
         first = np.flatnonzero(new)
@@ -69,7 +77,7 @@ class Spans:
         position = np.arange(len(group)) - first[sentence]
         piece = position * pieces // size
         start = -(-piece * size // pieces)
-        return cls.assemble(np.r_[0, np.cumsum(cuts)][sentence] + piece, position - start, onset)
+        return np.r_[0, np.cumsum(cuts)][sentence] + piece, position - start
 
     @classmethod
     def by_pieces(

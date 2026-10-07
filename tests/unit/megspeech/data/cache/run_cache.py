@@ -145,6 +145,7 @@ def test_words(tmp_path: Path) -> None:
     assert words["onset"].tolist() == [0.5, 2.0, 3.0]
     assert words["sentence"].tolist() == [0, 1, NO_SENTENCE]
     assert words["end"].tolist() == pytest.approx([0.8 + TAIL, 2.4 + TAIL, 3.0 + TAIL])
+    assert words["finish"].tolist() == pytest.approx([0.8, 2.4, 3.0])
 
 
 def test_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -185,6 +186,9 @@ def test_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert table["stop"].tolist() == [90, 170, SAMPLES] * 2
     assert table["opening"].tolist() == table["sample"].tolist()
     assert table["following"].tolist() == table["stop"].tolist()
+    assert table["piece_stop"].tolist() == table["stop"].tolist()
+    assert table["piece_opening"].tolist() == table["opening"].tolist()
+    assert table["piece_following"].tolist() == table["following"].tolist()
     assert table.index.tolist() == list(range(6))
     assert cache.table([runs[0].name])["word"].tolist() == ["The", "null", "end"]
     faster = RunCache(cache.cache, 2).table([runs[0].name])
@@ -339,3 +343,43 @@ def test_gigabytes() -> None:
     meg = torch.zeros((CHANNELS, 1000), dtype=torch.float16)
     loaded = DeviceRecording(meg, np.array([0, 1000]), ("r",), pd.DataFrame())
     assert loaded.gigabytes == pytest.approx(CHANNELS * 1000 * 2 / 1e9)
+
+
+def test_bounded() -> None:
+    cache = RunCache(Path("unused"))
+    rate = cache.rate
+    table = pd.DataFrame(
+        {
+            "run": "a",
+            "piece": [0, 0, 1],
+            "sample": [0, round(rate), round(3 * rate)],
+            "samples": round(10 * rate),
+            "end": [4.0, 4.0, 5.0],
+        }
+    )
+    cache.bounded(table, "piece_", "end", ["piece"])
+    assert table["piece_opening"].tolist() == [0, 0, round(3 * rate)]
+    assert table["piece_stop"].tolist() == [round(4 * rate)] * 2 + [round(5 * rate)]
+    assert table["piece_following"].tolist() == [round(rate), round(4 * rate), round(5 * rate)]
+
+
+def test_table_pieces(tmp_path: Path) -> None:
+    cache = RunCache(tmp_path / "cache")
+    cache.ready()
+    nine = pd.DataFrame(
+        {
+            "run": "a",
+            "onset": np.arange(9) * 0.5,
+            "word": "w",
+            "sentence": 0,
+            "end": 4.5 + 9 + TAIL,
+            "finish": np.arange(9) * 0.5 + 0.3,
+        }
+    )
+    cache.publish(nine)
+    cache.write("a", lambda: np.zeros((1, 30 * round(cache.rate)), dtype=np.float16))
+    table = cache.table(["a"])
+    assert table["piece"].tolist() == [0] * 5 + [1] * 4
+    assert table["piece_end"].tolist() == pytest.approx([2.3 + TAIL] * 5 + [4.3 + TAIL] * 4)
+    assert table["piece_opening"].tolist() == [0] * 5 + [round(2.5 * cache.rate)] * 4
+    assert (table["piece_stop"] < table["stop"]).all()

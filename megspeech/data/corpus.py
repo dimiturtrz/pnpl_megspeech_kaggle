@@ -88,8 +88,8 @@ class Corpus:
                 source.meg,
                 source.samples(words["at"]),
                 source.samples(data.grouping.bound(words)),
-                begin=source.samples(words["start"] + words["opening"]),
-                following=source.samples(words["start"] + words["following"]),
+                begin=source.samples(data.grouping.opening(words)),
+                following=source.samples(data.grouping.following(words)),
             )
         )
         labels = (words["target"].to_numpy(), words["token"].to_numpy())

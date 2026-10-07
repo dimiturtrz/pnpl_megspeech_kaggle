@@ -32,3 +32,18 @@ def test_bound() -> None:
     words = pd.DataFrame({"start": [0, 100], "samples": [80, 80], "stop": [60, 70]})
     assert Grouping.SENTENCE.bound(words).tolist() == [60, 170]
     assert Grouping.GAP.bound(words).tolist() == [80, 180]
+    pieced = words.assign(piece_stop=[40, 50])
+    assert Grouping.KAGGLE.bound(pieced).tolist() == [40, 150]
+    assert Grouping.SENTENCE.bound(pieced).tolist() == [60, 170]
+
+
+def test_opening() -> None:
+    words = pd.DataFrame({"start": [0, 100], "opening": [5, 6], "piece_opening": [7, 8]})
+    assert Grouping.SENTENCE.opening(words).tolist() == [5, 106]
+    assert Grouping.KAGGLE.opening(words).tolist() == [7, 108]
+
+
+def test_following() -> None:
+    words = pd.DataFrame({"start": [0, 100], "following": [5, 6], "piece_following": [7, 8]})
+    assert Grouping.SENTENCE.following(words).tolist() == [5, 106]
+    assert Grouping.KAGGLE.following(words).tolist() == [7, 108]
