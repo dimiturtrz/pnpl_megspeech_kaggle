@@ -119,6 +119,22 @@ def test_batch() -> None:
     assert torch.equal(jittered.slot, batch.slot)
 
 
+def segmented(length: int = 75) -> Split:
+    made = split()
+    return dataclasses.replace(made, windows=dataclasses.replace(made.windows, segment=length))
+
+
+def test_segmented() -> None:
+    batch = segmented().segmented(torch.tensor([1, 0]))
+    assert batch.x.shape == (2, CHANNELS, 75)
+    assert batch.slot[:, :DENSE].tolist() == [[0, 2, 2, 2], [1, 1, 1, 1]]
+    window = split().windows(torch.tensor([0]))[0]
+    assert torch.allclose(torch.diff(batch.x[1, :, :SAMPLES], dim=-1), torch.diff(window, dim=-1), atol=1e-5)
+    assert batch.subject.shape == (2,)
+    assert batch.onset.shape == batch.slot.shape
+    assert torch.equal(segmented().batch(torch.tensor([1, 0]), rows=6, jitter=3).x, batch.x)
+
+
 def test_capacity() -> None:
     s = split()
     natural = s.weight[s.index[:, 0]]

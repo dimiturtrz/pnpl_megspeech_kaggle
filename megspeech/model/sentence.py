@@ -134,11 +134,8 @@ class SentenceNet(nn.Module):
         subject: Int[Tensor, " r"],
     ) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"]]:
         """The transformer's input at each span position, and the position's word embedding (zeros when empty)."""
-        rows = len(x)
-        valid = torch.zeros(rows + 1, dtype=torch.bool, device=x.device).index_fill_(0, slot.flatten(), value=True)
-        embedded = self.embed(x, subject, valid[:rows])
-        slots = nn.functional.pad(embedded, (0, 0, 0, 1))[slot]
-        mask = slot < rows
+        slots = self.words.positions(self.prepare(x, subject), onset, slot)
+        mask = slot < len(x)
         onset = self.jitter.apply(onset, mask) if self.training else onset
         timing = self.onsets(self.clock.times(onset, mask), self.intervals.features(onset, mask))
         content = self.masking(self.project(MeanMax.segmented(slots, self.tokens)), mask)
@@ -186,8 +183,10 @@ class SentenceNet(nn.Module):
 
     def encoder(self) -> list[nn.Parameter]:
         """The stage-1 parameters, every one a word's embedding and word-head logits depend on: the subject layer, the
-        word CNN and its head; the span transformer and context head are the rest."""
-        return [p for name in ENCODER for p in getattr(self, name).parameters()]
+        word CNN and its head, or for an encoder over a pretrained trunk (`WordEncoder.backbone`) the trunk alone, its
+        read layers training with the span transformer and context head, the rest."""
+        stem = [p for name in ENCODER if name != "words" for p in getattr(self, name).parameters()]
+        return [*stem, *self.words.backbone()]
 
     def adopt(self, state: dict[str, Tensor]) -> None:
         """The stage-1 entries of another run's `state` loaded in, every other weight left as it is."""

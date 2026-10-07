@@ -3,7 +3,8 @@
 from abc import ABC, abstractmethod
 from typing import override
 
-from jaxtyping import Bool, Float
+import torch
+from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from megspeech.model.words.heads import WordHead
@@ -28,6 +29,19 @@ class WordEncoder(nn.Module, ABC):
     @abstractmethod
     def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:
         """`valid` rows alone set any batch statistics; the rest are padding."""
+
+    def positions(
+        self, x: Float[Tensor, "r c t"], onset: Float[Tensor, "g w"], slot: Int[Tensor, "g w"]
+    ) -> Float[Tensor, "g w e"]:
+        """Each span position's embedding of its row of `x`, zeros where `slot == len(x)` marks it empty. `onset` is
+        read only by encoders whose rows are spans, not words."""
+        rows = len(x)
+        valid = torch.zeros(rows + 1, dtype=torch.bool, device=x.device).index_fill_(0, slot.flatten(), value=True)
+        return nn.functional.pad(self.embed(x, valid[:rows]), (0, 0, 0, 1))[slot]
+
+    def backbone(self) -> tuple[nn.Parameter, ...]:
+        """The parameters `OptimConfig.encoder_lr` scales: everything, but for an encoder over a pretrained trunk."""
+        return tuple(self.parameters())
 
     def normalise(self, x: Float[Tensor, "b c t"], present: Bool[Tensor, "b 1 t"]) -> Float[Tensor, "b c t"]:
         """`x` standardised when `instance`, else unchanged."""

@@ -36,6 +36,7 @@ from megspeech.data.corpus import Corpus
 from megspeech.data.spans.spans import PAD
 from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.words.megxl import COMPONENTS, MegxlWords
+from megspeech.model.words.spanned import SpanWords
 from megspeech.model.words.trunk import ATTENTION_BATCH, DOWNSAMPLING
 from megspeech.training.config import RunConfig
 
@@ -176,10 +177,7 @@ class Segments:
     @staticmethod
     def weights(at: Int[Tensor, " n"], index: Int[Tensor, "b w"], tokens: int) -> Float[Tensor, "b w k"]:
         """Equal weights on the tokens overlapping each word's first `WORD` samples into its span's segment."""
-        start = at[index] - at[index[:, :1]]
-        token = torch.arange(tokens, device=at.device)
-        covered = (token >= start[..., None] // DOWNSAMPLING) & (token <= (start[..., None] + WORD - 1) // DOWNSAMPLING)
-        return covered.float() / covered.sum(-1, keepdim=True).clamp(min=1)
+        return SpanWords.weights(at[index] - at[index[:, :1]], tokens, WORD)
 
 
 class Read(StrEnum):

@@ -112,6 +112,11 @@ class DataConfig:
     as a Kaggle test sentence epoch starts there."""
     delay: float = 0.0
     """Seconds after each word's onset its `window` starts: 0.2 reads the recognition stage past the acoustic one."""
+    segment: float = 0.0
+    """Seconds of each span's continuous MEG from its first onset that a batch holds in place of word windows, stopped
+    at the span's sentence epoch end like every window: a long-context encoder (`context.encoder spanned`) reads all
+    its words' features out of that one signal. 0 batches word windows. The Kaggle test holds only each sentence epoch
+    (at most 8.7 s), so more adds zeros, never signal."""
     decimate: int = DECIMATE
     """The 250 Hz recordings' decimation factor: which continuous cache training reads (`RunCache.under`)."""
     folds: int = 1
@@ -154,6 +159,8 @@ class DataConfig:
             raise ValueError(f"fold {self.fold} is not one of the {self.folds} folds")
         if self.subspace and self.regions:
             raise ValueError("a recording keeps either subspace components or region sensors, not both")
+        if self.segment < 0 or (self.segment and self.features):
+            raise ValueError(f"segment {self.segment} must be 0 or positive, and is read from MEG, not features")
 
     @property
     def projected(self) -> bool:
@@ -199,7 +206,13 @@ class DataConfig:
         lead = self.to_samples(self.lead)
         offset = self.to_samples(self.delay) - lead
         spanned = self.spanned(windows)
-        return replace(spanned, length=self.samples + lead, offset=offset, baseline=self.to_samples(self.baseline))
+        return replace(
+            spanned,
+            length=self.samples + lead,
+            offset=offset,
+            baseline=self.to_samples(self.baseline),
+            segment=self.to_samples(self.segment),
+        )
 
     def spanned(self, windows: Windows) -> Windows:
         """`windows` stopped `span_lag` after each word's next onset, never before its own first sample; as they are

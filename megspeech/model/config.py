@@ -13,6 +13,7 @@ import torch
 from jaxtyping import Float
 from torch import Tensor, nn
 
+from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
@@ -22,6 +23,7 @@ from megspeech.model.words.conv import CONV, ConvConfig, ConvWords
 from megspeech.model.words.expert import Crop
 from megspeech.model.words.experts import ExpertWords
 from megspeech.model.words.megxl import POOLED, RESOLVED, FeatureWords
+from megspeech.model.words.spanned import SPANNED, SpannedConfig, SpanWords
 from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective
 
@@ -47,6 +49,10 @@ class Encoder(StrEnum):
     """Trained runs' CNNs, each `conv`-shaped, reading their own crops of the window side by side and fine-tuning
     together (`words.experts`)."""
 
+    SPANNED = "spanned"
+    """MEG-XL fine-tuned over each span's whole continuous segment (`DataConfig.segment`), words read at their onsets
+    (`words.spanned`)."""
+
     def build(self, context: "ContextConfig", channels: int = CHANNELS) -> WordEncoder:
         """This encoder for recordings of `channels` rows; a cached encoder reads its features, not them."""
         return BUILDERS[self](context, channels)
@@ -54,10 +60,13 @@ class Encoder(StrEnum):
     @property
     def cached(self) -> bool:
         """Whether the encoder reads features saved ahead of training rather than the MEG's sensors."""
-        return self not in {Encoder.CONV, Encoder.EXPERTS}
+        return self not in {Encoder.CONV, Encoder.EXPERTS, Encoder.SPANNED}
 
 
 BUILDERS: dict[Encoder, Callable[["ContextConfig", int], WordEncoder]] = {
+    Encoder.SPANNED: lambda context, channels: SpanWords.pretrained(
+        DataRoot.from_config(), context.conv, context.spanned, channels
+    ),
     Encoder.CONV: lambda context, channels: ConvWords(context.conv, channels),
     Encoder.CACHED: lambda context, _: FeatureWords(context.conv, POOLED),
     Encoder.RESOLVED: lambda context, _: FeatureWords(context.conv, RESOLVED),
@@ -122,6 +131,8 @@ class ContextConfig:
     """Samples into the window each `experts` encoder's crop starts at."""
     lengths: tuple[int, ...] = ()
     """Samples each `experts` encoder's crop runs, one per `starts`."""
+    spanned: SpannedConfig = SPANNED
+    """The `spanned` encoder's read of the trunk's tokens."""
 
     def __post_init__(self) -> None:
         if self.anchor.active and self.objective is Objective.SIGLIP:
@@ -138,7 +149,7 @@ class ContextConfig:
                 f"encoder {self.encoder} reads saved features, not sensors, so a per-subject sensor matrix "
                 f"(subjects={self.subjects}) has nothing to mix"
             )
-        if self.latency and (self.encoder.cached or self.conv.queries):
+        if self.latency and (self.encoder.cached or self.encoder is Encoder.SPANNED or self.conv.queries):
             raise ValueError(
                 f"latency tokens split the CNN's mean-max chunks; encoder {self.encoder} with "
                 f"queries={self.conv.queries} pools none"

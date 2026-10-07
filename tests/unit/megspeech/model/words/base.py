@@ -43,6 +43,21 @@ def test_standardise() -> None:
     assert torch.all(flat == 0)
 
 
+def test_positions() -> None:
+    encoder = Pooled()
+    x = torch.randn(3, 5, SAMPLES, generator=GENERATOR)
+    slot = torch.tensor([[0, 2, 3], [1, 3, 3]])
+    out = encoder.positions(x, torch.zeros(2, 3), slot)
+    assert out.shape == (2, 3, 5)
+    assert torch.equal(out[0, 1], x[2].mean(-1))
+    assert torch.all(out[slot == 3] == 0)
+
+
+def test_backbone() -> None:
+    encoder = Pooled()
+    assert {id(p) for p in encoder.backbone()} == {id(p) for p in encoder.parameters()}
+
+
 def test_forward() -> None:
     encoder = Pooled()
     x = torch.randn(3, 5, SAMPLES, generator=GENERATOR)

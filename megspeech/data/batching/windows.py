@@ -35,6 +35,9 @@ class Windows:
     holds none before its first onset. None bounds only at the signal's start."""
     following: Int[Tensor, " n"] | None = None
     """Each word's next onset sample in its sentence (its `end` for the last): where `DataConfig.span_lag` cuts."""
+    segment: int = 0
+    """Samples of each span's continuous segment from its first onset, which `Split.batch` reads in place of word
+    windows; 0 reads word windows."""
 
     @classmethod
     def stacked(cls, x: Float[Tensor, "n c s"], *, centred: bool = True) -> "Windows":

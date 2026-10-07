@@ -30,6 +30,7 @@ from megspeech.training.auxiliary import Auxiliary, NoAuxiliary
 from megspeech.training.config import RunConfig
 from megspeech.training.hook import Scheduled, StepHook
 from megspeech.training.loop.ema import Ema
+from megspeech.training.loop.gradnorm import GradNorms
 from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.average import GroupAverage
@@ -60,6 +61,7 @@ class TrainState:
     curriculum: Curriculum = field(default_factory=Natural)
     bgmix: Untouched = field(default_factory=Untouched)
     average: Untouched = field(default_factory=Untouched)
+    grads: GradNorms = field(default_factory=GradNorms)
 
 
 @dataclass
@@ -171,7 +173,7 @@ class Trainer:
         state.curriculum.observe(spans, outputs[0], batch.target(train.y))
         state.optimizer.zero_grad(set_to_none=True)
         value.backward()
-        nn.utils.clip_grad_norm_(state.model.parameters(), self.config.optim.clip)
+        state.grads.record(nn.utils.clip_grad_norm_(state.model.parameters(), self.config.optim.clip))
         state.optimizer.step()
         lr = state.schedule.lr()
         for hook in state.hooks:
@@ -201,6 +203,7 @@ class Trainer:
             Sampler.of(self.config.sampler, train),
             BGMix.of(train, self.config.augment.bgmix, self.config.augment.bgmix_key),
             GroupAverage.of(train, self.config.augment.average, self.config.augment.average_chance),
+            GradNorms(tuple(net.encoder())),
         )
 
     def rows(self, train: Split) -> int:
@@ -242,6 +245,7 @@ class Trainer:
                 epoch,
                 {type(t).__name__: v for t, v in zip(state.terms, terms.tolist(), strict=True)},
             )
+            LOG.info("epoch %d grad norms %s", epoch, state.grads.drained())
             LOG.info("epoch %d bgmix mixed words %d", epoch, state.bgmix.drained())
             LOG.info("epoch %d averaged words %d", epoch, state.average.drained())
             if not math.isfinite(value):

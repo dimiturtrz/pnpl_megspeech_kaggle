@@ -11,7 +11,7 @@ from megspeech.data.config import METRICS, DataConfig, Refit, Val
 from megspeech.evaluation.scoring.score import Epoch, SelectionConfig
 from megspeech.evaluation.scoring.telemetry import TelemetryConfig
 from megspeech.model.auxiliary import Tap
-from megspeech.model.config import CONTEXT, ContextConfig
+from megspeech.model.config import CONTEXT, ContextConfig, Encoder
 from megspeech.submission.config import ReportConfig
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.sampling.sampler import SamplerConfig
@@ -175,6 +175,16 @@ class RunConfig:
             raise ValueError(
                 f"encoder {self.context.encoder} with merger {self.context.conv.merger} reads the 306 sensors, which "
                 "a projected config does not keep"
+            )
+
+        if (self.context.encoder is Encoder.SPANNED) != bool(self.data.segment):
+            raise ValueError(
+                f"the spanned encoder, and it alone, reads continuous segments: encoder {self.context.encoder}, "
+                f"data.segment {self.data.segment}"
+            )
+        if self.data.segment and (self.augment.bgmix or self.augment.average > 1 or self.augment.jitter):
+            raise ValueError(
+                "bgmix, group averaging and jitter act on word windows, which a segment batch does not hold"
             )
 
     @property

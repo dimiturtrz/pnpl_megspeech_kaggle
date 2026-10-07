@@ -274,6 +274,15 @@ def test_reading() -> None:
     assert (windows.length, windows.offset, windows.baseline) == (2 * RATE + 5, -5, round(0.5 * RATE))
     delayed = DataConfig(window=0.2, delay=0.2).reading(Windows(torch.zeros(1, 10), at, at))
     assert (delayed.length, delayed.offset) == (round(0.2 * RATE), round(0.2 * RATE))
+    assert DataConfig().reading(Windows(torch.zeros(1, 10), at, at)).segment == 0
+    assert DataConfig(segment=9.0).reading(Windows(torch.zeros(1, 10), at, at)).segment == 9 * RATE
+
+
+def test_segment_validated() -> None:
+    with pytest.raises(ValueError, match="segment"):
+        DataConfig(segment=-1.0)
+    with pytest.raises(ValueError, match="segment"):
+        DataConfig(segment=9.0, features="x")
 
 
 def test_spanned() -> None:

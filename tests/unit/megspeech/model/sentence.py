@@ -6,18 +6,23 @@ import pytest
 import torch
 from torch import nn
 
+from core.paths import DataRoot
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.model.config import ContextConfig
+from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.context.droplayer import DropPathLayer
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig, ConvWords
+from megspeech.model.words.spanned import SpannedConfig
+from megspeech.model.words.trunk import DOWNSAMPLING, Geometry, Trunk
 from megspeech.objective.anchored import AnchoredHead
 from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective
 from megspeech.objective.scorer import DIM
+from tests.unit.megspeech.model.words.trunk import CHANNELS as GEOMETRY
+from tests.unit.megspeech.model.words.trunk import Features
 
 CONTEXT = ContextConfig(width=16, heads=2, layers=1, conv=ConvConfig(hidden=8, dilations=(1, 2)))
 SAMPLES = 50
@@ -65,6 +70,38 @@ def test_encoder() -> None:
     encoder = {id(p) for p in model.encoder()}
     assert {id(p) for p in model.words.parameters()} <= encoder
     assert not encoder & {id(p) for p in [*model.head.parameters(), *model.context.parameters()]}
+
+
+def spanned(monkeypatch: pytest.MonkeyPatch) -> SentenceNet:
+    trunk = Trunk(Features(), Geometry.of(GEOMETRY))
+    monkeypatch.setattr(Trunk, "pretrained", classmethod(lambda _cls, _root: trunk))
+    monkeypatch.setattr(DataRoot, "from_config", classmethod(lambda _cls: DataRoot(Path())))
+    config = replace(CONTEXT, encoder=Encoder.SPANNED, spanned=SpannedConfig(components=3, width=8))
+    return SentenceNet(nn.Identity(), config, channels=2)
+
+
+def test_encoder_spanned(monkeypatch: pytest.MonkeyPatch) -> None:
+    model = spanned(monkeypatch)
+    ids = [id(p) for p in model.encoder()]
+    assert len(ids) == len(set(ids))
+    assert {id(p) for p in model.words.backbone()} <= set(ids)
+    assert not set(ids) & {id(p) for p in [*model.words.reduce.parameters(), *model.words.mix.parameters()]}
+
+
+def test_features_spanned(monkeypatch: pytest.MonkeyPatch) -> None:
+    model = spanned(monkeypatch).eval()
+    x = torch.randn(2, 2, 3 * DOWNSAMPLING, generator=GENERATOR)
+    onset = torch.tensor([[0.0, 0.3, 0.0], [0.0, 0.0, 0.0]])
+    slot = torch.tensor([[0, 0, 2], [1, 2, 2]])
+    subject = torch.zeros(2, dtype=torch.long)
+    h, slots = model.features(x, onset, slot, subject)
+    assert h.shape == (2, 3, CONTEXT.width)
+    assert slots.shape == (2, 3, 8)
+    assert torch.all(slots[slot == 2] == 0)
+    context, word = model.forward(x, onset, slot, subject)
+    assert context.shape == word.shape == (2, 3, VOCAB_SIZE)
+    context[slot < 2].sum().backward()
+    assert all(p.grad is not None for p in model.words.backbone())
 
 
 def test_adopt() -> None:

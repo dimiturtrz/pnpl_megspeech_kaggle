@@ -191,13 +191,26 @@ class Split:
 
     def batch(self, spans: Int[Tensor, " b"], rows: int, jitter: int = 0) -> Batch:
         """The words of `spans` in `rows` rows, in span order, without a host sync; words past `rows` are dropped.
-        Each window's start moves by up to `jitter` samples (`Windows.__call__`)."""
+        Each window's start moves by up to `jitter` samples (`Windows.__call__`). Windows with a `segment` batch one row
+        per span instead (`segmented`)."""
+        if self.windows.segment:
+            return self.segmented(spans)
         index = self.index[spans]
         order = (index != PAD).flatten().cumsum(0).view_as(index) - 1
         slot = torch.where((index != PAD) & (order < rows), order, rows)
         index = torch.where(slot < rows, index, PAD)
         words = index.new_zeros(rows + 1).scatter_(0, slot.flatten(), index.clamp(min=0).flatten())[:rows]
         return Batch(self.windows(words, jitter), self.onset[spans], slot, index, self.subject[words])
+
+    def segmented(self, spans: Int[Tensor, " b"]) -> Batch:
+        """One row per span: its continuous segment from its first onset, `slot` naming that row at each of the span's
+        words. Never jittered, since every word's place in the segment is its onset."""
+        index = self.index[spans]
+        first = index[:, 0]
+        segments = replace(self.windows, length=self.windows.segment, offset=0, baseline=0)
+        rows = torch.arange(len(spans), device=index.device)[:, None].expand_as(index)
+        slot = torch.where(index != PAD, rows, len(spans))
+        return Batch(segments(first), self.onset[spans], slot, index, self.subject[first])
 
     def capacity(self, batch: int, weights: Float[Tensor, " g"]) -> int:
         """Word rows for `batch` spans drawn at `weights`: the expected count plus `SIGMAS` deviations."""

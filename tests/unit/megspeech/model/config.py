@@ -5,6 +5,7 @@ import pytest
 import torch
 from torch import nn
 
+from core.paths import DataRoot
 from megspeech.model.config import CONTEXT as DEFAULT
 from megspeech.model.config import FILE, ContextConfig, Covariance, Encoder, OnsetEncoding
 from megspeech.model.context.timing import Clock, Intervals
@@ -12,8 +13,11 @@ from megspeech.model.words.conv import ConvConfig, ConvWords
 from megspeech.model.words.expert import Crop
 from megspeech.model.words.experts import ExpertWords
 from megspeech.model.words.megxl import POOLED, RESOLVED
+from megspeech.model.words.spanned import SpannedConfig, SpanWords
+from megspeech.model.words.trunk import Geometry, Trunk
 from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective
+from tests.unit.megspeech.model.words.trunk import CHANNELS, Features
 
 CONTEXT = ContextConfig(width=16, timescales=4)
 
@@ -89,6 +93,19 @@ def test_build() -> None:
     experts = ContextConfig(conv=conv, encoder=Encoder.EXPERTS, starts=(0, 10), lengths=(50, 10))
     assert isinstance(Encoder.EXPERTS.build(experts, 5), ExpertWords)
     assert Encoder.EXPERTS.build(experts, 5).width == 2 * conv.width
+
+
+def test_build_spanned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    trunk = Trunk(Features(), Geometry.of(CHANNELS))
+    monkeypatch.setattr(Trunk, "pretrained", classmethod(lambda _cls, _root: trunk))
+    monkeypatch.setattr(DataRoot, "from_config", classmethod(lambda _cls: DataRoot(tmp_path)))
+    config = ContextConfig(encoder=Encoder.SPANNED, spanned=SpannedConfig(components=3, width=7))
+    built = Encoder.SPANNED.build(config, 2)
+    assert isinstance(built, SpanWords)
+    assert (built.trunk is trunk, built.width) == (True, 7)
+    assert not Encoder.SPANNED.cached
+    with pytest.raises(ValueError, match="latency"):
+        ContextConfig(encoder=Encoder.SPANNED, latency=True)
 
 
 def test_crops() -> None:

@@ -61,6 +61,17 @@ def test_projected_needs_sensor_free_encoder(context: ContextConfig) -> None:
         assert RunConfig(data=data).data.projected
 
 
+def test_segment_pairs_with_spanned_encoder() -> None:
+    spanned = ContextConfig(encoder=Encoder.SPANNED)
+    assert RunConfig(context=spanned, data=DataConfig(segment=9.0)).data.segment == 9.0
+    with pytest.raises(ValueError, match="continuous segments"):
+        RunConfig(context=spanned)
+    with pytest.raises(ValueError, match="continuous segments"):
+        RunConfig(data=DataConfig(segment=9.0))
+    with pytest.raises(ValueError, match="word windows"):
+        RunConfig(context=spanned, data=DataConfig(segment=9.0), augment=Augment(jitter=2))
+
+
 def test_saved_flat_optim_sampler(tmp_path: Path) -> None:
     """A run saved with the sampler knobs under `optim` loads them into `sampler`."""
     old = {"optim": {"epochs": 3, "priority": 0.5, "sampler": "uniform", "stratified": 2.0}}
