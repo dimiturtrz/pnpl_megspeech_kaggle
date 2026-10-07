@@ -1,10 +1,13 @@
 from pathlib import Path
 
+import h5py
+import numpy as np
 import pandas as pd
 import pytest
 
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.data.raw.serialised import Serialised
 
 NAME = "sub-0_ses-11_task-Sherlock1_run-2"
 POOLED = "sub-12_ses-11_task-Sherlock1_run-1"
@@ -64,7 +67,11 @@ def test_discover(tmp_path: Path) -> None:
 def test_everywhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
     root = DataRoot.from_config()
-    runs = [Run(meg(root.raw())), Run(meg(root.processed("meg_masc"), "sub-101_ses-0_task-MASC2_run-1"))]
+    runs = [
+        Run(meg(root.raw())),
+        Run(meg(root.processed("meg_masc"), "sub-101_ses-0_task-MASC2_run-1")),
+        Run(meg(root.processed("appleseed"), "sub-208_ses-1_task-Appleseed_run-1")),
+    ]
     for run in runs:
         run.events.parent.mkdir(parents=True)
         run.events.write_text("kind\n")
@@ -92,3 +99,14 @@ def test_matching() -> None:
     )
     assert Run.matching(names, ("Sherlock1", 12, 1)).tolist() == [True, False, False]
     assert Run.matching(names, ("TheMoth", 12, 1)).tolist() == [False, False, False]
+
+
+def test_signal(tmp_path: Path) -> None:
+    path = tmp_path / "run.h5"
+    signal = np.random.default_rng(0).standard_normal((2, 50)).astype(np.float32)
+    Serialised(path).write(signal, {})
+    with h5py.File(path) as stored:
+        assert np.allclose(Run.signal(stored), signal, atol=0.02)
+    with h5py.File(tmp_path / "pnpl.h5", "w") as plain:
+        plain["data"] = signal
+        assert np.array_equal(Run.signal(plain), signal)

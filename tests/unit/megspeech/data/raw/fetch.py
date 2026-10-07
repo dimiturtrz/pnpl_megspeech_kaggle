@@ -10,6 +10,7 @@ import pytest
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.raw import fetch as module
 from megspeech.data.raw.fetch import (
+    APPLESEED,
     KAGGLE,
     MASC,
     MASC_PARTS,
@@ -22,6 +23,7 @@ from megspeech.data.raw.fetch import (
     Checkout,
     Download,
     HubRepo,
+    OpenNeuroDataset,
     OsfProject,
     Weights,
     main,
@@ -208,3 +210,38 @@ def test_download_fetch(served: list[str], root: DataRoot):
     assert home.read_bytes().startswith(b"PK")
     assert download.fetch(root) == home
     assert served == [download.url]
+
+
+def test_open_neuro_dataset_home(root: DataRoot):
+    assert APPLESEED.home(root) == root.raw("appleseed")
+
+
+def test_open_neuro_dataset_command(root: DataRoot):
+    assert OpenNeuroDataset("ds1", "1.0.0", "set").command(root) == [
+        "uvx",
+        "openneuro-py",
+        "download",
+        "--dataset",
+        "ds1",
+        "--tag",
+        "1.0.0",
+        "--target-dir",
+        str(root.raw("set")),
+    ]
+
+
+def test_open_neuro_dataset_fetch(root: DataRoot, monkeypatch: pytest.MonkeyPatch):
+    ran: list[list[str]] = []
+    monkeypatch.setattr(module.subprocess, "run", lambda command, **_kwargs: ran.append(command))
+    dataset = OpenNeuroDataset("ds1", "1.0.0", "set")
+    assert dataset.fetch(root) == root.raw("set")
+    assert ran == [dataset.command(root)]
+
+
+def test_main_appleseed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
+    monkeypatch.setattr(sys, "argv", ["fetch", "--appleseed"])
+    fetched: list[object] = []
+    monkeypatch.setattr(OpenNeuroDataset, "fetch", lambda self, _root: fetched.append(self))
+    main()
+    assert fetched == [APPLESEED]

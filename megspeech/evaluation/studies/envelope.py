@@ -41,6 +41,7 @@ from megspeech.data.constants import PICO, SFREQ, WORKERS
 from megspeech.data.heard import Heard
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.raw.runs import Run
+from megspeech.data.raw.serialised import Serialised
 from megspeech.data.spans.grouping import Grouping
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.reader import Reader
@@ -100,7 +101,7 @@ class Recording:
             rate = float(stored.attrs["sample_frequency"])
             if rate != SFREQ:
                 raise ValueError(f"{run.meg.name} is {rate} Hz, not {SFREQ}")
-            return cls(stored["data"][:].astype(np.float32) * np.float32(PICO))
+            return cls(Serialised.read(stored).astype(np.float32) * np.float32(PICO))
 
 
 @dataclass(frozen=True)

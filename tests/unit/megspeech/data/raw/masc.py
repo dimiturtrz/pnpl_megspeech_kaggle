@@ -11,6 +11,7 @@ import pytest
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.constants import SFREQ
 from megspeech.data.raw import masc as module
+from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.masc import COLUMNS, HIGHPASS, Masc, Neuromag, Recording, main
 from megspeech.data.raw.runs import Run
 
@@ -42,6 +43,7 @@ def recording(tmp_path: Path) -> Recording:
     con.parent.mkdir(parents=True)
     con.write_bytes(b"kit")
     con.with_name(CON.replace("meg.con", "markers.mrk")).touch()
+    con.with_name(CON.replace("meg.con", "meg.json")).write_text('{"PowerLineFrequency": "n/a"}')
     for shape in ("ELP", "HSP"):
         con.with_name(f"sub-01_ses-0_acq-{shape}_headshape.pos").write_text("% header 18:34:26\n1 2 3\n4 5 6\n")
     table = pd.DataFrame(
@@ -151,14 +153,30 @@ def test_recording_meg(tmp_path: Path, target: Neuromag) -> None:
     assert signal.dtype == np.float32
 
 
-def test_masc_meg(tmp_path: Path) -> None:
-    rec = Recording(tmp_path / CON)
-    assert Masc(tmp_path, tmp_path / "out").meg(rec) == tmp_path / "out" / "serialised" / f"{NAME}_meg.h5"
+@pytest.mark.usefixtures("read", "mapped")
+def test_written(tmp_path: Path, target: Neuromag) -> None:
+    signal, attrs = recording(tmp_path).written(target)
+    assert signal.shape == (3, SECONDS * SFREQ)
+    assert attrs == target.attrs
 
 
-def test_masc_events(tmp_path: Path) -> None:
-    rec = Recording(tmp_path / CON)
-    assert Masc(tmp_path, tmp_path / "out").events(rec) == tmp_path / "out" / "events" / f"{NAME}_events.tsv"
+def test_attrs(target: Neuromag) -> None:
+    assert target.attrs == {
+        "channel_names": "MEG0111, MEG0121, MEG0131",
+        "channel_types": "mag, mag, mag",
+        "sample_frequency": SFREQ,
+        "highpass_cutoff": HIGHPASS,
+    }
+
+
+def test_raw_mains(tmp_path: Path, read: dict[str, object], monkeypatch: pytest.MonkeyPatch) -> None:
+    asked: list[tuple[Path, float | None]] = []
+    monkeypatch.setattr(
+        module.Mains, "of", lambda sidecar, fallback=None: asked.append((sidecar, fallback)) or Mains(50.0)
+    )
+    rec = recording(tmp_path)
+    rec.raw()
+    assert asked == [(rec.sidecar("meg.json"), module.MAINS)]
 
 
 def test_recording_events(tmp_path: Path) -> None:

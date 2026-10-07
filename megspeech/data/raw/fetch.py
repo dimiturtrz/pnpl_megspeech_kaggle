@@ -10,10 +10,13 @@ events `.tsv` are pulled; the raw `.fif` (hundreds of GB) is never needed.
                                                      # and MEG-XL's code at its pin, into external/
     uv run python -m megspeech.data.raw.fetch --stimuli  # Sherlock audiobook audio + wav2vec2 (speech targets)
     uv run python -m megspeech.data.raw.fetch --masc     # MEG-MASC's BIDS tree, into raw/meg_masc
+    uv run python -m megspeech.data.raw.fetch --appleseed  # Appleseed's BIDS tree, into raw/appleseed; it runs
+                                                     # `uvx openneuro-py download --dataset ds007870 --tag 1.3.2`
 """
 
 import argparse
 import logging
+import subprocess
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -162,6 +165,37 @@ class OsfProject:
         return home
 
 
+@dataclass(frozen=True)
+class OpenNeuroDataset:
+    """An OpenNeuro dataset at one snapshot tag, downloaded by `openneuro-py` into `raw/<dataset>`; files already there
+    are skipped, so an interrupted download resumes."""
+
+    accession: str
+    tag: str
+    dataset: str
+
+    def home(self, root: DataRoot) -> Path:
+        return root.raw(self.dataset)
+
+    def command(self, root: DataRoot) -> list[str]:
+        return [
+            "uvx",
+            "openneuro-py",
+            "download",
+            "--dataset",
+            self.accession,
+            "--tag",
+            self.tag,
+            "--target-dir",
+            str(self.home(root)),
+        ]
+
+    def fetch(self, root: DataRoot) -> Path:
+        LOG.info("fetching openneuro %s@%s -> %s", self.accession, self.tag, self.home(root))
+        subprocess.run(self.command(root), check=True)  # noqa: S603
+        return self.home(root)
+
+
 KAGGLE = HubRepo("pnpl/LibriBrain-Competition-2026", ("*.npz",))
 SOURCES = (
     KAGGLE,
@@ -204,6 +238,10 @@ BIDS; `megspeech.data.raw.masc` rewrites it as LibriBrain runs."""
 MASC_PARTS = (MASC, OsfProject("h2tzn", MASC.dataset), OsfProject("u5327", MASC.dataset))
 """OSF caps a project's storage, so MEG-MASC is three projects (subjects 01-11 in the first) merged into one tree."""
 
+APPLESEED = OpenNeuroDataset("ds007870", "1.3.2", "appleseed")
+"""Appleseed (Brodbeck et al. 2022, CC0): 12 subjects hearing an audiobook for ~1 h on a KIT 157-channel system, ~25 GB
+of BIDS with forced-aligned word/phone TextGrids; `megspeech.data.raw.appleseed` rewrites it as LibriBrain runs."""
+
 
 def main() -> None:
     """Fetch every source, or only the Kaggle test, the other subjects, the pretrained weights, or MEG-MASC."""
@@ -214,6 +252,7 @@ def main() -> None:
     choice.add_argument("--weights", dest="sources", action="store_const", const=(*WEIGHTS, MEGXL, NEUROMAG))
     choice.add_argument("--stimuli", dest="sources", action="store_const", const=STIMULI)
     choice.add_argument("--masc", dest="sources", action="store_const", const=MASC_PARTS)
+    choice.add_argument("--appleseed", dest="sources", action="store_const", const=(APPLESEED,))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()

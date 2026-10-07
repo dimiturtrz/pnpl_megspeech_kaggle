@@ -7,12 +7,14 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+import h5py
 import numpy as np
 import pandas as pd
-from jaxtyping import Bool, Int
+from jaxtyping import Bool, Float, Int
 
 from core.paths import DataRoot
-from megspeech.data.raw.fetch import MASC
+from megspeech.data.raw.fetch import APPLESEED, MASC
+from megspeech.data.raw.serialised import Serialised
 
 DEEP = 0
 """The Deep track's subject: the one the official split, the validation domains and the Kaggle test belong to."""
@@ -91,6 +93,11 @@ class Run:
         task, session, run = self.key
         return f"sub-{self.subject}_ses-{session}_task-{task}_run-{run}"
 
+    @staticmethod
+    def signal(stored: h5py.File) -> Float[np.ndarray, "c t"]:
+        """The MEG a run's open `.h5` holds, in tesla, whether stored raw or compressed."""
+        return Serialised.read(stored)
+
     @property
     def events(self) -> Path:
         return self.meg.parent.parent / "events" / f"{self.name}_events.tsv"
@@ -107,8 +114,10 @@ class Run:
 
     @classmethod
     def everywhere(cls, root: DataRoot) -> list["Run"]:
-        """LibriBrain's runs, then every other study's recordings rewritten as runs (`megspeech.data.raw.masc`)."""
-        return [*cls.discover(root.raw()), *cls.discover(root.processed(MASC.dataset))]
+        """LibriBrain's runs, then every other study's recordings rewritten as runs (`megspeech.data.raw.masc`,
+        `megspeech.data.raw.appleseed`)."""
+        rewritten = (root.processed(study.dataset) for study in (MASC, APPLESEED))
+        return [*cls.discover(root.raw()), *(run for processed in rewritten for run in cls.discover(processed))]
 
     @staticmethod
     def pooled(runs: Iterable["Run"]) -> list["Run"]:

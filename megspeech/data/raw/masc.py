@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-import h5py
 import mne
 import numpy as np
 import pandas as pd
@@ -29,13 +28,16 @@ from mne.forward._field_interpolation import _map_meg_or_eeg_channels
 from core.paths import DataRoot
 from megspeech.data.constants import SFREQ
 from megspeech.data.raw.fetch import MASC, NEUROMAG
+from megspeech.data.raw.mains import Mains
+from megspeech.data.raw.serialised import Corpus
 
 LOG = logging.getLogger(__name__)
 
 SUBJECT_OFFSET = 100
 """Added to a MASC subject's number so no MASC run shares a subject with LibriBrain's 0-32."""
-LINE = (60.0, 120.0)
-"""New York's mains frequency and its harmonic below the 125 Hz LibriBrain keeps."""
+MAINS = 50.0
+"""The mains frequency of NYU Abu Dhabi, where MASC was recorded: its BIDS sidecars record `n/a`, and the median
+spectrum of subject 1's first recording peaks at 50 Hz (5.7x its neighbours) and not at 60 (1.05x)."""
 HIGHPASS = 0.1
 """LibriBrain's high-pass, in Hz."""
 ORIGIN = (0.0, 0.0, 0.04)
@@ -47,9 +49,6 @@ SOURCE = re.compile(r"sub-(?P<subject>\d+)_ses-(?P<session>\d+)_task-(?P<task>\d
 KEPT = ("word", "phoneme")
 SENTENCE = "sentence"
 """The condition of a story's own sentences; `word_list` rows are the story's words shuffled, so no sentence."""
-SERIALISED = "serialised"
-EVENTS = "events"
-"""`Run.events` reads a run's events from `events/` beside the MEG's own directory."""
 COLUMNS = ["kind", "segment", "sentenceidx", "wordidx", "phonemeidx", "timemeg", "duration"]
 
 
@@ -85,6 +84,16 @@ class Neuromag:
     @property
     def types(self) -> list[str]:
         return self.info.get_channel_types()
+
+    @property
+    def attrs(self) -> dict[str, object]:
+        """The h5 attributes a LibriBrain run carries: its layout, rate and high-pass."""
+        return {
+            "channel_names": ", ".join(self.names),
+            "channel_types": ", ".join(self.types),
+            "sample_frequency": SFREQ,
+            "highpass_cutoff": HIGHPASS,
+        }
 
     def mapping(self, source: mne.Info) -> Float[np.ndarray, "n m"]:
         """The matrix taking `source`'s MEG channels to these channels' readings of the same field."""
@@ -134,7 +143,7 @@ class Recording:
             verbose="error",
         )
         raw.pick("meg", exclude="bads")
-        raw.notch_filter(LINE, verbose="error")
+        Mains.of(self.sidecar("meg.json"), MAINS).notch(raw)
         raw.filter(HIGHPASS, None, verbose="error")
         return raw.resample(SFREQ, verbose="error")
 
@@ -142,6 +151,9 @@ class Recording:
         """The recording's field at `target`'s channels, in tesla (per metre for gradiometers), float32."""
         raw = self.raw()
         return (target.mapping(raw.info) @ raw.get_data()).astype(np.float32)
+
+    def written(self, target: Neuromag) -> tuple[Float[np.ndarray, "c t"], dict[str, object]]:
+        return self.meg(target), target.attrs
 
     def events(self) -> pd.DataFrame:
         """The recording's words and phonemes in pnpl's columns: a story sentence's words share its `sentenceidx`, a
@@ -167,11 +179,8 @@ class Recording:
 
 
 @dataclass(frozen=True)
-class Masc:
+class Masc(Corpus[Neuromag]):
     """MASC's downloaded recordings and the LibriBrain-shaped runs they become under `processed/meg_masc`."""
-
-    source: Path
-    target: Path
 
     @classmethod
     def under(cls, root: DataRoot) -> "Masc":
@@ -185,34 +194,6 @@ class Masc:
             chosen = not subjects or recording.parsed["subject"] in subjects
             if chosen and con.stat().st_size and recording.sidecar("events.tsv").exists():
                 yield recording
-
-    def meg(self, recording: Recording) -> Path:
-        return self.target / SERIALISED / f"{recording.name}_meg.h5"
-
-    def events(self, recording: Recording) -> Path:
-        return self.target / EVENTS / f"{recording.name}_events.tsv"
-
-    def convert(self, recording: Recording, target: Neuromag) -> Path:
-        """Write `recording` as a LibriBrain run unless already written; its events land last, so `Run.discover`
-        never finds a run whose MEG is partial."""
-        meg, events = self.meg(recording), self.events(recording)
-        if events.exists():
-            return meg
-        meg.parent.mkdir(parents=True, exist_ok=True)
-        events.parent.mkdir(parents=True, exist_ok=True)
-        with h5py.File(meg, "w") as stored:
-            stored.create_dataset("data", data=recording.meg(target))
-            stored.attrs.update(
-                {
-                    "channel_names": ", ".join(target.names),
-                    "channel_types": ", ".join(target.types),
-                    "sample_frequency": SFREQ,
-                    "highpass_cutoff": HIGHPASS,
-                }
-            )
-        recording.events().to_csv(events, sep="\t", index=False)
-        LOG.info("%s -> %s", recording.con.name, recording.name)
-        return meg
 
 
 def main() -> None:

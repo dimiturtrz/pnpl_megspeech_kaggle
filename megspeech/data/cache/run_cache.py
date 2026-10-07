@@ -89,7 +89,7 @@ class RunCache:
             rate = float(stored.attrs["sample_frequency"])
             if rate != SFREQ:
                 raise ValueError(f"{run.meg.name} is {rate} Hz, not {SFREQ}")
-            meg = stored["data"][:]
+            meg = Run.signal(stored)
         return self.decimated(self.cleaner(lambda: run.meg)(meg))
 
     def cleaner(self, layout: Callable[[], Path]) -> Cleaner:
