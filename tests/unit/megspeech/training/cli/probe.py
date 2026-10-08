@@ -32,7 +32,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.Lo
     monkeypatch.setattr(module.Run, "everywhere", classmethod(lambda _c, _root: []))
     monkeypatch.setattr(module.Sessions, "of", classmethod(lambda _c, _data, _runs: SimpleNamespace(names=[])))
     monkeypatch.setattr(module.DeviceRecording, "load", classmethod(lambda _c, *_a, **_k: None))
-    monkeypatch.setattr(module.SentenceNet, "load", classmethod(lambda _c, _path: Stub()))
+    monkeypatch.setattr(module.Checkpoint, "load", classmethod(lambda _c, _path: Stub()))
     monkeypatch.setattr(module.Progress, "load", classmethod(lambda _c, *_a: Stub()))
     monkeypatch.setattr(sys, "argv", ["probe", "--model", "run", "--words", "7", "--k", "3"])
     with caplog.at_level(logging.INFO):

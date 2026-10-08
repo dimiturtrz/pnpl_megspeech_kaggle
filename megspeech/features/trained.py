@@ -17,6 +17,7 @@ from torch import Tensor
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.features.extract import CHUNK, Export
+from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.sentence import SentenceNet
 from megspeech.training.config import RunConfig
 
@@ -47,7 +48,7 @@ def main() -> None:
     root, device = DataRoot.from_config(), torch.device("cuda")
     run = root.models() / args.run
     config = RunConfig.saved(run)
-    net = SentenceNet.load(run / "model.pt").to(device).eval()
+    net = Checkpoint.load(run / "model.pt").to(device).eval()
     Export.of(config.data, root, args.name, device).save(Trained(net), asdict(config) | {"run": args.run})
 
 

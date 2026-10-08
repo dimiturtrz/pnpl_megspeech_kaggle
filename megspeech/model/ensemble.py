@@ -9,8 +9,8 @@ from jaxtyping import Float, Int
 from torch import Tensor, nn
 
 from megspeech.data.config import METRICS
+from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.input.subjects import Unseen
-from megspeech.model.sentence import SentenceNet
 
 
 class Ensemble(nn.Module):
@@ -23,7 +23,7 @@ class Ensemble(nn.Module):
     @classmethod
     def load(cls, paths: list[Path], unseen: Unseen = Unseen.IDENTITY) -> "Ensemble":
         """SentenceNet checkpoints, each reading a subject it has no matrix for through `unseen`."""
-        return cls([SentenceNet.load(path, unseen) for path in paths])
+        return cls([Checkpoint.load(path, unseen) for path in paths])
 
     @staticmethod
     def trained(models: Path, name: str) -> list[Path]:

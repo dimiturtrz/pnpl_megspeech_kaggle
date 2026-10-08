@@ -35,6 +35,7 @@ from megspeech.data.raw.runs import DEEP, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.reader import Reader
 from megspeech.model.auxiliary import Tap
+from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.tagging import Tagging
 
@@ -103,7 +104,7 @@ class Embedded:
     @classmethod
     def load(cls, path: Path, device: torch.device) -> "Embedded":  # devtools-ignore: test-mirror
         """The model saved at `path`, on `device`."""
-        return cls(SentenceNet.load(path).to(device))
+        return cls(Checkpoint.load(path).to(device))
 
     def tagged(self, split: Split) -> Int[np.ndarray, " n"]:  # devtools-ignore: test-mirror
         """Every word of `split`'s most probable tag by the word head's own tag head (a `TaggedHead`)."""

@@ -12,7 +12,7 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.raw.runs import Run
-from megspeech.model.sentence import SentenceNet
+from megspeech.model.checkpoint import Checkpoint
 from megspeech.training.config import RunConfig
 from megspeech.training.pretrain.progress import Probing, Progress
 from megspeech.training.pretrain.windows import Sessions
@@ -41,7 +41,7 @@ def main() -> None:
         standardised=data.standardised,
         geometry=data.geometry(root, device),
     )
-    net = SentenceNet.load(directory / "model.pt").to(device)
+    net = Checkpoint.load(directory / "model.pt").to(device)
     score = Progress.load(data, root, recording, probing, device).score(net)
     LOG.info("probe %s BAcc@10 %.4f (chance 0.2, words %d, k %d)", args.model, score, probing.words, probing.k)
 

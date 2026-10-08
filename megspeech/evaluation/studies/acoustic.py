@@ -23,6 +23,7 @@ from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.reader import Reader
 from megspeech.model.auxiliary import Tap
+from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.acoustic import Acoustic
 from megspeech.objective.auxiliary.order import HeadOrder
@@ -101,7 +102,7 @@ def main() -> None:
     trained_in = root.models() / args.name
     data = DataConfig.shared([trained_in], DataConfig.grouping)
     reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False))
-    readout = Readout.load(SentenceNet.load(trained_in / "model.pt").to(device), trained_in, device)
+    readout = Readout.load(Checkpoint.load(trained_in / "model.pt").to(device), trained_in, device)
     predicted: list[np.ndarray] = []
     truth: list[np.ndarray] = []
     for runs in reader.ruled(Run.discover(root.raw())).values():

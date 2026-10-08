@@ -15,9 +15,10 @@ from megspeech.data.batching.split import Split
 from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.constants import CHANNELS
 from megspeech.data.spans.spans import Spans
+from megspeech.model.branch import SCALE_MEDIAN
 from megspeech.model.config import ContextConfig, Covariance
 from megspeech.model.input.scaler import Scaler
-from megspeech.model.sentence import SCALE_MEDIAN, SentenceNet
+from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig
 from megspeech.training.config import METRICS
 from megspeech.training.pretrain import pretrain as module

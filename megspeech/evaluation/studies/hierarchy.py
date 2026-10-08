@@ -40,9 +40,9 @@ from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head, Score, SelectionConfig
 from megspeech.evaluation.studies.syntax import FLOOR, Embedded, Probe, Table, Timing
+from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.ensemble import Ensemble
 from megspeech.model.input.subjects import Fallback, SubjectLayer, Unseen
-from megspeech.model.sentence import SentenceNet
 
 LOG = logging.getLogger(__name__)
 
@@ -247,7 +247,7 @@ def main() -> None:
     trained = [run for run in data.trained(runs) if run.subject == DEEP][:: args.stride]
     contexts = ContextTags.load(ContextTags.path(root))
     timing = Timing.fitted(data.run_cache(root).table([run.name for run in trained]))
-    embedded = Embedded(SentenceNet.load(root.models() / (args.embeddings or args.name) / "model.pt").to(device))
+    embedded = Embedded(Checkpoint.load(root.models() / (args.embeddings or args.name) / "model.pt").to(device))
     train = Table.of(reader, embedded, {"train": trained}, contexts, timing)
     valid = Table.of(reader, embedded, held, contexts, timing)
     stack = STACKS[args.stack]

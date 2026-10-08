@@ -7,6 +7,7 @@ from megspeech.model.config import ContextConfig
 from megspeech.model.input.stem import Stem
 from megspeech.model.input.subjects import Unseen
 from megspeech.model.words.base import WordEncoder
+from megspeech.model.words.builder import WordBuilder
 
 ENCODER = ("scale", "whiten", "subjects", "words")
 """The stage-1 modules: everything between a window and its word embedding, and the word head the CNN owns."""
@@ -22,7 +23,7 @@ class Encoding(nn.Module):
         self.scale, self.whiten, self.subjects = Stem.of(
             scale, channels, whiten=context.whiten, subjects=context.subjects, unseen=unseen
         )
-        self.words = context.encoder.build(context, channels)
+        self.words = WordBuilder.build(context.encoder, context, channels)
 
     def embed(
         self, x: Float[Tensor, "r c t"], subject: Int[Tensor, " r"], valid: Bool[Tensor, " r"] | None = None

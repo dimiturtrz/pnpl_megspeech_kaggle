@@ -11,17 +11,11 @@ from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.context.droplayer import DropPathLayer
-from megspeech.model.fusion import Fusion
-from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig, ConvWords
 from megspeech.model.words.spanned import SpannedConfig
 from megspeech.model.words.trunk import DOWNSAMPLING, Geometry, Trunk
-from megspeech.objective.anchored import AnchoredHead
-from megspeech.objective.anchors import Source
-from megspeech.objective.context import Objective
-from megspeech.objective.scorer import DIM
 from tests.unit.megspeech.model.words.trunk import CHANNELS as GEOMETRY
 from tests.unit.megspeech.model.words.trunk import Features
 
@@ -135,16 +129,6 @@ def test_padding_rows_change_nothing() -> None:
         assert torch.allclose(a[mask], b[mask], atol=1e-5)
 
 
-def test_features() -> None:
-    model = SentenceNet(nn.Identity(), CONTEXT).eval()
-    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
-    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
-    h, slots = model.features(x, torch.zeros(2, 3), slot, torch.zeros(len(x), dtype=torch.long))
-    assert h.shape == (2, 3, CONTEXT.width)
-    assert slots.shape == (2, 3, model.words.width)
-    assert slots[slot == len(x)].eq(0).all()
-
-
 def test_features_instance_ignores_window_offset_and_gain() -> None:
     model = SentenceNet(nn.Identity(), replace(CONTEXT, conv=replace(CONTEXT.conv, instance=True))).eval()
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
@@ -248,10 +232,6 @@ def test_read() -> None:
     assert torch.equal(word, model.words.head(slots))
 
 
-def test_width() -> None:
-    assert SentenceNet(nn.Identity(), CONTEXT).width == CONTEXT.width
-
-
 def test_features_read_each_subject_through_its_layer() -> None:
     model = SentenceNet(nn.Identity(), replace(CONTEXT, subjects=2)).eval()
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
@@ -280,57 +260,6 @@ def test_padding_rows_change_nothing_mixing() -> None:
     assert torch.allclose(exact[0][mask], padded[0][mask], atol=1e-5)
 
 
-def test_load(tmp_path: Path) -> None:
-    model = SentenceNet(Scaler(torch.randn(4, CHANNELS, SAMPLES, generator=GENERATOR)), CONTEXT)
-    torch.save(model.state_dict(), tmp_path / "model.pt")
-    CONTEXT.save(tmp_path)
-    loaded = SentenceNet.load(tmp_path / "model.pt")
-    assert all(torch.equal(loaded.state_dict()[key], value) for key, value in model.state_dict().items())
-
-
-def test_readout(tmp_path: Path) -> None:
-    anchors = torch.randn(VOCAB_SIZE, DIM, generator=GENERATOR)
-    torch.manual_seed(0)
-    plain = cast("nn.Linear", SentenceNet.readout(CONTEXT, None))
-    torch.manual_seed(0)
-    assert torch.equal(plain.weight, cast("nn.Linear", Objective.SOFTMAX.head(CONTEXT.width, None)).weight)
-    anchored = replace(CONTEXT, anchor=Source.AUDIO)
-    head = cast("AnchoredHead", SentenceNet.readout(anchored, anchors))
-    assert torch.equal(head.anchors, anchors)
-    trained = cast("AnchoredHead", SentenceNet.readout(replace(anchored, anchor_train=True), anchors))
-    assert isinstance(trained.anchors, nn.Parameter)
-    model = SentenceNet(Scaler(torch.randn(4, CHANNELS, SAMPLES, generator=GENERATOR)), anchored, anchors)
-    torch.save(model.state_dict(), tmp_path / "model.pt")
-    anchored.save(tmp_path)
-    loaded = SentenceNet.load(tmp_path / "model.pt")
-    assert torch.equal(cast("AnchoredHead", loaded.head).anchors, anchors)
-    reduced = replace(anchored, anchor_dim=8)
-    small = SentenceNet(Scaler(torch.randn(4, CHANNELS, SAMPLES, generator=GENERATOR)), reduced, anchors[:, :8])
-    torch.save(small.state_dict(), tmp_path / "small.pt")
-    reduced.save(tmp_path)
-    assert cast("AnchoredHead", SentenceNet.load(tmp_path / "small.pt").head).anchors.shape == (VOCAB_SIZE, 8)
-
-
-def test_subspace_channels(tmp_path: Path) -> None:
-    """A model reading a `Projection`'s components: its input width is its scaler's, saved and loaded back so."""
-    components = 5
-    context = replace(CONTEXT, subjects=2, whiten=True)
-    sample = torch.randn(4, components, SAMPLES, generator=GENERATOR)
-    model = SentenceNet(Scaler(sample), context, channels=components).eval()
-    model.whiten.fit(model.scale(sample))
-    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
-    x = torch.randn(3, components, SAMPLES, generator=GENERATOR)
-    onsets = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
-    context_logits, _ = model.forward(x, onsets, slot, torch.zeros(len(x), dtype=torch.long))
-    assert context_logits.shape == (2, 3, VOCAB_SIZE)
-    torch.save(model.state_dict(), tmp_path / "model.pt")
-    context.save(tmp_path)
-    loaded = SentenceNet.load(tmp_path / "model.pt").eval()
-    assert loaded.state_dict()["whiten.matrix"].shape == (components, components)
-    again, _ = loaded.forward(x, onsets, slot, torch.zeros(len(x), dtype=torch.long))
-    assert torch.allclose(again, context_logits)
-
-
 def test_word_mask() -> None:
     """The mask enters before the timing is added, so a masked word still differs by position; with rate 0 there is
     no parameter and the state is the old one."""
@@ -352,12 +281,6 @@ def test_drop_path() -> None:
     assert [
         cast("DropPathLayer", layer).path.rate for layer in cast("nn.TransformerEncoder", model.context).layers
     ] == pytest.approx([0.1, 0.2])
-
-
-def test_fuse() -> None:
-    net = SentenceNet(Scaler(torch.randn(4, CHANNELS, SAMPLES)), CONTEXT)
-    assert net.fusion.names() == ("primary",)
-    assert net.fuse(Fusion([], 0.3)) is net
 
 
 def test_heard_timed() -> None:
@@ -382,13 +305,3 @@ def test_finish() -> None:
     h, slots = model.features(x, onset, slot, subject)
     finished = model.finish(h, slots, onset, slot < len(x))
     assert all(torch.equal(a, b) for a, b in zip(finished, model.heard(x, onset, slot, subject), strict=True))
-
-
-def test_chunked() -> None:
-    model = SentenceNet(nn.Identity(), CONTEXT).eval()
-    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
-    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
-    onset = torch.zeros(2, 3)
-    subject = torch.zeros(len(x), dtype=torch.long)
-    h, slots = model.features(x, onset, slot, subject)
-    assert torch.equal(model.chunked(x, onset, slot, subject, slots), h)

@@ -9,6 +9,7 @@ import torch
 from core.paths import DataRoot
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import CHANNELS
+from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.sentence import SentenceNet
@@ -165,7 +166,7 @@ def test_graft_top() -> None:
 
 def test_save(tmp_path: Path) -> None:
     assembly().save(tmp_path / "joint", rhythm=True)
-    net = SentenceNet.load(tmp_path / "joint" / "model.pt")
+    net = Checkpoint.load(tmp_path / "joint" / "model.pt")
     assert any(name.startswith("timing.") for name in net.state_dict())
     assert RunConfig.saved(tmp_path / "joint").context.encoder is Encoder.EXPERTS
 

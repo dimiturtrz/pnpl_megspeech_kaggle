@@ -8,11 +8,12 @@ from torch import nn
 from megspeech.data.config import METRICS
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.model.branch import SCALE_MEDIAN
 from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.ensemble import Ensemble
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer, Unseen
-from megspeech.model.sentence import SCALE_MEDIAN, SentenceNet
+from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.megxl import POOLED
 
 SAMPLES = 50

@@ -7,6 +7,7 @@ from torch import nn
 
 from megspeech.data.constants import CHANNELS
 from megspeech.model.branch import Branch
+from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.config import ContextConfig
 from megspeech.model.fusion import PRIMARY, Fusion
 from megspeech.model.input.scaler import Scaler
@@ -101,7 +102,7 @@ def test_fused_net_reloads_and_silences(tmp_path: Path) -> None:
     (models / "run").mkdir()
     torch.save(net.state_dict(), models / "run" / "model.pt")
     context.save(models / "run")
-    loaded = SentenceNet.load(models / "run" / "model.pt").eval()
+    loaded = Checkpoint.load(models / "run" / "model.pt").eval()
     args = inputs()
     assert torch.allclose(net.eval()(*args)[0], loaded(*args)[0], atol=1e-6)
     with loaded.fusion.silenced("a"):
