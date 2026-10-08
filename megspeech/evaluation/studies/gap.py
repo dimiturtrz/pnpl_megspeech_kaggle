@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 import torch
+from jaxtyping import Float
+from torch import Tensor
 
 from core.paths import DataRoot
 from core.tree import Tree
@@ -105,12 +107,19 @@ class Locator:
         words = sum(len(split.labelled()) for split in domains.values())
         return cls(loaded, Telemetry.subset(train, words, seed), domains, loaded.report(runs).tau, seed)
 
+    def context(self, condition: Condition) -> Float[Tensor, "k v"]:
+        """The context head's log-probabilities for the fit subset's labelled words."""
+        words = self.fitted.heard()
+        return self.loaded.evaluator.logits(self.loaded.model, condition.apply(self.fitted, self.seed))[Head.CONTEXT][
+            words
+        ]
+
     def fit(self, condition: Condition) -> float:
         """The context head's balanced top-10 on the fit subset's labelled words."""
-        evaluator = self.loaded.evaluator
         words = self.fitted.heard()
-        context = evaluator.logits(self.loaded.model, condition.apply(self.fitted, self.seed))[Head.CONTEXT]
-        return evaluator.evaluate(context[words], self.fitted.y[words], self.loaded.log_prior).by_tau[self.tau]
+        return self.loaded.evaluator.evaluate(
+            self.context(condition), self.fitted.y[words], self.loaded.log_prior
+        ).by_tau[self.tau]
 
     def val(self, condition: Condition) -> float:
         """The selection macro: the counted domains' unseen-span words, graded on the unshuffled split so every
