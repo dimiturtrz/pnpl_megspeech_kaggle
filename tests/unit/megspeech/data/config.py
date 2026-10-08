@@ -270,18 +270,35 @@ def test_carried() -> None:
     assert DataConfig(grouping=Grouping.SENTENCE).carried(table)["word"].tolist() == ["the", "zebra"]
 
 
-def test_migrated() -> None:
-    assert Val.migrated({"window": 2.0}) == {"window": 2.0, "val": Val.OFFICIAL}
-    assert Val.migrated({"ruler": "official"}) == {"val": Val.OFFICIAL}
-    assert Val.migrated({"ruler": "balanced"}) == {"val": Val.BALANCED}
-    assert Val.migrated({"share": 0.1, "stratify": True, "extra": 0}) == {"val": Val.BALANCED}
-    assert Val.migrated({"val": "carved"}) == {"val": "carved"}
-    assert Val.migrated({"refit": True}) == {"val": Val.OFFICIAL, "refit": Refit.VAL}
-    assert Val.migrated({"refit": False}) == {"val": Val.OFFICIAL, "refit": Refit.NONE}
-    assert Val.migrated({"refit": "all"}) == {"val": Val.OFFICIAL, "refit": "all"}
-    for retired in ({"extra": 1}, {"share": 0.1}):
-        with pytest.raises(ValueError, match="retired"):
-            Val.migrated(retired)
+def saved(tmp_path: Path, data: dict[str, object]) -> DataConfig:
+    (tmp_path / METRICS).write_text(json.dumps({"config": {"data": data}}))
+    return DataConfig.saved(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("data", "val", "refit"),
+    [
+        ({"window": 2.0}, Val.OFFICIAL, Refit.NONE),
+        ({"ruler": "official"}, Val.OFFICIAL, Refit.NONE),
+        ({"ruler": "balanced"}, Val.BALANCED, Refit.NONE),
+        ({"share": 0.1, "stratify": True, "extra": 0}, Val.BALANCED, Refit.NONE),
+        ({"stratify": True}, Val.OFFICIAL, Refit.NONE),
+        ({"val": "carved"}, Val.CARVED, Refit.NONE),
+        ({"ruler": "balanced", "val": "carved"}, Val.CARVED, Refit.NONE),
+        ({"refit": True}, Val.OFFICIAL, Refit.VAL),
+        ({"refit": False}, Val.OFFICIAL, Refit.NONE),
+        ({"refit": "all"}, Val.OFFICIAL, Refit.ALL),
+    ],
+)
+def test_saved_retired(tmp_path: Path, data: dict[str, object], val: Val, refit: Refit) -> None:
+    config = saved(tmp_path, data)
+    assert (config.val, config.refit) == (val, refit)
+
+
+@pytest.mark.parametrize("retired", [{"extra": 1}, {"share": 0.1}, {"share": 0.1, "stratify": False}, {"share": 0.5}])
+def test_saved_strided_refused(tmp_path: Path, retired: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="retired ruler"):
+        saved(tmp_path, retired)
 
 
 def test_share() -> None:

@@ -4,10 +4,11 @@ import itertools
 import json
 import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, fields, replace
 from enum import StrEnum
 from pathlib import Path
+from typing import ClassVar, override
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,7 @@ import torch
 from jaxtyping import Bool, Int
 
 from core.paths import DataRoot
-from core.tree import Tree
+from core.tree import Retired, Tree
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.alignment import AS_RECORDED, EVERY, UNALIGNED, Alignment, Geometry, Projection
 from megspeech.data.cache.cleaning import Cleaning
@@ -46,14 +47,20 @@ class Refit(StrEnum):
     VAL = "val"
     ALL = "all"
 
+    @override
+    @classmethod
+    def _missing_(cls, value: object) -> "Refit | None":
+        """The retired boolean `refit`: true trained val, false nothing."""
+        return {True: cls.VAL, False: cls.NONE}.get(value) if isinstance(value, bool) else None
+
 
 class Val(StrEnum):
     """Which sessions are VAL, selecting epoch and tau; the labelled sessions that report are the LOCAL TEST. `CARVED`:
     10% of each source's subject-0 training sessions, stratified (`Stratify`: source, sentence length, word
     diversity); the local test is pnpl's validation and test partitions pooled. `OFFICIAL`, the legacy full-data
     models': val is pnpl's validation partition, the local test its test partition. `BALANCED`, the retired
-    80/10/10 ruler's runs only (`migrated` maps them here): the carved test half stays out of training and reports,
-    val and the local test each add pnpl's own partition (megspeech-7gf.122)."""
+    80/10/10 ruler's runs only (a retired `ruler` maps them here): the carved test half stays out of training and
+    reports, val and the local test each add pnpl's own partition (megspeech-7gf.122)."""
 
     CARVED = "carved"
     OFFICIAL = "official"
@@ -79,25 +86,21 @@ class Val(StrEnum):
         """Whether `split`'s test half is withheld from training and scored as local test."""
         return self is Val.BALANCED
 
-    @classmethod
-    def migrated(cls, record: Mapping[str, object]) -> dict[str, object]:
-        """A saved data config as one under `val` and `Refit`: the retired `ruler`, `extra`/`share`/`stratify` fields
-        and boolean `refit` mapped, a balanced run to `BALANCED` and the rest to `OFFICIAL`; the retired
-        strided split and extra validation domains are refused."""
-        retired = {"extra", "share", "stratify", "ruler"}
-        kept = {k: v for k, v in record.items() if k not in retired}
-        share, stratified = float(str(record.get("share", 0.0))), bool(record.get("stratify", False))
-        if int(str(record.get("extra", 0))) or (share and not stratified):
-            raise ValueError("this run trained under a retired ruler (strided share or extra validation runs)")
-        balanced = bool(share) or record.get("ruler") == "balanced"
-        chosen = record.get("val", cls.BALANCED if balanced else cls.OFFICIAL)
-        refit = record.get("refit")
-        refitted: dict[str, object] = {"refit": Refit.VAL if refit else Refit.NONE} if isinstance(refit, bool) else {}
-        return kept | {"val": chosen} | refitted
+
+BALANCED_RULER = {"val": Val.BALANCED}
+STRIDED_RULER = "this run trained under a retired ruler (strided share or extra validation runs)"
 
 
 @dataclass(frozen=True)
 class DataConfig:
+    RETIRED: ClassVar[dict[str, Retired]] = {
+        "extra": Retired(0, STRIDED_RULER),
+        "share": Retired(0.0, STRIDED_RULER, {0.1: BALANCED_RULER}, {"stratify": True}),
+        "stratify": Retired(default=False, reason=STRIDED_RULER, becomes={True: {}}),
+        "ruler": Retired("official", becomes={"balanced": BALANCED_RULER}),
+    }
+    LEGACY: ClassVar[dict[str, object]] = {"val": Val.OFFICIAL}
+
     tasks: tuple[str, ...] = ()
     """Training restricted to these tasks' runs; empty trains on every task."""
     read_weight: float = 1.0
@@ -209,7 +212,7 @@ class DataConfig:
     def saved(cls, directory: Path) -> "DataConfig":
         """The data config a run in `directory` recorded; a record without one, or a flat one, falls to defaults."""
         config = json.loads((directory / METRICS).read_text())["config"]
-        return Tree(cls).load(Val.migrated(config.get("data", {})))
+        return Tree(cls).load(config.get("data", {}), saved=True)
 
     @classmethod
     def partitioned(cls, directories: Sequence[Path]) -> list[list[Path]]:

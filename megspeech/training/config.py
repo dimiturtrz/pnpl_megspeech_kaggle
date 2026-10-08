@@ -2,12 +2,11 @@
 
 import json
 import math
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from core.tree import Tree
-from megspeech.data.config import METRICS, DataConfig, Refit, Val
+from megspeech.data.config import METRICS, DataConfig, Refit
 from megspeech.evaluation.scoring.score import Epoch, SelectionConfig
 from megspeech.evaluation.scoring.telemetry import TelemetryConfig
 from megspeech.model.auxiliary import Tap
@@ -238,6 +237,4 @@ class RunConfig:
         """The config a run in `directory` recorded, flat records from before the tree included, its data section
         under the retired `extra`/`share`/`stratify` fields migrated to `val` and `refit`, its sampler knobs from
         `optim` to `sampler`."""
-        record = SamplerConfig.migrated(json.loads((directory / METRICS).read_text())["config"])
-        data = record.get("data")
-        return Tree(cls).load({**record, "data": Val.migrated(data if isinstance(data, Mapping) else {})})
+        return Tree(cls).load(json.loads((directory / METRICS).read_text())["config"], saved=True)

@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import ClassVar
 
 from megspeech.data.batching.split import Split
 from megspeech.training.sampling.curriculum import Annealed, Base, Curriculum, Prioritised, Robust
@@ -9,6 +10,8 @@ from megspeech.training.sampling.curriculum import Annealed, Base, Curriculum, P
 
 @dataclass(frozen=True)
 class SamplerConfig:
+    RENAMED: ClassVar[Mapping[str, str]] = {"sampler": "base", "stratified": "alpha"}
+
     base: Base = Base.NATURAL
     """The distribution spans are drawn from before any tilt (`megspeech.training.sampling.curriculum.Base`): `natural`
     draws each span at its words' run weight (`DataConfig.read_weight`, `narrator_weight`, `repeat_power`, all 1 unless
@@ -33,22 +36,6 @@ class SamplerConfig:
     visibility: float = 0.0
     """Exponent `beta` of a span's draw weight `(1 + seen) ** -beta` in the times training has drawn it, so unseen spans
     draw first and the corpus is rotated through; 0 turns it off; composes with `robust`."""
-
-    @classmethod
-    def migrated(cls, record: Mapping[str, object]) -> dict[str, object]:
-        """A saved run config with its sampler knobs, flat under `optim` (or at the root, before the tree), moved into
-        `sampler`, the retired `sampler` and `stratified` fields renamed `base` and `alpha`; a record that already has a
-        `sampler` node passes unchanged."""
-        renamed = {"sampler": "base", "stratified": "alpha"}
-        knobs = set(cls.__dataclass_fields__) | set(renamed)
-        if isinstance(record.get("sampler"), Mapping):
-            return dict(record)
-        optim = record.get("optim")
-        nested: Mapping[str, object] = optim if isinstance(optim, Mapping) else {}
-        moved = {k: v for source in (record, nested) for k, v in source.items() if k in knobs}
-        rest = {k: v for k, v in record.items() if k not in knobs and k != "optim"}
-        kept: dict[str, object] = {"optim": {k: v for k, v in nested.items() if k not in knobs}} if nested else {}
-        return rest | kept | {"sampler": {renamed.get(k, k): v for k, v in moved.items()}}
 
 
 class Sampler:

@@ -75,14 +75,3 @@ def test_of_base_options() -> None:
 def test_scheduled(sampler: Base) -> None:
     made = Sampler.scheduled(SamplerConfig(base=sampler), TRAIN)
     assert (made.weights(TRAIN, 0, 10) > 0).all()
-
-
-def test_migrated() -> None:
-    flat = {"optim": {"epochs": 3, "priority": 0.5, "visibility": 1.0, "sampler": "uniform", "stratified": 2.0}}
-    assert SamplerConfig.migrated(flat) == {
-        "optim": {"epochs": 3},
-        "sampler": {"priority": 0.5, "visibility": 1.0, "base": "uniform", "alpha": 2.0},
-    }
-    assert SamplerConfig.migrated({"epochs": 3, "robust": 1.0}) == {"epochs": 3, "sampler": {"robust": 1.0}}
-    nested = {"optim": {"epochs": 3}, "sampler": {"base": "uniform", "priority": 0.5}}
-    assert SamplerConfig.migrated(nested) == nested
