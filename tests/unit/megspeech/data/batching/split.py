@@ -7,7 +7,7 @@ import pytest
 import torch
 
 from core.paths import DataRoot
-from megspeech.data.batching.split import DENSE, FEATURES, TRAIN, Batch, Features, SpanText, Split
+from megspeech.data.batching.split import DENSE, FEATURES, TRAIN, Batch, Features, SpanInput, SpanText, Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import IGNORE
@@ -192,6 +192,41 @@ def test_ordered_interior_pad() -> None:
     assert torch.equal(moved.index == PAD, original.index == PAD)
     assert sorted(moved.index[0][moved.index[0] != PAD].tolist()) == [0, 1, 2]
     assert sorted(moved.index[1][moved.index[1] != PAD].tolist()) == [3, 4]
+
+
+def test_inputs() -> None:
+    batch = split().batch(torch.tensor([1, 0]), rows=6)
+    spans = batch.inputs()
+    assert spans.x is batch.x
+    assert spans.onset is batch.onset
+    assert spans.slot is batch.slot
+    assert spans.subject is batch.subject
+    other = torch.zeros_like(batch.x)
+    assert batch.inputs(other).x is other
+
+
+def spans() -> SpanInput:
+    return SpanInput(
+        torch.zeros(3, 2, 4), torch.ones(1, 3), torch.tensor([[0, 2, 3]]), torch.zeros(3, dtype=torch.long)
+    )
+
+
+def test_mask() -> None:
+    assert spans().mask.tolist() == [[True, True, False]]
+
+
+def test_reading() -> None:
+    x = torch.ones(3, 2, 4)
+    read = spans().reading(x)
+    assert read.x is x
+    assert torch.equal(read.slot, spans().slot)
+
+
+def test_timed() -> None:
+    onset = torch.zeros(1, 3)
+    timed = spans().timed(onset)
+    assert timed.onset is onset
+    assert torch.equal(timed.x, spans().x)
 
 
 def test_spanned() -> None:

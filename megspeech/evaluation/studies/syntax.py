@@ -126,7 +126,7 @@ class Embedded:
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
             for spans in torch.arange(len(split.index), device=device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
-                _, embedded, context, _ = self.net.heard(batch.x, batch.onset, batch.slot, batch.subject)
+                _, embedded, context, _ = self.net.heard(batch.inputs())
                 at = torch.where(batch.index != PAD, batch.index, words)
                 logp[at] = context.float().log_softmax(-1)
                 slots[at] = embedded.float()
@@ -150,7 +150,7 @@ class Embedded:
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
             for spans in torch.arange(len(split.index), device=device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
-                refined, slots, _, _ = self.net.heard(batch.x, batch.onset, batch.slot, batch.subject)
+                refined, slots, _, _ = self.net.heard(batch.inputs())
                 at = torch.where(batch.index != PAD, batch.index, words)
                 for tap, buffer in out.items():
                     buffer[at] = tap.pick(slots, refined).float()

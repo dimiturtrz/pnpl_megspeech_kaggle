@@ -8,6 +8,7 @@ import pytest
 import torch
 from torch import nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
@@ -20,10 +21,8 @@ class Reversed(Favourite):
     """`Favourite` ranking the context vocabulary the other way: it disagrees with `Favourite` on every word."""
 
     @override
-    def forward(
-        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        context, word = super().forward(x, onset, slot, subject)
+    def forward(self, spans: SpanInput) -> tuple[torch.Tensor, torch.Tensor]:
+        context, word = super().forward(spans)
         return context.flip(-1), word
 
 

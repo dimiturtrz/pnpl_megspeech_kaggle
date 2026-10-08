@@ -25,7 +25,7 @@ from matplotlib.figure import Figure
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.data.batching.split import Split
+from megspeech.data.batching.split import SpanInput, Split
 from megspeech.data.constants import RATE
 from megspeech.data.labels.vocabulary import PRIMARY
 from megspeech.data.raw.fetch import NEUROMAG
@@ -73,7 +73,7 @@ class Objective:
         n, rows = x.shape[:2]
         which = torch.arange(n, device=x.device)
         slot = torch.where(self.slot < rows, self.slot + which[:, None] * rows, n * rows)
-        context, _ = self.model(x.flatten(0, 1), onset, slot, self.subject.repeat(n))
+        context, _ = self.model(SpanInput(x.flatten(0, 1), onset, slot, self.subject.repeat(n)))
         target = which % len(self.labels)
         return context.log_softmax(-1)[which, self.positions[target], self.labels[target]]
 

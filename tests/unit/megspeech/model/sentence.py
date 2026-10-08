@@ -7,6 +7,7 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import ContextConfig, Encoder
@@ -29,7 +30,7 @@ def test_sentence_net_forward() -> None:
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     context, word = model.forward(
-        x, torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]]), slot, torch.zeros(len(x), dtype=torch.long)
+        SpanInput(x, torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]]), slot, torch.zeros(len(x), dtype=torch.long))
     )
     assert context.shape == word.shape == (2, 3, VOCAB_SIZE)
     assert torch.isfinite(context[slot < len(x)]).all()
@@ -41,7 +42,7 @@ def test_embed() -> None:
     subject = torch.zeros(len(x), dtype=torch.long)
     embedded = model.embed(x, subject)
     assert embedded.shape == (3, CONTEXT.conv.width)
-    _, slots = model.features(x, torch.zeros(1, 3), torch.tensor([[0, 1, 2]]), subject)
+    _, slots = model.features(SpanInput(x, torch.zeros(1, 3), torch.tensor([[0, 1, 2]]), subject))
     assert torch.allclose(slots[0], embedded, atol=1e-6)
 
 
@@ -91,11 +92,11 @@ def test_features_spanned(monkeypatch: pytest.MonkeyPatch) -> None:
     onset = torch.tensor([[0.0, 0.3, 0.0], [0.0, 0.0, 0.0]])
     slot = torch.tensor([[0, 0, 2], [1, 2, 2]])
     subject = torch.zeros(2, dtype=torch.long)
-    h, slots = model.features(x, onset, slot, subject)
+    h, slots = model.features(SpanInput(x, onset, slot, subject))
     assert h.shape == (2, 3, CONTEXT.width)
     assert slots.shape == (2, 3, 8)
     assert torch.all(slots[slot == 2] == 0)
-    context, word = model.forward(x, onset, slot, subject)
+    context, word = model.forward(SpanInput(x, onset, slot, subject))
     assert context.shape == word.shape == (2, 3, VOCAB_SIZE)
     context[slot < 2].sum().backward()
     assert all(p.grad is not None for p in model.words.backbone())
@@ -121,10 +122,12 @@ def test_padding_rows_change_nothing() -> None:
     model = SentenceNet(nn.Identity(), replace(CONTEXT, dropout=0.0, conv=replace(CONTEXT.conv, dropout=0.0))).train()
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
-    exact = model.forward(x, onset, torch.tensor([[0, 1, 3], [2, 3, 3]]), torch.zeros(3, dtype=torch.long))
+    exact = model.forward(SpanInput(x, onset, torch.tensor([[0, 1, 3], [2, 3, 3]]), torch.zeros(3, dtype=torch.long)))
     padding = 100 * torch.randn(2, CHANNELS, SAMPLES, generator=GENERATOR)
     padded = model.forward(
-        torch.cat([x, padding]), onset, torch.tensor([[0, 1, 5], [2, 5, 5]]), torch.zeros(5, dtype=torch.long)
+        SpanInput(
+            torch.cat([x, padding]), onset, torch.tensor([[0, 1, 5], [2, 5, 5]]), torch.zeros(5, dtype=torch.long)
+        )
     )
     mask = torch.tensor([[True, True, False], [True, False, False]])
     for a, b in zip(exact, padded, strict=True):
@@ -138,8 +141,8 @@ def test_features_instance_ignores_window_offset_and_gain() -> None:
     x[:, :, 40:] = 0
     shifted = x.clone()
     shifted[:, :, :40] = 5.0 + 3.0 * x[:, :, :40]
-    h, _ = model.features(x, torch.zeros(2, 3), slot, torch.zeros(len(x), dtype=torch.long))
-    moved, _ = model.features(shifted, torch.zeros(2, 3), slot, torch.zeros(len(x), dtype=torch.long))
+    h, _ = model.features(SpanInput(x, torch.zeros(2, 3), slot, torch.zeros(len(x), dtype=torch.long)))
+    moved, _ = model.features(SpanInput(shifted, torch.zeros(2, 3), slot, torch.zeros(len(x), dtype=torch.long)))
     assert torch.allclose(h, moved, atol=1e-4)
 
 
@@ -148,8 +151,10 @@ def test_classify() -> None:
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
-    whole = model(x, onset, slot, torch.zeros(len(x), dtype=torch.long))
-    split = model.classify(*model.features(x, onset, slot, torch.zeros(len(x), dtype=torch.long)), slot < len(x))
+    whole = model(SpanInput(x, onset, slot, torch.zeros(len(x), dtype=torch.long)))
+    split = model.classify(
+        *model.features(SpanInput(x, onset, slot, torch.zeros(len(x), dtype=torch.long))), slot < len(x)
+    )
     assert all(torch.equal(a, b) for a, b in zip(whole, split, strict=True))
 
 
@@ -170,14 +175,16 @@ def test_padding_words_change_nothing() -> None:
     model = SentenceNet(nn.Identity(), UNDROPPED).train()
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
-    h, _ = model.features(x, onset, torch.tensor([[0, 1, 3], [2, 3, 3]]), torch.zeros(3, dtype=torch.long))
+    h, _ = model.features(SpanInput(x, onset, torch.tensor([[0, 1, 3], [2, 3, 3]]), torch.zeros(3, dtype=torch.long)))
     assert h.shape == (2, 3, CONTEXT.width)
-    exact = model.forward(x, onset, torch.tensor([[0, 1, 3], [2, 3, 3]]), torch.zeros(3, dtype=torch.long))
+    exact = model.forward(SpanInput(x, onset, torch.tensor([[0, 1, 3], [2, 3, 3]]), torch.zeros(3, dtype=torch.long)))
     padded = model.forward(
-        torch.cat([x, torch.randn(2, CHANNELS, SAMPLES, generator=GENERATOR)]),
-        onset,
-        torch.tensor([[0, 1, 5], [2, 5, 5]]),
-        torch.zeros(5, dtype=torch.long),
+        SpanInput(
+            torch.cat([x, torch.randn(2, CHANNELS, SAMPLES, generator=GENERATOR)]),
+            onset,
+            torch.tensor([[0, 1, 5], [2, 5, 5]]),
+            torch.zeros(5, dtype=torch.long),
+        )
     )
     mask = torch.tensor([[True, True, False], [True, False, False]])
     assert exact[0].shape == (2, 3, VOCAB_SIZE)
@@ -197,8 +204,8 @@ def test_rhythm_adds_timing_logits() -> None:
     onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
     subject = torch.zeros(len(x), dtype=torch.long)
-    context, word = model.forward(x, onset, slot, subject)
-    plain, same = model.classify(*model.features(x, onset, slot, subject), slot < len(x))
+    context, word = model.forward(SpanInput(x, onset, slot, subject))
+    plain, same = model.classify(*model.features(SpanInput(x, onset, slot, subject)), slot < len(x))
     assert torch.allclose(context - plain, model.timing(onset, slot < len(x)), atol=1e-5)
     assert torch.equal(word, same)
     assert not any(key.startswith("timing") for key in SentenceNet(nn.Identity(), CONTEXT).state_dict())
@@ -210,10 +217,10 @@ def test_heard() -> None:
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
-    refined, slots, context, word = model.heard(x, onset, slot, torch.zeros(len(x), dtype=torch.long))
+    refined, slots, context, word = model.heard(SpanInput(x, onset, slot, torch.zeros(len(x), dtype=torch.long)))
     assert refined.shape == (2, 3, CONTEXT.width)
     assert slots.shape == (2, 3, model.words.width)
-    whole = model(x, onset, slot, torch.zeros(len(x), dtype=torch.long))
+    whole = model(SpanInput(x, onset, slot, torch.zeros(len(x), dtype=torch.long)))
     assert torch.equal(whole[0], context)
     assert torch.equal(whole[1], word)
 
@@ -233,8 +240,8 @@ def test_features_read_each_subject_through_its_layer() -> None:
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     with torch.no_grad():
         cast("SubjectLayer", model.subjects).weight[1].mul_(-1.0)
-    deep, _ = model.features(x, torch.zeros(2, 3), slot, torch.zeros(3, dtype=torch.long))
-    other, _ = model.features(x, torch.zeros(2, 3), slot, torch.tensor([0, 0, 1]))
+    deep, _ = model.features(SpanInput(x, torch.zeros(2, 3), slot, torch.zeros(3, dtype=torch.long)))
+    other, _ = model.features(SpanInput(x, torch.zeros(2, 3), slot, torch.tensor([0, 0, 1])))
     assert torch.allclose(deep[0], other[0], atol=1e-6)
     assert not torch.allclose(deep[1, 0], other[1, 0], atol=1e-3)
 
@@ -244,12 +251,14 @@ def test_padding_rows_change_nothing_mixing() -> None:
     model = SentenceNet(nn.Identity(), mixing).train()
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
-    exact = model.forward(x, onset, torch.tensor([[0, 1, 3], [2, 3, 3]]), torch.zeros(3, dtype=torch.long))
+    exact = model.forward(SpanInput(x, onset, torch.tensor([[0, 1, 3], [2, 3, 3]]), torch.zeros(3, dtype=torch.long)))
     padded = model.forward(
-        torch.cat([x, torch.randn(2, CHANNELS, SAMPLES, generator=GENERATOR)]),
-        onset,
-        torch.tensor([[0, 1, 5], [2, 5, 5]]),
-        torch.zeros(5, dtype=torch.long),
+        SpanInput(
+            torch.cat([x, torch.randn(2, CHANNELS, SAMPLES, generator=GENERATOR)]),
+            onset,
+            torch.tensor([[0, 1, 5], [2, 5, 5]]),
+            torch.zeros(5, dtype=torch.long),
+        )
     )
     mask = torch.tensor([[True, True, False], [True, False, False]])
     assert torch.allclose(exact[0][mask], padded[0][mask], atol=1e-5)
@@ -264,10 +273,10 @@ def test_word_mask() -> None:
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
     onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
-    h, _ = model.features(x, onset, slot, torch.zeros(len(x), dtype=torch.long))
+    h, _ = model.features(SpanInput(x, onset, slot, torch.zeros(len(x), dtype=torch.long)))
     assert not torch.allclose(h[0, 0], h[0, 1])
     model.eval()
-    h_eval, _ = model.features(x, onset, slot, torch.zeros(len(x), dtype=torch.long))
+    h_eval, _ = model.features(SpanInput(x, onset, slot, torch.zeros(len(x), dtype=torch.long)))
     assert not torch.allclose(h_eval[0, 0], h[0, 0])
 
 
@@ -285,8 +294,8 @@ def test_heard_timed() -> None:
     onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
     subject = torch.zeros(len(x), dtype=torch.long)
-    *heard, times = model.heard_timed(x, onset, slot, subject)
-    assert all(torch.equal(a, b) for a, b in zip(heard, model.heard(x, onset, slot, subject), strict=True))
+    *heard, times = model.heard_timed(SpanInput(x, onset, slot, subject))
+    assert all(torch.equal(a, b) for a, b in zip(heard, model.heard(SpanInput(x, onset, slot, subject)), strict=True))
     assert times.shape == (2, 3, model.words.time_width(), SAMPLES)
     assert times[slot == len(x)].eq(0).all()
 
@@ -297,6 +306,8 @@ def test_finish() -> None:
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     onset = torch.zeros(2, 3)
     subject = torch.zeros(len(x), dtype=torch.long)
-    h, slots = model.features(x, onset, slot, subject)
+    h, slots = model.features(SpanInput(x, onset, slot, subject))
     finished = model.finish(h, slots, onset, slot < len(x))
-    assert all(torch.equal(a, b) for a, b in zip(finished, model.heard(x, onset, slot, subject), strict=True))
+    assert all(
+        torch.equal(a, b) for a, b in zip(finished, model.heard(SpanInput(x, onset, slot, subject)), strict=True)
+    )

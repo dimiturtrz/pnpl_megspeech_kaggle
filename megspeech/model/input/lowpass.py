@@ -3,8 +3,10 @@
 from typing import override
 
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Float
 from torch import Tensor, nn
+
+from megspeech.data.batching.split import SpanInput
 
 
 class LowPass(nn.Module):
@@ -23,11 +25,5 @@ class LowPass(nn.Module):
         return torch.fft.irfft(torch.fft.rfft(x.float(), dim=-1) * kept, n=length, dim=-1)
 
     @override
-    def forward(
-        self,
-        x: Float[Tensor, "r c t"],
-        onset: Float[Tensor, "g w"],
-        slot: Int[Tensor, "g w"],
-        subject: Int[Tensor, " r"],
-    ) -> tuple[Float[Tensor, "g w v"], ...]:
-        return self.model(self.filtered(x), onset, slot, subject)
+    def forward(self, spans: SpanInput) -> tuple[Float[Tensor, "g w v"], ...]:
+        return self.model(spans.reading(self.filtered(spans.x)))

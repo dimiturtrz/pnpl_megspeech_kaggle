@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import override
 
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Float
 from torch import Tensor, nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.config import METRICS
 from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.input.subjects import Unseen
@@ -33,14 +34,8 @@ class Ensemble(nn.Module):
         return [models / member for member in saved.get("members", [name])]
 
     @override
-    def forward(
-        self,
-        x: Float[Tensor, "r c t"],
-        onset: Float[Tensor, "g w"],
-        slot: Int[Tensor, "g w"],
-        subject: Int[Tensor, " r"],
-    ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
-        outputs = [member(x, onset, slot, subject) for member in self.members]
+    def forward(self, spans: SpanInput) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
+        outputs = [member(spans) for member in self.members]
         context, word = (
             torch.stack([out.float().log_softmax(-1) for out in head]).mean(0) for head in zip(*outputs, strict=True)
         )

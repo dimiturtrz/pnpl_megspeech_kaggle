@@ -4,9 +4,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Float
 from torch import Tensor, nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.model.config import ContextConfig
 from megspeech.model.encoding import Encoding
 from megspeech.model.input.stem import Stem
@@ -45,13 +46,6 @@ class Branch(Encoding):
         """The runs in `directories`, each loaded as `load` does."""
         return [cls.load(directory, own, channels, unseen) for directory in directories]
 
-    def projected(
-        self,
-        x: Float[Tensor, "r c t"],
-        subject: Int[Tensor, " r"],
-        onset: Float[Tensor, "g w"],
-        slot: Int[Tensor, "g w"],
-    ) -> Float[Tensor, "g w d"]:
-        """Each span position's features through this encoder, projected to the transformer's width; `slot` names a
-        position's row of `x`, and `len(x)` an empty one."""
-        return self.project(self.words.positions(self.prepare(x, subject), onset, slot))
+    def projected(self, spans: SpanInput) -> Float[Tensor, "g w d"]:
+        """Each span position's features through this encoder, projected to the transformer's width."""
+        return self.project(self.words.positions(self.prepare(spans.x, spans.subject), spans.onset, spans.slot))

@@ -4,6 +4,7 @@ from typing import cast
 
 import torch
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.checkpoint import Checkpoint
@@ -50,11 +51,11 @@ def test_subspace_channels(tmp_path: Path) -> None:
     slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
     x = torch.randn(3, components, SAMPLES, generator=GENERATOR)
     onsets = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
-    context_logits, _ = model.forward(x, onsets, slot, torch.zeros(len(x), dtype=torch.long))
+    context_logits, _ = model.forward(SpanInput(x, onsets, slot, torch.zeros(len(x), dtype=torch.long)))
     assert context_logits.shape == (2, 3, VOCAB_SIZE)
     torch.save(model.state_dict(), tmp_path / "model.pt")
     context.save(tmp_path)
     loaded = Checkpoint.load(tmp_path / "model.pt").eval()
     assert loaded.state_dict()["whiten.matrix"].shape == (components, components)
-    again, _ = loaded.forward(x, onsets, slot, torch.zeros(len(x), dtype=torch.long))
+    again, _ = loaded.forward(SpanInput(x, onsets, slot, torch.zeros(len(x), dtype=torch.long)))
     assert torch.allclose(again, context_logits)

@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 import torch
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
 from megspeech.model.branch import Branch
 from megspeech.model.config import ContextConfig
@@ -46,7 +47,7 @@ def test_projected(tmp_path: Path) -> None:
     made = branch(tmp_path / "stem").eval()
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     subject = torch.zeros(3, dtype=torch.long)
-    out = made.projected(x, subject, torch.zeros(SLOT.shape), SLOT)
+    out = made.projected(SpanInput(x, torch.zeros(SLOT.shape), SLOT, subject))
     assert out.shape == (2, 3, CONTEXT.width)
     assert torch.allclose(out[0, 0], made.project(made.embed(x, subject)[0]), atol=1e-6)
 

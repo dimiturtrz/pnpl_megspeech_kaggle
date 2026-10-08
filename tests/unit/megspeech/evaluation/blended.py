@@ -7,7 +7,7 @@ import pytest
 import torch
 from torch import nn
 
-from megspeech.data.batching.split import Split
+from megspeech.data.batching.split import SpanInput, Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
@@ -23,10 +23,8 @@ class Flat(nn.Module):
     """Every word equally likely."""
 
     @override
-    def forward(
-        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        logits = torch.zeros(slot.shape[0], slot.shape[1], VOCAB_SIZE)
+    def forward(self, spans: SpanInput) -> tuple[torch.Tensor, torch.Tensor]:
+        logits = torch.zeros(spans.slot.shape[0], spans.slot.shape[1], VOCAB_SIZE)
         return logits, logits
 
 

@@ -6,7 +6,7 @@ import pytest
 import torch
 from torch import Tensor, nn
 
-from megspeech.data.batching.split import Split
+from megspeech.data.batching.split import SpanInput, Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
@@ -35,11 +35,9 @@ class Reader(nn.Module):
     """Reads its own word's label off the window only, ignoring context and onsets."""
 
     @override
-    def forward(
-        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        rows = torch.where(slot < len(x), slot, 0)
-        logits = torch.nn.functional.one_hot(x[rows, 0, 0].long(), VOCAB_SIZE).float() * LOGIT
+    def forward(self, spans: SpanInput) -> tuple[torch.Tensor, torch.Tensor]:
+        rows = torch.where(spans.mask, spans.slot, 0)
+        logits = torch.nn.functional.one_hot(spans.x[rows, 0, 0].long(), VOCAB_SIZE).float() * LOGIT
         return logits, logits
 
 

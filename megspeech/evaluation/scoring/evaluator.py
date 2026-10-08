@@ -67,7 +67,7 @@ class Evaluator:
         with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
             for spans in torch.arange(len(split.index), device=self.device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
-                context, word = model(batch.x, batch.onset, batch.slot, batch.subject)
+                context, word = model(batch.inputs())
                 at = torch.where(batch.index != PAD, batch.index, words)
                 out[Head.CONTEXT][at] = context.float()
                 out[Head.WORD][at] = word.float()

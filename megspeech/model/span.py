@@ -2,9 +2,10 @@
 
 from typing import Self
 
-from jaxtyping import Float, Int
+from jaxtyping import Float
 from torch import Tensor, nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
 from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.context.masking import WordMask
@@ -42,31 +43,19 @@ class Span(Encoding):
         self.fusion = fusion
         return self
 
-    def features(
-        self,
-        x: Float[Tensor, "r c t"],
-        onset: Float[Tensor, "g w"],
-        slot: Int[Tensor, "g w"],
-        subject: Int[Tensor, " r"],
-    ) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"]]:
+    def features(self, spans: SpanInput) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"]]:
         """The transformer's input at each span position, and the position's word embedding (zeros when empty)."""
-        slots = self.words.positions(self.prepare(x, subject), onset, slot)
-        return self.chunked(x, onset, slot, subject, slots), slots
+        slots = self.words.positions(self.prepare(spans.x, spans.subject), spans.onset, spans.slot)
+        return self.chunked(spans, slots), slots
 
-    def chunked(
-        self,
-        x: Float[Tensor, "r c t"],
-        onset: Float[Tensor, "g w"],
-        slot: Int[Tensor, "g w"],
-        subject: Int[Tensor, " r"],
-        slots: Float[Tensor, "g w e"],
-    ) -> Float[Tensor, "g w h"]:
+    def chunked(self, spans: SpanInput, slots: Float[Tensor, "g w e"]) -> Float[Tensor, "g w h"]:
         """The transformer's input at each span position from the word embeddings `slots`."""
-        mask = slot < len(x)
-        onset = self.jitter.apply(onset, mask) if self.training else onset
-        timing = self.onsets(self.clock.times(onset, mask), self.intervals.features(onset, mask))
+        mask = spans.mask
+        if self.training:
+            spans = spans.timed(self.jitter.apply(spans.onset, mask))
+        timing = self.onsets(self.clock.times(spans.onset, mask), self.intervals.features(spans.onset, mask))
         own = self.project(slots)
-        others = (b.projected(x, subject, onset, slot) for b in self.fusion.branches)
+        others = (b.projected(spans) for b in self.fusion.branches)
         return self.masking(self.fusion.mix([own, *others]), mask) + timing
 
     @property

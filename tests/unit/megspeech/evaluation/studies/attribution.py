@@ -7,6 +7,7 @@ import pytest
 import torch
 from torch import nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS, RATE
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.evaluation.studies.attribution import (
@@ -29,11 +30,9 @@ class Probe(nn.Module):
         self.coef = nn.Parameter(torch.linspace(-1, 1, VOCAB_SIZE))
 
     @override
-    def forward(
-        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        score = nn.functional.pad(x[:, 0].sum(-1), (0, 1))[slot]
-        logits = score[..., None] * self.coef + onset[..., None] * self.coef.flip(0)
+    def forward(self, spans: SpanInput) -> tuple[torch.Tensor, torch.Tensor]:
+        score = nn.functional.pad(spans.x[:, 0].sum(-1), (0, 1))[spans.slot]
+        logits = score[..., None] * self.coef + spans.onset[..., None] * self.coef.flip(0)
         return logits, logits
 
 

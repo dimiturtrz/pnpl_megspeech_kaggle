@@ -4,6 +4,7 @@ from typing import override
 import torch
 from torch import nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.model.input.lowpass import LowPass
 
 RATE = 50.0
@@ -21,11 +22,9 @@ class Seen(nn.Module):
         self.x = torch.empty(0)
 
     @override
-    def forward(
-        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        self.x = x
-        return onset, onset
+    def forward(self, spans: SpanInput) -> tuple[torch.Tensor, torch.Tensor]:
+        self.x = spans.x
+        return spans.onset, spans.onset
 
 
 def test_filtered() -> None:
@@ -39,6 +38,8 @@ def test_filtered() -> None:
 def test_forward() -> None:
     seen = Seen()
     onset = torch.zeros(1, 2)
-    out = LowPass(seen, RATE, 12.0).forward(tone(20.0), onset, torch.zeros(1, 2, dtype=torch.long), torch.zeros(2))
+    out = LowPass(seen, RATE, 12.0).forward(
+        SpanInput(tone(20.0), onset, torch.zeros(1, 2, dtype=torch.long), torch.zeros(2))
+    )
     assert out[0] is onset
     assert torch.allclose(seen.x, torch.zeros(2, 3, SAMPLES), atol=1e-4)

@@ -3,9 +3,10 @@
 from enum import StrEnum
 from typing import override
 
-from jaxtyping import Float, Int
+from jaxtyping import Float
 from torch import Tensor, nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.model.sentence import SentenceNet
 
 
@@ -57,19 +58,13 @@ class WithAuxiliary(nn.Module):
         self.taps = taps or tuple(tap for _ in heads)
 
     @override
-    def forward(
-        self,
-        x: Float[Tensor, "r c t"],
-        onset: Float[Tensor, "g w"],
-        slot: Int[Tensor, "g w"],
-        subject: Int[Tensor, " r"],
-    ) -> tuple[Float[Tensor, "g w _"], ...]:
+    def forward(self, spans: SpanInput) -> tuple[Float[Tensor, "g w _"], ...]:
         """`SentenceNet`'s two heads, then each auxiliary head's reading of every span position's tapped
         representation."""
         if Tap.TIME in self.taps:
-            refined, slots, context, word, times = self.net.heard_timed(x, onset, slot, subject)
+            refined, slots, context, word, times = self.net.heard_timed(spans)
         else:
-            (refined, slots, context, word), times = self.net.heard(x, onset, slot, subject), None
+            (refined, slots, context, word), times = self.net.heard(spans), None
         return (
             context,
             word,

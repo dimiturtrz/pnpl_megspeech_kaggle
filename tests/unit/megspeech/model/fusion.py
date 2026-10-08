@@ -5,6 +5,7 @@ import pytest
 import torch
 from torch import nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
 from megspeech.model.branch import Branch
 from megspeech.model.checkpoint import Checkpoint
@@ -34,8 +35,10 @@ def branch(directory: Path) -> Branch:
     return Branch.load(saved(directory), CONTEXT, CHANNELS)
 
 
-def inputs() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    return torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR), ONSET, SLOT, torch.zeros(3, dtype=torch.long)
+def inputs() -> SpanInput:
+    return SpanInput(
+        torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR), ONSET, SLOT, torch.zeros(3, dtype=torch.long)
+    )
 
 
 def test_names(tmp_path: Path) -> None:
@@ -87,7 +90,7 @@ def test_fused_net_equals_solo_when_the_branch_adds_nothing(tmp_path: Path) -> N
     nn.init.zeros_(fused.fusion.branches[0].project.weight)
     nn.init.zeros_(fused.fusion.branches[0].project.bias)
     args = inputs()
-    for a, b in zip(solo(*args), fused(*args), strict=True):
+    for a, b in zip(solo(args), fused(args), strict=True):
         assert torch.allclose(a, b, atol=1e-6)
 
 
@@ -104,6 +107,6 @@ def test_fused_net_reloads_and_silences(tmp_path: Path) -> None:
     context.save(models / "run")
     loaded = Checkpoint.load(models / "run" / "model.pt").eval()
     args = inputs()
-    assert torch.allclose(net.eval()(*args)[0], loaded(*args)[0], atol=1e-6)
+    assert torch.allclose(net.eval()(args)[0], loaded(args)[0], atol=1e-6)
     with loaded.fusion.silenced("a"):
-        assert not torch.allclose(net(*args)[0], loaded(*args)[0], atol=1e-6)
+        assert not torch.allclose(net(args)[0], loaded(args)[0], atol=1e-6)

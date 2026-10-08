@@ -5,7 +5,7 @@ import pytest
 import torch
 from torch import nn
 
-from megspeech.data.batching.split import DENSE, Split
+from megspeech.data.batching.split import DENSE, SpanInput, Split
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.spans.spans import Spans
@@ -28,10 +28,8 @@ def split(n: int = 12, seed: int = 0) -> Split:
 
 class Constant(nn.Module):
     @override
-    def forward(
-        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        logits = torch.zeros(*slot.shape, VOCAB_SIZE)
+    def forward(self, spans: SpanInput) -> tuple[torch.Tensor, torch.Tensor]:
+        logits = torch.zeros(*spans.slot.shape, VOCAB_SIZE)
         logits[..., 0] = 1
         return logits, logits
 
@@ -51,11 +49,9 @@ class Normed(Constant):
         self.norm = MaskedBatchNorm1d(CHANNELS)
 
     @override
-    def forward(
-        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        self.norm(x)
-        return super().forward(x, onset, slot, subject)
+    def forward(self, spans: SpanInput) -> tuple[torch.Tensor, torch.Tensor]:
+        self.norm(spans.x)
+        return super().forward(spans)
 
 
 def test_adapt() -> None:
@@ -163,11 +159,9 @@ class Counting(Constant):
         self.calls = 0
 
     @override
-    def forward(
-        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, spans: SpanInput) -> tuple[torch.Tensor, torch.Tensor]:
         self.calls += 1
-        return super().forward(x, onset, slot, subject)
+        return super().forward(spans)
 
 
 def test_report() -> None:

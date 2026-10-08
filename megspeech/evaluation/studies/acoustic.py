@@ -87,7 +87,7 @@ class Readout:
         with torch.no_grad():
             for spans in torch.arange(len(split.index), device=device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
-                *_, times = self.net.heard_timed(batch.x, batch.onset, batch.slot, batch.subject)
+                *_, times = self.net.heard_timed(batch.inputs())
                 out[torch.where(batch.index != PAD, batch.index, words)] = self.head(times).float()
         return out[:words].cpu().numpy()
 

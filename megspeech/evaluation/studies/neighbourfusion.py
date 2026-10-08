@@ -109,10 +109,7 @@ class Neighbours:
                 batch = split.batch(spans, rows)
                 at = torch.where(batch.index != PAD, batch.index, words)
                 reads = [
-                    member.beside(
-                        member.net.heard(batch.x, batch.onset, batch.slot, batch.subject)[1], batch.index != PAD
-                    )
-                    for member in self.members
+                    member.beside(member.net.heard(batch.inputs())[1], batch.index != PAD) for member in self.members
                 ]
                 out[at] = torch.stack(reads).mean(0)
         return out[:words]

@@ -33,6 +33,30 @@ ROW_ALIGN = 8
 
 
 @dataclass(frozen=True)
+class SpanInput:
+    """What a span model reads: word windows `x`, each span position's `onset` and row of `x` (`slot`, `len(x)` where
+    the position is empty), and each row's `subject`."""
+
+    x: Float[Tensor, "r c t"]
+    onset: Float[Tensor, "g w"]
+    slot: Int[Tensor, "g w"]
+    subject: Int[Tensor, " r"]
+
+    @property
+    def mask(self) -> Bool[Tensor, "g w"]:
+        """The span positions holding a word."""
+        return self.slot < len(self.x)
+
+    def reading(self, x: Float[Tensor, "r c t"]) -> "SpanInput":
+        """These spans over the windows `x` instead, row for row."""
+        return replace(self, x=x)
+
+    def timed(self, onset: Float[Tensor, "g w"]) -> "SpanInput":
+        """These spans with their positions at `onset` instead."""
+        return replace(self, onset=onset)
+
+
+@dataclass(frozen=True)
 class Batch:
     """Spans packed into a fixed number of word rows, so every training step has the same shapes.
 
@@ -44,6 +68,10 @@ class Batch:
     slot: Int[Tensor, "g w"]
     index: Int[Tensor, "g w"]
     subject: Int[Tensor, " r"]
+
+    def inputs(self, x: Float[Tensor, "r c t"] | None = None) -> SpanInput:
+        """What a model reads of this batch, over the windows `x` when given (an augmented copy of its own)."""
+        return SpanInput(self.x if x is None else x, self.onset, self.slot, self.subject)
 
     def target(self, labels: Int[Tensor, " n"]) -> Int[Tensor, "g w"]:
         """Each position's label from the split's `labels`; `IGNORE` where the position is empty."""

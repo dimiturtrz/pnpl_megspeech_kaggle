@@ -2,9 +2,10 @@
 
 from typing import override
 
-from jaxtyping import Bool, Float, Int
+from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
 from megspeech.model.config import CONTEXT, ContextConfig
 from megspeech.model.context.timing import TimingHead
@@ -39,36 +40,21 @@ class SentenceNet(Span):
         self.timing = TimingHead.over_vocabulary(active=context.rhythm)
 
     @override
-    def forward(
-        self,
-        x: Float[Tensor, "r c t"],
-        onset: Float[Tensor, "g w"],
-        slot: Int[Tensor, "g w"],
-        subject: Int[Tensor, " r"],
-    ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
-        """`slot` is each span position's row of `x`; `len(x)` marks an empty position, and rows no slot names are
-        padding that neither normalises nor reaches the transformer."""
-        _, _, context, word = self.heard(x, onset, slot, subject)
+    def forward(self, spans: SpanInput) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
+        """Rows of `spans.x` no slot names are padding that neither normalises nor reaches the transformer."""
+        _, _, context, word = self.heard(spans)
         return context, word
 
     def heard(
-        self,
-        x: Float[Tensor, "r c t"],
-        onset: Float[Tensor, "g w"],
-        slot: Int[Tensor, "g w"],
-        subject: Int[Tensor, " r"],
+        self, spans: SpanInput
     ) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"], Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
         """The refined positions and the word embeddings, then the context head's logits with the timing head's
         added, and the word head's."""
-        h, slots = self.features(x, onset, slot, subject)
-        return self.finish(h, slots, onset, slot < len(x))
+        h, slots = self.features(spans)
+        return self.finish(h, slots, spans.onset, spans.mask)
 
     def heard_timed(
-        self,
-        x: Float[Tensor, "r c t"],
-        onset: Float[Tensor, "g w"],
-        slot: Int[Tensor, "g w"],
-        subject: Int[Tensor, " r"],
+        self, spans: SpanInput
     ) -> tuple[
         Float[Tensor, "g w h"],
         Float[Tensor, "g w e"],
@@ -78,9 +64,9 @@ class SentenceNet(Span):
     ]:
         """`heard`'s outputs and, last, the encoder's per-timestep features at each position: `heard` itself, the
         encoder read once."""
-        slots, times = self.words.positions_timed(self.prepare(x, subject), slot)
-        h = self.chunked(x, onset, slot, subject, slots)
-        return *self.finish(h, slots, onset, slot < len(x)), times
+        slots, times = self.words.positions_timed(self.prepare(spans.x, spans.subject), spans.slot)
+        h = self.chunked(spans, slots)
+        return *self.finish(h, slots, spans.onset, spans.mask), times
 
     def finish(
         self,

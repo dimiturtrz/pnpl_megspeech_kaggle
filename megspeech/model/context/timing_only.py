@@ -1,8 +1,9 @@
 from typing import override
 
-from jaxtyping import Float, Int
+from jaxtyping import Float
 from torch import Tensor, nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.model.context.timing import TimingHead
 
 
@@ -15,12 +16,6 @@ class TimingOnly(nn.Module):
         self.timing = TimingHead(vocabulary)
 
     @override
-    def forward(
-        self,
-        x: Float[Tensor, "r c t"],
-        onset: Float[Tensor, "g w"],
-        slot: Int[Tensor, "g w"],
-        subject: Int[Tensor, " r"],
-    ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
-        logits = self.timing(onset, slot < len(x))
+    def forward(self, spans: SpanInput) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
+        logits = self.timing(spans.onset, spans.mask)
         return logits, logits

@@ -9,6 +9,7 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.cache.run_cache import WORD_TABLE as TABLE
 from megspeech.data.config import DataConfig, Val
 from megspeech.data.constants import CHANNELS
@@ -38,12 +39,10 @@ class Favourite(nn.Module):
     """Ranks the vocabulary by index for subject 0 and in reverse for every other subject."""
 
     @override
-    def forward(
-        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, spans: SpanInput) -> tuple[torch.Tensor, torch.Tensor]:
         ranks = -torch.arange(VOCAB_SIZE, dtype=torch.float32)
-        rows = torch.where(subject[:, None] == 0, ranks, ranks.flip(0))
-        logits = nn.functional.pad(rows, (0, 0, 0, 1))[slot]
+        rows = torch.where(spans.subject[:, None] == 0, ranks, ranks.flip(0))
+        logits = nn.functional.pad(rows, (0, 0, 0, 1))[spans.slot]
         return logits, logits
 
 

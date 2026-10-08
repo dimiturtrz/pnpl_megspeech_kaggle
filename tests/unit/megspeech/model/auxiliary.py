@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
 from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.config import ContextConfig
@@ -28,14 +29,14 @@ def x() -> torch.Tensor:
 def test_forward() -> None:
     model = net().eval()
     auxiliary = WithAuxiliary(model, nn.ModuleList([Semantic(model.words.width), nn.Linear(16, 5)])).eval()
-    inputs = (x(), ONSET, SLOT, torch.zeros(3, dtype=torch.long))
-    context, word, projected, phonetic = auxiliary.forward(*inputs)
-    assert all(torch.equal(a, b) for a, b in zip((context, word), model(*inputs), strict=True))
+    inputs = SpanInput(x(), ONSET, SLOT, torch.zeros(3, dtype=torch.long))
+    context, word, projected, phonetic = auxiliary.forward(inputs)
+    assert all(torch.equal(a, b) for a, b in zip((context, word), model(inputs), strict=True))
     assert projected.shape == (2, 3, DIM)
     assert phonetic.shape == (2, 3, 5)
-    assert len(WithAuxiliary(model, nn.ModuleList()).forward(*inputs)) == 2
-    tapped = WithAuxiliary(model, nn.ModuleList([nn.Identity()]), Tap.CONTEXT).eval().forward(*inputs)
-    h, _ = model.features(*inputs)
+    assert len(WithAuxiliary(model, nn.ModuleList()).forward(inputs)) == 2
+    tapped = WithAuxiliary(model, nn.ModuleList([nn.Identity()]), Tap.CONTEXT).eval().forward(inputs)
+    h, _ = model.features(inputs)
     assert torch.equal(tapped[2], model.refine(h, SLOT < 3))
 
 
@@ -44,9 +45,9 @@ def test_forward_time() -> None:
     without it."""
     model = net().eval()
     head = nn.Conv1d(model.words.time_width(), 1, 1)
-    inputs = (x(), ONSET, SLOT, torch.zeros(3, dtype=torch.long))
-    timed = WithAuxiliary(model, nn.ModuleList([nn.Identity()]), taps=(Tap.TIME,)).eval().forward(*inputs)
-    plain = WithAuxiliary(model, nn.ModuleList()).eval().forward(*inputs)
+    inputs = SpanInput(x(), ONSET, SLOT, torch.zeros(3, dtype=torch.long))
+    timed = WithAuxiliary(model, nn.ModuleList([nn.Identity()]), taps=(Tap.TIME,)).eval().forward(inputs)
+    plain = WithAuxiliary(model, nn.ModuleList()).eval().forward(inputs)
     assert all(torch.equal(a, b) for a, b in zip(plain, timed[:2], strict=True))
     assert timed[2].shape == (2, 3, model.words.time_width(), SAMPLES)
     assert head(timed[2].flatten(0, 1)).shape == (6, 1, SAMPLES)

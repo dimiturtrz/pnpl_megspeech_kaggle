@@ -8,7 +8,7 @@ import pytest
 import torch
 from torch import Tensor, nn
 
-from megspeech.data.batching.split import Split
+from megspeech.data.batching.split import SpanInput, Split
 from megspeech.data.config import METRICS
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
@@ -38,8 +38,8 @@ class Embedding(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return x
 
-    def heard(self, x: Tensor, onset: Tensor, slot: Tensor, subject: Tensor) -> tuple[None, Tensor, None, None]:
-        return None, nn.functional.pad(x.mean(-1), (0, 0, 0, 1))[slot], None, None
+    def heard(self, spans: SpanInput) -> tuple[None, Tensor, None, None]:
+        return None, nn.functional.pad(spans.x.mean(-1), (0, 0, 0, 1))[spans.slot], None, None
 
 
 def constant(label: int) -> nn.Linear:

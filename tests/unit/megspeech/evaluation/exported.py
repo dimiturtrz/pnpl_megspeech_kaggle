@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 import torch
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.constants import CHANNELS
@@ -35,10 +36,8 @@ class Contrary(Favourite):
     """`Favourite`'s context head, with a word head that ranks the vocabulary in reverse."""
 
     @override
-    def forward(
-        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        context, _ = super().forward(x, onset, slot, subject)
+    def forward(self, spans: SpanInput) -> tuple[torch.Tensor, torch.Tensor]:
+        context, _ = super().forward(spans)
         return context, context.flip(-1)
 
 

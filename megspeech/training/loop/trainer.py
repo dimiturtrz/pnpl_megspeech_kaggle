@@ -182,7 +182,7 @@ class Trainer:
         batch = train.batch(spans, state.rows, self.config.augment.jitter)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             mixed = state.bgmix.apply(state.average.apply(batch.x, batch, train), batch, train)
-            outputs = state.model(self.regional(self.config.augment(mixed)), batch.onset, batch.slot, batch.subject)
+            outputs = state.model(batch.inputs(self.regional(self.config.augment(mixed))))
             parts = zip(state.terms, state.readouts, outputs, strict=True)
             inside = batch.target(train.y) != IGNORE
             losses = torch.stack(

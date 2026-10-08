@@ -6,7 +6,7 @@ import pytest
 import torch
 from torch import nn
 
-from megspeech.data.batching.split import Split
+from megspeech.data.batching.split import SpanInput, Split
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.objective.auxiliary.neighbour import OUTSIDE, NextWordTerm, PreviousWordTerm
@@ -87,7 +87,7 @@ def test_gradient_skips_the_mixer() -> None:
     head = term.readout(model.words.head, model.words.width)
     heads = torch.nn.ModuleList([head])
     auxiliary = WithAuxiliary(model, heads, Tap.CONTEXT, (Tap.WORD,))
-    output = auxiliary(x(), ONSET, SLOT, torch.zeros(3, dtype=torch.long))[2]
+    output = auxiliary(SpanInput(x(), ONSET, SLOT, torch.zeros(3, dtype=torch.long)))[2]
     target = torch.tensor([[1, 2, IGNORE], [4, IGNORE, IGNORE]])
     term.loss(head, output, target).backward()
     assert all(p.grad is None or not p.grad.any() for p in model.context.parameters())

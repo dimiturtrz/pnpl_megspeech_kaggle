@@ -5,6 +5,7 @@ from typing import override
 import torch
 from torch import nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.config import METRICS
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
@@ -25,10 +26,8 @@ class Peaked(nn.Module):
         self.word = word
 
     @override
-    def forward(
-        self, x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor, subject: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        logits = torch.zeros(*slot.shape, VOCAB_SIZE)
+    def forward(self, spans: SpanInput) -> tuple[torch.Tensor, torch.Tensor]:
+        logits = torch.zeros(*spans.slot.shape, VOCAB_SIZE)
         logits[..., self.word] = 10
         return logits, logits
 
@@ -37,7 +36,7 @@ def test_forward() -> None:
     slot = torch.tensor([[0, 1]])
     members: list[nn.Module] = [Peaked(3), Peaked(3), Peaked(7)]
     context, word = Ensemble(members).forward(
-        torch.zeros(2, 1, 1), torch.zeros(1, 2), slot, torch.zeros(2, dtype=torch.long)
+        SpanInput(torch.zeros(2, 1, 1), torch.zeros(1, 2), slot, torch.zeros(2, dtype=torch.long))
     )
     assert torch.all(context.argmax(-1) == 3)
     assert torch.allclose(context, word)
