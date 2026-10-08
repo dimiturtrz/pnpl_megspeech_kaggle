@@ -14,6 +14,7 @@ from jaxtyping import Bool, Float, Int
 
 from core.paths import DataRoot
 from megspeech.data.raw.fetch import APPLESEED, MASC
+from megspeech.data.raw.kymata import KYMATA
 from megspeech.data.raw.serialised import Serialised
 
 DEEP = 0
@@ -115,8 +116,8 @@ class Run:
     @classmethod
     def everywhere(cls, root: DataRoot) -> list["Run"]:
         """LibriBrain's runs, then every other study's recordings rewritten as runs (`megspeech.data.raw.masc`,
-        `megspeech.data.raw.appleseed`)."""
-        rewritten = (root.processed(study.dataset) for study in (MASC, APPLESEED))
+        `megspeech.data.raw.appleseed`, `megspeech.data.raw.kymata`)."""
+        rewritten = (root.processed(study.dataset) for study in (MASC, APPLESEED, KYMATA))
         return [*cls.discover(root.raw()), *(run for processed in rewritten for run in cls.discover(processed))]
 
     @staticmethod
