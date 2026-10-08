@@ -4,8 +4,8 @@ import pytest
 from torch import nn
 
 from core.paths import DataRoot
+from megspeech.model.builder import WordBuilder
 from megspeech.model.config import ContextConfig, Encoder
-from megspeech.model.words.builder import WordBuilder
 from megspeech.model.words.conv import ConvConfig, ConvWords
 from megspeech.model.words.experts import ExpertWords
 from megspeech.model.words.megxl import POOLED, RESOLVED

@@ -124,6 +124,22 @@ def test_fit() -> None:
     assert found.fit(Condition.MEG) < found.fit(Condition.REAL)
 
 
+def test_context() -> None:
+    """The real condition reads the fit subset itself; a MEG shuffle moves the readings."""
+    found = locator()
+    assert torch.equal(found.context(Condition.REAL), found.read(found.fitted))
+    assert not torch.equal(found.context(Condition.MEG), found.read(found.fitted))
+
+
+def test_read() -> None:
+    """One row per labelled fit word, each ranking that word's own label first."""
+    found = locator()
+    words = found.fitted.heard()
+    read = found.read(found.fitted)
+    assert read.shape == (len(found.fitted.y[words]), VOCAB_SIZE)
+    assert torch.equal(read.argmax(-1), torch.as_tensor(found.fitted.y[words]).long())
+
+
 def test_val() -> None:
     found = locator()
     assert found.val(Condition.ORDER) == pytest.approx(found.val(Condition.REAL))

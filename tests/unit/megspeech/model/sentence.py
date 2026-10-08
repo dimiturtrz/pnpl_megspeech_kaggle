@@ -14,7 +14,7 @@ from megspeech.model.context.droplayer import DropPathLayer
 from megspeech.model.input.subjects import SubjectLayer
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig, ConvWords
-from megspeech.model.words.spanned import SpannedConfig
+from megspeech.model.words.spanned import SpannedConfig, SpanWords
 from megspeech.model.words.trunk import DOWNSAMPLING, Geometry, Trunk
 from tests.unit.megspeech.model.words.trunk import CHANNELS as GEOMETRY
 from tests.unit.megspeech.model.words.trunk import Features
@@ -80,7 +80,9 @@ def test_encoder_spanned(monkeypatch: pytest.MonkeyPatch) -> None:
     ids = [id(p) for p in model.encoder()]
     assert len(ids) == len(set(ids))
     assert {id(p) for p in model.words.backbone()} <= set(ids)
-    assert not set(ids) & {id(p) for p in [*model.words.reduce.parameters(), *model.words.mix.parameters()]}
+    words = model.words
+    assert isinstance(words, SpanWords)
+    assert not set(ids) & {id(p) for p in [*words.reduce.parameters(), *words.mix.parameters()]}
 
 
 def test_features_spanned(monkeypatch: pytest.MonkeyPatch) -> None:
