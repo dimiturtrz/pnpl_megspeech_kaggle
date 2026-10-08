@@ -9,8 +9,8 @@ the labelled words split by the source of the subject who heard them. Validation
 import argparse
 import logging
 import math
-from dataclasses import dataclass
-from enum import Enum
+from dataclasses import dataclass, replace
+from enum import Enum, StrEnum
 
 import torch
 from jaxtyping import Float, Int
@@ -18,11 +18,13 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from core.tree import Tree
+from megspeech.data.batching.split import Split
 from megspeech.data.corpus import Corpus
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.studies.gap import Condition, Locator
+from megspeech.model.context.timing import KAGGLE_GAP
 
 LOG = logging.getLogger(__name__)
 
@@ -40,25 +42,75 @@ class Source(Enum):
         return (subject >= low) & (subject <= high)
 
 
+UNSEEN_SUBJECT = 999
+"""A subject id no sensor layer holds a matrix for: read through its unseen fallback."""
+
+
+class Variant(StrEnum):
+    """What the fit subset is read as: real, or with MEG windows swapped plus one more thing taken from the input."""
+
+    REAL = "real"
+    MEG = "meg"
+    EVEN = "meg+even"
+    GAPS = "meg+gaps"
+    SUBJECT = "meg+subj"
+    BOTH = "meg+even+subj"
+
+    def apply(self, split: Split, seed: int) -> Split:
+        """`split` as this variant reads it."""
+        if self is Variant.REAL:
+            return split
+        shuffled = split.permuted(seed)
+        timed = {
+            Variant.MEG: lambda: shuffled,
+            Variant.EVEN: lambda: self.evenly(shuffled),
+            Variant.GAPS: lambda: self.regapped(shuffled, seed),
+            Variant.SUBJECT: lambda: self.anonymous(shuffled),
+            Variant.BOTH: lambda: self.anonymous(self.evenly(shuffled)),
+        }
+        return timed[self]()
+
+    @staticmethod
+    def evenly(split: Split) -> Split:
+        """Every span's words at the Kaggle test's typical spacing from zero: only the word count remains of timing."""
+        valid = split.index >= 0
+        rank = (valid.cumsum(-1) - 1).to(split.onset.dtype)
+        return replace(split, onset=torch.where(valid, rank * KAGGLE_GAP, split.onset))
+
+    @staticmethod
+    def regapped(split: Split, seed: int) -> Split:
+        """Every span's gaps between onsets dealt among its own gap slots in a random order."""
+        valid = split.index[:, 1:] >= 0
+        gaps = split.onset[:, 1:] - split.onset[:, :-1]
+        keys = torch.rand(gaps.shape, generator=torch.Generator().manual_seed(seed)).to(gaps.device)
+        order = torch.where(valid, keys, 2.0).argsort(dim=1)
+        moved = torch.cumsum(torch.where(valid, gaps.gather(1, order), 0.0), dim=1)
+        return replace(split, onset=torch.cat([split.onset[:, :1], torch.where(valid, moved, split.onset[:, 1:])], 1))
+
+    @staticmethod
+    def anonymous(split: Split) -> Split:
+        return replace(split, subject=torch.full_like(split.subject, UNSEEN_SUBJECT))
+
+
 @dataclass(frozen=True)
 class SourceFit:
-    """One run's fit per source with real and MEG-shuffled windows, the words behind each, and its validation macro."""
+    """One run's fit per source under each variant, the words behind each source, and its validation macro."""
 
-    fit: dict[Condition, dict[Source, float]]
+    fit: dict[Variant, dict[Source, float]]
     words: dict[Source, int]
     val: float
     tau: float
 
     @classmethod
     def of(cls, locator: Locator) -> "SourceFit":
-        """The fit subset's context-head balanced top-10 within each source's labelled words, per condition."""
+        """The fit subset's context-head balanced top-10 within each source's labelled words, per variant."""
         fitted = locator.fitted
         heard = fitted.heard()
         subject, label = fitted.subject[heard], fitted.y[heard]
         masks = {source: source.owns(subject) for source in Source}
         fit = {
-            condition: cls.scored(locator, locator.context(condition), label, masks)
-            for condition in (Condition.REAL, Condition.MEG)
+            variant: cls.scored(locator, locator.read(variant.apply(fitted, locator.seed)), label, masks)
+            for variant in Variant
         }
         words = {source: int(mask.sum().item()) for source, mask in masks.items()}
         return cls(fit, words, locator.val(Condition.REAL), locator.tau)
@@ -76,12 +128,14 @@ class SourceFit:
         }
 
     def lines(self) -> list[str]:
+        head = f"{'':12}" + "".join(f"{variant.value:>15}" for variant in Variant) + "  words"
         rows = [
-            f"{source.name.lower():12}fit {self.fit[Condition.REAL][source]:.4f}  "
-            f"meg-shuffled {self.fit[Condition.MEG][source]:.4f}  words {self.words[source]}"
+            f"{source.name.lower():12}"
+            + "".join(f"{self.fit[variant][source]:15.4f}" for variant in Variant)
+            + f"  {self.words[source]}"
             for source in Source
         ]
-        return [*rows, f"{'val macro':12}{self.val:.4f}  tau {self.tau}"]
+        return [head, *rows, f"{'val macro':12}{self.val:.4f}  tau {self.tau}"]
 
 
 def main() -> None:
