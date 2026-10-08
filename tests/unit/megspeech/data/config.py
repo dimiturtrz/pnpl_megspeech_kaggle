@@ -611,3 +611,29 @@ def test_muted() -> None:
     assert DataConfig(subjects=(0, 3), adapt=12).muted(names).tolist() == [True, False, False, False]
     assert DataConfig(subjects=(0, 3), adapt=12, adapt_context=True).muted(names).tolist() == [False] * 4
     assert DataConfig().muted(names).tolist() == [False] * 4
+
+
+def test_muted_context_subjects() -> None:
+    """`context_subjects` mutes every run of the subjects outside it, on top of the `adapt` rule; empty mutes none."""
+    names = pd.Series(
+        [
+            "sub-3_ses-12_task-Sherlock1_run-1",
+            "sub-3_ses-1_task-Sherlock1_run-1",
+            "sub-0_ses-1_task-Sherlock1_run-1",
+            "sub-301_ses-1_task-Sherlock1_run-1",
+        ]
+    )
+    assert DataConfig(subjects=(0, 3, 301), context_subjects=(0,)).muted(names).tolist() == [True, True, False, True]
+    assert DataConfig(subjects=(0, 3), adapt=12, adapt_context=True, context_subjects=(3,)).muted(names).tolist() == [
+        False,
+        False,
+        True,
+        True,
+    ]
+    assert DataConfig(subjects=(0, 3), adapt=12, context_subjects=(0, 3)).muted(names).tolist() == [
+        True,
+        False,
+        False,
+        True,
+    ]
+    assert DataConfig(context_subjects=()).muted(names).tolist() == [False] * 4

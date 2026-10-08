@@ -163,6 +163,10 @@ class DataConfig:
     """Whether the `adapt` words also train the context head. Off, they feed their spans as context input and train
     the word head and every per-window term, but the context head is not scored on them: all 32 subjects heard the
     same text, so N copies of it make the span transformer memorise it."""
+    context_subjects: tuple[int, ...] = ()
+    """Subjects whose words the context head (and its distillation) is scored on; empty scores every subject. The
+    others still train the word head and every per-window term and still feed their spans as context input, but
+    the context head cannot memorise a story they repeat (megspeech-7gf.152)."""
     features: str = ""
     """Features a frozen encoder saved under models/features/<name> (`megspeech.data.batching.split`), read in
     place of every split's MEG; `a+b` joins several encoders' per word (megspeech-7gf.77); empty reads the MEG."""
@@ -328,9 +332,11 @@ class DataConfig:
 
     def muted(self, names: "pd.Series[str]") -> Bool[np.ndarray, " n"]:
         """Whether each run `name`'s words keep the context head's label from training: the `adapt` runs of subjects
-        1-32, unless `adapt_context`."""
-        adapted = Run.matching(names, (ADAPTED, self.adapt, 1)) & (Run.subjects(names) != DEEP)
-        return adapted & (not self.adapt_context)
+        1-32, unless `adapt_context`, and every run of a subject outside `context_subjects` when it is set."""
+        subjects = Run.subjects(names)
+        adapted = Run.matching(names, (ADAPTED, self.adapt, 1)) & (subjects != DEEP)
+        outside = ~np.isin(subjects, self.context_subjects) if self.context_subjects else np.zeros(len(names), bool)
+        return (adapted & (not self.adapt_context)) | outside
 
     @staticmethod
     def stratum(task: str) -> str:
