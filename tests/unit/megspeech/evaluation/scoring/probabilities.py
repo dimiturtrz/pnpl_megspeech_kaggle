@@ -84,3 +84,10 @@ def test_load_missing(tmp_path: Path) -> None:
     probabilities().save(tmp_path / PROBS, "val")
     with pytest.raises(KeyError):
         Probabilities.load(tmp_path / PROBS, "absent")
+
+
+def test_probabilities_from_logits() -> None:
+    domains = {"a": split(), "b": split(n=8, seed=1)}
+    logits = {name: evaluator().logits(Constant(), s) for name, s in domains.items()}
+    made = Probabilities.from_logits(evaluator(), logits, domains, PRIOR, 0.5)
+    assert torch.equal(made.domains["b"].probabilities, probabilities().domains["b"].probabilities)

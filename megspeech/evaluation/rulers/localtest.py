@@ -13,7 +13,6 @@ from pathlib import Path
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.metric.ruler import Graded, Ruler
-from megspeech.evaluation.scoring.probabilities import Probabilities
 
 LOG = logging.getLogger(__name__)
 
@@ -49,9 +48,7 @@ class LocalTest:
     def record(self, partition: Partition, tau: float, path: Path) -> Path:
         """Every labelled word of `partition`'s domains with its probabilities at `tau`, saved into `path`."""
         loaded = replace(self.loaded, partition=partition)
-        domains, _ = loaded.domains(loaded.ruled(self.runs))
-        probabilities = Probabilities.of(loaded.evaluator, loaded.model, domains, loaded.log_prior, tau)
-        return probabilities.save(path, SECTIONS[partition])
+        return loaded.probabilities_of(self.runs, tau).save(path, SECTIONS[partition])
 
     def report(self, label: str, probabilities: Path | None = None) -> None:
         """Log both partitions' scores at val's tau, and save their per-word probabilities when `probabilities`

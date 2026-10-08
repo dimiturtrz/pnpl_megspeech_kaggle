@@ -13,6 +13,8 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.blended import Blended
 from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.scoring.score import Head
+from megspeech.evaluation.text import RULER
 from tests.unit.megspeech.evaluation.loaded import POOLED, SPOKEN, kaggle_stub, loaded, runs
 
 
@@ -34,6 +36,11 @@ class Shuffled(LoadedModel):
     def run_context(self, run: Run) -> tuple[Split, torch.Tensor]:
         split, context = super().run_context(run)
         return replace(split, y=split.y + 1), context
+
+    @override
+    def domain_logits(self, runs: list[Run]) -> tuple[dict[str, Split], dict[str, dict[Head, torch.Tensor]]]:
+        domains, logits = super().domain_logits(runs)
+        return {name: replace(split, y=split.y + 1) for name, split in domains.items()}, logits
 
 
 def pair(tmp_path: Path, *, second: type[LoadedModel] = LoadedModel) -> Blended:
@@ -86,6 +93,30 @@ def test_blend_refuses_different_words(tmp_path: Path) -> None:
         pair(tmp_path, second=Shuffled).blend(lambda group: group.run_context(run), run.name)
 
 
+def test_agree(tmp_path: Path) -> None:
+    split, _ = loaded(tmp_path).run_context(runs(tmp_path)[POOLED])
+    assert Blended.agree(split, split)
+    assert not Blended.agree(split, replace(split, y=split.y + 1))
+
+
+def test_domain_logits(tmp_path: Path) -> None:
+    """A blended report weights each group's log-probabilities at its member count, in every domain and head."""
+    blended = pair(tmp_path)
+    domains, logits = blended.domain_logits(runs(tmp_path))
+    alone, own = blended.groups[0].domain_logits(runs(tmp_path))
+    assert RULER in domains
+    flat = -float(np.log(VOCAB_SIZE))
+    for head in Head:
+        assert torch.allclose(logits[RULER][head], 2 / 3 * own[RULER][head] + 1 / 3 * flat, atol=1e-5)
+    assert alone.keys() == domains.keys()
+    assert blended.report(runs(tmp_path)).macro.n == blended.groups[0].report(runs(tmp_path)).macro.n
+
+
+def test_domain_logits_refuses_different_words(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="different words for the scored domains"):
+        pair(tmp_path, second=Shuffled).domain_logits(runs(tmp_path))
+
+
 def test_run_context(tmp_path: Path) -> None:
     split, context = pair(tmp_path).run_context(runs(tmp_path)[POOLED])
     assert len(split.y) == len(context) == len(SPOKEN)
@@ -102,6 +133,6 @@ def test_kaggle_chosen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.parametrize("method", ["context", "splits", "domains", "kaggle"])
 def test_single_group_reads_refused(tmp_path: Path, method: str) -> None:
     blended = pair(tmp_path)
-    argument = {"context": None, "splits": [], "domains": {}, "kaggle": Track.BROAD}[method]
+    argument: object = {"context": None, "splits": [], "domains": {}, "kaggle": Track.BROAD}[method]
     with pytest.raises(NotImplementedError, match="run_context and kaggle_chosen only"):
         getattr(blended, method)(argument)

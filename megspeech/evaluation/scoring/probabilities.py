@@ -84,10 +84,20 @@ class Probabilities:
         tau: float,
     ) -> "Probabilities":
         """`model`'s predictions on every labelled word of `domains`."""
-        words = {
-            name: Words.of(evaluator, evaluator.logits(model, split), split, log_prior, tau)
-            for name, split in domains.items()
-        }
+        logits = {name: evaluator.logits(model, split) for name, split in domains.items()}
+        return cls.from_logits(evaluator, logits, domains, log_prior, tau)
+
+    @classmethod
+    def from_logits(
+        cls,
+        evaluator: Evaluator,
+        logits: dict[str, dict[Head, Float[Tensor, "n v"]]],
+        domains: dict[str, Split],
+        log_prior: Float[Tensor, " v"],
+        tau: float,
+    ) -> "Probabilities":
+        """The predictions on every labelled word of `domains` from their already computed logits."""
+        words = {name: Words.of(evaluator, logits[name], split, log_prior, tau) for name, split in domains.items()}
         return cls(words, tau, log_prior.cpu(), evaluator.min_novel)
 
     @staticmethod

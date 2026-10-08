@@ -121,8 +121,19 @@ class Evaluator:
     def graded(self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], tau: float) -> Graded:
         """The context head's per-word hits on the unseen spans of every domain that counts toward selection."""
         counted = self.eligible(domains)
-        context = {name: self.logits(model, split)[Head.CONTEXT] for name, split in counted.items()}
-        return self.grade(context, counted, log_prior, tau)
+        logits = {name: self.logits(model, split) for name, split in counted.items()}
+        return self.graded_logits(logits, counted, log_prior, tau)
+
+    def graded_logits(
+        self,
+        logits: dict[str, dict[Head, Float[Tensor, "n v"]]],
+        domains: dict[str, Split],
+        log_prior: Float[Tensor, " v"],
+        tau: float,
+    ) -> Graded:
+        """`graded` from each domain's already computed logits: scores logits that come from no single model."""
+        counted = self.eligible(domains)
+        return self.grade({name: logits[name][Head.CONTEXT] for name in counted}, counted, log_prior, tau)
 
     def eligible(self, domains: dict[str, Split]) -> dict[str, Split]:
         """The `domains` with enough unseen-span words to count toward selection."""

@@ -21,6 +21,7 @@ from megspeech.evaluation import loaded as module
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.score import Head
 from megspeech.evaluation.text import RULER
 from megspeech.model.input.subjects import Reading
 
@@ -111,6 +112,18 @@ def test_graded(tmp_path: Path) -> None:
     graded = loaded(tmp_path).graded(runs(tmp_path), report.tau)
     assert Ruler().point(graded) == pytest.approx(report.macro.bacc10)
     assert sum(len(labels) for _, labels in graded.domains.values()) == report.macro.n
+
+
+def test_domain_logits(tmp_path: Path) -> None:
+    domains, logits = loaded(tmp_path).domain_logits(runs(tmp_path))
+    assert RULER in domains
+    assert logits[RULER][Head.CONTEXT].shape == (len(domains[RULER].y), VOCAB_SIZE)
+
+
+def test_probabilities_of(tmp_path: Path) -> None:
+    made = loaded(tmp_path).probabilities_of(runs(tmp_path), 0.5)
+    assert RULER in made.domains
+    assert made.tau == 0.5
 
 
 def test_probabilities(tmp_path: Path) -> None:

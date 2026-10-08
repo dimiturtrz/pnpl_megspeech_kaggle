@@ -14,6 +14,7 @@ from megspeech.data.raw.runs import Run
 from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.probabilities import Probabilities
 from megspeech.evaluation.scoring.score import Epoch, Head, Score
 
 
@@ -49,15 +50,25 @@ class LoadedModel(Reader):
         split, context = self.run_context(run)
         return self.evaluator.unseen(context, split, self.log_prior)
 
+    def domain_logits(self, runs: list[Run]) -> tuple[dict[str, Split], dict[str, dict[Head, Float[Tensor, "n v"]]]]:
+        """Every domain of `runs` in the scored partition as the model reads it, and both heads' log-probabilities."""
+        domains, _ = self.domains(self.ruled(runs))
+        return domains, {name: self.evaluator.logits(self.model, split) for name, split in domains.items()}
+
     def report(self, runs: list[Run]) -> Epoch:
         """Every domain of `runs` in the scored partition, scored alone, and the macro that selects."""
-        domains, _ = self.domains(self.ruled(runs))
-        return self.evaluator.report(self.model, domains, self.log_prior, 0, 0.0)
+        domains, logits = self.domain_logits(runs)
+        return self.evaluator.summarised(logits, domains, self.log_prior, 0, 0.0)
 
     def graded(self, runs: list[Run], tau: float) -> Graded:
         """Every counted domain of `runs` in the scored partition: its unseen-span words' hits at `tau`."""
-        domains, _ = self.domains(self.ruled(runs))
-        return self.evaluator.graded(self.model, domains, self.log_prior, tau)
+        domains, logits = self.domain_logits(runs)
+        return self.evaluator.graded_logits(logits, domains, self.log_prior, tau)
+
+    def probabilities_of(self, runs: list[Run], tau: float) -> Probabilities:
+        """Every labelled word of `runs`' scored domains with its probabilities at `tau`."""
+        domains, logits = self.domain_logits(runs)
+        return Probabilities.from_logits(self.evaluator, logits, domains, self.log_prior, tau)
 
     def kaggle(self, track: Track) -> Split:
         """Every row of `track`'s Kaggle test as this model reads it, each from its own subject's MEG."""

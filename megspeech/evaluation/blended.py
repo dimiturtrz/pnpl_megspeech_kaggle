@@ -18,6 +18,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.scoring.score import Head
 
 Read = Callable[[LoadedModel], tuple[Split, Float[Tensor, "n v"]]]
 WORDS = ("y", "token", "index", "onset")
@@ -58,6 +59,31 @@ class Blended(LoadedModel):
     def adapted_on(self) -> int:
         return max(group.adapted_on for group in self.groups)
 
+    @staticmethod
+    def agree(lead: Split, split: Split) -> bool:
+        """Whether `split` holds `lead`'s words in the same order."""
+        return all(torch.equal(getattr(lead, name), getattr(split, name)) for name in WORDS)
+
+    @override
+    def domain_logits(self, runs: list[Run]) -> tuple[dict[str, Split], dict[str, dict[Head, Float[Tensor, "n v"]]]]:
+        """Each group's domains under its own config, scored in the blend's partition; per domain and head the
+        weighted mean of the groups' log-probabilities, after checking that every group read the same words."""
+        reads = [replace(group, partition=self.partition).domain_logits(runs) for group in self.groups]
+        lead, _ = reads[0]
+        for domains, _ in reads[1:]:
+            if domains.keys() != lead.keys() or not all(self.agree(lead[name], domains[name]) for name in lead):
+                raise ValueError("the groups of a blended ensemble read different words for the scored domains")
+        logits = {
+            name: {
+                head: torch.stack(
+                    [w * logits[name][head] for w, (_, logits) in zip(self.weights, reads, strict=True)]
+                ).sum(0)
+                for head in Head
+            }
+            for name in lead
+        }
+        return lead, logits
+
     def blend(self, read: Read, what: str) -> tuple[Split, Float[Tensor, "n v"]]:
         """The first group's split and the weighted mean of every group's log-probabilities for it, after checking
         that every group read the same words in the same order."""
@@ -65,8 +91,7 @@ class Blended(LoadedModel):
         lead, first = next(reads)
         parts = [first]
         for split, part in reads:
-            same = all(torch.equal(getattr(lead, name), getattr(split, name)) for name in WORDS)
-            if not same or part.shape != first.shape:
+            if not self.agree(lead, split) or part.shape != first.shape:
                 raise ValueError(f"the groups of a blended ensemble read different words for {what}")
             parts.append(part)
         return lead, torch.stack([w * part for w, part in zip(self.weights, parts, strict=True)]).sum(0)

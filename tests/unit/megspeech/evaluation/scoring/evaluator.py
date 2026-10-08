@@ -198,3 +198,14 @@ def test_summarised() -> None:
     reported = evaluator.report(Constant(), domains, prior, 2, 0.25)
     assert summed.macro == reported.macro
     assert summed.loss == 0.25
+
+
+def test_graded_logits() -> None:
+    """Grading from precomputed logits is what grading the model gives."""
+    domains = {"a": split(), "b": split(n=8, seed=1)}
+    evaluator, prior = Evaluator(CPU, min_novel=1), torch.zeros(VOCAB_SIZE)
+    logits = {name: evaluator.logits(Constant(), s) for name, s in domains.items()}
+    read = evaluator.graded_logits(logits, domains, prior, 0.5)
+    expected = evaluator.graded(Constant(), domains, prior, 0.5)
+    assert set(read.domains) == set(expected.domains)
+    assert all(torch.equal(read.domains[name][0], expected.domains[name][0]) for name in read.domains)
