@@ -17,8 +17,8 @@ class GradNorms:
 
     def record(self, total: Float[Tensor, ""]) -> None:
         """Keep this step's `total` norm and its encoder's; call between `backward` and the optimiser step."""
-        grads = [p.grad.norm() for p in self.encoder if p.grad is not None]
-        encoder = torch.linalg.vector_norm(torch.stack([*grads, total.new_zeros(())]))
+        grads = [p.grad for p in self.encoder if p.grad is not None]
+        encoder = torch.linalg.vector_norm(torch.stack(torch._foreach_norm([*grads, total.new_zeros(())])))
         self.rows.append(torch.stack([total.detach(), encoder]))
 
     def drained(self) -> dict[str, float]:

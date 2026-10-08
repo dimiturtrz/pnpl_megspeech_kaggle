@@ -61,3 +61,13 @@ def test_copy() -> None:
     Ema.copy(into, [torch.ones(2), torch.full((3,), 2.0)])
     assert into[0].tolist() == [1.0, 1.0]
     assert into[1].tolist() == [2.0, 2.0, 2.0]
+
+
+def test_live() -> None:
+    net = model()
+    ema = Ema.of(net, 0.5)
+    assert ema.live(net) is ema.live(net)
+    assert all(
+        a is not b and a.data_ptr() == b.data_ptr() for a, b in zip(ema.live(net), net.parameters(), strict=True)
+    )
+    assert ema.live(model()) is not ema.live(net)

@@ -1,6 +1,8 @@
 """Train-time perturbations of word windows, applied on the device per batch."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cached_property
 
 import torch
 from jaxtyping import Float
@@ -53,11 +55,7 @@ class Augment:
 
     def __call__(self, x: Float[Tensor, "n c t"]) -> Float[Tensor, "n c t"]:
         """The perturbed windows in float32: the half-precision cache's largest values sit near its overflow."""
-        x = x.float()
-        shape = (*x.shape[:2], 1)
-        keep = torch.rand(shape, device=x.device) >= self.dropout
-        scale = torch.exp(self.gain * torch.randn(shape, device=x.device))
-        x = x * (keep * scale)
+        x = self.sensors(x.float())
         x = self.masked(x, self.mask, x.shape[-1], self.chance)
         if self.band:
             spectrum = self.masked(torch.fft.rfft(x, dim=-1), self.band, x.shape[-1] // 2 + 1, self.chance)
@@ -66,6 +64,22 @@ class Augment:
             spread = x.std(dim=-1, keepdim=True)
             x = x + self.noise * spread * torch.randn_like(x) * (x != 0)
         return self.mixed(x)
+
+    @cached_property
+    def sensors(self) -> Callable[[Float[Tensor, "n c t"]], Float[Tensor, "n c t"]]:
+        """The sensor dropout and gain stage, picked once: the identity when both are 0, whose draws would keep every
+        sensor at gain 1."""
+        return self.scaled if self.dropout or self.gain else self.unscaled
+
+    def scaled(self, x: Float[Tensor, "n c t"]) -> Float[Tensor, "n c t"]:
+        shape = (*x.shape[:2], 1)
+        keep = torch.rand(shape, device=x.device) >= self.dropout
+        scale = torch.exp(self.gain * torch.randn(shape, device=x.device))
+        return x * (keep * scale)
+
+    @staticmethod
+    def unscaled(x: Float[Tensor, "n c t"]) -> Float[Tensor, "n c t"]:
+        return x
 
     def mixed(self, x: Float[Tensor, "n c t"]) -> Float[Tensor, "n c t"]:
         """`x` plus a uniform share up to `mix` of a shuffled window, rolled by a uniform shift; padding stays zero."""

@@ -2,7 +2,7 @@
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import override
 
 import torch
@@ -19,6 +19,8 @@ class Ema(StepHook):
 
     decay: float
     shadow: list[Tensor]
+    tracked: dict[int, list[Tensor]] = field(default_factory=dict, compare=False, repr=False)
+    """Each model's `state`, listed once: its tensors are updated in place, so the list never goes stale."""
 
     @classmethod
     def of(cls, model: nn.Module, decay: float) -> "Ema":
@@ -30,17 +32,23 @@ class Ema(StepHook):
         buffers = [b for b in model.buffers() if b.is_floating_point()]
         return [p.detach() for p in model.parameters()] + buffers
 
+    def live(self, model: nn.Module) -> list[Tensor]:
+        key = id(model)
+        if key not in self.tracked:
+            self.tracked[key] = self.state(model)
+        return self.tracked[key]
+
     @torch.no_grad()
     @override
     def step(self, model: nn.Module, lr: float) -> None:
         """Move the average toward `model` after an optimiser step at `lr`, which the average does not read."""
-        get_ema_multi_avg_fn(self.decay)(self.shadow, self.state(model), None)
+        get_ema_multi_avg_fn(self.decay)(self.shadow, self.live(model), None)
 
     @contextmanager
     def applied(self, model: nn.Module) -> Iterator[nn.Module]:
         """`model` holding the average for the block, its own state restored after; copied in place so the
         tensors a compiled graph captured stay the ones it reads."""
-        parameters = self.state(model)
+        parameters = self.live(model)
         own = [p.clone() for p in parameters]
         self.copy(parameters, self.shadow)
         try:

@@ -219,3 +219,11 @@ def test_unread() -> None:
     meg = torch.zeros(1, 9)
     assert Windows(meg, at, end, 2, offset=2).unread().tolist() == []
     assert Windows(meg, at, end, 2, offset=3).unread().tolist() == [0]
+
+
+def test_starts() -> None:
+    meg, at = torch.zeros(2, 20), torch.tensor([0, 5])
+    unbounded = Windows(meg, at, at + 5)
+    assert unbounded.starts.tolist() == [0, 0]
+    assert unbounded.starts is unbounded.starts
+    assert Windows(meg, at, at + 5, begin=torch.tensor([1, 2])).starts.tolist() == [1, 2]

@@ -9,6 +9,7 @@ cached.
 """
 
 from dataclasses import dataclass, replace
+from functools import cached_property
 
 import torch
 from jaxtyping import Float, Int
@@ -85,5 +86,9 @@ class Windows:
 
     def first(self, words: Int[Tensor, " k"]) -> Int[Tensor, "k 1"]:
         """The first sample each of `words` may read."""
-        begin = self.at.new_zeros(len(self.at)) if self.begin is None else self.begin
-        return begin[words, None]
+        return self.starts[words, None]
+
+    @cached_property
+    def starts(self) -> Int[Tensor, " n"]:
+        """`begin`, or the signal's start for every word when it bounds none."""
+        return self.at.new_zeros(len(self.at)) if self.begin is None else self.begin

@@ -86,3 +86,22 @@ def test_mixed() -> None:
     x[..., 15:] = 0
     assert torch.all(Augment(mix=0.5).mixed(x)[..., 15:] == 0)
     assert torch.equal(Augment(mix=0.5)(torch.zeros(4, 2, 5)), torch.zeros(4, 2, 5))
+
+
+def test_sensors() -> None:
+    x = torch.randn(4, 3, 5)
+    state = torch.get_rng_state()
+    assert Augment().sensors(x) is x
+    assert torch.equal(torch.get_rng_state(), state)
+    assert Augment(gain=0.2).sensors(x) is not x
+
+
+def test_scaled() -> None:
+    x = torch.ones(8, 3, 5)
+    assert torch.all(Augment(dropout=1.0).scaled(x) == 0)
+    assert torch.equal(Augment().scaled(x), x)
+
+
+def test_unscaled() -> None:
+    x = torch.randn(2, 2, 2)
+    assert Augment.unscaled(x) is x
