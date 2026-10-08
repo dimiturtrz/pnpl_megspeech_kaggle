@@ -1,15 +1,17 @@
-"""Frozen wav2vec2 latents of the audiobook speech each training word was heard in: token-level acoustic targets
-(Défossez et al. 2023), where the t5 lexicon is one vector per word type.
+"""Frozen self-supervised speech latents (a `Teacher`: wav2vec2 or HuBERT) of the audiobook speech each training word
+was heard in: token-level acoustic targets (Défossez et al. 2023), where the t5 lexicon is one vector per word type.
 
 Each trained Sherlock run's chapter (`<book>_<session>_doyle_64kb.wav`) is encoded once; a word's target is the
 mean of the latents over the `WINDOW` after its chapter onset, a row of `<run>.npy` aligned with the run's word
 table (`RunCache.words`), NaN where there is none. Validation and test runs' audio is never read.
 
-uv run python -m megspeech.objective.targets.speech
+uv run python -m megspeech.objective.targets.speech [--teacher hubert-large-ll60k] [--layers 15 18]
 """
 
+import argparse
 import logging
 from dataclasses import dataclass
+from enum import StrEnum
 from math import gcd
 from pathlib import Path
 
@@ -20,7 +22,7 @@ from jaxtyping import Bool, Float, Int
 from scipy.io import wavfile
 from scipy.signal import resample_poly
 from torch import Tensor
-from transformers import Wav2Vec2Model
+from transformers import HubertModel, Wav2Vec2Model
 
 from core.paths import DataRoot
 from megspeech.data.config import DataConfig, Val
@@ -29,13 +31,28 @@ from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device
 from megspeech.objective.targets.t5 import Encoder
 
-MODEL = "facebook/wav2vec2-large-xlsr-53"
-STEM = MODEL.split("/")[-1]
+
+class Teacher(StrEnum):
+    """The frozen speech model whose latents are the targets, named by its weights' folder under the foreign models.
+    Both are 24-layer, 1024-wide, 16 kHz models on the same convolutional front end (`STRIDE`, `RECEPTIVE`), fed
+    normalised audio, so one pipeline reads either."""
+
+    WAV2VEC2 = "wav2vec2-large-xlsr-53"
+    HUBERT = "hubert-large-ll60k"
+    """Libri-Light's 60k h of LibriVox audiobooks, LibriBrain's own domain, where xlsr-53 spreads over 53 languages;
+    HuBERT-class models have the strongest brain-encoding record of the frame-level SSL models (Vaidya et al. 2022,
+    Li et al. 2023; research/2026-10-07_target_encoders.md)."""
+
+
+LOADERS = {Teacher.WAV2VEC2: Wav2Vec2Model, Teacher.HUBERT: HubertModel}
+STEM = Teacher.WAV2VEC2.value
 LAYERS = slice(15, 19)
-"""Transformer layers 15-18 of xlsr-53's 24, averaged: Défossez et al. (2023) align MEG to mid-to-late wav2vec2
-layers, where phonetic and lexical content peaks."""
+"""Transformer layers 15-18 of the 24, averaged: Défossez et al. (2023) align MEG to mid-to-late wav2vec2 layers, where
+phonetic and lexical content peaks. HuBERT's default too, with no alignment study of its own yet (7gf.137): the
+brain-encoding studies put the best speech-model layers in the upper middle (Vaidya et al. 2022), the shortlist's
+12-18, and one window keeps a teacher swap a one-variable change; `--layers` reads another."""
 SAMPLING = 16_000
-"""The rate wav2vec2 was pretrained at."""
+"""The rate both teachers were pretrained at."""
 STRIDE = 320
 """Samples per latent frame: 50 frames a second at `SAMPLING`."""
 RECEPTIVE = 400
@@ -68,6 +85,24 @@ LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class Reading:
+    """A teacher and the span of its layers whose mean hidden state is the target."""
+
+    teacher: Teacher = Teacher.WAV2VEC2
+    layers: slice = LAYERS
+
+    @property
+    def stem(self) -> str:
+        """The targets' directory under processed/speech: the teacher's name, suffixed by the layers unless `LAYERS`,
+        so every teacher and layer span has its own cache and the wav2vec2 one keeps its name."""
+        suffix = "" if self.layers == LAYERS else f"-L{self.layers.start}-{self.layers.stop - 1}"
+        return f"{self.teacher}{suffix}"
+
+    def load(self, root: DataRoot, device: torch.device) -> Encoder:
+        return LOADERS[self.teacher].from_pretrained(root.foreign(self.teacher.value)).to(device).eval()
+
+
+@dataclass(frozen=True)
 class Chapter:
     """A chapter's audio at `SAMPLING`, zero-mean and unit-variance as wav2vec2's feature extractor feeds it."""
 
@@ -85,8 +120,8 @@ class Chapter:
     def frames(self) -> int:
         return max(0, (len(self.audio) - RECEPTIVE) // STRIDE + 1)
 
-    def latents(self, encoder: Encoder, device: torch.device) -> Float[Tensor, "f d"]:
-        """Every frame's mean `LAYERS` hidden state, chunk by chunk, each chunk read with `CONTEXT` on both sides."""
+    def latents(self, encoder: Encoder, device: torch.device, layers: slice = LAYERS) -> Float[Tensor, "f d"]:
+        """Every frame's mean `layers` hidden state, chunk by chunk, each chunk read with `CONTEXT` on both sides."""
         parts: list[Tensor] = []
         with torch.no_grad(), torch.autocast(device.type, dtype=torch.bfloat16):
             for start in range(0, self.frames, CHUNK):
@@ -94,7 +129,7 @@ class Chapter:
                 stop = min(self.frames, start + CHUNK)
                 end = min(self.frames, stop + CONTEXT)
                 audio = torch.from_numpy(self.audio[first * STRIDE : (end - 1) * STRIDE + RECEPTIVE]).to(device)
-                hidden = encoder(input_values=audio[None], output_hidden_states=True).hidden_states[LAYERS]
+                hidden = encoder(input_values=audio[None], output_hidden_states=True).hidden_states[layers]
                 parts.append(torch.stack(hidden).float().mean(0)[0, start - first : stop - first])
         return torch.cat(parts)
 
@@ -157,7 +192,7 @@ class Targets:
 
     @staticmethod
     def directory(root: DataRoot, source: str = "") -> Path:
-        """Where the per-word targets of `source` (the wav2vec2 latents when empty) live."""
+        """Where the per-word targets of `source` (the wav2vec2 latents when empty; a `Reading.stem`) live."""
         return root.processed() / "speech" / (source or STEM)
 
     def save(self, path: Path) -> Path:
@@ -189,10 +224,11 @@ class Heard:
         heard = events[(events["kind"] == "word") & events["segment"].notna()]
         return heard["timechapter"].to_numpy(dtype=np.float64) + LAG
 
-    def targets(self, encoder: Encoder, device: torch.device) -> Targets:
+    def targets(self, encoder: Encoder, device: torch.device, layers: slice = LAYERS) -> Targets:
         chapter = Chapter.read(self.chapters()[0])
         onset = self.onsets()
-        return Targets.pool(chapter.latents(encoder, device), onset).masked(Targets.aligned(chapter.contrast(onset)))
+        aligned = Targets.aligned(chapter.contrast(onset))
+        return Targets.pool(chapter.latents(encoder, device, layers), onset).masked(aligned)
 
     @staticmethod
     def trained(runs: list[Run]) -> list["Heard"]:
@@ -201,24 +237,31 @@ class Heard:
         return [entry for entry in heard if entry.chapters()]
 
     @staticmethod
-    def write(root: DataRoot, encoder: Encoder, device: torch.device) -> Path:
-        directory = Targets.directory(root)
+    def write(root: DataRoot, encoder: Encoder, device: torch.device, reading: Reading) -> Path:
+        directory = Targets.directory(root, reading.stem)
         for entry in Heard.trained(Run.discover(root.raw())):
             path = directory / f"{entry.run.name}.npy"
             if path.exists():
                 continue
-            targets = entry.targets(encoder, device)
+            targets = entry.targets(encoder, device, reading.layers)
             targets.save(path)
             LOG.info("%s: %d of %d words", entry.run.name, targets.present.sum(), len(targets.vectors))
         return directory
 
     @staticmethod
     def main() -> None:
-        """Encode every trained run's chapter on the GPU and write its words' targets under processed/speech."""
+        """Encode every trained run's chapter on the GPU with the chosen teacher and layers and write its words'
+        targets under processed/speech/<`Reading.stem`>."""
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("--teacher", type=Teacher, choices=list(Teacher), default=Teacher.WAV2VEC2)
+        parser.add_argument(
+            "--layers", type=int, nargs=2, default=(LAYERS.start, LAYERS.stop - 1), metavar=("FIRST", "LAST")
+        )
+        args = parser.parse_args()
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+        reading = Reading(args.teacher, slice(args.layers[0], args.layers[1] + 1))
         root, device = DataRoot.from_config(), torch.device(DEVICE)
-        encoder = Wav2Vec2Model.from_pretrained(root.foreign(STEM)).to(device).eval()
-        LOG.info("wrote %s", Heard.write(root, encoder, device))
+        LOG.info("wrote %s", Heard.write(root, reading.load(root, device), device, reading))
 
 
 @dataclass(frozen=True)

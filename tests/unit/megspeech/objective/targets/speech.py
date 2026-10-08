@@ -22,8 +22,10 @@ from megspeech.objective.targets.speech import (
     WINDOW,
     Chapter,
     Heard,
+    Reading,
     Speech,
     Targets,
+    Teacher,
 )
 from megspeech.objective.targets.t5 import Encoder as T5Encoder
 from tests.unit.megspeech.data.config import HELD, TRAIN
@@ -55,7 +57,11 @@ class Encoder:
 
 
 class Loader:
-    def from_pretrained(self, *_: object, **__: object) -> Encoder:
+    def __init__(self) -> None:
+        self.seen: list[object] = []
+
+    def from_pretrained(self, *args: object, **__: object) -> Encoder:
+        self.seen.extend(args)
         return Encoder()
 
 
@@ -200,18 +206,42 @@ def test_write(tmp_path: Path) -> None:
     heard_run(tmp_path)
     heard_run(tmp_path, HELD)
     root = cast("DataRoot", Root(tmp_path))
-    directory = Heard.write(root, encoder(), CPU)
+    directory = Heard.write(root, encoder(), CPU, Reading())
     assert [path.stem for path in directory.glob("*.npy")] == [Run(Path(TRAIN)).name]
-    assert Heard.write(root, encoder(), CPU) == directory
+    assert Heard.write(root, encoder(), CPU, Reading()) == directory
+    hubert = Heard.write(root, encoder(), CPU, Reading(Teacher.HUBERT))
+    assert hubert == tmp_path / "processed" / "speech" / "hubert-large-ll60k"
+    assert [path.stem for path in hubert.glob("*.npy")] == [Run(Path(TRAIN)).name]
+
+
+def test_stem() -> None:
+    """Each teacher and layer span has its own cache; the default wav2vec2 one keeps its historical name."""
+    assert Reading().stem == STEM
+    assert Reading(Teacher.HUBERT).stem == "hubert-large-ll60k"
+    assert Reading(Teacher.HUBERT, slice(12, 19)).stem == "hubert-large-ll60k-L12-18"
+
+
+def test_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each teacher loads through its own model class from its own folder."""
+    loader = Loader()
+    monkeypatch.setitem(module.LOADERS, Teacher.HUBERT, loader)
+    root = cast("DataRoot", Root(tmp_path))
+    assert isinstance(Reading(Teacher.HUBERT).load(root, CPU), Encoder)
+    assert loader.seen == [tmp_path / "hubert-large-ll60k"]
 
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     heard_run(tmp_path)
-    monkeypatch.setattr(module, "Wav2Vec2Model", Loader())
+    monkeypatch.setitem(module.LOADERS, Teacher.WAV2VEC2, Loader())
+    monkeypatch.setitem(module.LOADERS, Teacher.HUBERT, Loader())
     monkeypatch.setattr(module, "DEVICE", "cpu")
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: Root(tmp_path)))
+    monkeypatch.setattr("sys.argv", ["speech"])
     Heard.main()
     assert np.load(tmp_path / "processed" / "speech" / STEM / f"{Run(Path(TRAIN)).name}.npy").shape == (2, DIM)
+    monkeypatch.setattr("sys.argv", ["speech", "--teacher", "hubert-large-ll60k", "--layers", "12", "18"])
+    Heard.main()
+    assert (tmp_path / "processed" / "speech" / "hubert-large-ll60k-L12-18" / f"{Run(Path(TRAIN)).name}.npy").exists()
 
 
 def test_gather(tmp_path: Path) -> None:
