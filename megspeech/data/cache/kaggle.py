@@ -184,13 +184,12 @@ class KaggleCache:
         device: torch.device | str,
         length: int,
         *,
-        standardised: bool = False,
         geometry: Geometry = AS_RECORDED,
     ) -> Windows:
         """Every Kaggle test row's `length`-sample window, in canonical order, from the built cache, each archive loaded
-        in `geometry` and `standardised` on its own if asked."""
+        in `geometry`."""
         names = [archive.name for archive in self.archives()]
-        recording = DeviceRecording.load(self.cache, device, names, standardised=standardised, geometry=geometry)
+        recording = DeviceRecording.load(self.cache, device, names, geometry=geometry)
         return recording.windows(length)
 
 

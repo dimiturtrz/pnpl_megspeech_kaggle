@@ -273,11 +273,6 @@ def test_load(tmp_path: Path) -> None:
     only = DeviceRecording.load(cache, "cpu", ["b"])
     assert only.names == ("b",)
     assert only.words["at"].tolist() == [25, 100, 150]
-    scaled = DeviceRecording.load(cache, "cpu", standardised=True).meg.float()
-    for begin in (0, SAMPLES):
-        run = scaled[:, begin : begin + SAMPLES]
-        assert run.median(dim=1).values.abs().max() < 0.05
-        assert torch.allclose(run.quantile(0.75, dim=1) - run.quantile(0.25, dim=1), torch.ones(CHANNELS), atol=0.05)
 
 
 def subspace() -> Projection:
@@ -285,35 +280,19 @@ def subspace() -> Projection:
     return Projection(torch.full((CHANNELS, 1), 7.0), torch.full((CHANNELS, 1), 4.0), basis)
 
 
-@pytest.mark.parametrize("standardised", [False, True])
-def test_load_projected(tmp_path: Path, *, standardised: bool) -> None:
+def test_load_projected(tmp_path: Path) -> None:
     cache = built(tmp_path)
     projection = subspace()
-    loaded = DeviceRecording.load(cache, "cpu", standardised=standardised, geometry=Geometry(projection=projection))
-    full = DeviceRecording.load(cache, "cpu", standardised=standardised)
+    loaded = DeviceRecording.load(cache, "cpu", geometry=Geometry(projection=projection))
+    full = DeviceRecording.load(cache, "cpu")
     assert loaded.meg.shape == (projection.rank, 2 * SAMPLES)
     assert loaded.meg.dtype == torch.float16
     assert loaded.offsets.tolist() == full.offsets.tolist()
     assert loaded.words.equals(full.words)
     for begin, name in zip((0, SAMPLES), NAMES, strict=True):
         run = torch.from_numpy(np.load(cache.path(name)))
-        if standardised:
-            DeviceRecording.standardise(run)
-        expected = projection.project(run, robust=standardised).half()
+        expected = projection.project(run).half()
         assert torch.allclose(loaded.meg[:, begin : begin + SAMPLES].float(), expected.float(), atol=1e-2)
-
-
-def test_standardise() -> None:
-    offset, gain = torch.tensor([[5.0], [-3.0]]), torch.tensor([[2.0], [0.5]])
-    signal = torch.linspace(-1, 1, 101).repeat(2, 1)
-    run = signal * gain + offset
-    DeviceRecording.standardise(run)
-    assert torch.allclose(run, signal, atol=1e-5)
-    flat = torch.cat([signal[:1] * 2.0 + 1.0, torch.full((1, 101), 4.0)])
-    DeviceRecording.standardise(flat)
-    assert torch.isfinite(flat).all()
-    assert torch.equal(flat[1], torch.zeros(101))
-    assert torch.allclose(flat[0], signal[0], atol=1e-5)
 
 
 def test_windows() -> None:

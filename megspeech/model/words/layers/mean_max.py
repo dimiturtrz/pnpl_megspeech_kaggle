@@ -21,8 +21,3 @@ class MeanMax(nn.Module):
             nn.functional.adaptive_max_pool1d(h, self.segments),
         ]
         return torch.cat([p.flatten(1) for p in pooled], dim=-1)
-
-    @staticmethod
-    def segmented(pooled: Float[Tensor, "*b e"], segments: int) -> Float[Tensor, "*b s f"]:
-        """`forward`'s output regrouped per chunk: each of the `segments` chunks' mean and max side by side."""
-        return pooled.unflatten(-1, (2, -1, segments)).movedim(-1, -3).flatten(-2)

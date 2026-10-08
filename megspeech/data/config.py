@@ -98,6 +98,11 @@ class DataConfig:
         "share": Retired(0.0, STRIDED_RULER, {0.1: BALANCED_RULER}, {"stratify": True}),
         "stratify": Retired(default=False, reason=STRIDED_RULER, becomes={True: {}}),
         "ruler": Retired("official", becomes={"balanced": BALANCED_RULER}),
+        "standardised": Retired(
+            default=False, reason="per-recording robust scaling (standardised) is retired, killed by megspeech-7gf.25.4"
+        ),
+        "lead": Retired(0.0, "reading ahead of each onset (lead) is retired, killed by megspeech-7gf.38"),
+        "baseline": Retired(0.0, "a pre-response centring stretch (baseline) is retired by megspeech-7gf.157.5"),
     }
     LEGACY: ClassVar[dict[str, object]] = {"val": Val.OFFICIAL}
 
@@ -118,21 +123,11 @@ class DataConfig:
     scores words training heard, so it can no longer select or report."""
     window: float = 1.0
     """Seconds of MEG from each word's onset; a model is scored and submitted at the window it trained on."""
-    standardised: bool = False
-    """Each recording — training or validation run, Kaggle test archive — robust-scaled per channel by its own median
-    and IQR before the model's scaler. Across the 162 runs a channel's IQR over its median run spans 0.78-1.28 (p5-p95);
-    the Kaggle test sentence archive's sits at 0.90."""
     train_share: float = 1.0
     """Of each source's training sessions the ruler leaves, the share that train: whole sessions, the same seeded order
     per source so a smaller share is a subset of a larger one (the data-scaling curve, megspeech-7gf.104)."""
     val: Val = Val.CARVED
     """Which sessions are withheld as val (selects epoch and tau) and which are the local test (reports); see `Val`."""
-    baseline: float = 0.0
-    """Seconds from each window's start its centring mean is taken over; 0 centres on the whole window. The
-    reference pipeline baselines on 0-0.5 s, the pre-response stretch, so the word's evoked field is kept whole."""
-    lead: float = 0.0
-    """Seconds of MEG before each word's onset, read ahead of its `window`: never before its sentence's first onset,
-    as a Kaggle test sentence epoch starts there."""
     delay: float = 0.0
     """Seconds after each word's onset its `window` starts: 0.2 reads the recognition stage past the acoustic one."""
     segment: float = 0.0
@@ -253,21 +248,12 @@ class DataConfig:
 
     def cut(self) -> tuple[int, int]:
         """The frames each word's window spans and its start's offset from the word's onset, at the cache's `rate`."""
-        lead = self.to_samples(self.lead)
-        return self.samples + lead, self.to_samples(self.delay) - lead
+        return self.samples, self.to_samples(self.delay)
 
     def reading(self, windows: Windows) -> Windows:
-        """`windows` cut as this config reads them: `lead` before each onset, `window` from `delay` after it, centred
-        on `baseline` (0 centres on the whole window)."""
+        """`windows` cut as this config reads them: `window` from `delay` after each onset, centred on itself."""
         length, offset = self.cut()
-        spanned = self.spanned(windows)
-        return replace(
-            spanned,
-            length=length,
-            offset=offset,
-            baseline=self.to_samples(self.baseline),
-            segment=self.to_samples(self.segment),
-        )
+        return replace(self.spanned(windows), length=length, offset=offset, segment=self.to_samples(self.segment))
 
     def spanned(self, windows: Windows) -> Windows:
         """`windows` stopped `span_lag` after each word's next onset, never before its own first sample; as they are

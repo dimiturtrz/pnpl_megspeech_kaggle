@@ -9,6 +9,7 @@ import pytest
 import torch
 
 from core.paths import DataRoot
+from core.tree import Tree
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.config import METRICS, READING, DataConfig, Refit, Val
@@ -319,8 +320,8 @@ def test_to_samples() -> None:
 
 def test_reading() -> None:
     at = torch.tensor([0])
-    windows = DataConfig(window=2.0, lead=0.1, baseline=0.5).reading(Windows(torch.zeros(1, 10), at, at))
-    assert (windows.length, windows.offset, windows.baseline) == (2 * RATE + 5, -5, round(0.5 * RATE))
+    windows = DataConfig(window=2.0).reading(Windows(torch.zeros(1, 10), at, at, baseline=3))
+    assert (windows.length, windows.offset, windows.baseline) == (2 * RATE, 0, 3)
     delayed = DataConfig(window=0.2, delay=0.2).reading(Windows(torch.zeros(1, 10), at, at))
     assert (delayed.length, delayed.offset) == (round(0.2 * RATE), round(0.2 * RATE))
     assert DataConfig().reading(Windows(torch.zeros(1, 10), at, at)).segment == 0
@@ -437,22 +438,17 @@ def test_partitioned(tmp_path: Path) -> None:
 def test_shared(tmp_path: Path) -> None:
     one = record(tmp_path / "one", {})
     two = record(tmp_path / "two", {"data": {"window": 2.0}})
-    scaled = record(tmp_path / "scaled", {"data": {"standardised": True}})
     assert DataConfig.shared([one, one], Grouping.GAP) == DataConfig(val=Val.OFFICIAL, grouping=Grouping.GAP)
-    assert DataConfig.shared([scaled], Grouping.SENTENCE).standardised
     balanced = record(tmp_path / "balanced", {"data": {"ruler": "balanced", "refit": True}})
     legacy = DataConfig.shared([balanced], Grouping.SENTENCE)
     assert (legacy.val, legacy.refit) == (Val.BALANCED, Refit.VAL)
-    based = record(tmp_path / "based", {"data": {"baseline": 0.5}})
-    assert DataConfig.shared([based], Grouping.SENTENCE).baseline == 0.5
-    assert DataConfig.shared([record(tmp_path / "fast", {"data": {"decimate": 2}})], Grouping.SENTENCE).decimate == 2
-    led = record(tmp_path / "led", {"data": {"lead": 0.1}})
-    assert DataConfig.shared([led], Grouping.SENTENCE).lead == 0.1
+    fast = record(tmp_path / "fast", {"data": {"decimate": 2}})
+    assert DataConfig.shared([fast], Grouping.SENTENCE).decimate == 2
     differing = r"runs trained at .*2.0"
     with pytest.raises(ValueError, match=differing):
         DataConfig.shared([one, two], Grouping.SENTENCE)
     with pytest.raises(ValueError, match="an ensemble needs one"):
-        DataConfig.shared([one, scaled], Grouping.SENTENCE)
+        DataConfig.shared([one, fast], Grouping.SENTENCE)
 
 
 @pytest.mark.parametrize(
@@ -585,7 +581,7 @@ def test_dropped_range() -> None:
 
 def test_cut() -> None:
     assert DataConfig().cut() == (RATE, 0)
-    assert DataConfig(window=2.0, lead=0.1).cut() == (2 * RATE + 5, -5)
+    assert DataConfig(window=2.0).cut() == (2 * RATE, 0)
     assert DataConfig(window=0.2, delay=0.2).cut() == (round(0.2 * RATE), round(0.2 * RATE))
 
 
@@ -666,3 +662,14 @@ def test_official_val() -> None:
 
 def test_tests_carved() -> None:
     assert [v.tests_carved for v in (Val.CARVED, Val.OFFICIAL, Val.BALANCED)] == [False, False, True]
+
+
+def test_reading_fields_retired() -> None:
+    assert Tree(DataConfig).load({"standardised": False, "lead": 0.0, "baseline": 0.0}) == DataConfig()
+    for name, value, killer in (
+        ("standardised", True, "7gf.25.4"),
+        ("lead", 0.1, "7gf.38"),
+        ("baseline", 0.5, "7gf.157.5"),
+    ):
+        with pytest.raises(ValueError, match=killer):
+            Tree(DataConfig).load({name: value})

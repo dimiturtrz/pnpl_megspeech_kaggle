@@ -49,11 +49,9 @@ class Projection:
         return self.basis.shape[0]
 
     @torch.no_grad()
-    def project(self, run: Float[Tensor, "c s"], *, robust: bool = False) -> Float[Tensor, "k s"]:
-        """`run`'s coordinates in float32, from subject 0's median and range; a `robust` run, already standardised
-        by its own (`DeviceRecording.standardise`), is read as it stands."""
-        z = run.float() if robust else (run.float() - self.median) / self.spread
-        return self.basis @ z
+    def project(self, run: Float[Tensor, "c s"]) -> Float[Tensor, "k s"]:
+        """`run`'s coordinates in float32, from subject 0's median and range."""
+        return self.basis @ ((run.float() - self.median) / self.spread)
 
 
 @dataclass(frozen=True)
@@ -149,9 +147,9 @@ class Geometry:
         if self.alignment is not None and self.alignment.applies(name):
             self.alignment.align(run)
 
-    def project(self, run: Float[Tensor, "c s"], *, robust: bool = False) -> Float[Tensor, "r s"]:
+    def project(self, run: Float[Tensor, "c s"]) -> Float[Tensor, "r s"]:
         """`run` in `projection`'s subspace (`Projection.project`), or as it is without one."""
-        return run if self.projection is None else self.projection.project(run, robust=robust)
+        return run if self.projection is None else self.projection.project(run)
 
 
 AS_RECORDED = Geometry()

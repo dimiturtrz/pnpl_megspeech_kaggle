@@ -52,8 +52,8 @@ class Run:
     def plain(self) -> bool:
         """Whether the run read the sensors as recorded, through its CNN alone: what an expert branch reproduces."""
         context, data = self.config.context, self.config.data
-        plain = context.encoder is Encoder.CONV and not (context.subjects or context.whiten or context.latency)
-        return plain and not (data.projected or data.features or data.baseline)
+        plain = context.encoder is Encoder.CONV and not (context.subjects or context.whiten)
+        return plain and not (data.projected or data.features)
 
     def weights(self, prefixes: tuple[str, ...], *, kept: bool) -> dict[str, Tensor]:
         """The run's weights under any of `prefixes` when `kept`, else those under none of them."""
@@ -83,16 +83,16 @@ class Assembly:
     @staticmethod
     def offset(data: DataConfig) -> int:
         """Samples from each word's onset to the start of its window as `data` reads it."""
-        return data.to_samples(data.delay) - data.to_samples(data.lead)
+        return data.to_samples(data.delay)
 
     @classmethod
     def end(cls, data: DataConfig) -> int:
-        return cls.offset(data) + data.samples + data.to_samples(data.lead)
+        return cls.offset(data) + data.samples
 
     @classmethod
     def crop(cls, window: DataConfig, expert: DataConfig) -> tuple[int, int]:
         """Where in `window`'s reading `expert`'s window starts, and its samples."""
-        start, length = cls.offset(expert) - cls.offset(window), expert.samples + expert.to_samples(expert.lead)
+        start, length = cls.offset(expert) - cls.offset(window), expert.samples
         if start < 0 or start + length > cls.end(window) - cls.offset(window) or expert.rate != window.rate:
             raise ValueError(f"an expert window of {length} samples at {start} lies outside the shared window")
         return start, length
@@ -100,15 +100,7 @@ class Assembly:
     @staticmethod
     def placement(base: DataConfig, data: DataConfig) -> DataConfig:
         """`base` reading the MEG in the window `data` places and samples."""
-        return replace(
-            base,
-            window=data.window,
-            lead=data.lead,
-            delay=data.delay,
-            baseline=data.baseline,
-            decimate=data.decimate,
-            features="",
-        )
+        return replace(base, window=data.window, delay=data.delay, decimate=data.decimate, features="")
 
     def state(self, config: RunConfig) -> dict[str, Tensor]:
         """The assembled model's weights: the stack's above the embeddings, its embedding scaler over the joined

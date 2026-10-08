@@ -11,9 +11,9 @@ MASK_INIT = 0.02
 
 
 class WordMask(nn.Module):
-    """Each valid word's tokens replaced with probability `rate` by one learned embedding, in training only; the
+    """Each valid word's token replaced with probability `rate` by one learned embedding, in training only; the
     caller adds the word's position after, so a masked word keeps its place. A rate of 0 has no parameter and
-    passes the tokens through."""
+    passes the token through."""
 
     token: Tensor
 
@@ -26,8 +26,8 @@ class WordMask(nn.Module):
             self.register_buffer("token", torch.zeros(width), persistent=False)
 
     @override
-    def forward(self, content: Float[Tensor, "g w s d"], valid: Bool[Tensor, "g w"]) -> Float[Tensor, "g w s d"]:
+    def forward(self, content: Float[Tensor, "g w d"], valid: Bool[Tensor, "g w"]) -> Float[Tensor, "g w d"]:
         if not self.training or not self.rate:
             return content
         hit = (torch.rand(valid.shape, device=content.device) < self.rate) & valid
-        return torch.where(hit[..., None, None], self.token, content)
+        return torch.where(hit[..., None], self.token, content)

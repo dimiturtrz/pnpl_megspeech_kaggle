@@ -22,11 +22,7 @@ class Stub:
 
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
-    data = SimpleNamespace(
-        run_cache=lambda _root: tmp_path,
-        standardised=True,
-        geometry=lambda _root, _device: None,
-    )
+    data = SimpleNamespace(run_cache=lambda _root: tmp_path, geometry=lambda _root, _device: None)
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))
     monkeypatch.setattr(module.RunConfig, "saved", classmethod(lambda _c, _directory: SimpleNamespace(data=data)))
     monkeypatch.setattr(module.Run, "everywhere", classmethod(lambda _c, _root: []))

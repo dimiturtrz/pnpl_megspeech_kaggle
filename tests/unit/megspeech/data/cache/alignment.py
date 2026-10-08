@@ -81,8 +81,6 @@ def test_projection_project() -> None:
     assert coordinates.shape == (2, 500)
     restored = projection.basis.T @ coordinates * projection.spread + projection.median
     assert torch.allclose(restored, run, atol=1e-4)
-    z = (run - alignment.median) / alignment.spread
-    assert torch.allclose(projection.project(z, robust=True), coordinates, atol=1e-5)
     assert projection.project(run.half()).dtype == torch.float32
 
 
@@ -154,8 +152,8 @@ def test_geometry_project() -> None:
     alignment, mixing = deficient()
     run = mixing @ torch.randn(2, 100, generator=GENERATOR) + alignment.median
     assert AS_RECORDED.project(run) is run
-    projected = Geometry(projection=alignment.projection()).project(run, robust=True)
-    assert torch.equal(projected, alignment.projection().project(run, robust=True))
+    projected = Geometry(projection=alignment.projection()).project(run)
+    assert torch.equal(projected, alignment.projection().project(run))
 
 
 def test_align_keeps_dtype() -> None:

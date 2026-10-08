@@ -18,37 +18,7 @@ def test_forward_valid() -> None:
     assert torch.allclose(block.forward(x, valid)[:2], block.forward(x[:2]), atol=1e-5)
 
 
-def test_conv() -> None:
-    conv = DilatedBlock.conv(4, 2, 5)
-    x = torch.randn(2, 4, 10, generator=GENERATOR)
-    assert conv.kernel_size == (5,)
-    assert conv(x).shape == x.shape
-
-
-def test_conv_expand() -> None:
-    conv = DilatedBlock.conv(4, 2, 3, 2)
-    x = torch.randn(2, 4, 10, generator=GENERATOR)
-    assert conv(x).shape == (2, 8, 10)
-
-
-def test_forward_gated() -> None:
-    block = DilatedBlock(4, 2, 0.0, (3, 5), gated=True).eval()
-    x = torch.randn(2, 4, 10, generator=GENERATOR)
-    assert block.body[0].out_channels == 8
-    assert block.parallel[0].out_channels == 8
-    assert isinstance(block.body[2], torch.nn.GLU)
-    assert block.forward(x).shape == x.shape
-
-
-def test_block_default_keeps_checkpoint_keys() -> None:
-    keys = set(DilatedBlock(4, 2, 0.0).state_dict())
-    assert "body.0.weight" in keys
-    assert not any(key.startswith("parallel.") for key in keys)
-
-
-def test_forward_parallel_kernels() -> None:
-    block = DilatedBlock(4, 2, 0.0, (3, 5, 7)).eval()
-    x = torch.randn(2, 4, 10, generator=GENERATOR)
+def test_block_keeps_checkpoint_keys() -> None:
+    block = DilatedBlock(4, 2, 0.0)
     assert block.body[0].kernel_size == (3,)
-    assert [conv.kernel_size for conv in block.parallel] == [(5,), (7,)]
-    assert block.forward(x).shape == x.shape
+    assert {"body.0.weight", "body.0.bias"} <= set(block.state_dict())

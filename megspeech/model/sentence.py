@@ -105,10 +105,8 @@ class SentenceNet(Span):
         return self.read(self.refine(h, mask), slots)
 
     def refine(self, h: Float[Tensor, "g w h"], mask: Bool[Tensor, "g w"]) -> Float[Tensor, "g w h"]:
-        """`h`, each word's `tokens` in a row, refined across its span's `mask`ed words and averaged back to one per
-        word: what the context head reads."""
-        tokens = mask.repeat_interleave(self.tokens, dim=1)
-        return self.context(h, src_key_padding_mask=~tokens).unflatten(1, (-1, self.tokens)).mean(2)
+        """`h` refined across its span's `mask`ed words: what the context head reads."""
+        return self.context(h, src_key_padding_mask=~mask)
 
     def read(
         self, refined: Float[Tensor, "g w h"], slots: Float[Tensor, "g w e"]

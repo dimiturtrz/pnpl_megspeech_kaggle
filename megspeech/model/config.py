@@ -6,13 +6,13 @@ import math
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import override
+from typing import ClassVar, override
 
 import torch
 from jaxtyping import Float
 from torch import Tensor, nn
 
-from core.tree import Tree
+from core.tree import Retired, Tree
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.context.timing import Clock, Intervals
 from megspeech.model.words.conv import CONV, ConvConfig
@@ -55,6 +55,12 @@ class Encoder(StrEnum):
 
 @dataclass(frozen=True)
 class ContextConfig:
+    RETIRED: ClassVar[dict[str, Retired]] = {
+        "latency": Retired(
+            default=False, reason="per-chunk latency tokens (latency) are retired, killed by megspeech-7gf.67"
+        ),
+    }
+
     width: int = 256
     heads: int = 4
     layers: int = 4
@@ -94,10 +100,6 @@ class ContextConfig:
     subjects: int = 0
     final_norm: bool = False
     """A LayerNorm after the pre-norm transformer's last layer, before the context head (plain transformer only)."""
-    latency: bool = False
-    """Each of the CNN readout's `conv.segments` time chunks enters the transformer as its own token, tagged by its
-    chunk: words arrive ~0.21 s apart, so a word's late chunks overlap its successors' early responses, and attention
-    across the chunks can tell them apart where one pooled token per word mixes them."""
     whiten: bool = False
     """Decorrelate the scaled sensors by their training covariance before the subject layer (`input.whitener`)."""
     covariance: Covariance = Covariance.TOTAL
@@ -136,22 +138,12 @@ class ContextConfig:
                 f"encoder {self.encoder} reads saved features, not sensors, so a per-subject sensor matrix "
                 f"(subjects={self.subjects}) has nothing to mix"
             )
-        if self.latency and (self.encoder.cached or self.encoder is Encoder.SPANNED or self.conv.queries):
-            raise ValueError(
-                f"latency tokens split the CNN's mean-max chunks; encoder {self.encoder} with "
-                f"queries={self.conv.queries} pools none"
-            )
         if self.whiten and self.encoder.cached:
             raise ValueError(f"encoder {self.encoder} reads saved features, not sensors, so there is nothing to whiten")
         if not 0 <= self.branch_drop < 1:
             raise ValueError(f"branch_drop {self.branch_drop} is a probability below 1")
         if self.covariance is Covariance.NOISE and not self.whiten:
             raise ValueError("a noise covariance is only inverted by whiten")
-
-    @property
-    def tokens(self) -> int:
-        """Transformer tokens per word: one per readout chunk with `latency`, else one."""
-        return self.conv.segments if self.latency else 1
 
     @property
     def crops(self) -> tuple[Crop, ...]:

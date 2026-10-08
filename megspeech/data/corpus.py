@@ -42,7 +42,7 @@ class Corpus:
         reading = [r.name for r in trained] + [r.name for group in held.values() for r in group]
         names = list(dict.fromkeys(reading))
         geometry = data.geometry(root, device)
-        source = DeviceRecording.load(cache, device, names, standardised=data.standardised, geometry=geometry)
+        source = DeviceRecording.load(cache, device, names, geometry=geometry)
         table = source.words.assign(position=source.words.groupby("run").cumcount())
         words = data.carried(table)
         weights = {r.name: data.weight(r) for r in trained}
@@ -74,7 +74,7 @@ class Corpus:
         in `geometry`."""
         cache = KaggleCache.of(root, data.decimate, track, data.cleaning)
         cache.build()
-        windows = data.reading(cache.windows(device, data.samples, standardised=data.standardised, geometry=geometry))
+        windows = data.reading(cache.windows(device, data.samples, geometry=geometry))
         unread = windows.unread()
         if len(unread):
             raise ValueError(

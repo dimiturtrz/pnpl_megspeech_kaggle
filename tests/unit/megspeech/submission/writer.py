@@ -36,7 +36,6 @@ class Kaggle:
 
 
 class Cache:
-    standardised: list[bool]
     geometry: list[object]
 
     @classmethod
@@ -46,8 +45,7 @@ class Cache:
     def build(self) -> None:
         pass
 
-    def windows(self, device: torch.device, length: int, *, standardised: bool, geometry: object) -> Windows:
-        Cache.standardised = [standardised]
+    def windows(self, device: torch.device, length: int, *, geometry: object) -> Windows:
         Cache.geometry = [geometry]
         return Windows.stacked(torch.zeros(3, CHANNELS, length, device=device))
 
@@ -59,7 +57,7 @@ def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module.Track, "kaggle", lambda track, _: tracks.append(track) or Kaggle())
     monkeypatch.setattr(KaggleCache, "of", Cache.of)
     monkeypatch.setattr(module, "write_submission", lambda path, _, p, s: written.update(p=p, s=s) or path)
-    data = DataConfig(window=2.0, standardised=True)
+    data = DataConfig(window=2.0)
     loaded = ExportedModel(
         DataRoot(tmp_path),
         data,
@@ -70,7 +68,7 @@ def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         log_prior=torch.zeros(VOCAB_SIZE),
     )
     assert KaggleWriter(Track.BROAD).write(loaded, 0.5, tmp_path / "s.csv") == tmp_path / "s.csv"
-    assert (set(tracks), Cache.standardised, Cache.geometry) == ({Track.BROAD}, [True], [AS_RECORDED])
+    assert (set(tracks), Cache.geometry) == ({Track.BROAD}, [AS_RECORDED])
     assert written["p"].shape == (3, VOCAB_SIZE)
     assert (written["p"].argmax(axis=1) == VOCAB_SIZE - 1).all()
     assert np.allclose(written["s"], 1 / len(SECONDARY.words))

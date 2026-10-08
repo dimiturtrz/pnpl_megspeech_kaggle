@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 import torch
 
+from core.tree import Tree
 from megspeech.model.config import CONTEXT as DEFAULT
 from megspeech.model.config import FILE, ContextConfig, Covariance, Encoder, OnsetEncoding
 from megspeech.model.context.timing import Clock, Intervals
@@ -35,7 +36,7 @@ def test_load(tmp_path: Path) -> None:
 
 
 def test_load_conv(tmp_path: Path) -> None:
-    shaped = ContextConfig(conv=ConvConfig(kernels=(3, 5, 7), segments=4))
+    shaped = ContextConfig(conv=ConvConfig(segments=4))
     shaped.save(tmp_path)
     assert ContextConfig.load(tmp_path) == shaped
     (tmp_path / FILE).write_text(json.dumps({"width": 16, "clock": "order"}))
@@ -48,10 +49,6 @@ def test_combination() -> None:
     for encoder in (Encoder.CACHED, Encoder.RESOLVED):
         with pytest.raises(ValueError, match="subjects=3"):
             ContextConfig(encoder=encoder, subjects=3)
-    with pytest.raises(ValueError, match="latency"):
-        ContextConfig(latency=True, encoder=Encoder.CACHED)
-    with pytest.raises(ValueError, match="latency"):
-        ContextConfig(latency=True, conv=ConvConfig(queries=2))
     with pytest.raises(ValueError, match="whiten"):
         ContextConfig(whiten=True, encoder=Encoder.TRAINED)
     with pytest.raises(ValueError, match="siglip"):
@@ -65,15 +62,10 @@ def test_combination() -> None:
     assert ContextConfig(anchor=Source.AUDIO, anchor_dim=49).anchor_dim == 49
 
 
-def test_tokens() -> None:
-    four = ConvConfig(segments=4)
-    assert ContextConfig(conv=four).tokens == 1
-    assert ContextConfig(conv=four, latency=True).tokens == 4
-
-
-def test_spanned_rejects_latency() -> None:
-    with pytest.raises(ValueError, match="latency"):
-        ContextConfig(encoder=Encoder.SPANNED, latency=True)
+def test_latency_retired() -> None:
+    assert Tree(ContextConfig).load({"latency": False}) == ContextConfig()
+    with pytest.raises(ValueError, match="7gf.67"):
+        Tree(ContextConfig).load({"latency": True})
 
 
 def test_crops() -> None:

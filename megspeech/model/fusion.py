@@ -46,10 +46,10 @@ class Fusion(nn.Module):
         gates = keep * n / keep.sum(dim=1, keepdim=True)
         return gates * torch.tensor([float(name != self.silent) for name in names], device=device)
 
-    def mix(self, parts: Sequence[Float[Tensor, "g w s d"]]) -> Float[Tensor, "g w s d"]:
+    def mix(self, parts: Sequence[Float[Tensor, "g w d"]]) -> Float[Tensor, "g w d"]:
         """The sources' `parts` summed under each span's gates."""
         gates = self.gates(len(parts[0]), parts[0].device).to(parts[0].dtype)
-        return (torch.stack(list(parts)) * gates.t()[:, :, None, None, None]).sum(0)
+        return (torch.stack(list(parts)) * gates.t()[:, :, None, None]).sum(0)
 
     @contextmanager
     def silenced(self, name: str) -> Iterator[None]:

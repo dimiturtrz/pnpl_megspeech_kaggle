@@ -63,7 +63,7 @@ def test_plain() -> None:
     run = expert(0.2, 0.0)
     assert run.plain()
     assert not stack().plain()
-    assert not replace(run, config=replace(run.config, data=DataConfig(baseline=0.1))).plain()
+    assert not replace(run, config=replace(run.config, data=DataConfig(features="x"))).plain()
 
 
 def test_weights() -> None:
@@ -90,12 +90,11 @@ def test_config() -> None:
 
 def test_offset() -> None:
     assert Assembly.offset(DataConfig(delay=0.2)) == 10
-    assert Assembly.offset(DataConfig(delay=0.2, lead=0.1)) == 5
 
 
 def test_end() -> None:
     assert Assembly.end(DataConfig(window=0.2, delay=0.2)) == 20
-    assert Assembly.end(DataConfig(window=1.0, lead=0.1)) == 50
+    assert Assembly.end(DataConfig(window=1.0)) == 50
 
 
 def test_crop() -> None:
@@ -104,7 +103,7 @@ def test_crop() -> None:
     with pytest.raises(ValueError, match="outside the shared window"):
         Assembly.crop(window, DataConfig(window=0.2, delay=0.9))
     with pytest.raises(ValueError, match="outside the shared window"):
-        Assembly.crop(window, DataConfig(window=0.2, lead=0.1))
+        Assembly.crop(window, DataConfig(window=0.2, decimate=2))
 
 
 def test_placement() -> None:

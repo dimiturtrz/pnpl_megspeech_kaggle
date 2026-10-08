@@ -200,3 +200,10 @@ def test_resolve() -> None:
         entry.resolve("n", {"n": 7}, table)
     with pytest.raises(ValueError, match="n=1 is retired"):
         entry.resolve("n", {"n": 1, "mate": True}, table)
+
+
+def test_resolve_reads_a_list_as_its_tuple() -> None:
+    entry = Retired((3,))
+    assert entry.resolve("k", {"k": [3]}, {}) == {}
+    with pytest.raises(ValueError, match=r"k=\(3, 5\) is retired"):
+        entry.resolve("k", {"k": [3, 5]}, {})

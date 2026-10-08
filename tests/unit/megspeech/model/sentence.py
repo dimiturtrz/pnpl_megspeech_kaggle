@@ -162,23 +162,16 @@ def test_refine() -> None:
     assert torch.equal(model.refine(h.where(mask[..., None], 7.0), mask)[mask], refined[mask])
 
 
-LATENCY = replace(CONTEXT, latency=True, dropout=0.0, conv=replace(CONTEXT.conv, segments=4, dropout=0.0))
+UNDROPPED = replace(CONTEXT, dropout=0.0, conv=replace(CONTEXT.conv, segments=4, dropout=0.0))
 
 
-def test_latency_tags() -> None:
-    """Latency tags are learned and saved; one token per word saves none, so earlier checkpoints still load."""
-    assert SentenceNet(nn.Identity(), LATENCY).latency.shape == (4, CONTEXT.width)
-    assert "latency" in SentenceNet(nn.Identity(), LATENCY).state_dict()
-    assert "latency" not in SentenceNet(nn.Identity(), CONTEXT).state_dict()
-
-
-def test_latency_tokens() -> None:
-    """Each word enters the transformer as one token per chunk and leaves as one; padding words change nothing."""
-    model = SentenceNet(nn.Identity(), LATENCY).train()
+def test_padding_words_change_nothing() -> None:
+    """Each word enters the transformer as one token; padding words change nothing."""
+    model = SentenceNet(nn.Identity(), UNDROPPED).train()
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     onset = torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]])
     h, _ = model.features(x, onset, torch.tensor([[0, 1, 3], [2, 3, 3]]), torch.zeros(3, dtype=torch.long))
-    assert h.shape == (2, 3 * 4, CONTEXT.width)
+    assert h.shape == (2, 3, CONTEXT.width)
     exact = model.forward(x, onset, torch.tensor([[0, 1, 3], [2, 3, 3]]), torch.zeros(3, dtype=torch.long))
     padded = model.forward(
         torch.cat([x, torch.randn(2, CHANNELS, SAMPLES, generator=GENERATOR)]),

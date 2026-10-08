@@ -38,7 +38,6 @@ def main() -> None:
         data.run_cache(root),
         device,
         sessions.names,
-        standardised=data.standardised,
         geometry=data.geometry(root, device),
     )
     net = Checkpoint.load(directory / "model.pt").to(device)

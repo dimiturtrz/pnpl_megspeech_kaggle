@@ -55,7 +55,7 @@ def test_gates(tmp_path: Path) -> None:
 
 def test_mix(tmp_path: Path) -> None:
     fusion = Fusion([branch(tmp_path / "a")], 0.3).eval()
-    parts = [torch.randn(2, 3, 1, 4, generator=GENERATOR), torch.randn(2, 3, 1, 4, generator=GENERATOR)]
+    parts = [torch.randn(2, 3, 4, generator=GENERATOR), torch.randn(2, 3, 4, generator=GENERATOR)]
     assert torch.allclose(fusion.mix(parts), parts[0] + parts[1])
     with fusion.silenced(PRIMARY):
         assert torch.allclose(fusion.mix(parts), parts[1])

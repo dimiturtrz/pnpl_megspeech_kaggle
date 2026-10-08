@@ -81,7 +81,6 @@ class Progress:
             data.run_cache(root),
             train.meg.device,
             names,
-            standardised=data.standardised,
             geometry=data.geometry(root, train.meg.device),
         )
         return cls.of(cls.cut(train, data), cls.cut(held, data), probing, device)

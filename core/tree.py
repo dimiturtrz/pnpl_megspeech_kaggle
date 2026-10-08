@@ -38,8 +38,9 @@ class Retired:
     given: Mapping[str, object] = dataclasses.field(default_factory=dict)
 
     def resolve(self, name: str, record: Mapping[str, object], table: Mapping[str, "Retired"]) -> Mapping[str, object]:
-        """The fields a record's value of `name` stands for, or a refusal naming it."""
+        """The fields a record's value of `name` stands for, or a refusal naming it; JSON's lists read as tuples."""
         value = record[name]
+        value = tuple(value) if isinstance(value, list) else value
         if value == self.default:
             return {}
         held = all(record.get(key, table[key].default) == wanted for key, wanted in self.given.items())

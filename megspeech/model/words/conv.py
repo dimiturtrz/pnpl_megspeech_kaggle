@@ -1,11 +1,12 @@
 """A word classifier over one decimated MEG window: spatial mixing, dilated temporal convolutions, pooling."""
 
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, override
 
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
+from core.tree import Retired
 from megspeech.data.constants import CHANNELS
 from megspeech.model.words.base import WordEncoder
 from megspeech.model.words.heads import WordHead
@@ -16,30 +17,28 @@ from megspeech.model.words.layers.downsample import Downsample
 from megspeech.model.words.layers.mean_max import MeanMax
 from megspeech.model.words.layers.sensorwise import Grouping, Sensorwise
 from megspeech.model.words.layers.spatial import SpatialAttention
-from megspeech.model.words.layers.ssm import Ssm
 
 
 @dataclass(frozen=True)
 class ConvConfig:
+    RETIRED: ClassVar[dict[str, Retired]] = {
+        "kernels": Retired((3,), "multi-kernel blocks (kernels) are retired, killed by megspeech-7gf.26"),
+        "ssm": Retired(0, "the state-space layer (ssm) is retired, killed by megspeech-7gf.27"),
+        "lora": Retired(0, "lora adapted the retired end-to-end MEG-XL encoder and never trained above 0"),
+        "gated": Retired(default=False, reason="the GLU-gated trunk (gated) is retired, killed by megspeech-7gf.29.7"),
+    }
+
     hidden: int = 256
     dilations: tuple[int, ...] = (1, 2, 4, 8, 1, 2)
     dropout: float = 0.3
-    kernels: tuple[int, ...] = (3,)
-    """Kernel sizes every block sums in parallel at its dilation, a multi-resolution front end: dropping it cost
-    BrainWatson's MEGState 5.3 BAcc points (LibriBrain 2025 phoneme track). Odd, so each keeps the time axis."""
     segments: int = 1
     """Equal time chunks the readout pools mean and max over; more keep when in the window the response came."""
-    ssm: int = 0
-    """Modes per direction of a bidirectional state-space layer after the convolutions; 0 adds none."""
     conformer: int = 0
     """Conformer blocks after the convolutions: self-attention and a 0.5 s depthwise convolution, MEGConformer's
     encoder; with no `dilations` they replace the convolutions."""
     instance: bool = False
     """Z-score each sensor within each window over its recorded samples: MEGConformer (LibriBrain 2025 phoneme
     winner) found per-window normalisation critical for the shift to the Kaggle test."""
-    lora: int = 0
-    """Retired: the rank of adapters on an end-to-end MEG-XL trunk, never trained above 0; kept so the configs
-    saved with it still load."""
     queries: int = 0
     """Learned attention queries the readout pools time with (`AttentionPool`); 0 pools mean and max over
     `segments` chunks. Two queries scored 0.615 vs 0.621 mean-max on one seed (megspeech-7gf.45)."""
@@ -67,8 +66,6 @@ class ConvConfig:
     sensorwise_drop: float = 0.0
     """Training-only share of sites dropped per window (masked out of the pool's attention, or zeroed and the
     survivors rescaled under the flatten fuse); 0 = none."""
-    gated: bool = False
-    """GLU-gate every dilated block in place of its GELU (`DilatedBlock`), d'Ascoli et al.'s trunk activation."""
     head: WordHead = WordHead.LINEAR
     """How the embedding is read out as the 50 words: one linear layer, or one per part of speech (`TaggedHead`)."""
     stages: tuple[int, ...] = ()
@@ -78,15 +75,11 @@ class ConvConfig:
     """Channel multiplier per stage, each width rounded to a multiple of 8."""
 
     def __post_init__(self) -> None:
-        if any(kernel % 2 == 0 for kernel in self.kernels):
-            raise ValueError(f"kernels {self.kernels} must be odd to keep the time axis")
         if self.merger and self.sensorwise:
             raise ValueError(f"merger={self.merger} and sensorwise={self.sensorwise} are two spatial front ends")
         if self.sensorwise_depth > len(self.dilations):
             raise ValueError(f"sensorwise_depth={self.sensorwise_depth} exceeds the {len(self.dilations)} dilations")
         self._check_sensorwise()
-        if self.lora:
-            raise ValueError(f"lora={self.lora}: the end-to-end MEG-XL encoder it adapted is retired")
         if list(self.stages) != sorted(set(self.stages)) or any(
             not 1 <= stage < len(self.dilations) for stage in self.stages
         ):
@@ -146,11 +139,7 @@ class ConvWords(WordEncoder):
         for i, d in enumerate(config.dilations):
             if i in config.stages:
                 self.blocks.append(Downsample(config.widths[i], config.widths[i + 1]))
-            self.blocks.append(
-                DilatedBlock(config.widths[i + 1], d, config.dropout, config.kernels, gated=config.gated)
-            )
-        if config.ssm:
-            self.blocks.append(Ssm(config.out, config.ssm, config.dropout))
+            self.blocks.append(DilatedBlock(config.widths[i + 1], d, config.dropout))
         self.blocks.extend(TimeConformer(config.out, config.dropout) for _ in range(config.conformer))
         self.head = self.classifier(config.dropout, config.head)
 
@@ -160,7 +149,7 @@ class ConvWords(WordEncoder):
         1x1 convolution."""
         if config.sensorwise:
             stack = (
-                DilatedBlock(config.sensorwise, d, config.dropout, config.kernels, gated=config.gated)
+                DilatedBlock(config.sensorwise, d, config.dropout)
                 for d in config.dilations[: config.sensorwise_depth or None]
             )
             return Sensorwise(

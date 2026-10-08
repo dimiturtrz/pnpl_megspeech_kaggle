@@ -33,9 +33,7 @@ class Reader:
         """`runs` on the device, and their words keyed by `Text` and cut as the model's grouping cuts them."""
         cache = self.data.run_cache(self.root)
         names = [run.name for run in runs]
-        source = DeviceRecording.load(
-            cache, self.device, names, standardised=self.data.standardised, geometry=self.geometry
-        )
+        source = DeviceRecording.load(cache, self.device, names, geometry=self.geometry)
         return source, self.data.carried(Text.of(source.words).words)
 
     def spoken(self, runs: list[Run]) -> tuple[pd.DataFrame, pd.DataFrame]:  # devtools-ignore: test-mirror

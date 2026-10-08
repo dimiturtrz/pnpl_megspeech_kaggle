@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -87,9 +88,10 @@ def test_split(tmp_path: Path) -> None:
     tail = round(2.2 * RATE) - round(0.5 * RATE)
     assert long[..., tail:].eq(0).all()
     assert long[..., :tail].ne(0).all()
-    headed = Corpus.split(loaded, words, DataConfig(baseline=0.02), np.ones(5)).windows(torch.tensor([4]))
+    plain = Corpus.split(loaded, words, DataConfig(), np.ones(5)).windows
+    headed = replace(plain, baseline=1)(torch.tensor([4]))
     assert headed[..., 0].float().eq(0).all()
-    led = Corpus.split(loaded, words, DataConfig(lead=0.1), np.ones(5)).windows(torch.tensor([0, 1]))
+    led = replace(plain, length=RATE + 5, offset=-5)(torch.tensor([0, 1]))
     assert led.shape == (2, CHANNELS, RATE + 5)
     assert led[0, :, :5].eq(0).all()
     assert led[1, :, :5].ne(0).all()
@@ -139,9 +141,9 @@ def test_kaggle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
     root = DataRoot.from_config()
     kaggle(root.raw())
-    windows = Corpus.kaggle(root, DataConfig(lead=0.1, baseline=0.5), Track.DEEP, "cpu")
+    windows = Corpus.kaggle(root, DataConfig(), Track.DEEP, "cpu")
     assert len(windows) == 1 + len(ONSETS) + WORD_EPOCHS
-    assert (windows.length, windows.offset, windows.baseline) == (RATE + 5, -5, round(0.5 * RATE))
+    assert (windows.length, windows.offset, windows.baseline) == (RATE, 0, 0)
 
 
 def test_kaggle_delay_past_epoch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

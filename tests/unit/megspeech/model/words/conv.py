@@ -4,6 +4,7 @@ import pytest
 import torch
 from torch import nn
 
+from core.tree import Tree
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.words.conv import ConvConfig, ConvWords
@@ -56,21 +57,13 @@ def test_embed_segments_one_is_mean_and_max() -> None:
     assert torch.allclose(net.embed(x), torch.cat([h.mean(-1), h.amax(-1)], dim=-1), atol=1e-6)
 
 
-def test_embed_kernels_and_segments() -> None:
-    config = ConvConfig(hidden=8, dilations=(1, 2), kernels=(3, 5, 7), segments=4)
+def test_embed_segments() -> None:
+    config = ConvConfig(hidden=8, dilations=(1, 2), segments=4)
     net = ConvWords(config)
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     assert net.width == 2 * 8 * 4
     assert net.embed(x).shape == (3, net.width)
     assert net.forward(x).shape == (3, VOCAB_SIZE)
-
-
-def test_embed_ssm_appends_one_layer() -> None:
-    net = ConvWords(ConvConfig(hidden=8, dilations=(1, 2), ssm=4))
-    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
-    assert len(net.blocks) == 3
-    assert net.embed(x).shape == (3, 2 * 8)
-    assert len(ConvWords(SMALL).blocks) == 2
 
 
 def test_embed_conformer_replaces_the_convolutions() -> None:
@@ -80,14 +73,13 @@ def test_embed_conformer_replaces_the_convolutions() -> None:
     assert net.embed(x).shape == (3, 2 * 8)
 
 
-def test_conv_config_rejects_even_kernel() -> None:
-    with pytest.raises(ValueError, match="odd"):
-        ConvConfig(kernels=(3, 4))
-
-
-def test_conv_config_rejects_lora() -> None:
-    with pytest.raises(ValueError, match="retired"):
-        ConvConfig(lora=4)
+def test_conv_config_retired_fields_load_only_at_default() -> None:
+    assert Tree(ConvConfig).load({"kernels": [3], "ssm": 0, "lora": 0, "gated": False}) == ConvConfig()
+    for name, value, killer in (("kernels", [3, 5], "7gf.26"), ("ssm", 4, "7gf.27"), ("gated", True, "7gf.29.7")):
+        with pytest.raises(ValueError, match=killer):
+            Tree(ConvConfig).load({name: value})
+    with pytest.raises(ValueError, match="MEG-XL"):
+        Tree(ConvConfig).load({"lora": 4})
 
 
 def test_embed_attention_queries() -> None:
@@ -169,8 +161,8 @@ def test_grown() -> None:
     assert [config.grown(k) for k in range(3)] == [256, 384, 576]
 
 
-def test_stages_ssm_and_conformer_use_final_width() -> None:
-    net = ConvWords(ConvConfig(hidden=8, dilations=(1, 2), stages=(1,), ssm=4, conformer=1))
+def test_stages_and_conformer_use_final_width() -> None:
+    net = ConvWords(ConvConfig(hidden=8, dilations=(1, 2), stages=(1,), conformer=1))
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     assert net.embed(x).shape == (3, 2 * 16)
 

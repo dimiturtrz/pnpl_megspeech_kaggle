@@ -207,7 +207,6 @@ class Pretrainer:
             data.run_cache(root),
             where,
             sessions.names,
-            standardised=data.standardised,
             geometry=data.geometry(root, where),
         )
         LOG.info("pretraining on %d sessions, %.2f GB on %s", len(sessions.runs), recording.gigabytes, where)

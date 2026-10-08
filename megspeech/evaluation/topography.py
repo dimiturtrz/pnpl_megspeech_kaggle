@@ -6,7 +6,7 @@ over the temporal lobes, as the acoustic expert's spatial prior assumes (megspee
 
 import logging
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Self
 
 import numpy as np
@@ -23,8 +23,10 @@ from megspeech.data.raw.masc import Neuromag
 
 LOG = logging.getLogger(__name__)
 
-READING = DataConfig(window=0.5, lead=0.2, baseline=0.2)
-"""0.2 s before each onset, centred on it, to 0.5 s after: the auditory evoked field's whole first half-second."""
+READING = DataConfig(window=0.5)
+LEAD = 0.2
+"""Seconds read before each onset and centred on: with `READING`'s window, the auditory evoked field's whole first
+half-second."""
 EARLY = (0.05, 0.15)
 """Seconds after onset of the auditory M50-M100, the response of primary auditory cortex."""
 CHUNK = 4096
@@ -64,9 +66,10 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
     train = Corpus.load(READING, root, torch.device("cuda")).train
-    evoked, helmet = Evoked.of(train.windows), Neuromag.of(NEUROMAG.home(root))
+    onset = READING.to_samples(LEAD)
+    windows = replace(train.windows, length=READING.samples + onset, offset=-onset, baseline=onset)
+    evoked, helmet = Evoked.of(windows), Neuromag.of(NEUROMAG.home(root))
     positions = helmet.positions
-    onset = READING.to_samples(READING.lead)
     peaks = evoked.peaks(*(onset + READING.to_samples(edge) for edge in EARLY)).cpu().numpy()
     temporal, order = helmet.within(TEMPORAL), np.argsort(-peaks)
     for i in order[:TOP]:

@@ -223,10 +223,6 @@ class RunCache:
         return (begin >= 0) & (begin + length <= table["samples"].to_numpy())
 
 
-STANDARDISE_SAMPLE = 20_000
-"""Samples per channel a recording's quantiles are read from, strided across it."""
-
-
 @dataclass(frozen=True)
 class DeviceRecording:
     """Cached runs end to end in one device tensor: run `i` is `meg[:, offsets[i]:offsets[i + 1]]`.
@@ -247,11 +243,10 @@ class DeviceRecording:
         device: torch.device | str,
         names: Sequence[str] | None = None,
         *,
-        standardised: bool = False,
         geometry: Geometry = AS_RECORDED,
     ) -> "DeviceRecording":
         """Load the named runs (default: every cached run) into one preallocated tensor, one run at a time, each in
-        `geometry`: re-coloured if it applies, `standardised` on its own if asked, then projected if it projects."""
+        `geometry`: re-coloured if it applies, then projected if it projects."""
         chosen = tuple(names) if names is not None else tuple(sorted(path.stem for path in cache.cache.glob("*.npy")))
         stored = [np.load(cache.path(name), mmap_mode="r") for name in chosen]
         offsets = np.r_[0, np.cumsum([signal.shape[1] for signal in stored])].astype(np.int64)
@@ -259,24 +254,11 @@ class DeviceRecording:
         for begin, signal, name in zip(offsets, stored, chosen, strict=False):
             run = torch.from_numpy(np.array(signal)).to(device)
             geometry.align(run, name)
-            if standardised:
-                cls.standardise(run)
-            meg[:, begin : begin + signal.shape[1]].copy_(geometry.project(run, robust=standardised))
+            meg[:, begin : begin + signal.shape[1]].copy_(geometry.project(run))
         words = cache.table(chosen)
         words["start"] = words["run"].map(dict(zip(chosen, offsets[:-1].tolist(), strict=True)))
         words["at"] = words["start"] + words["sample"]
         return cls(meg, offsets, chosen, words)
-
-    @staticmethod
-    @torch.no_grad()
-    def standardise(run: Float[Tensor, "c s"]) -> None:
-        """`run` in place as each channel's distance from its median in interquartile ranges: one recording's
-        sensor gain and offset, which drift between sessions, taken out before the model's own scaler."""
-        sample = run[:, :: max(1, run.shape[1] // STANDARDISE_SAMPLE)].float()
-        levels = torch.tensor([0.25, 0.5, 0.75], device=run.device)
-        low, median, high = torch.quantile(sample, levels, dim=1, keepdim=True)
-        spread = (high - low).clamp(min=torch.finfo(torch.float32).tiny)
-        run.copy_((run.float() - median) / spread)
 
     def windows(self, length: int = RATE) -> Windows:
         """Every word of `words`, in its order, as a `length`-sample window gathered from `meg`, ending at `stop` and
