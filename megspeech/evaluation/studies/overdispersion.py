@@ -30,8 +30,7 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.reader import Reader
-from megspeech.evaluation.rulers.localtest import SECTIONS
-from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities, Words
+from megspeech.evaluation.scoring.probabilities import PROBS, SECTIONS, Probabilities, Words
 from megspeech.model.ensemble import Ensemble
 
 LOG = logging.getLogger(__name__)

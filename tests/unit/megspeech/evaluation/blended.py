@@ -12,10 +12,11 @@ from megspeech.data.cache.kaggle import Track
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.blended import Blended
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.scoring.score import Head
 from megspeech.evaluation.text import RULER
-from tests.unit.megspeech.evaluation.loaded import POOLED, SPOKEN, kaggle_stub, loaded, runs
+from tests.unit.megspeech.evaluation.exported import kaggle_stub
+from tests.unit.megspeech.evaluation.loaded import POOLED, SPOKEN, loaded, runs
 
 
 class Flat(nn.Module):
@@ -29,7 +30,7 @@ class Flat(nn.Module):
         return logits, logits
 
 
-class Shuffled(LoadedModel):
+class Shuffled(ExportedModel):
     """Reads other words than its peers."""
 
     @override
@@ -43,7 +44,7 @@ class Shuffled(LoadedModel):
         return {name: replace(split, y=split.y + 1) for name, split in domains.items()}, logits
 
 
-def pair(tmp_path: Path, *, second: type[LoadedModel] = LoadedModel) -> Blended:
+def pair(tmp_path: Path, *, second: type[ExportedModel] = ExportedModel) -> Blended:
     first = replace(loaded(tmp_path), names=("a", "b"), log_prior=torch.zeros(VOCAB_SIZE))
     other = loaded(tmp_path)
     flat = second(

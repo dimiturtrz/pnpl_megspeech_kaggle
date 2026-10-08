@@ -17,23 +17,23 @@ from torch import Tensor
 from megspeech.data.batching.split import Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.scoring.score import Head
 
-Read = Callable[[LoadedModel], tuple[Split, Float[Tensor, "n v"]]]
+Read = Callable[[ExportedModel], tuple[Split, Float[Tensor, "n v"]]]
 WORDS = ("y", "token", "index", "onset")
 REFUSED = "a blended ensemble reads its groups through run_context and kaggle_chosen only"
 
 
 @dataclass(frozen=True, kw_only=True)
-class Blended(LoadedModel):
+class Blended(ExportedModel):
     """`groups` blended as one model; the first group's reader, model and data stand for it where one is read."""
 
-    groups: tuple[LoadedModel, ...]
+    groups: tuple[ExportedModel, ...]
     weights: tuple[float, ...]
 
     @classmethod
-    def of(cls, groups: Sequence[LoadedModel]) -> "Blended":
+    def of(cls, groups: Sequence[ExportedModel]) -> "Blended":
         members = [len(group.names) for group in groups]
         weights = tuple(count / sum(members) for count in members)
         prior = torch.stack([w * group.log_prior for w, group in zip(weights, groups, strict=True)]).sum(0)

@@ -14,7 +14,7 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.corpus import Corpus
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.submission.report import Report
 from megspeech.submission.writer import KaggleWriter
@@ -66,7 +66,7 @@ def main() -> None:
     evaluator.graded(model, validation, log_prior, best.tau).save(out / "hits.pt")
     if config.telemetry.probs:
         Probabilities.of(evaluator, model, validation, log_prior, best.tau).save(out / PROBS, "val")
-    loaded = LoadedModel(
+    loaded = ExportedModel(
         root,
         config.data,
         evaluator.device,

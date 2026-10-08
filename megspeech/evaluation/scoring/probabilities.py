@@ -14,11 +14,14 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from megspeech.data.batching.split import Split
+from megspeech.data.raw.runs import Partition
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head
 
 PROBS = "probs.pt"
 META = "#meta"
+SECTIONS = {Partition.VALIDATION: "official-val", Partition.TEST: "local-test"}
+"""The sections of `probs.pt` each partition's predictions are saved under."""
 
 
 @dataclass(frozen=True)

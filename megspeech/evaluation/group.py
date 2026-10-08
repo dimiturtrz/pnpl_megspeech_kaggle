@@ -9,7 +9,7 @@ from core.paths import DataRoot
 from megspeech.data.cache.alignment import Geometry
 from megspeech.data.config import DataConfig
 from megspeech.data.heard import Heard
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
@@ -24,7 +24,7 @@ class Group:
         scoring: Scoring,
         device: torch.device,
         geometry: Geometry | None,
-    ) -> LoadedModel:
+    ) -> ExportedModel:
         """The runs in `directories`, which trained at one `READING`, averaged as one model."""
         data = DataConfig.shared(directories, scoring.grouping)
         model = scoring.network(directories, data.rate, device)
@@ -40,7 +40,7 @@ class Group:
             shifts=scoring.shifts,
             adapted=scoring.adapted,
         )
-        return LoadedModel(
+        return ExportedModel(
             **{field.name: getattr(reader, field.name) for field in fields(Reader)},
             model=model,
             evaluator=evaluator,

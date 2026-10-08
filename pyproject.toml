@@ -285,10 +285,11 @@ layers = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "megspeech.evaluation layers: metric -> scoring -> loaded model -> track rulers and studies"
+name = "megspeech.evaluation layers: metric -> scoring -> loaded model -> export -> track rulers and studies"
 type = "layers"
 layers = [
     "megspeech.evaluation.rulers | megspeech.evaluation.studies",
+    "megspeech.evaluation.exported",
     "megspeech.evaluation.loaded",
     "megspeech.evaluation.scoring",
     "megspeech.evaluation.metric",

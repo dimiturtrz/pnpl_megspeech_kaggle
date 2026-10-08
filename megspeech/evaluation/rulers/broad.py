@@ -13,27 +13,18 @@ An adapted model also logs the mean over the subjects outside `data.subjects`, t
 
 import logging
 
-from megspeech.data.config import ADAPTED
-from megspeech.data.raw.runs import DEEP, Run
+from megspeech.data.raw.runs import Run
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.scoring.score import Score
 
 LOG = logging.getLogger(__name__)
 
-ADAPT_ON_ELEVEN = 11
-
 
 class BroadRuler:
     @staticmethod
-    def scored(loaded: LoadedModel, runs: list[Run]) -> list[Run]:
-        """Subjects 1-32's Sherlock1 run the model did not adapt on: session 11, or 12 when it adapts on 11."""
-        held = 12 if loaded.data.adapt == ADAPT_ON_ELEVEN else 11
-        return sorted((r for r in runs if r.subject != DEEP and r.key == (ADAPTED, held, 1)), key=lambda r: r.subject)
-
-    @staticmethod
     def select(loaded: LoadedModel, runs: list[Run]) -> Score:
-        scores = loaded.evaluator.counted({run.subject: loaded.unseen(run) for run in BroadRuler.scored(loaded, runs)})
+        scores = loaded.evaluator.counted({run.subject: loaded.unseen(run) for run in loaded.broad(runs)})
         macro = Score.mean(scores.values())
         for subject, score in scores.items():
             LOG.info("subject %2d  bacc10 %.4f  n %d", subject, score.by_tau[macro.tau], score.n)
@@ -54,7 +45,7 @@ class BroadRuler:
     def graded(loaded: LoadedModel, runs: list[Run], tau: float) -> Graded:
         """Each counted subject a domain, its run loaded alone as `select` loads it."""
         parts: list[Graded] = []
-        for run in BroadRuler.scored(loaded, runs):
+        for run in loaded.broad(runs):
             split, context = loaded.run_context(run)
             counted = loaded.evaluator.eligible({str(run.subject): split})
             parts.append(loaded.evaluator.grade(dict.fromkeys(counted, context), counted, loaded.log_prior, tau))

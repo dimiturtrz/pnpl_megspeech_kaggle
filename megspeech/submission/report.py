@@ -16,7 +16,7 @@ from megspeech.data.cache.alignment import Geometry
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.rulers.base import TrackRuler
 from megspeech.evaluation.rulers.broad import BroadRuler
@@ -42,7 +42,7 @@ class Submission:
 
     track: Track
 
-    def write(self, loaded: LoadedModel, runs: list[Run], out: Path) -> Path:
+    def write(self, loaded: ExportedModel, runs: list[Run], out: Path) -> Path:
         """The ruler's hits, the record and the Kaggle test rows under `out`; the submission's path."""
         ruler = RULERS[self.track]
         selected = ruler.select(loaded, runs)
@@ -76,5 +76,5 @@ class Report:
             written = Submission(track).write(self.loaded(scoring), runs, self.root.models() / f"{self.name}-{track}")
             LOG.info("wrote %s", written)
 
-    def loaded(self, scoring: Scoring) -> LoadedModel:
+    def loaded(self, scoring: Scoring) -> ExportedModel:
         return Loader.of(self.root, [self.name], scoring, self.device, self.geometry)

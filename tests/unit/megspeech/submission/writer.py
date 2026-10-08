@@ -13,7 +13,7 @@ from megspeech.data.cache.kaggle import KaggleCache, Track
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import SECONDARY, VOCAB_SIZE
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.model.input.subjects import Reading
 from megspeech.submission.writer import KaggleWriter
@@ -60,7 +60,7 @@ def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(KaggleCache, "of", Cache.of)
     monkeypatch.setattr(module, "write_submission", lambda path, _, p, s: written.update(p=p, s=s) or path)
     data = DataConfig(window=2.0, standardised=True)
-    loaded = LoadedModel(
+    loaded = ExportedModel(
         DataRoot(tmp_path),
         data,
         CPU,
@@ -79,7 +79,7 @@ def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_write_refuses_adapted_deep(tmp_path: Path) -> None:
     """A model that trained on `adapt` is refused on the Deep track, before any Kaggle row is read."""
     data = DataConfig(subjects=(0, 1), adapt=12)
-    loaded = LoadedModel(
+    loaded = ExportedModel(
         DataRoot(tmp_path),
         data,
         CPU,

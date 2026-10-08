@@ -26,7 +26,7 @@ from transformers import AutoModel, AutoTokenizer, PreTrainedTokenizerBase
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.studies.expertcheck import Centroids
@@ -236,7 +236,7 @@ class Study:
     """The trained model, on CPU, and the data root its teachers come from."""
 
     root: DataRoot
-    loaded: LoadedModel
+    loaded: ExportedModel
 
     def meg(self) -> Meg:  # devtools-ignore: test-mirror
         """The model's softmax scores on the unseen-span words of every counted validation domain."""

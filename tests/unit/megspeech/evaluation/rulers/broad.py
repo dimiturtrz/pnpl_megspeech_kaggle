@@ -30,17 +30,6 @@ def test_graded(tmp_path: Path) -> None:
     assert BroadRuler.graded(strict, runs(tmp_path), 0.5).domains == {}
 
 
-def test_scored(tmp_path: Path) -> None:
-    """Session 11 by default and under `adapt=12`; session 12 once the model adapts on 11."""
-    every = runs(tmp_path)
-    tool = loaded(tmp_path)
-    keys = {
-        adapt: [r.key[1] for r in BroadRuler.scored(replace(tool, data=replace(tool.data, adapt=adapt)), every)]
-        for adapt in (0, 11, 12)
-    }
-    assert keys == {0: [11], 11: [12], 12: [11]}
-
-
 def test_select_held_out(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """An adapted model's mean over the subjects outside `data.subjects` is logged; a default model's is not."""
     tool = loaded(tmp_path)

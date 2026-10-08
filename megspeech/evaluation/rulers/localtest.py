@@ -11,21 +11,20 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.metric.ruler import Graded, Ruler
+from megspeech.evaluation.scoring.probabilities import SECTIONS
 
 LOG = logging.getLogger(__name__)
 
 SCORED = {Partition.VALIDATION: "val", Partition.TEST: "local test"}
-SECTIONS = {Partition.VALIDATION: "official-val", Partition.TEST: "local-test"}
-"""The sections of `probs.pt` each partition's predictions are saved under."""
 
 
 @dataclass(frozen=True)
 class LocalTest:
     """`loaded` scored on val and on the local test of `runs`, at the tau its val macro selects."""
 
-    loaded: LoadedModel
+    loaded: ExportedModel
     runs: list[Run]
     ruler: Ruler = Ruler()
 

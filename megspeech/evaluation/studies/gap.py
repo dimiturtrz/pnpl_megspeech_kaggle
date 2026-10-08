@@ -113,14 +113,12 @@ class Locator:
 
     def read(self, split: Split) -> Float[Tensor, "k v"]:
         """The context head's log-probabilities for the labelled words of `split`, a variant of the fit subset."""
-        return self.loaded.evaluator.logits(self.loaded.model, split)[Head.CONTEXT][self.fitted.heard()]
+        return self.loaded.context(split)[self.fitted.heard()]
 
     def fit(self, condition: Condition) -> float:
         """The context head's balanced top-10 on the fit subset's labelled words."""
         words = self.fitted.heard()
-        return self.loaded.evaluator.evaluate(
-            self.context(condition), self.fitted.y[words], self.loaded.log_prior
-        ).by_tau[self.tau]
+        return self.loaded.score(self.context(condition), self.fitted.y[words]).by_tau[self.tau]
 
     def val(self, condition: Condition) -> float:
         """The selection macro: the counted domains' unseen-span words, graded on the unshuffled split so every

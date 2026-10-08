@@ -17,7 +17,6 @@ from core.paths import DataRoot
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.loading import Loader
-from megspeech.evaluation.rulers.broad import BroadRuler
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Score
@@ -77,7 +76,7 @@ class Pool:
             evaluator = evaluator or loaded.evaluator
             seen |= loaded.evaluator.seen
             priors.append(loaded.log_prior)
-            for run in BroadRuler.scored(loaded, runs):
+            for run in loaded.broad(runs):
                 split, context = loaded.run_context(run)
                 novel = split.novel(loaded.evaluator.seen)
                 if run.subject in labels and not torch.equal(labels[run.subject], split.y[novel]):

@@ -4,7 +4,7 @@ from typing import cast, override
 import numpy as np
 import pytest
 import torch
-from torch import nn
+from torch import Tensor, nn
 
 from megspeech.data.batching.split import Split
 from megspeech.data.batching.windows import Windows
@@ -13,6 +13,7 @@ from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import Spans
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.score import Head, Score
 from megspeech.evaluation.studies.gap import Condition, Grid, Locator, Subset
 
 CPU = torch.device("cpu")
@@ -47,6 +48,12 @@ class Stub:
         self.model = Reader()
         self.evaluator = Evaluator(CPU, min_novel=1)
         self.log_prior = torch.zeros(VOCAB_SIZE)
+
+    def context(self, split: Split) -> Tensor:
+        return self.evaluator.logits(self.model, split)[Head.CONTEXT]
+
+    def score(self, context: Tensor, y: Tensor) -> Score:
+        return self.evaluator.evaluate(context, y, self.log_prior)
 
     def ruled(self, runs: list[Run]) -> dict[str, list[Run]]:
         return {"d": runs}
