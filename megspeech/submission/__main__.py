@@ -14,10 +14,12 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.evaluation.labelweighted import Shrinkage
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.rulers.localtest import LocalTest
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.studies.memorisation import Memorisation
+from megspeech.submission.labelweighted import LabelWeighted
 from megspeech.submission.report import SCORING, Submission
 
 LOG = logging.getLogger(__name__)
@@ -32,12 +34,27 @@ def main() -> None:
         "--memorisation", action="store_true", help="with --local, tally test hits by what training heard"
     )
     parser.add_argument("--track", type=Track, choices=list(Track), default=Track.DEEP)
+    parser.add_argument("--device", default="cuda", help="cpu keeps scoring off a GPU a training run owns")
+    parser.add_argument(
+        "--labelweights",
+        nargs=2,
+        type=float,
+        metavar=("K", "BETA"),
+        help="blend members per label (shrinkage K, sharpness BETA) fit on the whole Broad ruler; Broad track only",
+    )
     tree = Tree(Scoring, SCORING)
     tree.arguments(parser)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    loaded = Loader.of(root, args.names, tree.parse(args), torch.device("cuda"))
+    device = torch.device(args.device)
+    if args.labelweights:
+        if args.track is not Track.BROAD:
+            parser.error("--labelweights fits on the Broad ruler: pass --track broad")
+        weighted = LabelWeighted.read(root, args.names, tree.parse(args), device, Shrinkage(*args.labelweights))
+        LOG.info("wrote %s", weighted.write(root.raw(), root.models() / args.out))
+        return None
+    loaded = Loader.of(root, args.names, tree.parse(args), device)
     runs = Run.discover(root.raw())
     if args.local:
         test, label = LocalTest(loaded, runs), "+".join(args.names)
