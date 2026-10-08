@@ -8,6 +8,7 @@ from jaxtyping import Float
 from torch import Tensor, nn
 
 from megspeech.data.batching.split import SpanInput
+from megspeech.device import Device
 from megspeech.model.config import ContextConfig
 from megspeech.model.encoding import Encoding
 from megspeech.model.input.stem import Stem
@@ -30,7 +31,7 @@ class Branch(Encoding):
     def load(cls, directory: Path, own: ContextConfig, channels: int, unseen: Unseen = Unseen.IDENTITY) -> "Branch":
         """The run in `directory`'s encoder, shaped by its own config and holding its weights, projecting to `own`'s
         width; its input must be the model's own channels."""
-        state = torch.load(directory / "model.pt", map_location="cpu", weights_only=True)
+        state = torch.load(directory / "model.pt", map_location=Device.CPU, weights_only=True)
         context = ContextConfig.load(directory)
         reads = state[SCALE_MEDIAN].shape[0]
         if reads != channels:

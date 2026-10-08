@@ -21,6 +21,7 @@ from megspeech.data.batching.split import EVAL_SPANS, Split
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
+from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
 from megspeech.model.auxiliary import Tap
 from megspeech.model.checkpoint import Checkpoint
@@ -95,7 +96,7 @@ class Readout:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("name", help="a model trained with --optim.acoustic under models/")
-    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--device", default=Device.CUDA)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), torch.device(args.device)

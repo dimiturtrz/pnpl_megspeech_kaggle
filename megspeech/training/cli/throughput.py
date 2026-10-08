@@ -18,6 +18,7 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
+from megspeech.device import Device
 from megspeech.training.config import RunConfig
 from megspeech.training.loop.trainer import Trainer
 
@@ -64,8 +65,8 @@ class Throughput:
 
     def phase(self, work: Callable[[], object], device: torch.device) -> Phase:
         """Time `work` unprofiled and synchronised, then run it again under the profiler for the op table."""
-        activities = [ProfilerActivity.CPU, *([ProfilerActivity.CUDA] if device.type == "cuda" else [])]
-        sync = torch.cuda.synchronize if device.type == "cuda" else (lambda: None)
+        activities = [ProfilerActivity.CPU, *([ProfilerActivity.CUDA] if device.type == Device.CUDA else [])]
+        sync = torch.cuda.synchronize if device.type == Device.CUDA else (lambda: None)
         start = time.perf_counter()
         work()
         sync()
@@ -76,7 +77,7 @@ class Throughput:
         events = prof.key_averages()
         host = sum(e.self_cpu_time_total for e in events) / 1e6
         on_device = sum(e.self_device_time_total for e in events) / 1e6
-        sort = "self_cuda_time_total" if device.type == "cuda" and not self.host else "self_cpu_time_total"
+        sort = "self_cuda_time_total" if device.type == Device.CUDA and not self.host else "self_cpu_time_total"
         return Phase(seconds, host, on_device, events.table(sort_by=sort, row_limit=self.rows))
 
     def measure(self, trainer: Trainer, corpus: Corpus, full_spans: int) -> EpochEstimate:
@@ -114,7 +115,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     config = tree.parse(args)
     root = DataRoot.from_config()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = Device.best().as_torch()
     corpus = Corpus.load(config.data, root, device)
     out = Throughput(steps=args.steps, host=args.host).measure(
         Trainer.of(corpus, config, root), corpus, args.full_spans
@@ -123,7 +124,7 @@ def main() -> None:
         LOG.info(
             "%s: wall %.2fs host %.2fs device %.2fs\n%s", name, phase.seconds, phase.host, phase.device, phase.table
         )
-    if device.type == "cuda":
+    if device.type == Device.CUDA:
         LOG.info("peak reserved %.1f GB", torch.cuda.max_memory_reserved() / 1e9)
     LOG.info(
         "per step %.1f ms x %d steps + report %.1fs = epoch %.1fs (%.2f epochs/min), eval share %.0f%%",

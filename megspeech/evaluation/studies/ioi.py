@@ -24,6 +24,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import MAX_WORDS, PAD
+from megspeech.device import Device
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Graded, Ruler
 from megspeech.evaluation.scoring.config import Scoring
@@ -226,7 +227,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    loaded = Loader.of(root, args.names, tree.parse(args), torch.device("cuda"))
+    loaded = Loader.of(root, args.names, tree.parse(args), Device.CUDA.as_torch())
     runs = Run.discover(root.raw())
     tau = loaded.report(runs).tau
     kaggle = Timing(loaded.kaggle(Track.DEEP))

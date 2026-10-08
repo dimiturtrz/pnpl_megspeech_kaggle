@@ -29,6 +29,7 @@ from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
+from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.probabilities import PROBS, SECTIONS, Probabilities, Words
 from megspeech.model.ensemble import Ensemble
@@ -43,7 +44,7 @@ CHUNK = 250
 """Permutations drawn at once, bounding the `perms x words` index tensor."""
 POOLED = "pooled"
 VAL = "val"
-CPU = torch.device("cpu")
+CPU = Device.CPU.as_torch()
 ABSENT = -1
 """A word no span reads."""
 

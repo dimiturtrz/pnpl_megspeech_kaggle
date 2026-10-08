@@ -30,6 +30,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import DataConfig
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.device import Device
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.config import Scoring
@@ -255,7 +256,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    root, device = DataRoot.from_config(), torch.device("cuda")
+    root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     loaded = Loader.of(root, [args.base], Scoring(), device)
     domains, _ = loaded.domains(loaded.ruled(Run.discover(root.raw())))
     dump = Dump.load(Dump.path(root, args.base))

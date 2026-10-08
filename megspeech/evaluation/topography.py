@@ -20,6 +20,7 @@ from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.masc import Neuromag
+from megspeech.device import Device
 
 LOG = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ def main() -> None:
     field's strength over time."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    train = Corpus.load(READING, root, torch.device("cuda")).train
+    train = Corpus.load(READING, root, Device.CUDA.as_torch()).train
     onset = READING.to_samples(LEAD)
     windows = replace(train.windows, length=READING.samples + onset, offset=-onset, baseline=onset)
     evoked, helmet = Evoked.of(windows), Neuromag.of(NEUROMAG.home(root))

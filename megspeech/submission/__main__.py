@@ -14,6 +14,7 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.device import Device
 from megspeech.evaluation.labelweighted import Shrinkage
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.memorisation import Memorisation
@@ -34,7 +35,7 @@ def main() -> None:
         "--memorisation", action="store_true", help="with --local, tally test hits by what training heard"
     )
     parser.add_argument("--track", type=Track, choices=list(Track), default=Track.DEEP)
-    parser.add_argument("--device", default="cuda", help="cpu keeps scoring off a GPU a training run owns")
+    parser.add_argument("--device", default=Device.CUDA, help="cpu keeps scoring off a GPU a training run owns")
     parser.add_argument(
         "--labelweights",
         nargs=2,

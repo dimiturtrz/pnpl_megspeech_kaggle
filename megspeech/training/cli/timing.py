@@ -8,10 +8,9 @@ import json
 import logging
 from dataclasses import asdict
 
-import torch
-
 from core.paths import DataRoot
 from core.tree import Tree
+from megspeech.device import Device
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.training.config import METRICS, RunConfig
 from megspeech.training.loop.trainer import Trainer
@@ -32,7 +31,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
     config = RunConfig.saved(root.models() / args.origin)
-    corpus = Trainer.corpus(config, root, torch.device("cuda"))
+    corpus = Trainer.corpus(config, root, Device.CUDA.as_torch())
     evaluator = Evaluator(corpus.train.y.device, corpus.seen, config.selection.min_novel)
     model, history = expert.fit(corpus.train, corpus.validation, evaluator, corpus.train.log_prior())
     out = root.models() / args.name

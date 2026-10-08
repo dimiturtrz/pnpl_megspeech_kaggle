@@ -16,7 +16,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-import torch
 from jaxtyping import Bool, Float
 from sklearn.linear_model import Ridge
 from sklearn.metrics import r2_score
@@ -27,6 +26,7 @@ from sklearn.preprocessing import StandardScaler
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import DEEP, Run
+from megspeech.device import Device
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Graded
@@ -178,7 +178,7 @@ def main() -> None:
     parser.add_argument("--stride", type=int, default=4, help="every stride-th subject-0 training run is probed on")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    root, device = DataRoot.from_config(), torch.device("cuda")
+    root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     loaded = Loader.of(root, [args.name], Scoring(), device)
     runs = Run.discover(root.raw())
     held = [run for group in loaded.ruled(runs).values() for run in group]

@@ -16,6 +16,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
+from megspeech.device import Device
 from megspeech.features.extract import CHUNK, Export
 from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.sentence import SentenceNet
@@ -45,7 +46,7 @@ def main() -> None:
     parser.add_argument("--name", required=True)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    root, device = DataRoot.from_config(), torch.device("cuda")
+    root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     run = root.models() / args.run
     config = RunConfig.saved(run)
     net = Checkpoint.load(run / "model.pt").to(device).eval()

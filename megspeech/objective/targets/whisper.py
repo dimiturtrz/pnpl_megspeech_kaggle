@@ -22,6 +22,7 @@ from transformers import WhisperFeatureExtractor, WhisperModel
 
 from core.paths import DataRoot
 from megspeech.data.raw.runs import Run
+from megspeech.device import Device
 from megspeech.objective.targets.speech import SAMPLING, STRIDE, Chapter, Heard, Targets
 from megspeech.objective.targets.t5 import Encoder
 
@@ -39,7 +40,7 @@ MARGIN = 5 * SAMPLING // STRIDE
 """Frames of a window, from each edge, that a later or earlier window supplies instead."""
 BATCH = 8
 """Windows read per forward pass."""
-DEVICE = "cuda"
+DEVICE = Device.CUDA
 LOG = logging.getLogger(__name__)
 
 Extractor = Callable[[list[np.ndarray]], Float[Tensor, "b m t"]]

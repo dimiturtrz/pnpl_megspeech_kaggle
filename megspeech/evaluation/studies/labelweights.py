@@ -17,6 +17,7 @@ from itertools import product
 import torch
 
 from core.paths import DataRoot
+from megspeech.device import Device
 from megspeech.evaluation.labelweighted import Pool, Shrinkage
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.input.subjects import Fallback, Unseen
@@ -78,7 +79,7 @@ class CrossFit:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("names", nargs="+", help="trained models under models/, each one member")
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default=Device.CPU)
     parser.add_argument("--aligned", action="store_true")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")

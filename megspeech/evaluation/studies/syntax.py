@@ -33,6 +33,7 @@ from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import DEEP, Run
 from megspeech.data.spans.spans import PAD
+from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
 from megspeech.model.auxiliary import Tap
 from megspeech.model.checkpoint import Checkpoint
@@ -123,7 +124,7 @@ class Embedded:
         logp = torch.zeros(words + 1, VOCAB_SIZE, device=device)
         slots = torch.zeros(words + 1, Tap.WORD.width(self.net), device=device)
         self.net.eval()
-        with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+        with torch.no_grad(), torch.autocast(Device.CUDA, dtype=torch.bfloat16):
             for spans in torch.arange(len(split.index), device=device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
                 _, embedded, context, _ = self.net.heard(batch.inputs())
@@ -147,7 +148,7 @@ class Embedded:
         device = split.index.device
         out = {tap: torch.zeros(words + 1, tap.width(self.net), device=device) for tap in Tap.pooled()}
         self.net.eval()
-        with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+        with torch.no_grad(), torch.autocast(Device.CUDA, dtype=torch.bfloat16):
             for spans in torch.arange(len(split.index), device=device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
                 refined, slots, _, _ = self.net.heard(batch.inputs())
@@ -334,7 +335,7 @@ class TorchLogistic(ClassifierMixin, BaseEstimator):
     def fit(self, x: Float[np.ndarray, "n d"], y: Int[np.ndarray, " n"]) -> "TorchLogistic":
         """The weights minimising the penalised loss of `y` (any integer labels) on `x`."""
         self.classes_, targets = np.unique(y, return_inverse=True)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = Device.best().as_torch()
         features = torch.as_tensor(x, dtype=torch.float32, device=device)
         self.mean_ = features.mean(0) if self.standardize else torch.zeros(features.shape[1], device=device)
         scale = features.std(0, correction=0) if self.standardize else torch.ones(features.shape[1], device=device)
@@ -448,7 +449,7 @@ def main() -> None:
     parser.add_argument("--stride", type=int, default=4, help="every stride-th subject-0 training run is probed on")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    root, device = DataRoot.from_config(), torch.device("cuda")
+    root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     trained_in = root.models() / args.name
     data = DataConfig.shared([trained_in], DataConfig.grouping)
     reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False))

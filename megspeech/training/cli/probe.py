@@ -6,12 +6,11 @@ uv run python -m megspeech.training.cli.probe --model sent40-ioi-ema9998-s0
 import argparse
 import logging
 
-import torch
-
 from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.raw.runs import Run
+from megspeech.device import Device
 from megspeech.model.checkpoint import Checkpoint
 from megspeech.training.config import RunConfig
 from megspeech.training.pretrain.progress import Probing, Progress
@@ -30,7 +29,7 @@ def main() -> None:
     probing = tree.parse(args)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = Device.best().as_torch()
     directory = root.models() / args.model
     data = RunConfig.saved(directory).data
     sessions = Sessions.of(data, Run.everywhere(root))

@@ -26,6 +26,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import DEEP, Partition, Run
+from megspeech.device import Device
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Ruler
@@ -127,7 +128,7 @@ class Encoder:
         """The stage-1 embedding of every word window of `split`, on the CPU."""
         net = self.network.eval()
         out = []
-        with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+        with torch.no_grad(), torch.autocast(Device.CUDA, dtype=torch.bfloat16):
             for words in torch.arange(len(split.y), device=split.y.device).split(BATCH):
                 valid = torch.ones(len(words), dtype=torch.bool, device=words.device)
                 out.append(net.embed(split.windows(words), split.subject[words], valid).float().cpu())
@@ -208,7 +209,7 @@ class Study:
         parser.add_argument("--draws", type=int, default=DRAWS)
         args = parser.parse_args()
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-        root, device = DataRoot.from_config(), torch.device("cuda")
+        root, device = DataRoot.from_config(), Device.CUDA.as_torch()
         loaded = Loader.of(root, [args.name], Scoring(partition=args.partition), device)
         encoder = Encoder(loaded)
         trained = [r for r in loaded.data.trained(Run.everywhere(root)) if r.subject == DEEP]

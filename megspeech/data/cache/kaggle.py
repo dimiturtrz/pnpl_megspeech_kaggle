@@ -34,6 +34,7 @@ from megspeech.data.cache.run_cache import DeviceRecording, RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
 from megspeech.data.labels.vocabulary import SECONDARY
 from megspeech.data.raw.runs import Run
+from megspeech.device import Device
 
 LOG = logging.getLogger(__name__)
 
@@ -197,7 +198,7 @@ def main() -> None:
     """Cache a track's Kaggle test, then report its windows' shape, count against its rows, finite share, and the
     share of samples zeroed past their epoch's end."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default=Device.CPU)
     parser.add_argument("--window", type=float, default=1.0, help="window length in seconds")
     parser.add_argument("--decimate", type=int, default=DECIMATE)
     parser.add_argument("--track", type=Track, choices=list(Track), default=Track.DEEP)

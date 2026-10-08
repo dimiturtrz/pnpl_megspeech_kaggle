@@ -26,6 +26,7 @@ from transformers import AutoModel, AutoTokenizer, PreTrainedTokenizerBase
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.device import Device
 from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
@@ -290,7 +291,7 @@ def main() -> None:
     if args.write_gemma:
         LOG.info("wrote %s", GemmaWords.encode(PRIMARY.words).save(root))
         return
-    studies = {name: Study(root, Loader.of(root, [name], Scoring(), torch.device("cpu"))) for name in args.run}
+    studies = {name: Study(root, Loader.of(root, [name], Scoring(), Device.CPU.as_torch())) for name in args.run}
     teachers = next(iter(studies.values())).teachers()
     for name, study in studies.items():
         meg = study.meg()

@@ -24,6 +24,7 @@ from core.tree import Tree
 from megspeech.data.batching.split import Split
 from megspeech.data.corpus import Corpus
 from megspeech.data.raw.runs import Run
+from megspeech.device import Device
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.scoring.score import Head
@@ -153,7 +154,7 @@ def main() -> None:
     tree = Tree(Scoring)
     tree.arguments(parser)
     args = parser.parse_args()
-    root, device = DataRoot.from_config(), torch.device("cuda")
+    root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     scoring, runs = tree.parse(args), Run.discover(root.raw())
     for name in args.names:
         loaded = Loader.of(root, [name], scoring, device)

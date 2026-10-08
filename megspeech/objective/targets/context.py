@@ -25,6 +25,7 @@ from core.paths import DataRoot
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.config import DataConfig, Val
 from megspeech.data.raw.runs import Run
+from megspeech.device import Device
 from megspeech.objective.targets.speech import Targets
 from megspeech.objective.targets.t5 import Encoder
 
@@ -35,7 +36,7 @@ WINDOW = 1024
 """Tokens one forward pass reads: gpt2's whole context."""
 FLOOR = 1e-6
 """Least per-dimension spread a z-score divides by."""
-DEVICE = "cuda"
+DEVICE = Device.CUDA
 LOG = logging.getLogger(__name__)
 
 Tokenizer = Callable[[list[str]], dict[str, list[list[int]]]]

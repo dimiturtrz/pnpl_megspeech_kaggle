@@ -20,6 +20,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.config import DataConfig
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.raw.runs import Run
+from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.studies.expert import Expert, Head
 from megspeech.objective.targets.speech import Speech, Targets
@@ -147,7 +148,7 @@ def main() -> None:
     parser.add_argument("--source", required=True, help="the teacher's directory under processed/speech")
     parser.add_argument("--fold", type=int, default=0)
     parser.add_argument("--runs", type=int, default=3)
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default=Device.CPU)
     parser.add_argument("--fit-runs", type=int, default=12, help="training runs the centroids average")
     parser.add_argument("--seen", action="store_true", help="runs the model trained on, not held out")
     args = parser.parse_args()

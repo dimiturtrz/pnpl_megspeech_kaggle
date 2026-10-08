@@ -23,6 +23,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE, PRIMARY
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
+from megspeech.device import Device
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
@@ -136,7 +137,7 @@ def main() -> None:
     parser.add_argument("--model", default=MASKED_LM)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    root, device = DataRoot.from_config(), torch.device("cuda")
+    root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     loaded = Loader.of(root, args.names, Scoring(fallback=Fallback(Unseen.DEEP)), device)
     held = loaded.data.held(Run.discover(root.raw()))
     table = Fusion(loaded, MaskedPrior.load(args.model, device)).table(held)

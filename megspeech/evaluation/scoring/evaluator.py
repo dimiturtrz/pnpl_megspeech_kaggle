@@ -15,6 +15,7 @@ from torch import Tensor, nn
 from megspeech.data.batching.split import EVAL_SPANS, Split
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.spans.spans import PAD
+from megspeech.device import Device
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.metric.ruler import Coverage, Graded, Ruler
 from megspeech.evaluation.scoring.score import ADJUSTMENTS, MIN_NOVEL, Epoch, Head, Report, Score
@@ -64,7 +65,7 @@ class Evaluator:
         """
         words, rows = len(split.y), EVAL_SPANS * split.index.shape[1]
         out = {head: torch.zeros(words + 1, VOCAB_SIZE, device=self.device) for head in Head}
-        with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+        with torch.no_grad(), torch.autocast(Device.CUDA, dtype=torch.bfloat16):
             for spans in torch.arange(len(split.index), device=self.device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
                 context, word = model(batch.inputs())

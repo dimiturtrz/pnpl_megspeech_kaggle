@@ -19,6 +19,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
+from megspeech.device import Device
 from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.training.config import RunConfig
 from megspeech.training.loop.trainer import Trainer
@@ -94,7 +95,7 @@ class Probe:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
         parser = argparse.ArgumentParser(description=__doc__)
         parser.add_argument("teachers", nargs="+", help="directories of per-word targets under processed/speech")
-        parser.add_argument("--device", default="cuda")
+        parser.add_argument("--device", default=Device.CUDA)
         arguments = parser.parse_args()
         names = arguments.teachers
         corpus = Trainer.corpus(RunConfig(), DataRoot.from_config(), torch.device(arguments.device))

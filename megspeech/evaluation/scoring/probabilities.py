@@ -15,6 +15,7 @@ from torch import Tensor, nn
 
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import Partition
+from megspeech.device import Device
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head
 
@@ -106,7 +107,7 @@ class Probabilities:
     @staticmethod
     def stored(path: Path) -> dict[str, dict[str, Tensor]]:
         """Every tensor record saved at `path` (`<section>#meta`, `<section>/<domain>`), none when there is no file."""
-        return torch.load(path, map_location="cpu", weights_only=True) if path.exists() else {}
+        return torch.load(path, map_location=Device.CPU, weights_only=True) if path.exists() else {}
 
     def save(self, path: Path, section: str) -> Path:
         """`section` written into `path`, the file's other sections kept."""

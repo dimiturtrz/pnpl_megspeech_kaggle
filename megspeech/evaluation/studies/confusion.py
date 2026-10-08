@@ -35,6 +35,7 @@ from megspeech.data.labels.phonemes import EVENTS, WORD
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
+from megspeech.device import Device
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import TOP, Ruler
@@ -386,7 +387,7 @@ class Report:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("name", help="a trained model under models/")
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default=Device.CPU)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()

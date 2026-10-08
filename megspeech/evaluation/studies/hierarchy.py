@@ -36,6 +36,7 @@ from megspeech.data.labels.context_tags import ContextTags
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import DEEP, Run
+from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head, Score, SelectionConfig
@@ -233,7 +234,7 @@ def main() -> None:
     parser.add_argument("--stride", type=int, default=4, help="every stride-th subject-0 training run is probed on")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    root, device = DataRoot.from_config(), torch.device("cuda")
+    root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     directories = Ensemble.trained(root.models(), args.name)
     data = DataConfig.shared(directories, DataConfig.grouping)
     reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False))

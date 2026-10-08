@@ -32,6 +32,7 @@ from torch import Tensor
 from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.device import Device
 from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.metric.ruler import Graded, Ruler
 from megspeech.evaluation.scoring.evaluator import Evaluator
@@ -247,7 +248,7 @@ def main() -> None:
     tree.arguments(parser)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    root, scoring, device = DataRoot.from_config(), tree.parse(args), torch.device("cuda")
+    root, scoring, device = DataRoot.from_config(), tree.parse(args), Device.CUDA.as_torch()
     members: list[Member] = []
     boards: dict[Partition, Board] = {}
     for name in args.names:

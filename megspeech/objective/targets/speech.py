@@ -26,6 +26,7 @@ from core.paths import DataRoot
 from megspeech.data.config import DataConfig, Val
 from megspeech.data.constants import MISSING
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.device import Device
 from megspeech.objective.targets.t5 import Encoder
 
 MODEL = "facebook/wav2vec2-large-xlsr-53"
@@ -62,7 +63,7 @@ FLOOR = 1e-6
 """Least per-dimension spread `Targets.standardised` divides by."""
 KEY_SEED = 0
 """Seed of the random direction a target is keyed by to tell identical targets apart."""
-DEVICE = "cuda"
+DEVICE = Device.CUDA
 LOG = logging.getLogger(__name__)
 
 

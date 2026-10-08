@@ -26,6 +26,7 @@ from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.masc import Neuromag
 from megspeech.data.raw.runs import DEEP, Run
+from megspeech.device import Device
 from megspeech.model.config import CONTEXT, ContextConfig, Covariance
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.sentence import SentenceNet
@@ -68,7 +69,7 @@ class PretrainConfig:
     average."""
     sessions: int = 0
     """Only the first this-many sessions (name order) are read, for a smoke; 0 reads every one."""
-    store: str = "cpu"
+    store: str = Device.CPU
     """Where the sessions' MEG lives: all of subject 0's training sessions are ~9 GB, more than a shared GPU holds."""
     fit: int = 10000
     """Random windows the scaler and whitener are fit on."""
@@ -326,7 +327,7 @@ class Pretrainer:
         steps = per_epoch * config.epochs
         params = [*net.encoder(), *predictor.parameters(), *(p for term in terms for p in term.parameters())]
         optimizer = torch.optim.AdamW(
-            params, lr=config.lr, weight_decay=config.weight_decay, fused=self.device.type == "cuda"
+            params, lr=config.lr, weight_decay=config.weight_decay, fused=self.device.type == Device.CUDA
         )
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, config.lr, total_steps=steps)
         history: list[Round] = []

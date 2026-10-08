@@ -35,6 +35,7 @@ from megspeech.data.config import DataConfig, Val
 from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.device import Device
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.studies.timing import Readings
@@ -531,7 +532,7 @@ class Study:
         parser.add_argument("--seed", type=int, default=0)
         args = parser.parse_args()
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-        for line in Experiment(DataRoot.from_config(), torch.device("cuda"), args.reps, args.seed).run():
+        for line in Experiment(DataRoot.from_config(), Device.CUDA.as_torch(), args.reps, args.seed).run():
             LOG.info("%s", line)
 
 

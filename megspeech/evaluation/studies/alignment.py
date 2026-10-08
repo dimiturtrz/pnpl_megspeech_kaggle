@@ -24,6 +24,7 @@ from torch.nn import functional
 from core.paths import DataRoot
 from megspeech.data.config import DataConfig
 from megspeech.data.raw.runs import DEEP, Partition, Run
+from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.studies.expertcheck import Probe
 from megspeech.evaluation.studies.syntax import Embedded
@@ -328,7 +329,7 @@ def main() -> None:
     parser.add_argument("--shuffles", type=int, default=SHUFFLES)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    root, device = DataRoot.from_config(), torch.device("cuda")
+    root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     directory = root.models() / args.run
     data = DataConfig.saved(directory)
     reader = Reader(root, data, device, geometry=data.geometry(root, device))

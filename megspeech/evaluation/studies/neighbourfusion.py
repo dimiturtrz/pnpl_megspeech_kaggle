@@ -28,6 +28,7 @@ from megspeech.data.config import METRICS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import PAD
+from megspeech.device import Device
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.score import Head
@@ -104,7 +105,7 @@ class Neighbours:
         device = split.index.device
         words, rows = len(split.y), EVAL_SPANS * split.index.shape[1]
         out = torch.zeros(words + 1, VOCAB_SIZE, device=device)
-        with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+        with torch.no_grad(), torch.autocast(Device.CUDA, dtype=torch.bfloat16):
             for spans in torch.arange(len(split.index), device=device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
                 at = torch.where(batch.index != PAD, batch.index, words)
@@ -125,7 +126,7 @@ def main() -> None:
     scoring = tree.parse(args)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    loaded = Loader.of(root, args.names, scoring, torch.device("cuda"))
+    loaded = Loader.of(root, args.names, scoring, Device.CUDA.as_torch())
     neighbours = Neighbours.of(loaded.model, Scoring.members(root.models(), args.names), loaded.evaluator.device)
     runs = Run.discover(root.raw())
     tau = loaded.report(runs).tau

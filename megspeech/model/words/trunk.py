@@ -21,6 +21,7 @@ from torch import Tensor, nn
 
 from core.paths import DataRoot
 from megspeech.data.raw.fetch import MEGXL, NEUROMAG
+from megspeech.device import Device
 
 CHECKPOINT = "meg-xl-med-v2.ckpt"
 """The released medium model, the one whose word-decoding numbers the paper reports."""
@@ -94,7 +95,7 @@ class Checkpoint:
     def trunk(self) -> nn.Module:
         """The pretrained trunk, its tokenizer's weights among the checkpoint's."""
         biocodec, crisscross = self.modules()
-        saved = torch.load(self.weights, map_location="cpu", weights_only=False)
+        saved = torch.load(self.weights, map_location=Device.CPU, weights_only=False)
         hparams = {key: value for key, value in saved["hyper_parameters"].items() if key != "debug_nan_checks"}
         tokenizer = biocodec.BioCodecModel._get_optimized_model()  # noqa: SLF001
         module = crisscross.CrissCrossTransformerModule(tokenizer=tokenizer, **hparams)

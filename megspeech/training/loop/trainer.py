@@ -18,6 +18,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import IGNORE
+from megspeech.device import Device
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Epoch
 from megspeech.evaluation.scoring.telemetry import Telemetry
@@ -134,7 +135,7 @@ class Trainer:
 
     def compiled[M: nn.Module](self, model: M) -> M:
         """`model` compiled in place into CUDA graphs when the run compiles and is on the GPU."""
-        if self.config.optim.compiled and self.evaluator.device.type == "cuda":
+        if self.config.optim.compiled and self.evaluator.device.type == Device.CUDA:
             model.compile(mode="reduce-overhead")
         return model
 
@@ -149,7 +150,7 @@ class Trainer:
         anchor's groups splits off its `encoder` parameters at `encoder_lr` times the rate, and each fused branch's at
         its `fused_lr`'s."""
         optim = self.config.optim
-        fused = self.evaluator.device.type == "cuda"
+        fused = self.evaluator.device.type == Device.CUDA
         shares = {id(p): optim.encoder_lr for p in encoder}
         for params, share in zip(branches, optim.fused_lr or (1.0,) * len(branches), strict=True):
             shares |= {id(p): share for p in params}
@@ -180,7 +181,7 @@ class Trainer:
     def step(self, state: TrainState, train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, " k"]:
         """One optimiser step on the words of `spans`; returns each term's loss without syncing it to the host."""
         batch = train.batch(spans, state.rows, self.config.augment.jitter)
-        with torch.autocast("cuda", dtype=torch.bfloat16):
+        with torch.autocast(Device.CUDA, dtype=torch.bfloat16):
             mixed = state.bgmix.apply(state.average.apply(batch.x, batch, train), batch, train)
             outputs = state.model(batch.inputs(self.regional(self.config.augment(mixed))))
             parts = zip(state.terms, state.readouts, outputs, strict=True)

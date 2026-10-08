@@ -31,6 +31,7 @@ from megspeech.data.labels.vocabulary import PRIMARY
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.masc import Neuromag
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.device import Device
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
@@ -278,7 +279,7 @@ class Study:
         parser.add_argument("--no-png", action="store_true")
         args = parser.parse_args()
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-        root, device = DataRoot.from_config(), torch.device("cuda")
+        root, device = DataRoot.from_config(), Device.CUDA.as_torch()
         loaded: LoadedModel = Loader.of(root, [args.name], Scoring(partition=Partition.VALIDATION), device)
         domains, _ = loaded.domains(loaded.ruled(Run.discover(root.raw())))
         config = AttributionConfig(steps=args.steps, words=args.words)

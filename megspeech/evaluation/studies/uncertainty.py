@@ -25,6 +25,7 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.device import Device
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Ruler
@@ -152,7 +153,7 @@ class Saved:
     def partition(self) -> tuple[pd.DataFrame, dict[str, Bool[Tensor, "e n"]]]:
         """Every counted domain's scored (unseen-span) words, as `Members.partition` reads them live."""
         first = self.members[0]
-        reading = Reading(Evaluator(torch.device("cpu")), first.log_prior)
+        reading = Reading(Evaluator(Device.CPU.as_torch()), first.log_prior)
         read = {}
         for name, words in first.domains.items():
             if int(words.novel.sum()) < first.min_novel:
@@ -214,7 +215,7 @@ class Study:
         parser.add_argument("--partitions", nargs="+", default=[Partition.VALIDATION, Partition.TEST])
         args = parser.parse_args()
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-        root, device = DataRoot.from_config(), torch.device("cuda")
+        root, device = DataRoot.from_config(), Device.CUDA.as_torch()
         if args.section:
             saved = Saved.load([root.models() / name for name in args.name], args.section)
             for line in Tally(*saved.partition()).lines():

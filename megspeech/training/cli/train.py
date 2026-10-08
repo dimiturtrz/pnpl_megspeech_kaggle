@@ -14,6 +14,7 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.corpus import Corpus
+from megspeech.device import Device
 from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.submission.report import Report
@@ -43,7 +44,7 @@ def main() -> None:
     config = tree.parse(args)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    corpus = Corpus.load(config.data, root, torch.device("cuda"))
+    corpus = Corpus.load(config.data, root, Device.CUDA.as_torch())
     train, validation, log_prior = corpus.train, corpus.validation, corpus.train.log_prior()
     trainer = Trainer.of(corpus, config, root)
     model, history = trainer.fit(train, validation, log_prior)

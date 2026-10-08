@@ -24,6 +24,7 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
+from megspeech.device import Device
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import TOP
@@ -130,7 +131,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    loaded = Loader.of(root, args.names, tree.parse(args), torch.device("cuda"))
+    loaded = Loader.of(root, args.names, tree.parse(args), Device.CUDA.as_torch())
     evaluator, prior, runs = loaded.evaluator, loaded.log_prior, Run.discover(root.raw())
     domains, reference = loaded.domains(loaded.data.held(runs))
     context = {name: loaded.context(split) for name, split in domains.items()}

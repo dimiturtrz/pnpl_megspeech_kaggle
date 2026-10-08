@@ -23,6 +23,7 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import CHANNELS
+from megspeech.device import Device
 from megspeech.model.config import Encoder
 from megspeech.model.input.scaler import CLAMP, Scaler
 from megspeech.model.sentence import SentenceNet
@@ -47,7 +48,9 @@ class Run:
 
     @classmethod
     def load(cls, directory: Path) -> Self:
-        return cls(RunConfig.saved(directory), torch.load(directory / MODEL, map_location="cpu", weights_only=True))
+        return cls(
+            RunConfig.saved(directory), torch.load(directory / MODEL, map_location=Device.CPU, weights_only=True)
+        )
 
     def plain(self) -> bool:
         """Whether the run read the sensors as recorded, through its CNN alone: what an expert branch reproduces."""

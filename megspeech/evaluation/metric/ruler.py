@@ -18,6 +18,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.device import Device
 
 LOG = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ def main() -> None:
     parser.add_argument("--block", type=int, default=1, help="consecutive words resampled together")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = Device.best().as_torch()
     ruler = Ruler(block=args.block)
     a, b = Graded.load(args.a, device), Graded.load(args.b, device)
     delta = ruler.delta(a, b)

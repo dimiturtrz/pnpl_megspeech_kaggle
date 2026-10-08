@@ -6,10 +6,9 @@ uv run python -m megspeech.training.cli.pretrain --name ssl-v0 --origin sent40-i
 import argparse
 import logging
 
-import torch
-
 from core.paths import DataRoot
 from core.tree import Tree
+from megspeech.device import Device
 from megspeech.training.config import RunConfig
 from megspeech.training.pretrain.pretrain import PretrainConfig, Pretrainer
 
@@ -29,7 +28,7 @@ def main() -> None:
     args = parser.parse_args()
     config = tree.parse(args)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    trainer = Pretrainer.of(config, root, torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    trainer = Pretrainer.of(config, root, Device.best().as_torch())
     net, predictor, history = trainer.run()
     trainer.save(root.models() / args.name, net, predictor, history)
 

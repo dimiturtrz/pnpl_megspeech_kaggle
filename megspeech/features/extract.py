@@ -34,6 +34,7 @@ from megspeech.data.config import DataConfig
 from megspeech.data.constants import CHANNELS, RATE
 from megspeech.data.corpus import Corpus
 from megspeech.data.spans.spans import PAD
+from megspeech.device import Device
 from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.words.megxl import COMPONENTS, MegxlWords
 from megspeech.model.words.spanned import SpanWords
@@ -253,7 +254,7 @@ def main() -> None:
     if config.data.projected:
         parser.error("MEG-XL reads the 306 sensors; a projected config keeps fewer")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    root, device = DataRoot.from_config(), torch.device("cuda")
+    root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     export = Export.of(config.data, root, args.name, device)
     train = export.corpus.train
     torch.manual_seed(config.optim.seed)

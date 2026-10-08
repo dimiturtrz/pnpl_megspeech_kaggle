@@ -10,7 +10,6 @@ import logging
 from dataclasses import dataclass
 
 import numpy as np
-import torch
 from jaxtyping import Int
 
 from core.paths import DataRoot
@@ -18,6 +17,7 @@ from megspeech.data.config import DataConfig
 from megspeech.data.labels.context_tags import ContextTags
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.raw.runs import Run
+from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.studies.syntax import Embedded, Probed
 
@@ -45,7 +45,7 @@ def main() -> None:
     parser.add_argument("name", help="a trained tagged-head model under models/")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    root, device = DataRoot.from_config(), torch.device("cuda")
+    root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     trained_in = root.models() / args.name
     data = DataConfig.shared([trained_in], DataConfig.grouping)
     reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False))

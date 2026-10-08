@@ -43,6 +43,7 @@ from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from megspeech.data.raw.serialised import Serialised
 from megspeech.data.spans.grouping import Grouping
+from megspeech.device import Device
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.score import MIN_NOVEL
@@ -407,7 +408,7 @@ class Study:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
         started = time.monotonic()
         root = DataRoot.from_config()
-        reader = Reader(root, DataConfig(val=Val.OFFICIAL), torch.device("cpu"))
+        reader = Reader(root, DataConfig(val=Val.OFFICIAL), Device.CPU.as_torch())
         runs = Run.everywhere(root)
         trained = reader.data.trained(runs)
         held = reader.ruled(runs)
