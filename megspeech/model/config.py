@@ -12,6 +12,7 @@ import torch
 from jaxtyping import Float
 from torch import Tensor, nn
 
+from core.rules import Rule
 from core.tree import Retired, Tree
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.context.timing import Clock, Intervals
@@ -124,26 +125,7 @@ class ContextConfig:
     sees them always learns to trust them."""
 
     def __post_init__(self) -> None:
-        if self.anchor.active and self.objective is Objective.SIGLIP:
-            raise ValueError("an anchored head and the siglip head are both the context head's scorer")
-        if not 0 <= self.anchor_dim < VOCAB_SIZE or (self.anchor_dim and not self.anchor.active):
-            raise ValueError(f"anchor_dim {self.anchor_dim} needs an anchor source and at most {VOCAB_SIZE - 1}")
-        if len(self.starts) != len(self.lengths) or (self.encoder is Encoder.EXPERTS) != bool(self.starts):
-            raise ValueError(
-                f"the experts encoder, and it alone, reads one crop per expert: starts={self.starts}, "
-                f"lengths={self.lengths} for encoder {self.encoder}"
-            )
-        if self.encoder.cached and self.subjects:
-            raise ValueError(
-                f"encoder {self.encoder} reads saved features, not sensors, so a per-subject sensor matrix "
-                f"(subjects={self.subjects}) has nothing to mix"
-            )
-        if self.whiten and self.encoder.cached:
-            raise ValueError(f"encoder {self.encoder} reads saved features, not sensors, so there is nothing to whiten")
-        if not 0 <= self.branch_drop < 1:
-            raise ValueError(f"branch_drop {self.branch_drop} is a probability below 1")
-        if self.covariance is Covariance.NOISE and not self.whiten:
-            raise ValueError("a noise covariance is only inverted by whiten")
+        Rule.enforce(self, CONTEXT_RULES)
 
     @property
     def crops(self) -> tuple[Crop, ...]:
@@ -162,6 +144,42 @@ class ContextConfig:
         return Tree(cls).load(json.loads(path.read_text())) if path.exists() else CONTEXT
 
 
+CONTEXT_RULES: tuple[Rule[ContextConfig], ...] = (
+    Rule(
+        lambda c: c.anchor.active and c.objective is Objective.SIGLIP,
+        lambda _: "an anchored head and the siglip head are both the context head's scorer",
+    ),
+    Rule(
+        lambda c: not 0 <= c.anchor_dim < VOCAB_SIZE or bool(c.anchor_dim and not c.anchor.active),
+        lambda c: f"anchor_dim {c.anchor_dim} needs an anchor source and at most {VOCAB_SIZE - 1}",
+    ),
+    Rule(
+        lambda c: len(c.starts) != len(c.lengths) or (c.encoder is Encoder.EXPERTS) != bool(c.starts),
+        lambda c: (
+            f"the experts encoder, and it alone, reads one crop per expert: starts={c.starts}, "
+            f"lengths={c.lengths} for encoder {c.encoder}"
+        ),
+    ),
+    Rule(
+        lambda c: c.encoder.cached and bool(c.subjects),
+        lambda c: (
+            f"encoder {c.encoder} reads saved features, not sensors, so a per-subject sensor matrix "
+            f"(subjects={c.subjects}) has nothing to mix"
+        ),
+    ),
+    Rule(
+        lambda c: c.whiten and c.encoder.cached,
+        lambda c: f"encoder {c.encoder} reads saved features, not sensors, so there is nothing to whiten",
+    ),
+    Rule(
+        lambda c: not 0 <= c.branch_drop < 1,
+        lambda c: f"branch_drop {c.branch_drop} is a probability below 1",
+    ),
+    Rule(
+        lambda c: c.covariance is Covariance.NOISE and not c.whiten,
+        lambda _: "a noise covariance is only inverted by whiten",
+    ),
+)
 FILE = "context.json"
 CONTEXT = ContextConfig()
 

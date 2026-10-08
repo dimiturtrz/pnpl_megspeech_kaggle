@@ -5,6 +5,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.rules import Rule
 from core.tree import Tree
 from megspeech.data.config import METRICS, DataConfig, Refit
 from megspeech.evaluation.scoring.score import Epoch, SelectionConfig
@@ -186,38 +187,7 @@ class RunConfig:
     telemetry: TelemetryConfig = TelemetryConfig()
 
     def __post_init__(self) -> None:
-        if self.optim.fused_lr and len(self.optim.fused_lr) != len(self.context.fused):
-            raise ValueError(f"fused_lr {self.optim.fused_lr} gives a rate for each of the fused {self.context.fused}")
-        if self.optim.tap is Tap.TIME:
-            raise ValueError("optim.tap time reads the window's time course, which only the acoustic head asks for")
-        if self.optim.acoustic and self.context.encoder is not Encoder.CONV:
-            raise ValueError(
-                f"optim.acoustic reads the conv encoder's time features, not encoder {self.context.encoder}"
-            )
-        if self.optim.acoustic and self.data.cut() != DataConfig().cut():
-            raise ValueError(f"optim.acoustic's envelopes are cut {DataConfig().cut()}, not {self.data.cut()}")
-        if self.stop.patience < 0:
-            raise ValueError(f"stop.patience {self.stop.patience} is negative; 0 trains every epoch")
-        if self.stop.patience and self.keeps_last:
-            raise ValueError(
-                f"stop.patience {self.stop.patience} needs an epoch selected on validation, but this run keeps its "
-                "last (refit, optim.last, or heads 0)"
-            )
-        if self.data.projected and (self.context.encoder.cached or self.context.conv.merger):
-            raise ValueError(
-                f"encoder {self.context.encoder} with merger {self.context.conv.merger} reads the 306 sensors, which "
-                "a projected config does not keep"
-            )
-
-        if (self.context.encoder is Encoder.SPANNED) != bool(self.data.segment):
-            raise ValueError(
-                f"the spanned encoder, and it alone, reads continuous segments: encoder {self.context.encoder}, "
-                f"data.segment {self.data.segment}"
-            )
-        if self.data.segment and (self.augment.bgmix or self.augment.average > 1 or self.augment.jitter):
-            raise ValueError(
-                "bgmix, group averaging and jitter act on word windows, which a segment batch does not hold"
-            )
+        Rule.enforce(self, RUN_RULES)
 
     @property
     def keeps_last(self) -> bool:
@@ -238,3 +208,52 @@ class RunConfig:
         under the retired `extra`/`share`/`stratify` fields migrated to `val` and `refit`, its sampler knobs from
         `optim` to `sampler`."""
         return Tree(cls).load(json.loads((directory / METRICS).read_text())["config"], saved=True)
+
+
+RUN_RULES: tuple[Rule[RunConfig], ...] = (
+    Rule(
+        lambda r: bool(r.optim.fused_lr) and len(r.optim.fused_lr) != len(r.context.fused),
+        lambda r: f"fused_lr {r.optim.fused_lr} gives a rate for each of the fused {r.context.fused}",
+    ),
+    Rule(
+        lambda r: r.optim.tap is Tap.TIME,
+        lambda _: "optim.tap time reads the window's time course, which only the acoustic head asks for",
+    ),
+    Rule(
+        lambda r: bool(r.optim.acoustic) and r.context.encoder is not Encoder.CONV,
+        lambda r: f"optim.acoustic reads the conv encoder's time features, not encoder {r.context.encoder}",
+    ),
+    Rule(
+        lambda r: bool(r.optim.acoustic) and r.data.cut() != DataConfig().cut(),
+        lambda r: f"optim.acoustic's envelopes are cut {DataConfig().cut()}, not {r.data.cut()}",
+    ),
+    Rule(
+        lambda r: r.stop.patience < 0,
+        lambda r: f"stop.patience {r.stop.patience} is negative; 0 trains every epoch",
+    ),
+    Rule(
+        lambda r: bool(r.stop.patience) and r.keeps_last,
+        lambda r: (
+            f"stop.patience {r.stop.patience} needs an epoch selected on validation, but this run keeps its "
+            "last (refit, optim.last, or heads 0)"
+        ),
+    ),
+    Rule(
+        lambda r: bool(r.data.projected) and bool(r.context.encoder.cached or r.context.conv.merger),
+        lambda r: (
+            f"encoder {r.context.encoder} with merger {r.context.conv.merger} reads the 306 sensors, which "
+            "a projected config does not keep"
+        ),
+    ),
+    Rule(
+        lambda r: (r.context.encoder is Encoder.SPANNED) != bool(r.data.segment),
+        lambda r: (
+            f"the spanned encoder, and it alone, reads continuous segments: encoder {r.context.encoder}, "
+            f"data.segment {r.data.segment}"
+        ),
+    ),
+    Rule(
+        lambda r: bool(r.data.segment) and bool(r.augment.bgmix or r.augment.average > 1 or r.augment.jitter),
+        lambda _: "bgmix, group averaging and jitter act on word windows, which a segment batch does not hold",
+    ),
+)
