@@ -85,6 +85,11 @@ class OptimConfig:
     """Weight of the next-word auxiliary (`megspeech.objective.auxiliary.neighbour`): each word slot's local encoder
     embedding, before the span transformer whatever the `tap`, predicts the next word's 50-way label in its span
     (ignored where that word is outside the 50, absent or in another span); 0 creates no head."""
+    mi: float = 0.0
+    """Weight of the OVMI auxiliary (`megspeech.objective.information`): minus the mutual information in bits between
+    the word and the context head's softmax over each batch's labelled words, the confusion rows weighted by the
+    training prior as `Ruler.information` weighs them. Maximising it rewards predictions both confident and spread
+    over the 50 words; 0 adds no term."""
     prev_word: float = 0.0
     """Weight of the previous-word auxiliary, the next-word one's mirror; 0 creates no head."""
     adversary: float = 0.0

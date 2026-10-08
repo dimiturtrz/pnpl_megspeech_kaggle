@@ -219,3 +219,12 @@ def test_distilled_term_labels_muted() -> None:
     muted = replace(train, muted=torch.tensor([True] + [False] * (len(train.y) - 1)))
     term = DistilledTerm(0.0, None, taught=torch.zeros(len(train.y), VOCAB_SIZE), y=train.y, share=0.5, unlabelled=True)
     assert term.labels(muted).tolist() == [IGNORE, *range(1, len(train.y))]
+
+
+def test_context_term_hard() -> None:
+    assert torch.equal(ContextTerm(0.0, None).hard(Y), Y)
+
+
+def test_distilled_term_hard() -> None:
+    term = distilled(0.5, torch.zeros(3, VOCAB_SIZE))
+    assert term.hard(torch.tensor([[0, IGNORE]])).tolist() == [[int(term.y[0]), IGNORE]]

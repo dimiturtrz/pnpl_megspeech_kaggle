@@ -27,6 +27,7 @@ from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.anchors import Anchors
 from megspeech.objective.context import Objective
+from megspeech.objective.information import InformedTerm
 from megspeech.objective.targets.t5 import Prototypes
 from megspeech.objective.term import ContextTerm, LabelTerm, Term, WordTerm
 from megspeech.training.auxiliary import Auxiliary, NoAuxiliary
@@ -171,7 +172,9 @@ class Trainer:
         context = ContextTerm(
             optim.label_smoothing, classes, objective=self.config.context.objective, weight=optim.heads
         )
-        context = self.teacher.taught(context, train, self.evaluator)
+        context = InformedTerm.of(
+            self.teacher.taught(context, train, self.evaluator), optim.mi, train.log_prior().exp()
+        )
         return context, WordTerm(optim.label_smoothing, classes, weight=optim.heads), *self.auxiliary.terms
 
     def step(self, state: TrainState, train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, " k"]:

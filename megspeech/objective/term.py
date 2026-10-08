@@ -81,6 +81,10 @@ class ContextTerm(LabelTerm):
     def labels(self, split: Split) -> Int[Tensor, " n"]:
         return split.unmuted(split.y)
 
+    def hard(self, target: Int[Tensor, "g w"]) -> Int[Tensor, "g w"]:
+        """The vocabulary label of each position of `target`, `IGNORE` for words outside the 50."""
+        return target
+
     @override
     def unweighted(
         self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
@@ -109,11 +113,15 @@ class DistilledTerm(ContextTerm):
         return split.unmuted(torch.arange(len(self.y), device=self.y.device))
 
     @override
+    def hard(self, target: Int[Tensor, "g w"]) -> Int[Tensor, "g w"]:
+        return torch.where(target == IGNORE, IGNORE, self.y[target.clamp(min=0)])
+
+    @override
     def unweighted(
         self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
     ) -> Float[Tensor, ""]:
         rows = target.clamp(min=0)
-        y = torch.where(target == IGNORE, IGNORE, self.y[rows])
+        y = self.hard(target)
         hard = super().unweighted(head, output, y)
         keep = (target != IGNORE if self.unlabelled else y != IGNORE).float()
         teacher = (self.taught[rows].float() / self.temperature).log_softmax(-1)
