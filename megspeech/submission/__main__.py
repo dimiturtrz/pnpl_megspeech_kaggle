@@ -16,9 +16,9 @@ from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.evaluation.labelweighted import Shrinkage
 from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.memorisation import Memorisation
 from megspeech.evaluation.rulers.localtest import LocalTest
 from megspeech.evaluation.scoring.config import Scoring
-from megspeech.evaluation.studies.memorisation import Memorisation
 from megspeech.submission.labelweighted import LabelWeighted
 from megspeech.submission.report import SCORING, Submission
 

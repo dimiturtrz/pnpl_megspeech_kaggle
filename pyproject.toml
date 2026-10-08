@@ -294,6 +294,12 @@ layers = [
     "megspeech.evaluation.scoring",
     "megspeech.evaluation.metric",
 ]
+
+[[tool.importlinter.contracts]]
+name = "megspeech.evaluation.studies is an instrument layer: nothing outside it imports it"
+type = "protected"
+protected_modules = ["megspeech.evaluation.studies"]
+allowed_importers = ["megspeech.evaluation.studies"]
 # <<< LOCAL-SLOT: import-contracts
 
 
