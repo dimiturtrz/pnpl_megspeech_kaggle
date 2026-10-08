@@ -55,8 +55,6 @@ OUT = "confusion"
 CELL = 0.17
 """Inches per heatmap row, so the 50 tick labels stay legible."""
 LABEL_SIZE = 5
-GAINS = 10
-"""Targets listed at each end of the gain ranking."""
 
 
 @dataclass(frozen=True)

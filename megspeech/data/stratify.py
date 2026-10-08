@@ -20,8 +20,6 @@ BOOKS = slice(LABELS.stop, None)
 RATIOS = (np.array([LOG_IOI, SENTENCED, KNOWN]), np.array([IOIS, SENTENCES, WORDS]))
 """Numerators and denominators of the per-word means compared: log word rate, sentence length, in-vocabulary share."""
 
-CRITERIA = 6
-"""Gaps a held partition is balanced on: word volume, the three `RATIOS`, label mix and book mix."""
 DRAWS = 512
 """Random assignments each criterion's gap is scaled by: its median over them is one unit, so criteria add on one scale
 without hand-set weights."""
