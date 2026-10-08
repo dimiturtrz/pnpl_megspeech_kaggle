@@ -3,6 +3,7 @@ import dataclasses
 import numpy as np
 import pytest
 import torch
+from scipy import stats
 
 from megspeech.data.batching.split import Batch, Split
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
@@ -86,6 +87,35 @@ def test_apply_leaves_unlabelled_rows_and_never_partners_with_them() -> None:
     assert torch.equal(out[3], x[3])
     assert torch.allclose(out[0] - 1.0, x[2] - 2.0, atol=1e-5)
     assert torch.allclose(out[2] - 2.0, x[0] - 1.0, atol=1e-5)
+
+
+def test_partners() -> None:
+    torch.manual_seed(0)
+    known = torch.tensor([True, False, True, True, False, True, True, False])
+    rows = len(known)
+    draws = torch.stack([BGMix.partners(known) for _ in range(20_000)])
+    counts = torch.zeros(rows, rows, dtype=torch.long).scatter_add_(
+        1, draws.T, torch.ones_like(draws.T, dtype=torch.long)
+    )
+    for i in range(rows):
+        valid = known & (torch.arange(rows) != i)
+        assert counts[i][~valid].sum() == 0
+        assert stats.chisquare(counts[i][valid].numpy()).pvalue > 1e-4
+
+
+def test_partners_without_others_partner_with_themselves() -> None:
+    lone = torch.tensor([False, True, False])
+    assert BGMix.partners(lone).tolist() == [1, 1, 1]
+    assert BGMix.partners(torch.zeros(4, dtype=torch.bool)).tolist() == [0, 1, 2, 3]
+    assert BGMix.partners(torch.ones(1, dtype=torch.bool)).tolist() == [0]
+    assert BGMix.partners(torch.zeros(0, dtype=torch.bool)).tolist() == []
+
+
+def test_apply_lone_labelled_row_is_untouched() -> None:
+    split, batch, x = pair([1, IGNORE, IGNORE])
+    mixer = BGMix(1.0, table())
+    assert torch.equal(mixer.apply(x, batch, split), x)
+    assert mixer.drained() == 0
 
 
 def test_untouched_drained() -> None:

@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import override
 
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 from megspeech.data.batching.split import Batch, Split
@@ -113,15 +113,24 @@ class BGMix(Untouched):
         word = BGMix.words(batch)
         return torch.where(word >= 0, train.y[word.clamp(min=0)], IGNORE)
 
+    @staticmethod
+    def partners(known: Bool[Tensor, " r"]) -> Int[Tensor, " r"]:
+        """Each row's partner, uniform over the known rows other than itself; itself when there is none."""
+        rows = torch.arange(len(known), device=known.device)
+        pool = torch.argsort((~known).to(torch.uint8), stable=True)
+        rank = known.cumsum(0) - known.long()
+        options = known.sum() - known.long()
+        draw = (torch.rand(len(known), device=known.device) * options).long()
+        draw = torch.minimum(draw, (options - 1).clamp(min=0))
+        slot = draw + (known & (draw >= rank)).long()
+        return torch.where(options > 0, pool[slot.clamp(max=len(known) - 1)], rows)
+
     @override
     def apply(self, x: Float[Tensor, "r c t"], batch: Batch, train: Split) -> Float[Tensor, "r c t"]:
         """`x` with each chosen labelled row's window replaced as the class says."""
         label = self.rows(batch, train)
         known = label != IGNORE
-        eye = torch.eye(len(x), dtype=torch.bool, device=x.device)
-        others = known[None, :] & ~eye
-        others |= eye & ~others.any(dim=1, keepdim=True)
-        partner = torch.multinomial(others.float(), 1).squeeze(1)
+        partner = self.partners(known)
         chosen = (
             known & (torch.rand(len(x), device=x.device) < self.p) & (partner != torch.arange(len(x), device=x.device))
         )
