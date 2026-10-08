@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from enum import Enum, StrEnum
 
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 from core.paths import DataRoot
@@ -37,7 +37,7 @@ class Source(Enum):
     APPLESEED = (201, 212)
     KYMATA = (301, 323)
 
-    def owns(self, subject: torch.Tensor) -> torch.Tensor:
+    def owns(self, subject: Int[Tensor, " n"]) -> Bool[Tensor, " n"]:
         low, high = self.value
         return (subject >= low) & (subject <= high)
 

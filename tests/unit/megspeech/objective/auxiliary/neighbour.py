@@ -4,6 +4,7 @@ from typing import cast
 
 import pytest
 import torch
+from torch import nn
 
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
@@ -30,11 +31,14 @@ def test_beside() -> None:
     assert NextWordTerm.beside(target, -1).tolist() == [[IGNORE, 1, 2]]
 
 
-def test_shift() -> None:
+def test_next_word_term_shift() -> None:
     assert NextWordTerm(weight=1.0).shift(TARGET).tolist() == [
         [OUTSIDE, 7, IGNORE, IGNORE],
         [6, IGNORE, IGNORE, IGNORE],
     ]
+
+
+def test_previous_word_term_shift() -> None:
     assert PreviousWordTerm(weight=1.0).shift(TARGET).tolist() == [[IGNORE, 3, OUTSIDE, 7], [IGNORE, 5, 6, IGNORE]]
 
 
@@ -58,6 +62,18 @@ def test_unweighted() -> None:
     assert term.unweighted(head, uniform, torch.full((2, 4), IGNORE)).item() == 0.0
 
 
+def test_weighted() -> None:
+    """Rows scale each predicted slot's loss; a slot without a heard neighbour contributes nothing."""
+    term = NextWordTerm(weight=1.0)
+    head = term.head(4)
+    uniform = torch.zeros(2, 4, VOCAB_SIZE)
+    flat = torch.ones(2, 4)
+    assert term.weighted(head, uniform, TARGET, flat).item() == pytest.approx(math.log(VOCAB_SIZE))
+    skewed = torch.tensor([[1.0, 9.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0]])
+    assert term.weighted(head, uniform, TARGET, skewed).item() == pytest.approx(math.log(VOCAB_SIZE))
+    assert term.weighted(head, uniform, torch.full((2, 4), IGNORE), flat).item() == 0.0
+
+
 def test_local() -> None:
     assert NextWordTerm.local
     assert PreviousWordTerm.local
@@ -68,11 +84,14 @@ def test_gradient_skips_the_mixer() -> None:
     never the span transformer."""
     model = net()
     term = NextWordTerm(weight=1.0)
-    heads = torch.nn.ModuleList([term.readout(model.words.head, model.words.width)])
+    head = term.readout(model.words.head, model.words.width)
+    heads = torch.nn.ModuleList([head])
     auxiliary = WithAuxiliary(model, heads, Tap.CONTEXT, (Tap.WORD,))
     output = auxiliary(x(), ONSET, SLOT, torch.zeros(3, dtype=torch.long))[2]
     target = torch.tensor([[1, 2, IGNORE], [4, IGNORE, IGNORE]])
-    term.loss(heads[0], output, target).backward()
+    term.loss(head, output, target).backward()
     assert all(p.grad is None or not p.grad.any() for p in model.context.parameters())
     assert any(p.grad is not None and p.grad.any() for p in model.words.parameters())
-    assert heads[0][1].weight.grad.any()
+    grad = cast("nn.Linear", head.get_submodule("1")).weight.grad
+    assert grad is not None
+    assert grad.any()

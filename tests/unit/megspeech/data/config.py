@@ -637,3 +637,15 @@ def test_muted_context_subjects() -> None:
         True,
     ]
     assert DataConfig(context_subjects=()).muted(names).tolist() == [False] * 4
+
+
+def test_stratified() -> None:
+    assert [v.stratified for v in (Val.CARVED, Val.OFFICIAL, Val.BALANCED)] == [True, False, True]
+
+
+def test_official_val() -> None:
+    assert [v.official_val for v in (Val.CARVED, Val.OFFICIAL, Val.BALANCED)] == [False, True, True]
+
+
+def test_tests_carved() -> None:
+    assert [v.tests_carved for v in (Val.CARVED, Val.OFFICIAL, Val.BALANCED)] == [False, False, True]

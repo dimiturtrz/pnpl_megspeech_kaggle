@@ -105,7 +105,8 @@ class Recording(Triux):
     @property
     @override
     def shared(self) -> dict[str, Path]:
-        subject = self.fif.name.split("_task")[0]
+        name = self.fif.name
+        subject = name.split("_task")[0]
         return {
             "cross_talk": self.fif.with_name(f"{subject}_acq-crosstalk_meg.fif"),
             "calibration": self.fif.with_name(f"{subject}_acq-calibration_meg.dat"),

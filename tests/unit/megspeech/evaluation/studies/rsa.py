@@ -15,7 +15,7 @@ def random_geometry(seed: int = 0, dim: int = DIM) -> Geometry:
     return Geometry(np.random.default_rng(seed).normal(size=(VOCAB_SIZE, dim)))
 
 
-def test_present() -> None:
+def test_geometry_present() -> None:
     vectors = random_geometry().vectors.copy()
     vectors[3] = 0
     present = Geometry(vectors).present
@@ -94,7 +94,7 @@ def test_pairs() -> None:
     assert np.isclose(Rsa.pairs(similarity, similarity, np.array([3, 3, 5, 7, 9])), 1.0)
 
 
-def test_of() -> None:
+def test_rsa_of() -> None:
     similarity = random_geometry().cosine()
     noise = random_geometry(1).cosine()
     shared = np.ones(VOCAB_SIZE, dtype=bool)

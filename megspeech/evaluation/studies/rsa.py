@@ -13,6 +13,7 @@ import argparse
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -20,7 +21,7 @@ import torch
 from jaxtyping import Bool, Float, Int
 from scipy.stats import spearmanr
 from torch import Tensor
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer, PreTrainedTokenizerBase
 
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
@@ -212,7 +213,7 @@ class GemmaWords:
 
     @classmethod
     def encode(cls, words: tuple[str, ...]) -> "GemmaWords":  # devtools-ignore: test-mirror
-        tokenizer = AutoTokenizer.from_pretrained(GEMMA)
+        tokenizer = cast(PreTrainedTokenizerBase, AutoTokenizer.from_pretrained(GEMMA))
         model = AutoModel.from_pretrained(GEMMA).eval()
         batch = tokenizer([GEMMA_PREFIX + word for word in words], return_tensors="pt", padding=True)
         with torch.no_grad():
@@ -242,7 +243,8 @@ class Study:
         runs = Run.discover(self.root.raw())
         tau = self.loaded.report(runs).tau
         domains, _ = self.loaded.domains(self.loaded.ruled(runs))
-        probabilities, labels = [], []
+        probabilities: list[np.ndarray] = []
+        labels: list[np.ndarray] = []
         for split in domains.values():
             novel = split.novel(self.loaded.evaluator.seen)
             probabilities.append(self.loaded.probabilities(split, tau)[novel.cpu().numpy()])

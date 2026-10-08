@@ -34,7 +34,7 @@ def logits() -> torch.Tensor:
     return right
 
 
-def test_loss() -> None:
+def test_term_loss() -> None:
     """The weight scales the unweighted loss."""
     plain = WordTerm(0.0, None)
     doubled = WordTerm(0.0, None, weight=2.0)
@@ -188,7 +188,7 @@ def test_weighted() -> None:
     assert heavy.item() == pytest.approx(wrong / 10)
 
 
-def test_auxiliary_loss_vocab_weight() -> None:
+def test_auxiliary_term_loss() -> None:
     """Weight 1 equals the old loss exactly; above 1 it moves toward the in-vocabulary rows; an all-OOV batch and a
     batch without `inside` read as weight 1."""
     plain = lexical()
@@ -228,3 +228,17 @@ def test_context_term_hard() -> None:
 def test_distilled_term_hard() -> None:
     term = distilled(0.5, torch.zeros(3, VOCAB_SIZE))
     assert term.hard(torch.tensor([[0, IGNORE]])).tolist() == [[int(term.y[0]), IGNORE]]
+
+
+def test_auxiliary_term_unweighted() -> None:
+    """Unweighted ignores `weight` and `vocab_weight`: it is the loss at unit rows."""
+    term = replace(lexical(), vocab_weight=9.0)
+    ones = torch.ones(1, 2)
+    assert torch.equal(
+        term.unweighted(nn.Identity(), inside_logits(), TOKEN_PAIR),
+        term.weighted(nn.Identity(), inside_logits(), TOKEN_PAIR, ones),
+    )
+    assert torch.equal(
+        replace(term, weight=3.0).unweighted(nn.Identity(), inside_logits(), TOKEN_PAIR),
+        term.unweighted(nn.Identity(), inside_logits(), TOKEN_PAIR),
+    )

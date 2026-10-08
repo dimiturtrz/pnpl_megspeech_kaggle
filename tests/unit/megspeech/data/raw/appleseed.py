@@ -1,6 +1,7 @@
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import cast
 
 import mne
 import numpy as np
@@ -201,7 +202,7 @@ def test_written(tmp_path: Path, target: Neuromag) -> None:
     assert attrs["bad_channels"] == f"MEG {FLAT:03d}, MEG {NOISY:03d}"
     assert attrs["mains"] == 50.0
     assert attrs["channel_names"] == "MEG0111, MEG0121, MEG0131"
-    assert attrs["reference_variance_removed"] > 0.9
+    assert float(cast("float", attrs["reference_variance_removed"])) > 0.9
 
 
 def test_recording_events(tmp_path: Path) -> None:
