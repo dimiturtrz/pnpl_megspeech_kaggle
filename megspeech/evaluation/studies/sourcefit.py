@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 import torch
+from jaxtyping import Float, Int
+from torch import Tensor
 
 from core.paths import DataRoot
 from core.tree import Tree
@@ -40,34 +42,45 @@ class Source(Enum):
 
 @dataclass(frozen=True)
 class SourceFit:
-    """One run's fit per source, the words behind each, and its validation macro."""
+    """One run's fit per source with real and MEG-shuffled windows, the words behind each, and its validation macro."""
 
-    fit: dict[Source, float]
+    fit: dict[Condition, dict[Source, float]]
     words: dict[Source, int]
     val: float
     tau: float
 
     @classmethod
     def of(cls, locator: Locator) -> "SourceFit":
-        """The fit subset's context-head balanced top-10 within each source's labelled words."""
-        evaluator, fitted = locator.loaded.evaluator, locator.fitted
+        """The fit subset's context-head balanced top-10 within each source's labelled words, per condition."""
+        fitted = locator.fitted
         heard = fitted.heard()
-        context = locator.context(Condition.REAL)
         subject, label = fitted.subject[heard], fitted.y[heard]
-        fit: dict[Source, float] = {}
-        words: dict[Source, int] = {}
-        for source in Source:
-            mask = source.owns(subject)
-            words[source] = int(mask.sum().item())
-            fit[source] = (
-                evaluator.evaluate(context[mask], label[mask], locator.loaded.log_prior).by_tau[locator.tau]
-                if words[source]
-                else math.nan
-            )
+        masks = {source: source.owns(subject) for source in Source}
+        fit = {
+            condition: cls.scored(locator, locator.context(condition), label, masks)
+            for condition in (Condition.REAL, Condition.MEG)
+        }
+        words = {source: int(mask.sum().item()) for source, mask in masks.items()}
         return cls(fit, words, locator.val(Condition.REAL), locator.tau)
 
+    @staticmethod
+    def scored(
+        locator: Locator, context: Float[Tensor, "k v"], label: Int[Tensor, " k"], masks: dict[Source, Tensor]
+    ) -> dict[Source, float]:
+        evaluator, log_prior = locator.loaded.evaluator, locator.loaded.log_prior
+        return {
+            source: evaluator.evaluate(context[mask], label[mask], log_prior).by_tau[locator.tau]
+            if mask.any()
+            else math.nan
+            for source, mask in masks.items()
+        }
+
     def lines(self) -> list[str]:
-        rows = [f"{source.name.lower():12}fit {self.fit[source]:.4f}  words {self.words[source]}" for source in Source]
+        rows = [
+            f"{source.name.lower():12}fit {self.fit[Condition.REAL][source]:.4f}  "
+            f"meg-shuffled {self.fit[Condition.MEG][source]:.4f}  words {self.words[source]}"
+            for source in Source
+        ]
         return [*rows, f"{'val macro':12}{self.val:.4f}  tau {self.tau}"]
 
 

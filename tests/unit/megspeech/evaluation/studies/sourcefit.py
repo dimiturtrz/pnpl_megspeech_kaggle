@@ -4,7 +4,7 @@ from typing import cast
 import torch
 
 from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.studies.gap import Locator
+from megspeech.evaluation.studies.gap import Condition, Locator
 from megspeech.evaluation.studies.sourcefit import Source, SourceFit
 from tests.unit.megspeech.evaluation.studies.gap import Stub, split
 
@@ -27,8 +27,8 @@ def test_owns_partitions_subject_ids_by_source() -> None:
 
 def test_of_scores_each_source_and_leaves_an_absent_one_nan() -> None:
     measured = SourceFit.of(locator())
-    assert measured.fit[Source.MASC] == 1.0
-    assert math.isnan(measured.fit[Source.KYMATA])
+    assert measured.fit[Condition.REAL][Source.MASC] == 1.0
+    assert math.isnan(measured.fit[Condition.MEG][Source.KYMATA])
     assert measured.words[Source.KYMATA] == 0
     assert sum(measured.words.values()) > 0
 
