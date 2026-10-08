@@ -133,3 +133,22 @@ def test_alignment_of(tmp_path: Path) -> None:
     rate = 8000
     wavfile.write(tmp_path / "a.wav", rate, np.random.default_rng(0).standard_normal((3 * rate, 2)))
     assert Alignment.of(tmp_path / "a.wav").seconds == 3
+
+
+def test_alignment_of_mono(tmp_path: Path) -> None:
+    rate = 8000
+    wavfile.write(tmp_path / "a.wav", rate, np.random.default_rng(0).standard_normal(3 * rate).astype(np.float32))
+    assert Alignment.of(tmp_path / "a.wav").seconds == 3
+
+
+def test_locate_plays() -> None:
+    alignment = reference()
+    found = alignment.locate(played(alignment, [10.0, 70.0], DRIFT), 1)
+    assert len(found) == 1
+
+
+def test_clock_offsets() -> None:
+    alignment = reference()
+    recorded = played(alignment, [START + 0.1], DRIFT)
+    assert not alignment.clock(recorded, START).fitted
+    assert alignment.clock(recorded, START, (-0.2, 0.2)).fitted

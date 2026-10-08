@@ -125,19 +125,19 @@ class Alignment:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", wavfile.WavFileWarning)
             rate, audio = wavfile.read(wav)
-        return cls(Envelope.of(audio.astype(np.float64).mean(axis=1), rate))
+        return cls(Envelope.of(audio.reshape(len(audio), -1).astype(np.float64).mean(axis=1), rate))
 
     @property
     def seconds(self) -> float:
         return len(self.reference.samples) / RATE
 
-    def locate(self, recorded: Envelope) -> list[float]:
+    def locate(self, recorded: Envelope, plays: int = PLAYS_PER_RUN) -> list[float]:
         """Nominal starts (seconds) of the clip's plays found from the audio alone, for a run with no start trigger:
         the best matches that do not overlap, earliest first, each placed as the trigger would have been."""
         length = len(self.reference.samples)
         match = recorded.correlation(self.reference)
         peaks = []
-        for _ in range(PLAYS_PER_RUN):
+        for _ in range(plays):
             peak = int(np.argmax(match))
             peaks.append(peak)
             match[max(peak - length, 0) : peak + length] = -np.inf
@@ -156,7 +156,7 @@ class Alignment:
             lags.append((int(np.argmax(match)) + LAG_LOW) / RATE)
         return np.array(centres), np.array(lags)
 
-    def clock(self, recorded: Envelope, nominal: float) -> Clock:
+    def clock(self, recorded: Envelope, nominal: float, offsets: tuple[float, float] = OFFSET_BOUNDS) -> Clock:
         """The play's fitted `Clock`, or `FALLBACK`'s constants if its recording is too short, the fit leaves the
         measured offset and drift ranges, or a window strays from the line."""
         first = round(nominal * RATE)
@@ -168,7 +168,7 @@ class Alignment:
         drift, offset = np.polyfit(centres, lags, 1)
         residual = float(np.abs(lags - (offset + drift * centres)).max())
         believable = (
-            OFFSET_BOUNDS[0] <= offset <= OFFSET_BOUNDS[1]
+            offsets[0] <= offset <= offsets[1]
             and DRIFT_BOUNDS[0] <= drift <= DRIFT_BOUNDS[1]
             and residual <= MAX_RESIDUAL
         )

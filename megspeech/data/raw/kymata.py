@@ -136,6 +136,15 @@ class Recording:
         """The dataset's root, two levels above the file."""
         return self.fif.parents[2]
 
+    @property
+    def shared(self) -> dict[str, Path]:
+        """The cross-talk and fine-calibration files SSS reads."""
+        return {"cross_talk": self.dataset / CROSS_TALK, "calibration": self.dataset / CALIBRATION}
+
+    @property
+    def audio_channel(self) -> str:
+        return AUDIO_CHANNEL
+
     def head_positions(self, raw: mne.io.BaseRaw) -> Float[np.ndarray, "n 10"]:
         """The head's pose over the recording, fitted from its head-position indicator coils."""
         amplitudes = mne.chpi.compute_chpi_amplitudes(raw, t_step_min=POSE_STEP, verbose="error")
@@ -145,7 +154,7 @@ class Recording:
     def cleaned(self) -> mne.io.BaseRaw:
         """The recording's MEG channels: SSS with head-position correction, mains notched, high-passed, 250 Hz."""
         raw = mne.io.read_raw_fif(self.fif, preload=True, verbose="error")
-        shared = {"cross_talk": self.dataset / CROSS_TALK, "calibration": self.dataset / CALIBRATION}
+        shared = self.shared
         positions = self.head_positions(raw)
         found = find_bad_channels_maxwell(raw, verbose="error", **shared)
         raw.info["bads"] = sorted({*raw.info["bads"], *found[0], *found[1]})
@@ -179,7 +188,7 @@ class Recording:
     def audio(self) -> Envelope:
         """The envelope of the stimulus audio the recording carries."""
         raw = mne.io.read_raw_fif(self.fif, preload=False, verbose="error")
-        return Envelope.of(raw.get_data(picks=[AUDIO_CHANNEL])[0], raw.info["sfreq"])
+        return Envelope.of(raw.get_data(picks=[self.audio_channel])[0], raw.info["sfreq"])
 
     def plays(self) -> list[Clock]:
         """Each play's clock in the saved MEG: found from the start triggers, or from the audio alone if the run has

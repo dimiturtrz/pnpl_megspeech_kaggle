@@ -309,3 +309,15 @@ def test_main_events_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, targe
     monkeypatch.setattr(Kymata, "refreshed", refreshed)
     main()
     assert seen == [([rec], module.EVENT_WORKERS)]
+
+
+def test_shared(tmp_path: Path) -> None:
+    rec = dataset(tmp_path)
+    assert rec.shared == {
+        "cross_talk": rec.dataset / module.CROSS_TALK,
+        "calibration": rec.dataset / module.CALIBRATION,
+    }
+
+
+def test_audio_channel(tmp_path: Path) -> None:
+    assert dataset(tmp_path).audio_channel == module.AUDIO_CHANNEL
