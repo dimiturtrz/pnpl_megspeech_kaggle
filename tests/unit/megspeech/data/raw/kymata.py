@@ -162,6 +162,10 @@ def test_head_positions(monkeypatch: pytest.MonkeyPatch) -> None:
     assert steps == [module.POSE_STEP]
 
 
+def test_mains(tmp_path: Path) -> None:
+    assert dataset(tmp_path).mains.frequency == 50.0
+
+
 def test_cleaned(tmp_path: Path, read: Calls) -> None:
     rec = dataset(tmp_path)
     cleaned = rec.cleaned()

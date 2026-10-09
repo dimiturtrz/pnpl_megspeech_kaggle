@@ -106,6 +106,10 @@ def test_audio_channel(tmp_path: Path) -> None:
     assert Recording(tmp_path / FIF).audio_channel == module.AUDIO_CHANNEL
 
 
+def test_prefix(tmp_path: Path) -> None:
+    assert Recording(tmp_path / FIF).prefix == GERMAN
+
+
 def test_book(tmp_path: Path) -> None:
     rec = dataset(tmp_path)
     assert rec.book == Book(tmp_path / "stimuli" / "audiobooks" / "task-audiobook2_run-01_stim")

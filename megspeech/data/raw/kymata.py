@@ -1,5 +1,6 @@
-"""Kymata-SOTO (Thwaites and Yang, CC0) rewritten as LibriBrain runs: each Triux Neuromag-306 recording Maxwell-filtered
-the way LibriBrain's are, at 250 Hz, its word and phoneme events in pnpl's columns.
+"""Kymata-SOTO (Thwaites and Yang; OSF qdzgh, licensed CC-BY 4.0 there, though its BIDS description says CC0)
+rewritten as LibriBrain runs: each Triux Neuromag-306 recording Maxwell-filtered the way LibriBrain's are, at 250 Hz,
+its word and phoneme events in pnpl's columns.
 
 The recordings are raw (no SSS applied) and carry continuous head localisation, so the cleaning is LibriBrain's in its
 order: bad channels, SSS with the cross-talk and fine-calibration files and head-position correction onto one standard
@@ -151,6 +152,10 @@ class Recording:
         locations = mne.chpi.compute_chpi_locs(raw.info, amplitudes, verbose="error")
         return mne.chpi.compute_head_pos(raw.info, locations, verbose="error")
 
+    @property
+    def mains(self) -> Mains:
+        return Mains.of(self.sidecar("meg.json"))
+
     def cleaned(self) -> mne.io.BaseRaw:
         """The recording's MEG channels: SSS with head-position correction, mains notched, high-passed, 250 Hz."""
         raw = mne.io.read_raw_fif(self.fif, preload=True, verbose="error")
@@ -160,7 +165,7 @@ class Recording:
         raw.info["bads"] = sorted({*raw.info["bads"], *found[0], *found[1]})
         raw = maxwell_filter(raw, head_pos=positions, destination=ORIGIN, verbose="error", **shared)
         raw.pick("meg")
-        Mains.of(self.sidecar("meg.json")).notch(raw)
+        self.mains.notch(raw)
         raw.filter(HIGHPASS, None, verbose="error")
         return raw.resample(SFREQ, verbose="error")
 
@@ -171,7 +176,7 @@ class Recording:
         order = [names.index(name) for name in target.names]
         bads = ", ".join(raw.info["bads"])
         LOG.info("%s: bads %s", self.fif.name, bads)
-        attrs = {**target.attrs, "bad_channels": bads, "mains": Mains.of(self.sidecar("meg.json")).frequency}
+        attrs = {**target.attrs, "bad_channels": bads, "mains": self.mains.frequency}
         return np.asarray(raw.get_data(picks=np.array(order)), dtype=np.float32), attrs
 
     @property

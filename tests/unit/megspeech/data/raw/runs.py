@@ -72,6 +72,7 @@ def test_everywhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         Run(meg(root.processed("meg_masc"), "sub-101_ses-0_task-MASC2_run-1")),
         Run(meg(root.processed("appleseed"), "sub-208_ses-1_task-Appleseed_run-1")),
         Run(meg(root.processed("kymata"), "sub-301_ses-1_task-Kymata_run-1")),
+        Run(meg(root.processed("smn4lang"), "sub-501_ses-1_task-SMN4Lang_run-7")),
     ]
     for run in runs:
         run.events.parent.mkdir(parents=True)

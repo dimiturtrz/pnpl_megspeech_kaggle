@@ -122,6 +122,11 @@ class Recording(Triux):
         parsed = self.parsed
         return Book(self.dataset / STIMULI / f"task-audiobook{parsed['book']}_run-{parsed['run']:02d}_stim")
 
+    @property
+    def prefix(self) -> str:
+        """What every segment starts with: the language its words are in."""
+        return GERMAN
+
     @override
     def plays(self) -> list[Clock]:
         """The one play's clock in the saved MEG, fitted from the audio; a fit that is not believable is an error, as
@@ -138,7 +143,7 @@ class Recording(Triux):
         """The words on the clock of `plays`' one play, `timechapter` their start in the wav."""
         (clock,) = plays
         words = self.book.words
-        placed = clock.place(words).assign(segment=GERMAN + words["segment"], timechapter=words["timemeg"])
+        placed = clock.place(words).assign(segment=self.prefix + words["segment"], timechapter=words["timemeg"])
         ordered = placed.assign(order=placed["kind"].map(KIND_ORDER))
         return ordered.sort_values(["timemeg", "order"], kind="stable")[COLUMNS_WITH_AUDIO].reset_index(drop=True)
 

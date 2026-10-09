@@ -17,6 +17,7 @@ from megspeech.data.raw.fetch import APPLESEED, MASC
 from megspeech.data.raw.kymata import KYMATA
 from megspeech.data.raw.scans import SCANS
 from megspeech.data.raw.serialised import Serialised
+from megspeech.data.raw.smn4lang import SMN4LANG
 
 DEEP = 0
 """The Deep track's subject: the one the official split, the validation domains and the Kaggle test belong to."""
@@ -117,8 +118,10 @@ class Run:
     @classmethod
     def everywhere(cls, root: DataRoot) -> list["Run"]:
         """LibriBrain's runs, then every other study's recordings rewritten as runs (`megspeech.data.raw.masc`,
-        `megspeech.data.raw.appleseed`, `megspeech.data.raw.kymata`, `megspeech.data.raw.scans`)."""
-        rewritten = (root.processed(study.dataset) for study in (MASC, APPLESEED, KYMATA, SCANS))
+        `megspeech.data.raw.appleseed`, `megspeech.data.raw.kymata`, `megspeech.data.raw.scans`,
+        `megspeech.data.raw.smn4lang`)."""
+        studies = (MASC, APPLESEED, KYMATA, SCANS, SMN4LANG)
+        rewritten = (root.processed(study.dataset) for study in studies)
         return [*cls.discover(root.raw()), *(run for processed in rewritten for run in cls.discover(processed))]
 
     @staticmethod
