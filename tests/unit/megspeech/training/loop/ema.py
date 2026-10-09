@@ -71,3 +71,18 @@ def test_live() -> None:
         a is not b and a.data_ptr() == b.data_ptr() for a, b in zip(ema.live(net), net.parameters(), strict=True)
     )
     assert ema.live(model()) is not ema.live(net)
+
+
+def test_step_matches_rebuilt_state() -> None:
+    torch.manual_seed(0)
+    net = nn.Sequential(nn.Linear(4, 6), nn.BatchNorm1d(6), nn.Linear(6, 2))
+    cached = Ema.of(net, 0.9)
+    rebuilt = [t.clone() for t in Ema.state(net)]
+    for _ in range(20):
+        with torch.no_grad():
+            for p in net.parameters():
+                p.add_(torch.randn_like(p))
+        net(torch.randn(8, 4))
+        cached.step(net, 0.0)
+        torch._foreach_lerp_(rebuilt, Ema.state(net), 0.1)
+    assert all(torch.equal(a, b) for a, b in zip(cached.shadow, rebuilt, strict=True))

@@ -105,3 +105,19 @@ def test_scaled() -> None:
 def test_unscaled() -> None:
     x = torch.randn(2, 2, 2)
     assert Augment.unscaled(x) is x
+
+
+def unit_scaled(x: torch.Tensor, dropout: float, gain: float) -> torch.Tensor:
+    shape = (*x.shape[:2], 1)
+    keep = torch.rand(shape, device=x.device) >= dropout
+    return x * (keep * torch.exp(gain * torch.randn(shape, device=x.device)))
+
+
+def test_sensors_matches_unit_scaling() -> None:
+    x = (torch.randn(16, 30, 75) * 1e3).half().float()
+    torch.manual_seed(1)
+    assert torch.equal(Augment().sensors(x), unit_scaled(x, 0.0, 0.0))
+    torch.manual_seed(1)
+    expected = unit_scaled(x, 0.2, 0.1)
+    torch.manual_seed(1)
+    assert torch.equal(Augment(dropout=0.2, gain=0.1).sensors(x), expected)
