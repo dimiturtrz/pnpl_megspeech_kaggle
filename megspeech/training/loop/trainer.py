@@ -42,6 +42,7 @@ from megspeech.training.regularise.average import GroupAverage
 from megspeech.training.regularise.bgmix import BGMix, Untouched
 from megspeech.training.regularise.noise import SAMPLES
 from megspeech.training.regularise.regional import Regional
+from megspeech.training.regularise.rightcut import RightCut, Whole
 from megspeech.training.sampling.curriculum import Curriculum, Natural
 from megspeech.training.sampling.sampler import Sampler
 from megspeech.training.teacher import Teacher, Untaught
@@ -67,6 +68,7 @@ class TrainState:
     bgmix: Untouched = field(default_factory=Untouched)
     average: Untouched = field(default_factory=Untouched)
     grads: GradNorms = field(default_factory=GradNorms)
+    cut: Whole = field(default_factory=Whole)
 
 
 @dataclass
@@ -180,7 +182,7 @@ class Trainer:
 
     def step(self, state: TrainState, train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, " k"]:
         """One optimiser step on the words of `spans`; returns each term's loss without syncing it to the host."""
-        batch = train.batch(spans, state.rows, self.config.augment.jitter)
+        batch = state.cut.apply(train.batch(spans, state.rows, self.config.augment.jitter), train)
         with torch.autocast(Device.CUDA, dtype=torch.bfloat16):
             mixed = state.bgmix.apply(state.average.apply(batch.x, batch, train), batch, train)
             outputs = state.model(batch.inputs(self.regional(self.config.augment(mixed))))
@@ -224,6 +226,7 @@ class Trainer:
             BGMix.of(train, self.config.augment.bgmix, self.config.augment.bgmix_key),
             GroupAverage.of(train, self.config.augment.average, self.config.augment.average_chance),
             GradNorms(tuple(net.encoder())),
+            RightCut.of(train, self.config.augment.right_cut, self.config.data.rate),
         )
 
     def rows(self, train: Split) -> int:
@@ -268,6 +271,7 @@ class Trainer:
             LOG.info("epoch %d grad norms %s", epoch, state.grads.drained())
             LOG.info("epoch %d bgmix mixed words %d", epoch, state.bgmix.drained())
             LOG.info("epoch %d averaged words %d", epoch, state.average.drained())
+            LOG.info("epoch %d right cut %s", epoch, state.cut.drained())
             if not math.isfinite(value):
                 raise FloatingPointError(f"non-finite loss at epoch {epoch}")
             with state.ema.applied(model):

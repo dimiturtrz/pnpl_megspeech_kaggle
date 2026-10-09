@@ -257,4 +257,8 @@ RUN_RULES: tuple[Rule[RunConfig], ...] = (
         lambda r: bool(r.data.segment) and bool(r.augment.bgmix or r.augment.average > 1 or r.augment.jitter),
         lambda _: "bgmix, group averaging and jitter act on word windows, which a segment batch does not hold",
     ),
+    Rule(
+        lambda r: bool(r.data.segment) and bool(r.augment.right_cut),
+        lambda _: "a right cut drops words a segment batch still reads in its span's continuous signal",
+    ),
 )

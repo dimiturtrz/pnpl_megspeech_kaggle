@@ -34,6 +34,7 @@ from megspeech.training.loop.trainer import Trainer, TrainState
 from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
+from megspeech.training.regularise.rightcut import RightCut, Whole
 from megspeech.training.sampling.curriculum import Annealed, Natural, Robust
 from megspeech.training.sampling.sampler import SamplerConfig
 from megspeech.training.timing_expert import TimingExpert
@@ -177,6 +178,9 @@ def test_state() -> None:
     assert isinstance(state.curriculum, Natural)
     tilted = trainer(RunConfig(optim=optim, sampler=SamplerConfig(robust=1.0))).state(net, split(), 10)
     assert isinstance(tilted.curriculum, Robust)
+    assert type(state.cut) is Whole
+    cut = trainer(RunConfig(optim=optim, augment=Augment(right_cut=0.3))).state(net, split(), 10)
+    assert isinstance(cut.cut, RightCut)
 
 
 def test_rows() -> None:

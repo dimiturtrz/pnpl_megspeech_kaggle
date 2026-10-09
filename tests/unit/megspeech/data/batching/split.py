@@ -66,6 +66,7 @@ def test_ended() -> None:
     """Each span's last word ends `TAIL` before its bound, counted from the span's first onset."""
     held = timed()
     assert Split.ended(held.windows, held.index, held.onset, 10).tolist() == pytest.approx([1.1, 5.0])
+    assert Split.ended(held.windows, held.index, held.onset, 10, tail=0.0).tolist() == pytest.approx([2.1, 6.0])
 
 
 def test_finished() -> None:

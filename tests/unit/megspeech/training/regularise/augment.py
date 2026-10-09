@@ -68,6 +68,9 @@ def test_post_init_rejects_chance_outside_unit_interval() -> None:
     for bad in (-0.1, 1.1):
         with pytest.raises(ValueError, match="chance"):
             Augment(chance=bad)
+    for bad in (-0.1, 1.0):
+        with pytest.raises(ValueError, match="right_cut"):
+            Augment(right_cut=bad)
 
 
 def test_masked() -> None:

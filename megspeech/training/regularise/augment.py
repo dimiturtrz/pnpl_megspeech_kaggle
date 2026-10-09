@@ -44,10 +44,16 @@ class Augment:
     """Probability a labelled training word's window is averaged, when `average` is above 1."""
     spatial: float = 0.0
     """Radius of the sensor patch each window loses (`Regional`), as a share of the array's widest extent."""
+    right_cut: float = 0.0
+    """Share of labelled training words that end their span, reached by cutting random spans short after a random word
+    (`megspeech.training.regularise.rightcut`); the Kaggle test's is 156 of its 868 rows in multi-row epochs, 0.18.
+    0 cuts none."""
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.chance <= 1.0:
             raise ValueError(f"chance must lie in [0, 1], got {self.chance}")
+        if not 0.0 <= self.right_cut < 1.0:
+            raise ValueError(f"right_cut must lie in [0, 1), got {self.right_cut}")
         if self.average < 1 or not 0.0 <= self.average_chance <= 1.0:
             raise ValueError(
                 f"average must be >= 1, average_chance in [0, 1]; got {self.average}, {self.average_chance}"

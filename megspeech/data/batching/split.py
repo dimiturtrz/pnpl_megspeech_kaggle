@@ -181,15 +181,20 @@ class Split:
 
     @staticmethod
     def ended(
-        windows: Windows, index: Int[Tensor, "g w"], onset: Float[Tensor, "g w"], rate: float = RATE
+        windows: Windows,
+        index: Int[Tensor, "g w"],
+        onset: Float[Tensor, "g w"],
+        rate: float = RATE,
+        tail: float = TAIL,
     ) -> Float[Tensor, " g"]:
         """Each span's last word's end in seconds from its first onset: its next-onset bound, which past a span's last
-        word is its epoch's end, less `TAIL`. Without next onsets every end is 0, before the last onset: unknown."""
+        word is its epoch's end, less `tail` (the epoch's `TAIL`; 0 where the bound is the next word's onset, as for a
+        span cut short of its sentence's end). Without next onsets every end is 0, before the last onset: unknown."""
         if windows.following is None:
             return onset.new_zeros(len(index))
         place = ((index != PAD).sum(dim=1) - 1).clamp(min=0)[:, None]
         last = index.gather(1, place)[:, 0].clamp(min=0)
-        heard = (windows.following[last] - windows.at[last]).to(onset.dtype) / rate - TAIL
+        heard = (windows.following[last] - windows.at[last]).to(onset.dtype) / rate - tail
         return onset.gather(1, place)[:, 0] + heard
 
     @classmethod
