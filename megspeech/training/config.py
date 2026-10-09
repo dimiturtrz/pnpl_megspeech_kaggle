@@ -116,6 +116,13 @@ class OptimConfig:
     mean 1, so 0.5 is 1/sqrt(count) (the PNPL 2025 phoneme winner's). The metric is balanced accuracy, and the
     ruler's `tau` already corrects the class prior after training (Menon et al. 2021 logit adjustment); balancing
     during training overlaps it, so an arm asks whether it adds beyond `tau`. SigLIP's context loss is unweighted."""
+    topk: float = 0.0
+    """Share of the smooth top-k loss (Berrada et al. 2018, k=10) blended into both 50-way heads' losses, over the same
+    logits and `balance` class weights (`TopKMix`); 0 trains their own losses alone."""
+    topk_temperature: float = 1.0
+    """The top-k term's smoothing in raw logits: 1 is the cross-entropy's own, the paper's tau 1 is 10."""
+    topk_margin: float = 1.0
+    """The raw-logit gap the label must hold over the 10th competitor before its top-k term is ~0."""
     anchor: float = 1.0
     """Share of each subject matrix's deviation from the Deep subject's that the run's decay leaves by its end, were
     its gradient never to restore it (`megspeech.training.regularise.anchor`); 1 decays the matrices toward 0 like
@@ -212,6 +219,13 @@ class RunConfig:
 
 
 RUN_RULES: tuple[Rule[RunConfig], ...] = (
+    Rule(
+        lambda r: not 0 <= r.optim.topk <= 1 or r.optim.topk_temperature <= 0 or r.optim.topk_margin < 0,
+        lambda r: (
+            f"optim.topk {r.optim.topk} needs to be in [0, 1], topk_temperature {r.optim.topk_temperature} above 0 "
+            f"and topk_margin {r.optim.topk_margin} at least 0"
+        ),
+    ),
     Rule(
         lambda r: bool(r.optim.fused_lr) and len(r.optim.fused_lr) != len(r.context.fused),
         lambda r: f"fused_lr {r.optim.fused_lr} gives a rate for each of the fused {r.context.fused}",

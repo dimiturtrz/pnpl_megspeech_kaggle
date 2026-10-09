@@ -17,6 +17,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.objective.context import Objective
+from megspeech.objective.topk import TopKMix
 
 
 @dataclass(frozen=True)
@@ -49,11 +50,23 @@ class Term(ABC):
 @dataclass(frozen=True)
 class LabelTerm(Term):
     """A 50-way head trained on the vocabulary label, smoothed by `smoothing`, each class's rows scaled by
-    `classes`."""
+    `classes`, its loss blended with the smooth top-k term by `topk`."""
 
     smoothing: float
     classes: Float[Tensor, " v"] | None
     weight: float = field(default=1.0, kw_only=True)
+    topk: TopKMix = field(default=TopKMix(), kw_only=True)
+
+    @override
+    def unweighted(
+        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
+    ) -> Float[Tensor, ""]:
+        logits, y = output.flatten(0, 1), target.flatten()
+        return self.topk.mixed(self.labelled(logits, y), logits, y, self.classes)
+
+    @abstractmethod
+    def labelled(self, logits: Float[Tensor, "n v"], y: Int[Tensor, " n"]) -> Float[Tensor, ""]:
+        """The head's own loss over `logits` against `y`, before the top-k blend."""
 
     @staticmethod
     def balanced(y: Int[Tensor, " n"], weight: Float[Tensor, " n"], balance: float) -> Float[Tensor, " v"] | None:
@@ -86,10 +99,8 @@ class ContextTerm(LabelTerm):
         return target
 
     @override
-    def unweighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        return self.objective.loss(output.flatten(0, 1), target.flatten(), self.smoothing, self.classes)
+    def labelled(self, logits: Float[Tensor, "n v"], y: Int[Tensor, " n"]) -> Float[Tensor, ""]:
+        return self.objective.loss(logits, y, self.smoothing, self.classes)
 
 
 @dataclass(frozen=True)
@@ -137,12 +148,10 @@ class WordTerm(LabelTerm):
     cross-entropy, unlike the context head's float32, which every trained run's numbers were made with."""
 
     @override
-    def unweighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
+    def labelled(self, logits: Float[Tensor, "n v"], y: Int[Tensor, " n"]) -> Float[Tensor, ""]:
         return functional.cross_entropy(
-            output.flatten(0, 1),
-            target.flatten(),
+            logits,
+            y,
             weight=self.classes,
             ignore_index=IGNORE,
             label_smoothing=self.smoothing,

@@ -25,7 +25,8 @@ from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
 from megspeech.objective.scorer import DIM
 from megspeech.objective.targets.t5 import Lexicon
-from megspeech.objective.term import ContextTerm, WordTerm
+from megspeech.objective.term import ContextTerm, LabelTerm, WordTerm
+from megspeech.objective.topk import TopKMix
 from megspeech.training.auxiliary import Joint, NoAuxiliary
 from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig, StopConfig
 from megspeech.training.hook import Scheduled
@@ -160,6 +161,9 @@ def test_terms() -> None:
     expert = trainer(RunConfig(optim=OptimConfig(heads=0.0))).terms(train)
     assert [term.weight for term in expert[:2]] == [0.0, 0.0]
     assert [term.weight for term in trainer(RunConfig()).terms(train)[:2]] == [1.0, 1.0]
+    mix = TopKMix(share=0.3, temperature=2.0, margin=0.5)
+    mixed = trainer(RunConfig(optim=OptimConfig(topk=0.3, topk_temperature=2.0, topk_margin=0.5))).terms(train)[:2]
+    assert [cast("LabelTerm", term).topk for term in mixed] == [mix, mix]
 
 
 def test_state() -> None:
@@ -225,6 +229,8 @@ def test_fit() -> None:
     assert isinstance(anchored.fit(split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE))[0], SentenceNet)
     balanced = trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, balance=0.5)))
     assert isinstance(balanced.fit(split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE))[0], SentenceNet)
+    topk = trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, balance=0.5, topk=0.5)))
+    assert isinstance(topk.fit(split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE))[0], SentenceNet)
     with pytest.raises(FloatingPointError):
         trainer(RunConfig(optim=OptimConfig(epochs=1, batch=4, lr=math.inf))).fit(
             split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE)

@@ -147,3 +147,10 @@ def test_acoustic_refuses_the_pyramid() -> None:
         RunConfig(
             optim=OptimConfig(acoustic=0.5), context=ContextConfig(conv=ConvConfig(pyramid=PyramidConfig(taps=(1,))))
         )
+
+
+def test_topk_mix_validated() -> None:
+    assert RunConfig(optim=OptimConfig(topk=0.5, topk_temperature=2.0, topk_margin=0.0)).optim.topk == 0.5
+    for optim in (OptimConfig(topk=1.5), OptimConfig(topk_temperature=0.0), OptimConfig(topk_margin=-1.0)):
+        with pytest.raises(ValueError, match="optim.topk"):
+            RunConfig(optim=optim)

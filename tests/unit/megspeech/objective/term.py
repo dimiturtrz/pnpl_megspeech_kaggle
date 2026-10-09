@@ -16,6 +16,7 @@ from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.context import Objective
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import AuxiliaryTerm, Classified, ContextTerm, DistilledTerm, LabelTerm, WordTerm
+from megspeech.objective.topk import TopKMix
 
 CPU = torch.device("cpu")
 Y = torch.tensor([[3, 7], [IGNORE, 3]])
@@ -242,3 +243,27 @@ def test_auxiliary_term_unweighted() -> None:
         replace(term, weight=3.0).unweighted(nn.Identity(), inside_logits(), TOKEN_PAIR),
         term.unweighted(nn.Identity(), inside_logits(), TOKEN_PAIR),
     )
+
+
+def smoothed() -> torch.Tensor:
+    return functional.cross_entropy(logits().flatten(0, 1), Y.flatten(), ignore_index=IGNORE, label_smoothing=0.1)
+
+
+def test_context_term_labelled() -> None:
+    """The head's own loss over flattened logits, before any top-k blend."""
+    assert torch.allclose(ContextTerm(0.1, None).labelled(logits().flatten(0, 1), Y.flatten()), smoothed())
+
+
+def test_word_term_labelled() -> None:
+    assert torch.allclose(WordTerm(0.1, None).labelled(logits().flatten(0, 1), Y.flatten()), smoothed())
+
+
+@pytest.mark.parametrize("term", [WordTerm(0.1, None), ContextTerm(0.1, None)])
+def test_label_term_unweighted(term: LabelTerm) -> None:
+    """Share 0 is the head's own loss exactly; share 1 is the top-k term alone, ~0 when every word ranks first."""
+    plain = term.unweighted(nn.Identity(), logits(), Y)
+    off = replace(term, topk=TopKMix(share=0.0, temperature=0.5)).unweighted(nn.Identity(), logits(), Y)
+    assert torch.equal(off, plain)
+    full = replace(term, topk=TopKMix(share=1.0)).unweighted(nn.Identity(), logits(), Y)
+    assert full < 1e-6
+    assert replace(term, topk=TopKMix(share=1.0)).unweighted(nn.Identity(), -logits(), Y) > 1.0

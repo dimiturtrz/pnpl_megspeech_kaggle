@@ -31,6 +31,7 @@ from megspeech.objective.context import Objective
 from megspeech.objective.information import InformedTerm
 from megspeech.objective.targets.t5 import Prototypes
 from megspeech.objective.term import ContextTerm, LabelTerm, Term, WordTerm
+from megspeech.objective.topk import TopKMix
 from megspeech.training.auxiliary import Auxiliary, NoAuxiliary
 from megspeech.training.config import RunConfig
 from megspeech.training.hook import Scheduled, StepHook
@@ -172,13 +173,18 @@ class Trainer:
         class-weighted alike."""
         optim = self.config.optim
         classes = LabelTerm.balanced(train.y, train.weight, optim.balance)
+        topk = TopKMix(optim.topk, optim.topk_temperature, optim.topk_margin)
         context = ContextTerm(
-            optim.label_smoothing, classes, objective=self.config.context.objective, weight=optim.heads
+            optim.label_smoothing, classes, objective=self.config.context.objective, weight=optim.heads, topk=topk
         )
         context = InformedTerm.of(
             self.teacher.taught(context, train, self.evaluator), optim.mi, train.log_prior().exp()
         )
-        return context, WordTerm(optim.label_smoothing, classes, weight=optim.heads), *self.auxiliary.terms
+        return (
+            context,
+            WordTerm(optim.label_smoothing, classes, weight=optim.heads, topk=topk),
+            *self.auxiliary.terms,
+        )
 
     def step(self, state: TrainState, train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, " k"]:
         """One optimiser step on the words of `spans`; returns each term's loss without syncing it to the host."""

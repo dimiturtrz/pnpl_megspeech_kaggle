@@ -4,6 +4,11 @@ The metric counts a word as hit when it ranks in the top 10; cross-entropy keeps
 This loss is satisfied once the label leads every k-subset without it by the margin, smoothed by temperature tau.
 Its log-sum-exp over k-subsets is a ratio of elementary symmetric polynomials of exp(s / (k tau)), computed exactly
 by the recursion e_j <- e_j + x_i e_{j-1} in log space.
+
+`TopKMix` blends it into a head's own loss in raw-logit units: k times the loss at temperature t/k and margin m/k is
+t softplus(m/t + LSE_without(sum s/t) - LSE_with(sum s/t)) over k-subset logit sums, which at k=1, t=1, m=0 is the
+cross-entropy itself. Its gradient per raw logit then matches the cross-entropy's scale, and t=1 smooths on the logit
+scale the cross-entropy trained; the paper's tau=1 at k=10 is t=10, a margin of 10 raw logits (megspeech-7gf.73).
 """
 
 from dataclasses import dataclass
@@ -50,3 +55,31 @@ class SmoothTopK:
             grown = torch.logaddexp(table[:, 1:], table[:, :-1] + column[:, None])
             table = torch.cat([table[:, :1], grown], dim=-1)
         return table
+
+
+@dataclass(frozen=True)
+class TopKMix:
+    """A head's loss as `(1 - share) * own + share * k * SmoothTopK`, the latter at raw-logit `temperature` and
+    `margin` over the same logits and class weights; `share` 0 is the head's own loss untouched."""
+
+    share: float = 0.0
+    temperature: float = 1.0
+    margin: float = 1.0
+    k: int = TOP
+
+    @property
+    def loss(self) -> SmoothTopK:
+        """The paper's loss whose k-fold equals this mix's raw-unit term."""
+        return SmoothTopK(k=self.k, margin=self.margin / self.k, tau=self.temperature / self.k)
+
+    def mixed(
+        self,
+        own: Float[Tensor, ""],
+        logits: Float[Tensor, "n v"],
+        y: Int[Tensor, " n"],
+        weight: Float[Tensor, " v"] | None = None,
+    ) -> Float[Tensor, ""]:
+        """`own`, the head's loss over `logits` against `y`, blended with the raw-unit top-k term."""
+        if not self.share:
+            return own
+        return (1 - self.share) * own + self.share * self.k * self.loss(logits, y, weight)
