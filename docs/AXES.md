@@ -162,7 +162,7 @@ at <10% odds, because the 50 classes are function words and the test neighbours 
 | timing shortcut (MEG zeroed) | 7gf.71 | 0.521 vs 0.6445 (OV) | instrument | context alone carries most of the score | 7gf.71 |
 | LM prior fusion / LM oracle | 7gf.6, 7gf.53 | top-1 0.146 < 0.5 gate | CLOSED-null | 50 classes are function words; neighbours are OOV | 7gf.53 |
 | BERT MLM fusion | 7gf.60, 7gf.60.1 | monotone harmful | CLOSED-null | same external-text channel | 7gf.60.1 |
-| causal LM + beam / oracle stage-1 bound | lvj, 7gf.61, lmfusion.py | not run | OPEN (P3, instrument) | priced <10% | lvj |
+| causal LM + beam / oracle stage-1 bound | lvj, 7gf.61, lmbound.py | m11 VAL 2-fold, GPT-2-large pmi, true in-vocab neighbours: backoff +.044 [+.022,+.068], +2 right words +.091; drop +.011 / +.040; full-text oracle +.170 / +.254; local test same sign | OPEN (P2) — oracle bound clears +.03; realistic (predicted-neighbour) version next | bound uses TRUE neighbour words: an upper bound, not a deliverable | lvj |
 | Sinkhorn balancing | 7gf.29.3 | +0.008 (OV); PUB +0.002 | DIRECTIONAL | no why recorded | 7gf.29.3 |
 | per-member logit adjustment | 7gf.72 | — | CLOSED | vacuous by algebra | 7gf.72 |
 | TTA shifts | 7gf.39 | −0.004 (OV) | CLOSED-null | onsets precise to < 20 ms | 7gf.39 |
