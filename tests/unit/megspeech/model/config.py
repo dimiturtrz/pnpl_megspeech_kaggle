@@ -9,6 +9,7 @@ from megspeech.model.config import CONTEXT as DEFAULT
 from megspeech.model.config import FILE, ContextConfig, Covariance, Encoder, OnsetEncoding
 from megspeech.model.context.intervals import Intervals
 from megspeech.model.context.timing import Clock
+from megspeech.model.pyramid import PyramidConfig
 from megspeech.model.words.conv import ConvConfig
 from megspeech.model.words.expert import Crop
 from megspeech.objective.anchors import Source
@@ -105,3 +106,12 @@ def test_noise_covariance_needs_whiten() -> None:
 def test_branch_drop_is_a_probability() -> None:
     with pytest.raises(ValueError, match="branch_drop"):
         ContextConfig(branch_drop=1.0)
+
+
+def test_pyramid_needs_an_unfused_conv_encoder(tmp_path: Path) -> None:
+    tapped = ContextConfig(conv=ConvConfig(pyramid=PyramidConfig(taps=(1, 3), bound=0.15)))
+    assert ContextConfig.load(tapped.save(tmp_path).parent) == tapped
+    with pytest.raises(ValueError, match="conv encoder"):
+        ContextConfig(encoder=Encoder.CACHED, conv=tapped.conv)
+    with pytest.raises(ValueError, match="fused"):
+        ContextConfig(fused=("other",), conv=tapped.conv)

@@ -103,3 +103,52 @@ def test_positions_timed() -> None:
     assert times.shape == (2, 3, 5, STEPS)
     assert torch.equal(times[0, 1], x[2, :, :STEPS])
     assert torch.all(times[slot == 3] == 0)
+
+
+class Tapped(Pooled):
+    @override
+    def tap_widths(self) -> tuple[int, ...]:
+        return (5,)
+
+    @override
+    def embed_tapped(
+        self, x: Float[Tensor, "b c t"], taps: tuple[int, ...], levels: tuple[int, ...], valid: Bool[Tensor, " b"]
+    ) -> tuple[Float[Tensor, "b e"], Float[Tensor, "b k"]]:
+        return x.mean(-1), x[:, :, : len(taps) * len(levels)].flatten(1)
+
+
+def test_tap_widths() -> None:
+    assert Tapped().tap_widths() == (5,)
+    with pytest.raises(NotImplementedError, match="Pooled"):
+        Pooled().tap_widths()
+
+
+def test_embed_tapped() -> None:
+    x = torch.randn(3, 5, SAMPLES, generator=GENERATOR)
+    valid = torch.ones(3, dtype=torch.bool)
+    embedded, pooled = Tapped().embed_tapped(x, (0,), (1, 2), valid)
+    assert torch.equal(embedded, Pooled().embed(x))
+    assert pooled.shape == (3, 10)
+    with pytest.raises(NotImplementedError, match="Pooled"):
+        Pooled().embed_tapped(x, (0,), (1,), valid)
+
+
+def test_positions_tapped() -> None:
+    encoder = Tapped()
+    x = torch.randn(3, 5, SAMPLES, generator=GENERATOR)
+    slot = torch.tensor([[0, 2, 3], [1, 3, 3]])
+    embedded, pooled = encoder.positions_tapped(x, slot, (0,), (1,))
+    assert torch.equal(embedded, encoder.positions(x, torch.zeros(2, 3), slot))
+    assert torch.equal(pooled[0, 1], x[2, :, :1].flatten())
+    assert torch.all(pooled[slot == 3] == 0)
+
+
+def test_occupied() -> None:
+    x = torch.zeros(3, 5, SAMPLES)
+    assert WordEncoder.occupied(x, torch.tensor([[0, 2, 3]])).tolist() == [True, False, True]
+
+
+def test_placed() -> None:
+    rows = torch.arange(6.0).reshape(2, 3)
+    placed = WordEncoder.placed(rows, torch.tensor([[1, 2], [0, 2]]))
+    assert placed.tolist() == [[[3.0, 4.0, 5.0], [0.0, 0.0, 0.0]], [[0.0, 1.0, 2.0], [0.0, 0.0, 0.0]]]

@@ -229,6 +229,10 @@ RUN_RULES: tuple[Rule[RunConfig], ...] = (
         lambda r: f"optim.acoustic's envelopes are cut {DataConfig().cut()}, not {r.data.cut()}",
     ),
     Rule(
+        lambda r: bool(r.optim.acoustic) and r.context.conv.pyramid.active,
+        lambda _: "optim.acoustic reads the encoder's time course beside the heads, which the pyramid readout corrects",
+    ),
+    Rule(
         lambda r: r.stop.patience < 0,
         lambda r: f"stop.patience {r.stop.patience} is negative; 0 trains every epoch",
     ),

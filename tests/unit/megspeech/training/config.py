@@ -10,6 +10,7 @@ from megspeech.evaluation.scoring.score import Epoch, Score
 from megspeech.model.auxiliary import Tap
 from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.context.timing import Clock
+from megspeech.model.pyramid import PyramidConfig
 from megspeech.model.words.conv import ConvConfig
 from megspeech.submission.config import ReportConfig
 from megspeech.training.config import METRICS, OptimConfig, RunConfig, StopConfig
@@ -139,3 +140,10 @@ def test_acoustic_needs_the_envelope_geometry() -> None:
         RunConfig(optim=OptimConfig(acoustic=0.5), data=DataConfig(window=2.0))
     with pytest.raises(ValueError, match="acoustic head"):
         RunConfig(optim=OptimConfig(tap=Tap.TIME))
+
+
+def test_acoustic_refuses_the_pyramid() -> None:
+    with pytest.raises(ValueError, match="pyramid"):
+        RunConfig(
+            optim=OptimConfig(acoustic=0.5), context=ContextConfig(conv=ConvConfig(pyramid=PyramidConfig(taps=(1,))))
+        )

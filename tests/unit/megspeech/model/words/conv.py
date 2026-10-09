@@ -236,3 +236,20 @@ def test_embed_timed() -> None:
     assert torch.equal(embedded, words.embed(x))
     assert times.shape == (2, words.time_width(), SAMPLES)
     assert torch.equal(times, words.taps(x)[-1])
+
+
+def test_tap_widths() -> None:
+    grown = ConvConfig(hidden=8, dilations=(1, 2, 4), stages=(2,), conformer=1)
+    assert ConvWords(grown).tap_widths() == (8, 8, grown.out, grown.out)
+
+
+def test_embed_tapped() -> None:
+    """The embedding is `embed`'s; each tap is its map mean-pooled whole and in halves, in tap then level order."""
+    words = ConvWords(SMALL).eval()
+    x = torch.randn(2, CHANNELS, SAMPLES, generator=GENERATOR)
+    embedded, pooled = words.embed_tapped(x, (0, 1), (1, 2), torch.ones(2, dtype=torch.bool))
+    maps = words.taps(x)
+    assert torch.allclose(embedded, words.embed(x))
+    assert pooled.shape == (2, SMALL.hidden * 2 * 3)
+    assert torch.allclose(pooled[:, : SMALL.hidden], maps[0].mean(-1))
+    assert torch.allclose(pooled[:, 3 * SMALL.hidden : 4 * SMALL.hidden], maps[1].mean(-1))

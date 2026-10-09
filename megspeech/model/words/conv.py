@@ -3,11 +3,13 @@
 from dataclasses import dataclass
 from typing import ClassVar, override
 
+import torch
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
 
 from core.tree import Retired
 from megspeech.data.constants import CHANNELS
+from megspeech.model.pyramid import PYRAMID, PyramidConfig
 from megspeech.model.words.base import WordEncoder
 from megspeech.model.words.heads import WordHead
 from megspeech.model.words.layers.attention_pool import AttentionPool
@@ -73,6 +75,9 @@ class ConvConfig:
     AlexNet/ResNet pyramid; empty keeps every block at full rate and width."""
     growth: float = 1.5
     """Channel multiplier per stage, each width rounded to a multiple of 8."""
+    pyramid: PyramidConfig = PYRAMID
+    """A sentence model's intermediate-depth readout of these blocks' maps: a norm-bounded correction to both heads'
+    logits, everything under it frozen (`model.pyramid`); no taps reads none."""
 
     def __post_init__(self) -> None:
         if self.merger and self.sensorwise:
@@ -141,6 +146,7 @@ class ConvWords(WordEncoder):
                 self.blocks.append(Downsample(config.widths[i], config.widths[i + 1]))
             self.blocks.append(DilatedBlock(config.widths[i + 1], d, config.dropout))
         self.blocks.extend(TimeConformer(config.out, config.dropout) for _ in range(config.conformer))
+        self.depths = (*config.widths[1:], *(config.out,) * config.conformer)
         self.head = self.classifier(config.dropout, config.head)
 
     @staticmethod
@@ -195,3 +201,15 @@ class ConvWords(WordEncoder):
     ) -> tuple[Float[Tensor, "b e"], Float[Tensor, "b h s"]]:
         times = self.taps(x, valid)[-1]
         return self.pool(times), times
+
+    @override
+    def tap_widths(self) -> tuple[int, ...]:
+        return self.depths
+
+    @override
+    def embed_tapped(
+        self, x: Float[Tensor, "b c t"], taps: tuple[int, ...], levels: tuple[int, ...], valid: Bool[Tensor, " b"]
+    ) -> tuple[Float[Tensor, "b e"], Float[Tensor, "b k"]]:
+        maps = self.taps(x, valid)
+        pooled = [nn.functional.adaptive_avg_pool1d(maps[tap], level).flatten(1) for tap in taps for level in levels]
+        return self.pool(maps[-1]), torch.cat(pooled, dim=-1)

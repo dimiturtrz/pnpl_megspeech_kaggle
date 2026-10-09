@@ -13,6 +13,7 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.context.droplayer import DropPathLayer
 from megspeech.model.input.subjects import SubjectLayer
+from megspeech.model.pyramid import Pyramid, PyramidConfig
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig, ConvWords
 from megspeech.model.words.spanned import SpannedConfig, SpanWords
@@ -311,3 +312,58 @@ def test_finish() -> None:
     assert all(
         torch.equal(a, b) for a, b in zip(finished, model.heard(SpanInput(x, onset, slot, subject)), strict=True)
     )
+
+
+TAPPED = replace(CONTEXT, conv=replace(CONTEXT.conv, pyramid=PyramidConfig(taps=(0, 1), width=6)))
+
+
+def spans() -> SpanInput:
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    return SpanInput(
+        x,
+        torch.tensor([[0.0, 0.2, 0.0], [0.0, 0.0, 0.0]]),
+        torch.tensor([[0, 1, 3], [2, 3, 3]]),
+        torch.zeros(len(x), dtype=torch.long),
+    )
+
+
+def test_train() -> None:
+    """A pyramid model holds everything under the readout frozen in evaluation mode, whatever mode it is set to;
+    without one every module follows the mode."""
+    plain = SentenceNet(nn.Identity(), CONTEXT).train()
+    assert plain.context.training
+    assert all(p.requires_grad for p in plain.parameters())
+    tapped = SentenceNet(nn.Identity(), TAPPED)
+    assert tapped.train() is tapped
+    assert isinstance(tapped.pyramid, Pyramid)
+    assert tapped.pyramid.training
+    assert not tapped.words.training
+    assert not tapped.context.training
+    trainable = {name.split(".")[0] for name, p in tapped.named_parameters() if p.requires_grad}
+    assert trainable == {"pyramid"}
+
+
+def test_warm() -> None:
+    """A pyramid model warms from the plain model it reads, logits unchanged until its readout trains; any other
+    missing or unknown entry is refused."""
+    plain = SentenceNet(nn.Identity(), CONTEXT).eval()
+    tapped = SentenceNet(nn.Identity(), TAPPED)
+    tapped.warm(plain.state_dict())
+    tapped.eval()
+    batch = spans()
+    for ours, theirs in zip(tapped(batch), plain(batch), strict=True):
+        assert torch.allclose(ours, theirs, atol=1e-6)
+    with pytest.raises(KeyError, match="lacks"):
+        plain.warm({k: v for k, v in plain.state_dict().items() if not k.startswith("head.")})
+    with pytest.raises(KeyError, match="unknown"):
+        plain.warm(tapped.state_dict())
+
+
+def test_pyramid_trains_only_its_readout() -> None:
+    tapped = SentenceNet(nn.Identity(), TAPPED)
+    context, word = tapped(spans())
+    (context.sum() + word.sum()).backward()
+    assert all(p.grad is None for name, p in tapped.named_parameters() if not name.startswith("pyramid."))
+    grad = cast("Pyramid", tapped.pyramid).out.weight.grad
+    assert grad is not None
+    assert grad.abs().sum() > 0

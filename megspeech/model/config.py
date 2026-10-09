@@ -178,6 +178,14 @@ CONTEXT_RULES: tuple[Rule[ContextConfig], ...] = (
         lambda c: f"branch_drop {c.branch_drop} is a probability below 1",
     ),
     Rule(
+        lambda c: c.conv.pyramid.active and c.encoder is not Encoder.CONV,
+        lambda c: f"the pyramid readout taps the conv encoder's feature maps, not encoder {c.encoder}'s",
+    ),
+    Rule(
+        lambda c: c.conv.pyramid.active and bool(c.fused),
+        lambda c: f"the pyramid readout freezes the model it reads, fused encoders {c.fused} too",
+    ),
+    Rule(
         lambda c: c.covariance is Covariance.NOISE and not c.whiten,
         lambda _: "a noise covariance is only inverted by whiten",
     ),

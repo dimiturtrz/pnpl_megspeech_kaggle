@@ -1,6 +1,6 @@
 """The sentence-context model: per-word embeddings, onset timing, and a transformer across the span."""
 
-from typing import override
+from typing import Self, override
 
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
@@ -38,6 +38,23 @@ class SentenceNet(Span):
         self.context = Mixer.of(context)
         self.head = ContextReadout.build(context, prototypes)
         self.timing = TimingHead.over_vocabulary(active=context.rhythm)
+        pyramid = context.conv.pyramid
+        self.pyramid = pyramid.readout(self.words, context.width)
+        self.train()
+
+    @override
+    def train(self, mode: bool = True) -> Self:
+        """`mode` set throughout, but for what the pyramid readout holds frozen."""
+        super().train(mode)
+        self.pyramid.hold(self)
+        return self
+
+    def warm(self, state: dict[str, Tensor]) -> None:
+        """Another run's `state` loaded in whole; only the pyramid readout this model adds may be missing from it."""
+        missing, unexpected = self.load_state_dict(state, strict=False)
+        stale = set(missing) - self.pyramid.fresh()
+        if stale or unexpected:
+            raise KeyError(f"warm state lacks {sorted(stale)} and has unknown {sorted(unexpected)}")
 
     @override
     def forward(self, spans: SpanInput) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
@@ -49,9 +66,11 @@ class SentenceNet(Span):
         self, spans: SpanInput
     ) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"], Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
         """The refined positions and the word embeddings, then the context head's logits with the timing head's
-        added, and the word head's."""
-        h, slots = self.features(spans)
-        return self.finish(h, slots, spans.onset, spans.mask)
+        added, and the word head's, both corrected by the pyramid readout."""
+        prepared = self.prepare(spans.x, spans.subject)
+        slots, taps = self.pyramid.positions(self.words, prepared, spans.onset, spans.slot)
+        refined, slots, context, word = self.finish(self.chunked(spans, slots), slots, spans.onset, spans.mask)
+        return refined, slots, *self.pyramid.correct(taps, refined, context, word)
 
     def heard_timed(
         self, spans: SpanInput
@@ -63,7 +82,7 @@ class SentenceNet(Span):
         Float[Tensor, "g w k t"],
     ]:
         """`heard`'s outputs and, last, the encoder's per-timestep features at each position: `heard` itself, the
-        encoder read once."""
+        encoder read once, for a model with no pyramid readout (`RUN_RULES`)."""
         slots, times = self.words.positions_timed(self.prepare(spans.x, spans.subject), spans.slot)
         h = self.chunked(spans, slots)
         return *self.finish(h, slots, spans.onset, spans.mask), times

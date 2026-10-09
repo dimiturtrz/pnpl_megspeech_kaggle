@@ -35,9 +35,20 @@ class WordEncoder(nn.Module, ABC):
     ) -> Float[Tensor, "g w e"]:
         """Each span position's embedding of its row of `x`, zeros where `slot == len(x)` marks it empty. `onset` is
         read only by encoders whose rows are spans, not words."""
+        return self.placed(self.embed(x, self.occupied(x, slot)), slot)
+
+    @staticmethod
+    def occupied(x: Float[Tensor, "r c t"], slot: Int[Tensor, "g w"]) -> Bool[Tensor, " r"]:
+        """Which rows of `x` some span position names; `slot == len(x)` names none."""
         rows = len(x)
-        valid = torch.zeros(rows + 1, dtype=torch.bool, device=x.device).index_fill_(0, slot.flatten(), value=True)
-        return nn.functional.pad(self.embed(x, valid[:rows]), (0, 0, 0, 1))[slot]
+        return torch.zeros(rows + 1, dtype=torch.bool, device=x.device).index_fill_(0, slot.flatten(), value=True)[
+            :rows
+        ]
+
+    @staticmethod
+    def placed(rows: Float[Tensor, "r *f"], slot: Int[Tensor, "g w"]) -> Float[Tensor, "g w *f"]:
+        """Each span position's row of `rows`, zeros where `slot == len(rows)` marks it empty."""
+        return nn.functional.pad(rows, (0, 0) * (rows.dim() - 1) + (0, 1))[slot]
 
     def time_width(self) -> int:
         """Channels of the per-timestep features `embed_timed` returns."""
@@ -53,10 +64,26 @@ class WordEncoder(nn.Module, ABC):
         self, x: Float[Tensor, "r c t"], slot: Int[Tensor, "g w"]
     ) -> tuple[Float[Tensor, "g w e"], Float[Tensor, "g w h s"]]:
         """`positions`, and each span position's per-timestep features, zeros where `slot == len(x)` marks it empty."""
-        rows = len(x)
-        valid = torch.zeros(rows + 1, dtype=torch.bool, device=x.device).index_fill_(0, slot.flatten(), value=True)
-        embedded, times = self.embed_timed(x, valid[:rows])
-        return nn.functional.pad(embedded, (0, 0, 0, 1))[slot], nn.functional.pad(times, (0, 0, 0, 0, 0, 1))[slot]
+        embedded, times = self.embed_timed(x, self.occupied(x, slot))
+        return self.placed(embedded, slot), self.placed(times, slot)
+
+    def tap_widths(self) -> tuple[int, ...]:
+        """Channels of each feature map `embed_tapped` can read, in depth order."""
+        raise NotImplementedError(f"{type(self).__name__} keeps no intermediate feature maps")
+
+    def embed_tapped(
+        self, x: Float[Tensor, "b c t"], taps: tuple[int, ...], levels: tuple[int, ...], valid: Bool[Tensor, " b"]
+    ) -> tuple[Float[Tensor, "b e"], Float[Tensor, "b k"]]:
+        """`embed`, and the feature maps at depths `taps` each mean-pooled over `levels` equal chunks of time."""
+        raise NotImplementedError(f"{type(self).__name__} keeps no intermediate feature maps")
+
+    def positions_tapped(
+        self, x: Float[Tensor, "r c t"], slot: Int[Tensor, "g w"], taps: tuple[int, ...], levels: tuple[int, ...]
+    ) -> tuple[Float[Tensor, "g w e"], Float[Tensor, "g w k"]]:
+        """`positions`, and each span position's `embed_tapped` pyramid, zeros where `slot == len(x)` marks it
+        empty."""
+        embedded, pooled = self.embed_tapped(x, taps, levels, self.occupied(x, slot))
+        return self.placed(embedded, slot), self.placed(pooled, slot)
 
     def backbone(self) -> tuple[nn.Parameter, ...]:
         """The parameters `OptimConfig.encoder_lr` scales: everything, but for an encoder over a pretrained trunk."""

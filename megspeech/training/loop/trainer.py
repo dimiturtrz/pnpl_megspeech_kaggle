@@ -128,7 +128,7 @@ class Trainer:
         model.fuse(Fusion(Branch.many(self.fused, context, channels), context.branch_drop))
         model.whiten.fit(model.scale(SAMPLES[self.config.context.covariance].windows(train, sample)))
         if self.initial:
-            model.load_state_dict(self.initial)
+            model.warm(self.initial)
         if self.stem:
             model.adopt(self.stem)
         if self.timing:
