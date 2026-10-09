@@ -3,9 +3,10 @@
 The MEG matrix is the trained model's mean softmax score of each word over the 50 candidates, read on the scored
 (validation) unseen-span words and symmetrised. A teacher's matrix is the cosine of its type-level word vectors. The
 representational similarity of the two is the Spearman correlation of their off-diagonal upper triangles, with a
-bootstrap over words. CPU only.
+bootstrap over words for its interval and a Mantel permutation of the teacher's word labels for its one-sided p. CPU
+only.
 
-    uv run --no-sync python -m megspeech.evaluation.studies.rsa --run ema-cd25-syn05-s1
+    uv run --no-sync python -m megspeech.evaluation.studies.rsa --run ema-cd25-masc27w-s1
     PYTHONPATH=<transformers>=5.19 uv run --no-sync python -m megspeech.evaluation.studies.rsa --write-gemma
 """
 
@@ -47,6 +48,9 @@ GEMMA_PREFIX = "task: sentence similarity | query: "
 GEMMA_DIMS = (768, 256, 128)
 CACHED = (
     "wav2vec2-large-xlsr-53",
+    "hubert-large-ll60k",
+    "data2vec-audio-large",
+    "gpt2-large",
     "whisper-medium-L8",
     "whisper-medium-L12",
     "whisper-medium-L16",
@@ -54,9 +58,15 @@ CACHED = (
     "whisper-medium-L24",
 )
 HEADER = (
-    "| teacher | dims | words | RSA raw | 95% CI raw | min cos dist raw "
-    "| RSA centred | 95% CI centred | min cos dist centred |"
+    "| teacher | dims | words | RSA raw | 95% CI raw | perm p raw | min cos dist raw "
+    "| RSA centred | 95% CI centred | perm p centred | min cos dist centred |"
 )
+DEFAULT_RUNS = (
+    "ema-cd25-xsp10sem05-hub-s1-ft-s1",
+    "ema-cd25-xsp10sem05-d2v-s1-ft-s1",
+    "ema-cd25-masc27w-s1",
+)
+"""One member of each Deep ensemble kind: H (HuBERT speech aux), D (data2vec speech aux), M (MASC-27 pretrained)."""
 
 
 @dataclass(frozen=True)
@@ -126,6 +136,7 @@ class Rsa:
     low: float
     high: float
     words: int
+    p: float
 
     @staticmethod
     def spearman(meg: Float[np.ndarray, " p"], teacher: Float[np.ndarray, " p"]) -> float:
@@ -146,6 +157,28 @@ class Rsa:
         return cls.spearman(meg[a, b], teacher[a, b])
 
     @classmethod
+    def mantel(
+        cls,
+        meg: Float[np.ndarray, "v v"],
+        teacher: Float[np.ndarray, "v v"],
+        words: Int[np.ndarray, " k"],
+        draws: int = DRAWS,
+    ) -> float:
+        """One-sided permutation p of the correlation over `words`: the teacher's word labels shuffled, the MEG's
+        kept, so the null keeps each matrix's own structure and breaks only their correspondence."""
+        first, second = np.triu_indices(len(words), k=1)
+        observed = meg[words[first], words[second]]
+        rho = cls.spearman(observed, teacher[words[first], words[second]])
+        rng = np.random.default_rng(SEED)
+        null = np.array(
+            [
+                cls.spearman(observed, teacher[shuffled[first], shuffled[second]])
+                for shuffled in (rng.permutation(words) for _ in range(draws))
+            ]
+        )
+        return float((1 + np.sum(null >= rho)) / (1 + draws))
+
+    @classmethod
     def of(
         cls,
         meg: Float[np.ndarray, "v v"],
@@ -153,12 +186,15 @@ class Rsa:
         shared: Bool[np.ndarray, " v"],
         draws: int = DRAWS,
     ) -> "Rsa":
-        """The correlation over the `shared` words, and the percentile interval of `draws` word resamples."""
+        """The correlation over the `shared` words, the percentile interval of `draws` word resamples, and the
+        permutation p of `draws` label shuffles."""
         words = np.flatnonzero(shared)
         rng = np.random.default_rng(SEED)
         resampled = [cls.pairs(meg, teacher, rng.choice(words, size=len(words))) for _ in range(draws)]
         low, high = np.percentile(resampled, INTERVAL)
-        return cls(cls.pairs(meg, teacher, words), float(low), float(high), len(words))
+        return cls(
+            cls.pairs(meg, teacher, words), float(low), float(high), len(words), cls.mantel(meg, teacher, words, draws)
+        )
 
 
 @dataclass(frozen=True)
@@ -174,10 +210,10 @@ class Row:
     def markdown(self) -> str:
         return (
             f"| {self.name} | {self.raw.vectors.shape[1]} | {self.rsa_raw.words} "
-            f"| {self.rsa_raw.rho:+.3f} | [{self.rsa_raw.low:+.3f}, {self.rsa_raw.high:+.3f}] "
+            f"| {self.rsa_raw.rho:+.3f} | [{self.rsa_raw.low:+.3f}, {self.rsa_raw.high:+.3f}] | {self.rsa_raw.p:.3f} "
             f"| {self.raw.min_distance():.3f} "
             f"| {self.rsa_centred.rho:+.3f} | [{self.rsa_centred.low:+.3f}, {self.rsa_centred.high:+.3f}] "
-            f"| {self.centred.min_distance():.3f} |"
+            f"| {self.rsa_centred.p:.3f} | {self.centred.min_distance():.3f} |"
         )
 
     @classmethod
@@ -283,7 +319,7 @@ class Study:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run", nargs="+", default=["ema-cd25-syn05-s1"])
+    parser.add_argument("--run", nargs="+", default=list(DEFAULT_RUNS))
     parser.add_argument("--write-gemma", action="store_true", help="embed the 50 words with EmbeddingGemma 2 and stop")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -303,7 +339,7 @@ def main() -> None:
             int(meg.counts.sum()),
         )
         LOG.info(HEADER)
-        LOG.info("|---|---|---|---|---|---|---|---|---|")
+        LOG.info("|---|---|---|---|---|---|---|---|---|---|---|")
         for teacher, geometry in teachers.items():
             LOG.info(Row.of(teacher, geometry, meg).markdown())
 

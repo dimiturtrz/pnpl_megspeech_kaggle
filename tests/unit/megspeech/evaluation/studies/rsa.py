@@ -94,6 +94,16 @@ def test_pairs() -> None:
     assert np.isclose(Rsa.pairs(similarity, similarity, np.array([3, 3, 5, 7, 9])), 1.0)
 
 
+def test_mantel() -> None:
+    similarity = random_geometry().cosine()
+    words = np.arange(VOCAB_SIZE)
+    assert Rsa.mantel(similarity, similarity, words, DRAWS) == 1 / (1 + DRAWS)
+    assert Rsa.mantel(similarity, -similarity, words, DRAWS) == 1.0
+    assert Rsa.mantel(similarity, Geometry.one_hot().cosine(), words, DRAWS) == 1.0
+    noise = Rsa.mantel(similarity, random_geometry(1).cosine(), words, DRAWS)
+    assert 0.05 < noise <= 1.0
+
+
 def test_rsa_of() -> None:
     similarity = random_geometry().cosine()
     noise = random_geometry(1).cosine()
@@ -102,6 +112,7 @@ def test_rsa_of() -> None:
     assert same.rho == 1.0
     assert same.low > 0.99
     assert same.words == VOCAB_SIZE
+    assert same.p == 1 / (1 + DRAWS)
     apart = Rsa.of(similarity, noise, shared, DRAWS)
     assert apart.low < apart.rho < apart.high
     assert abs(apart.rho) < 0.2
@@ -111,7 +122,7 @@ def test_markdown() -> None:
     meg = Meg(random_geometry().cosine(), np.ones(VOCAB_SIZE, dtype=int))
     line = Row.of("teacher", random_geometry(), meg, DRAWS).markdown()
     assert line.startswith(f"| teacher | {DIM} | {VOCAB_SIZE} | ")
-    assert line.count("|") == 10
+    assert line.count("|") == 12
 
 
 def test_row_of() -> None:
@@ -122,6 +133,7 @@ def test_row_of() -> None:
     null = Row.of("one-hot", Geometry.one_hot(), meg, DRAWS)
     assert null.rsa_raw.rho == 0.0
     assert (null.rsa_raw.low, null.rsa_raw.high) == (0.0, 0.0)
+    assert null.rsa_raw.p == 1.0
 
 
 def test_pooled() -> None:
