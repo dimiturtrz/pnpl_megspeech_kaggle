@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from megspeech.data.batching.split import Split
-from megspeech.training.sampling.curriculum import Annealed, Base, Curriculum, Prioritised, Robust
+from megspeech.training.sampling.curriculum import Annealed, Balanced, Base, Curriculum, Prioritised, Robust
 
 
 @dataclass(frozen=True)
@@ -20,6 +20,10 @@ class SamplerConfig:
     alpha: float = 1.0
     """Exponent of `base = stratified`: each span draws at `count ** -alpha` of its stratum's span count, so 1 gives
     every stratum an equal share and 0 draws every span alike."""
+    balance: float = 0.0
+    """Power of the tilt toward spans of rare target words (`megspeech.training.sampling.curriculum.Balanced`): each
+    span draws at the mean over its labelled words of `share ** -balance`, a word's label's share of training's
+    labelled words, so 1 is inverse-frequency sampling and 0 draws at the base's weights alone."""
     curriculum: float = 0.0
     """The Deep subject's share of the spans drawn at the last epoch, annealed linearly from an equal share per
     subject at the first (`megspeech.training.sampling.curriculum`); 0 draws every subject's spans at the sampler's
@@ -39,14 +43,16 @@ class SamplerConfig:
 
 
 class Sampler:
-    """A base distribution (`SamplerConfig.base`) under an ordered chain of modifiers: annealed, then tilted by
-    stratum (`robust`), then by span (`priority`, `visibility`). Each wraps the one before and forwards what training
-    observes to it, so the loss-driven tilts compose."""
+    """A base distribution (`SamplerConfig.base`) under an ordered chain of modifiers: balanced by word rarity,
+    annealed, then tilted by stratum (`robust`), then by span (`priority`, `visibility`). Each wraps the one before
+    and forwards what training observes to it, so the loss-driven tilts compose."""
 
     @staticmethod
     def scheduled(config: SamplerConfig, train: Split) -> Curriculum:
-        """The chain's loss-free head, the base annealed by `curriculum`: what sizes a batch's word rows."""
-        return Annealed.of(config.curriculum, config.base.of(train, config.alpha))
+        """The chain's loss-free head, the base balanced by `balance` then annealed by `curriculum`: what sizes a
+        batch's word rows."""
+        balanced = Balanced.of(config.base.of(train, config.alpha), train, config.balance)
+        return Annealed.of(config.curriculum, balanced)
 
     @staticmethod
     def of(config: SamplerConfig, train: Split) -> Curriculum:

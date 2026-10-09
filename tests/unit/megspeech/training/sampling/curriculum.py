@@ -11,7 +11,9 @@ from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.spans.spans import Spans
 from megspeech.training.sampling.curriculum import (
     Annealed,
+    Balanced,
     Base,
+    Curriculum,
     Natural,
     Prioritised,
     Robust,
@@ -266,3 +268,58 @@ def test_robust_and_prioritised_both_observe() -> None:
 
 
 TRAIN_STRATA = replace(SPANNED, source=torch.tensor([0, 0, 0, 1, 1, 1]))
+
+
+LABELLED = Split.of(
+    Windows.stacked(torch.zeros(7, 1, 2)),
+    (np.array([0, 0, 0, 0, 1, IGNORE, 0]), np.zeros(7, dtype=np.int64)),
+    Spans(np.array([[0, 1], [2, 3], [4, 6], [5, -1]]), np.zeros((4, 2))),
+    np.ones(7),
+)
+
+
+def balanced(power: float, base: Curriculum | None = None) -> Balanced:
+    made = Balanced.of(Natural() if base is None else base, LABELLED, power)
+    assert isinstance(made, Balanced)
+    return made
+
+
+def test_balanced_of() -> None:
+    """At 0 the base itself; label 1 is 1 of 6 labelled words, label 0 is 5, so at power 1 its words weigh 5 to 1:
+    0.6 and 3 once normalised to a mean of 1 over the six, and a span with no labelled word keeps 1."""
+    assert Balanced.of(Natural(), LABELLED, 0.0) == Natural()
+    made = balanced(1.0)
+    assert made.rarity.tolist() == pytest.approx([0.6, 0.6, 1.8, 1.0])
+    assert made.rare.tolist() == [False, False, True, False]
+
+
+def test_balanced_labels() -> None:
+    labels, valid = Balanced.labels(LABELLED)
+    assert labels.tolist() == [[0, 0], [0, 0], [1, 0], [0, 0]]
+    assert valid.tolist() == [[True, True], [True, True], [True, True], [False, False]]
+
+
+def test_balanced_weights() -> None:
+    """The base's weights times each span's rarity: the rare word's span draws most."""
+    made = balanced(0.5)
+    weights = made.weights(LABELLED, 0, 10)
+    assert torch.equal(weights, Natural().weights(LABELLED, 0, 10) * made.rarity)
+    assert int(weights.argmax()) == 2
+
+
+def test_balanced_observe() -> None:
+    base = prioritised(power=1.0, visibility=0.0)
+    balanced(1.0, base).observe(torch.tensor([3]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
+    assert base.seen.tolist() == [0.0, 0.0, 0.0, 1.0]
+
+
+def test_balanced_summary() -> None:
+    """The rare span's share of the draw rises above its share of the base."""
+    made = balanced(1.0)
+    out = made.summary(LABELLED, 0, 10, made.weights(LABELLED, 0, 10))
+    assert out["rare_share_base"] == pytest.approx(0.25)
+    assert out["rare_share"] > out["rare_share_base"]
+
+
+def test_balanced_share() -> None:
+    assert balanced(1.0).share(torch.tensor([1.0, 1.0, 2.0, 0.0])) == pytest.approx(0.5)

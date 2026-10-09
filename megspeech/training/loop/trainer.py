@@ -257,6 +257,7 @@ class Trainer:
         state = self.state(net, train, optim.epochs * per_epoch)
         model = state.model
         curriculum = state.curriculum
+        LOG.info("sampler %s", type(curriculum).__name__)
         history: list[Epoch] = []
         best_state = net.state_dict()
         self.heads = self.auxiliary_state(model)

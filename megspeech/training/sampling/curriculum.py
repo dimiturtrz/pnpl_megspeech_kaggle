@@ -12,8 +12,9 @@ from torch import Tensor
 from torch.nn import functional
 
 from megspeech.data.batching.split import Split
-from megspeech.data.labels.vocabulary import IGNORE
+from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.raw.runs import DEEP
+from megspeech.data.spans.spans import PAD
 from megspeech.training.sampling.strata import Strata
 
 FLOOR = 0.25
@@ -21,6 +22,9 @@ FLOOR = 0.25
 
 CEILING = 4.0
 """Multiple of its base weight no prioritised span rises above, so no span dominates the draw."""
+
+QUARTILE = 0.25
+"""Share of the labels training holds, rarest first, whose spans `Balanced` reports the draw's share on."""
 
 
 class Curriculum(Protocol):
@@ -127,6 +131,59 @@ class Stratified:
     def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
         """Nothing to report: the draw is not tilted by a loss."""
         return {}
+
+
+@dataclass(frozen=True)
+class Balanced:
+    """`base`'s draw tilted toward spans of rare target words: each span's weight times the mean, over its labelled
+    words, of `share ** -power` for each word's label's share of training's labelled words (normalised to a mean of 1
+    over those words; a span with none keeps 1). Rare words are seen more often from balanced data, not a reweighted
+    loss: inverse-frequency sampling as Mikolov et al. 2013 subsample frequent words, at a tunable `power`."""
+
+    base: Curriculum
+    rarity: Float[Tensor, " g"]
+    rare: Bool[Tensor, " g"]
+
+    @classmethod
+    def of(cls, base: Curriculum, train: Split, power: float) -> Curriculum:
+        """`base` balanced at `power` over `train`'s labels; `base` itself at 0."""
+        if not power:
+            return base
+        labels, valid = cls.labels(train)
+        counts = torch.bincount(labels[valid], minlength=VOCAB_SIZE).float()
+        word = (counts.clamp(min=1) / counts.sum()).pow(-power)
+        word = word / word[labels[valid]].mean()
+        spans = valid.sum(dim=1)
+        summed = torch.where(valid, word[labels], 0).sum(dim=1)
+        rarity = torch.where(spans > 0, summed / spans.clamp(min=1), 1.0)
+        present = counts > 0
+        ranked = torch.where(present, counts, torch.inf).argsort()
+        rarest = ranked[: max(1, int(int(present.sum()) * QUARTILE))]
+        rare = (torch.isin(labels, rarest) & valid).any(dim=1)
+        return cls(base, rarity, rare)
+
+    @staticmethod
+    def labels(train: Split) -> tuple[Int[Tensor, "g w"], Bool[Tensor, "g w"]]:
+        """Each span slot's label (0 where padded or unlabelled) and whether it is a labelled word."""
+        labels = train.y[train.index.clamp(min=0)]
+        valid = (train.index != PAD) & (labels != IGNORE)
+        return torch.where(valid, labels, 0), valid
+
+    def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
+        return self.base.weights(train, epoch, epochs) * self.rarity
+
+    def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
+        """Forwarded to `base`: the tilt ignores the loss."""
+        self.base.observe(spans, logits, target)
+
+    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
+        """The draw's share on spans holding a word of the rarest `QUARTILE` of labels, under `weights` and `base`'s."""
+        base = self.base.weights(train, epoch, epochs)
+        return {"rare_share": self.share(weights), "rare_share_base": self.share(base)}
+
+    def share(self, weights: Float[Tensor, " g"]) -> float:
+        """`weights`' share on spans holding a word of the rarest `QUARTILE` of labels."""
+        return (weights[self.rare].sum() / weights.sum()).item()
 
 
 class Base(StrEnum):

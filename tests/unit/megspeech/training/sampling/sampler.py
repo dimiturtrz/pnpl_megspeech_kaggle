@@ -5,7 +5,7 @@ import torch
 from megspeech.data.batching.split import Split
 from megspeech.data.batching.windows import Windows
 from megspeech.data.spans.spans import Spans
-from megspeech.training.sampling.curriculum import Annealed, Base, Natural, Prioritised, Robust, Uniform
+from megspeech.training.sampling.curriculum import Annealed, Balanced, Base, Natural, Prioritised, Robust, Uniform
 from megspeech.training.sampling.sampler import Sampler, SamplerConfig
 
 TRAIN = Split.of(
@@ -75,3 +75,12 @@ def test_of_base_options() -> None:
 def test_scheduled(sampler: Base) -> None:
     made = Sampler.scheduled(SamplerConfig(base=sampler), TRAIN)
     assert (made.weights(TRAIN, 0, 10) > 0).all()
+
+
+def test_scheduled_balanced() -> None:
+    """A `balance` wraps the base in `Balanced` beneath the annealing; 0 leaves the base bare."""
+    assert isinstance(Sampler.scheduled(SamplerConfig(balance=0.5), TRAIN), Balanced)
+    annealed = Sampler.scheduled(SamplerConfig(balance=0.5, curriculum=0.9), TRAIN)
+    assert isinstance(annealed, Annealed)
+    assert isinstance(annealed.base, Balanced)
+    assert isinstance(Sampler.scheduled(SamplerConfig(balance=0.0), TRAIN), Natural)
