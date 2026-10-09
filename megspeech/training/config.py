@@ -66,7 +66,7 @@ class OptimConfig:
     per word token, not per word type as the semantic auxiliary's; 0 never reads the targets."""
     speech_source: str = ""
     """The targets the speech auxiliary aligns to, a directory of `<run>.npy` under processed/speech: empty is the
-    wav2vec2 latents, `hubert-large-ll60k` the HuBERT ones (a `megspeech.objective.targets.speech.Reading.stem`,
+    wav2vec2 latents, `hubert-large-ll60k` / `data2vec-audio-large` those teachers' (a `megspeech.objective.targets.speech.Reading.stem`,
     7gf.141.6), `gpt2-large` the in-context text states of `megspeech.objective.targets.context` (megspeech-7gf.101)."""
     speech_centred: bool = False
     """Centre each run's speech targets on its own mean (`Targets.centred`), removing the direction every target

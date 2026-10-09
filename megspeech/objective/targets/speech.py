@@ -1,5 +1,6 @@
-"""Frozen self-supervised speech latents (a `Teacher`: wav2vec2 or HuBERT) of the audiobook speech each training word
-was heard in: token-level acoustic targets (Défossez et al. 2023), where the t5 lexicon is one vector per word type.
+"""Frozen self-supervised speech latents (a `Teacher`: wav2vec2, HuBERT or data2vec) of the audiobook speech each
+training word was heard in: token-level acoustic targets (Défossez et al. 2023), where the t5 lexicon is one vector per
+word type.
 
 Each trained Sherlock run's chapter (`<book>_<session>_doyle_64kb.wav`) is encoded once; a word's target is the
 mean of the latents over the `WINDOW` after its chapter onset, a row of `<run>.npy` aligned with the run's word
@@ -22,7 +23,7 @@ from jaxtyping import Bool, Float, Int
 from scipy.io import wavfile
 from scipy.signal import resample_poly
 from torch import Tensor
-from transformers import HubertModel, Wav2Vec2Model
+from transformers import Data2VecAudioModel, HubertModel, Wav2Vec2Model
 
 from core.paths import DataRoot
 from megspeech.data.config import DataConfig, Val
@@ -34,7 +35,7 @@ from megspeech.objective.targets.t5 import Encoder
 
 class Teacher(StrEnum):
     """The frozen speech model whose latents are the targets, named by its weights' folder under the foreign models.
-    Both are 24-layer, 1024-wide, 16 kHz models on the same convolutional front end (`STRIDE`, `RECEPTIVE`), fed
+    All are 24-layer, 1024-wide, 16 kHz models on the same convolutional front end (`STRIDE`, `RECEPTIVE`), fed
     normalised audio, so one pipeline reads either."""
 
     WAV2VEC2 = "wav2vec2-large-xlsr-53"
@@ -42,9 +43,12 @@ class Teacher(StrEnum):
     """Libri-Light's 60k h of LibriVox audiobooks, LibriBrain's own domain, where xlsr-53 spreads over 53 languages;
     HuBERT-class models have the strongest brain-encoding record of the frame-level SSL models (Vaidya et al. 2022,
     Li et al. 2023; research/2026-10-07_target_encoders.md)."""
+    DATA2VEC = "data2vec-audio-large"
+    """LibriSpeech's 960 h, regressing the teacher's own averaged top layers rather than HuBERT's discrete units: a
+    third objective on the same front end, for an ensemble whose same-teacher members saturate."""
 
 
-LOADERS = {Teacher.WAV2VEC2: Wav2Vec2Model, Teacher.HUBERT: HubertModel}
+LOADERS = {Teacher.WAV2VEC2: Wav2Vec2Model, Teacher.HUBERT: HubertModel, Teacher.DATA2VEC: Data2VecAudioModel}
 STEM = Teacher.WAV2VEC2.value
 LAYERS = slice(15, 19)
 """Transformer layers 15-18 of the 24, averaged: Défossez et al. (2023) align MEG to mid-to-late wav2vec2 layers, where

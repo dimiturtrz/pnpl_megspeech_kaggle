@@ -214,6 +214,7 @@ STIMULI = (
     HubRepo("pnpl/LibriBrain2", SHERLOCK_AUDIO),
     Weights("facebook/wav2vec2-large-xlsr-53", ("*.json", "*.bin", "*.txt")),
     Weights("facebook/hubert-large-ll60k", ("*.json", "*.bin")),
+    Weights("facebook/data2vec-audio-large", ("*.json", "*.bin")),
 )
 """The stimulus speech and the self-supervised speech models whose latents of it are per-word targets (7gf.54,
 7gf.141.6)."""
