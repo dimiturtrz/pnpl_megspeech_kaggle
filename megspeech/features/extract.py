@@ -227,7 +227,7 @@ class Export:
         track = Track.DEEP
         corpus = Corpus.load(meg, root, device)
         windows = Corpus.kaggle(root, meg, track, device, corpus.geometry)
-        return cls(corpus, Split.from_kaggle(track.kaggle(root.raw()), windows), Features.under(root, name))
+        return cls(corpus, Split.from_kaggle(track.kaggle(root.raw()), windows, meg.rate), Features.under(root, name))
 
     def splits(self) -> dict[str, Split]:
         """Every split by the name its features are saved and read under."""

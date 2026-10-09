@@ -51,6 +51,42 @@ def test_of() -> None:
     assert held.y.tolist() == [0, 1, 2]
     assert held.index.shape[0] == 2
     assert held.weight.tolist() == [1.0, 1.0, 3.0]
+    assert held.finish is None
+
+
+def timed() -> Split:
+    """Two spans read at 10 Hz: words at 0 and 0.1 s, the second's epoch running 2 s on; a lone word 6 s long."""
+    spans = Spans.by_gap(np.array([0.0, 0.1, 9.0]))
+    at = torch.tensor([0, 10, 20])
+    windows = Windows(torch.zeros(CHANNELS, 100), at, at + 50, following=torch.tensor([10, 30, 80]))
+    return Split.of(windows, (np.array([0, 1, 2]),) * 2, spans, np.ones(3)).finished(10)
+
+
+def test_ended() -> None:
+    """Each span's last word ends `TAIL` before its bound, counted from the span's first onset."""
+    held = timed()
+    assert Split.ended(held.windows, held.index, held.onset, 10).tolist() == pytest.approx([1.1, 5.0])
+
+
+def test_finished() -> None:
+    """Without next onsets every end is 0: unknown."""
+    held = timed()
+    assert held.finish is not None
+    assert held.finish.tolist() == pytest.approx([1.1, 5.0])
+    plain = dataclasses.replace(held, windows=dataclasses.replace(held.windows, following=None)).finished()
+    assert plain.finish is not None
+    assert plain.finish.tolist() == [0.0, 0.0]
+
+
+def test_ends() -> None:
+    held = timed()
+    ends = held.ends(torch.tensor([1]))
+    assert ends is not None
+    assert ends.tolist() == pytest.approx([5.0])
+    assert dataclasses.replace(held, finish=None).ends(torch.tensor([0])) is None
+    finish = held.batch(torch.tensor([1]), 4).finish
+    assert finish is not None
+    assert finish.tolist() == pytest.approx([5.0])
 
 
 def test_sample() -> None:

@@ -97,7 +97,9 @@ class Corpus:
             )
         )
         labels = (words["target"].to_numpy(), words["token"].to_numpy())
-        held = Split.of(windows, labels, data.grouping.spans(words), weight, Run.subjects(words["run"]))
+        held = Split.of(windows, labels, data.grouping.spans(words), weight, Run.subjects(words["run"])).finished(
+            data.rate
+        )
         return replace(
             held,
             source=torch.tensor(data.sources(words["run"]), device=windows.device),

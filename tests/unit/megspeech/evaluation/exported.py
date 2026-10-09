@@ -47,7 +47,9 @@ def test_probabilities_lone(tmp_path: Path) -> None:
     split = domains[RULER]
     lone = torch.full((3, split.index.shape[1]), PAD)
     lone[:, 0] = split.index[1, :3]
-    split = replace(split, index=torch.cat([split.index[:1], lone]), onset=torch.zeros(4, split.index.shape[1]))
+    split = replace(
+        split, index=torch.cat([split.index[:1], lone]), onset=torch.zeros(4, split.index.shape[1]), finish=None
+    )
     probabilities = replace(loaded(tmp_path), model=Contrary()).probabilities(split, 0.5)
     assert probabilities.argmax(axis=1).tolist() == [0, 0, 0, VOCAB_SIZE - 1, VOCAB_SIZE - 1, VOCAB_SIZE - 1]
 

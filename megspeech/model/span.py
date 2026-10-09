@@ -53,7 +53,9 @@ class Span(Encoding):
         mask = spans.mask
         if self.training:
             spans = spans.timed(self.jitter.apply(spans.onset, mask))
-        timing = self.onsets(self.clock.times(spans.onset, mask), self.intervals.features(spans.onset, mask))
+        timing = self.onsets(
+            self.clock.times(spans.onset, mask), self.intervals.features(spans.onset, mask, spans.finish)
+        )
         own = self.project(slots)
         others = (b.projected(spans) for b in self.fusion.branches)
         return self.masking(self.fusion.mix([own, *others]), mask) + timing

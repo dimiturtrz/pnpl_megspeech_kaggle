@@ -17,6 +17,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
+from megspeech.data.constants import RATE, TAIL
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.spans.spans import PAD, Spans
 
@@ -35,12 +36,13 @@ ROW_ALIGN = 8
 @dataclass(frozen=True)
 class SpanInput:
     """What a span model reads: word windows `x`, each span position's `onset` and row of `x` (`slot`, `len(x)` where
-    the position is empty), and each row's `subject`."""
+    the position is empty), each row's `subject`, and each span's `finish` (`Split.finish`)."""
 
     x: Float[Tensor, "r c t"]
     onset: Float[Tensor, "g w"]
     slot: Int[Tensor, "g w"]
     subject: Int[Tensor, " r"]
+    finish: Float[Tensor, " g"] | None = None
 
     @property
     def mask(self) -> Bool[Tensor, "g w"]:
@@ -68,10 +70,11 @@ class Batch:
     slot: Int[Tensor, "g w"]
     index: Int[Tensor, "g w"]
     subject: Int[Tensor, " r"]
+    finish: Float[Tensor, " g"] | None = None
 
     def inputs(self, x: Float[Tensor, "r c t"] | None = None) -> SpanInput:
         """What a model reads of this batch, over the windows `x` when given (an augmented copy of its own)."""
-        return SpanInput(self.x if x is None else x, self.onset, self.slot, self.subject)
+        return SpanInput(self.x if x is None else x, self.onset, self.slot, self.subject, self.finish)
 
     def target(self, labels: Int[Tensor, " n"]) -> Int[Tensor, "g w"]:
         """Each position's label from the split's `labels`; `IGNORE` where the position is empty."""
@@ -140,6 +143,9 @@ class Split:
     """Whether each word is of a read-sentence run (`DataConfig.reads`); None where unknown."""
     muted: Bool[Tensor, " n"] | None = None
     """Whether each word's label is kept from the context head (`DataConfig.muted`); None mutes none."""
+    finish: Float[Tensor, " g"] | None = None
+    """Each span's last word's end, in seconds from its first onset: its epoch's bound less `TAIL`, as a Kaggle test
+    sentence epoch's length less `sentence_extra_end_s` gives it; None where unknown (`ended`)."""
 
     @classmethod
     def from_arrays(
@@ -169,10 +175,27 @@ class Split:
             torch.tensor(np.zeros(len(y), dtype=np.int64) if subject is None else subject, device=device),
         )
 
+    def finished(self, rate: float = RATE) -> "Split":
+        """This split with each span's `finish`, its windows sampled at `rate`."""
+        return replace(self, finish=self.ended(self.windows, self.index, self.onset, rate))
+
+    @staticmethod
+    def ended(
+        windows: Windows, index: Int[Tensor, "g w"], onset: Float[Tensor, "g w"], rate: float = RATE
+    ) -> Float[Tensor, " g"]:
+        """Each span's last word's end in seconds from its first onset: its next-onset bound, which past a span's last
+        word is its epoch's end, less `TAIL`. Without next onsets every end is 0, before the last onset: unknown."""
+        if windows.following is None:
+            return onset.new_zeros(len(index))
+        place = ((index != PAD).sum(dim=1) - 1).clamp(min=0)[:, None]
+        last = index.gather(1, place)[:, 0].clamp(min=0)
+        heard = (windows.following[last] - windows.at[last]).to(onset.dtype) / rate - TAIL
+        return onset.gather(1, place)[:, 0] + heard
+
     @classmethod
-    def from_kaggle(cls, kaggle: Kaggle, windows: Windows) -> "Split":
-        """Every Kaggle test row, its window the same row of `windows`, grouped by sentence; a lone word is its own
-        span."""
+    def from_kaggle(cls, kaggle: Kaggle, windows: Windows, rate: float = RATE) -> "Split":
+        """Every Kaggle test row, its window the same row of `windows` (at `rate`), grouped by sentence; a lone word is
+        its own span."""
         frame = kaggle.metadata_frame()
         if len(frame) != len(windows):
             raise ValueError(f"{len(windows)} Kaggle test windows for {len(frame)} Kaggle test rows")
@@ -186,7 +209,7 @@ class Split:
             spans,
             np.ones(len(frame)),
             frame["subject"].to_numpy(),
-        )
+        ).finished(rate)
 
     def sample(self, count: int) -> Float[Tensor, "k c t"]:
         """Up to `count` windows drawn without replacement."""
@@ -234,7 +257,7 @@ class Split:
         slot = torch.where((index != PAD) & (order < rows), order, rows)
         index = torch.where(slot < rows, index, PAD)
         words = index.new_zeros(rows + 1).scatter_(0, slot.flatten(), index.clamp(min=0).flatten())[:rows]
-        return Batch(self.windows(words, jitter), self.onset[spans], slot, index, self.subject[words])
+        return Batch(self.windows(words, jitter), self.onset[spans], slot, index, self.subject[words], self.ends(spans))
 
     def segmented(self, spans: Int[Tensor, " b"]) -> Batch:
         """One row per span: its continuous segment from its first onset, `slot` naming that row at each of the span's
@@ -244,7 +267,11 @@ class Split:
         segments = replace(self.windows, length=self.windows.segment, offset=0, baseline=0)
         rows = torch.arange(len(spans), device=index.device)[:, None].expand_as(index)
         slot = torch.where(index != PAD, rows, len(spans))
-        return Batch(segments(first), self.onset[spans], slot, index, self.subject[first])
+        return Batch(segments(first), self.onset[spans], slot, index, self.subject[first], self.ends(spans))
+
+    def ends(self, spans: Int[Tensor, " b"]) -> Float[Tensor, " b"] | None:
+        """`finish` of `spans`; None where unknown."""
+        return None if self.finish is None else self.finish[spans]
 
     def capacity(self, batch: int, weights: Float[Tensor, " g"]) -> int:
         """Word rows for `batch` spans drawn at `weights`: the expected count plus `SIGMAS` deviations."""
@@ -275,7 +302,7 @@ class Split:
 
     def spanned(self, spans: Int[Tensor, " b"]) -> "Split":
         """This split reduced to `spans`: words keep their ids, so only the words `heard` names are read."""
-        return replace(self, index=self.index[spans], onset=self.onset[spans])
+        return replace(self, index=self.index[spans], onset=self.onset[spans], finish=self.ends(spans))
 
     def heard(self) -> Int[Tensor, " k"]:
         """Labelled words that some span of this split reads."""

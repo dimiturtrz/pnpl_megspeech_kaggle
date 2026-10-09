@@ -15,7 +15,8 @@ from torch import Tensor, nn
 from core.rules import Rule
 from core.tree import Retired, Tree
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.model.context.timing import Clock, Intervals
+from megspeech.model.context.intervals import Intervals
+from megspeech.model.context.timing import Clock
 from megspeech.model.words.conv import CONV, ConvConfig
 from megspeech.model.words.expert import Crop
 from megspeech.model.words.spanned import SPANNED, SpannedConfig
@@ -78,9 +79,10 @@ class ContextConfig:
     timescales: int = 16
     clock: Clock = Clock.ONSET
     intervals: Intervals = Intervals.NONE
+    """Added beside the clock: `log` tells each word its gaps to its neighbours' onsets, `rich` the timing head's onset
+    features, `ended` those and its span's end (`Intervals`)."""
     onset_jitter: float = 0.0
     """Seconds of Gaussian error added to every word onset the timing input reads, in training only (`Jitter`)."""
-    """Added beside the clock: `log` tells each word its gaps to its neighbours' onsets."""
     objective: Objective = Objective.SOFTMAX
     anchor: Source = Source.NONE
     """Where the context head's fixed per-word anchors come from (`objective.anchors`): its logits are then a scaled

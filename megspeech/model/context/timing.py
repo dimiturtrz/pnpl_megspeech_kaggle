@@ -28,30 +28,6 @@ class Clock(StrEnum):
         return onset if self is Clock.ONSET else (mask.cumsum(-1) - 1).to(onset.dtype) * KAGGLE_GAP
 
 
-class Intervals(StrEnum):
-    """Whether each word is told its gaps to its span neighbours' onsets.
-
-    `log`: the log gaps to the next and previous word's onsets, in Kaggle test gaps, each beside whether that neighbour
-    exists. A word's duration identifies it far above chance (arXiv 2609.40359: log inter-onset time alone 22.9%
-    top-1 of 50); a span's last word has no next onset, in training and Kaggle test alike."""
-
-    NONE = "none"
-    LOG = "log"
-
-    @property
-    def width(self) -> int:
-        return 4 if self is Intervals.LOG else 0
-
-    def features(self, onset: Float[Tensor, "g w"], mask: Bool[Tensor, "g w"]) -> Float[Tensor, "g w k"]:
-        if self is Intervals.NONE:
-            return onset.new_zeros(*onset.shape, 0)
-        pair = mask[:, 1:] & mask[:, :-1]
-        gap = torch.where(pair, (onset[:, 1:] - onset[:, :-1]).clamp(min=SHORTEST) / KAGGLE_GAP, 1.0).log()
-        pad = nn.functional.pad
-        known = pair.to(onset.dtype)
-        return torch.stack([pad(gap, (0, 1)), pad(known, (0, 1)), pad(gap, (1, 0)), pad(known, (1, 0))], dim=-1)
-
-
 @dataclass(frozen=True)
 class Jitter:
     """Gaussian error of `sigma` seconds on every word onset, as training noise on what the timing input is told: the

@@ -33,7 +33,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.cache.cleaning import Cleaner, Cleaning
-from megspeech.data.constants import DECIMATE, HALF, MISSING, PICO, RATE, SFREQ, WORKERS
+from megspeech.data.constants import DECIMATE, HALF, MISSING, PICO, RATE, SFREQ, TAIL, WORKERS
 from megspeech.data.labels.vocabulary import ABSENT, IGNORE, PRIMARY, Vocabulary
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.grouping import KAGGLE_WORDS, Grouping
@@ -47,11 +47,6 @@ DIRECTORY = "continuous{rate:g}"
 WORD_TABLE = "words.tsv"
 NO_SENTENCE = -1
 GB = 1e9
-
-TAIL = 1.0
-"""Seconds a Kaggle test sentence epoch runs past its sentence's last word (`sentence_extra_end_s`), measured from the
-word's end: the epochs' tails after their last onset are never under 1.022 s, though one in nine training sentences
-ends on a vocabulary word whose tail from its onset would be exactly 1 s."""
 
 
 @dataclass(frozen=True)

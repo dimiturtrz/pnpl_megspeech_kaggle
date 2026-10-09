@@ -17,6 +17,11 @@ DECIMATE = 5
 RATE = SFREQ // DECIMATE
 """50 Hz: the cached rate, and the rate a word onset in seconds is multiplied by to find its sample."""
 
+TAIL = 1.0
+"""Seconds a Kaggle test sentence epoch runs past its sentence's last word (`sentence_extra_end_s`), measured from the
+word's end: the epochs' tails after their last onset are never under 1.022 s, though one in nine training sentences
+ends on a vocabulary word whose tail from its onset would be exactly 1 s."""
+
 PICO = 1e12
 """Tesla → picotesla, so a float16 cache keeps the ~1e-13 T magnetometer signal out of subnormals."""
 

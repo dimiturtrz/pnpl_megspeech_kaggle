@@ -29,7 +29,7 @@ class ExportedModel(LoadedModel):
         """Every row of `track`'s Kaggle test as this model reads it, each from its own subject's MEG."""
         kaggle = track.kaggle(self.root.raw())
         windows = Corpus.kaggle(self.root, self.data, track, self.device, self.geometry)
-        return self.read(f"{KAGGLE_FEATURES}-{track}", Split.from_kaggle(kaggle, windows))
+        return self.read(f"{KAGGLE_FEATURES}-{track}", Split.from_kaggle(kaggle, windows, self.data.rate))
 
     def chosen(self, split: Split) -> Float[Tensor, "n v"]:
         """Every word of `split`'s log-probabilities: the context head's, but the word head's for a word alone in its
