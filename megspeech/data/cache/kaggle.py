@@ -157,9 +157,10 @@ class KaggleCache:
     def of(
         cls, root: DataRoot, decimate: int = DECIMATE, track: Track = Track.DEEP, cleaning: Cleaning = Cleaning.NONE
     ) -> "KaggleCache":
-        """`track`'s Kaggle test cached inside the training cache at `decimate` after `cleaning`."""
+        """`track`'s Kaggle test cached inside the training cache at `decimate` after `cleaning`, in a directory of its
+        own: a word table shared across tracks is overwritten by whichever track built last."""
         trained = RunCache.under(root.processed(), decimate, cleaning)
-        kaggle = RunCache(trained.cache / KAGGLE_DIR, decimate, cleaning)
+        kaggle = RunCache(trained.cache / KAGGLE_DIR / track, decimate, cleaning)
         return cls(root.raw() / HOLDOUT_SUBDIR, kaggle, track.subjects)
 
     def archives(self) -> list[Archive]:

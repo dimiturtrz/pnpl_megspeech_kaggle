@@ -142,12 +142,14 @@ def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ENV_OVERRIDE, str(tmp_path))
     cache = KaggleCache.of(DataRoot.from_config())
     assert cache.raw.name == HOLDOUT_SUBDIR
-    assert cache.cache.cache.parts[-2:] == (DIRECTORY.format(rate=RATE), KAGGLE_DIR)
+    assert cache.cache.cache.parts[-3:] == (DIRECTORY.format(rate=RATE), KAGGLE_DIR, Track.DEEP)
     fast = KaggleCache.of(DataRoot.from_config(), 2).cache
-    assert (fast.cache.parts[-2:], fast.rate) == (("continuous125", KAGGLE_DIR), SFREQ / 2)
-    assert KaggleCache.of(DataRoot.from_config(), track=Track.BROAD).subjects == tuple(range(1, 40))
+    assert (fast.cache.parts[-3:], fast.rate) == (("continuous125", KAGGLE_DIR, Track.DEEP), SFREQ / 2)
+    broad = KaggleCache.of(DataRoot.from_config(), track=Track.BROAD)
+    assert broad.subjects == tuple(range(1, 40))
+    assert broad.cache.cache != cache.cache.cache
     cleaned = KaggleCache.of(DataRoot.from_config(), cleaning=Cleaning.ICA).cache
-    assert (cleaned.cache.parts[-2:], cleaned.cleaning) == (("continuous50-ica", KAGGLE_DIR), Cleaning.ICA)
+    assert (cleaned.cache.parts[-3:], cleaned.cleaning) == (("continuous50-ica", KAGGLE_DIR, Track.DEEP), Cleaning.ICA)
 
 
 def test_layout(tmp_path: Path) -> None:
