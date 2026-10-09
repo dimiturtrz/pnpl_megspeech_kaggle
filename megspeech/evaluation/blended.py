@@ -1,7 +1,9 @@
 """Members trained at different `DataConfig.READING`s, each group scored under its own config and blended per word.
 
 The blend is the one `Ensemble` makes inside a group, taken across groups: the groups' log-probabilities averaged per
-word, each group weighted by its member count, so every member counts once. The prior is averaged the same way, which
+word, each group weighted by its member count, so every member counts once. A word is identified by its label, token
+and onset, not by its row: groups that cut the same words into other windows or spans still blend, and groups whose
+word sets differ are refused. The prior is averaged the same way, which
 makes the blend's logit adjustment the average of the groups' own.
 """
 
@@ -9,19 +11,21 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import override
 
+import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Float
+from jaxtyping import Float, Int
 from torch import Tensor
 
 from megspeech.data.batching.split import Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Run
+from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.scoring.score import Head
 
 Read = Callable[[ExportedModel], tuple[Split, Float[Tensor, "n v"]]]
-WORDS = ("y", "token", "index", "onset")
+ABSENT = -1.0
 REFUSED = "a blended ensemble reads its groups through run_context and kaggle_chosen only"
 
 
@@ -60,40 +64,68 @@ class Blended(ExportedModel):
         return max(group.adapted_on for group in self.groups)
 
     @staticmethod
-    def agree(lead: Split, split: Split) -> bool:
-        """Whether `split` holds `lead`'s words in the same order."""
-        return all(torch.equal(getattr(lead, name), getattr(split, name)) for name in WORDS)
+    def keys(split: Split) -> Float[np.ndarray, "n k"]:
+        """Each row's word key: its label, token and onset (`ABSENT` where no span holds it)."""
+        onset = np.full(len(split.y), ABSENT)
+        index, times = split.index.cpu().numpy(), split.onset.cpu().numpy()
+        onset[index[index != PAD]] = times[index != PAD]
+        return np.stack([split.y.cpu().numpy(), split.token.cpu().numpy(), onset], axis=1).astype(np.float64)
+
+    @classmethod
+    def order(cls, lead: Split, split: Split) -> Int[Tensor, " n"] | None:
+        """The rows of `split` that stand in `lead`'s row order, matched on word key (equal keys pair in row order);
+        None when the two hold different words."""
+        mine, theirs = cls.keys(lead), cls.keys(split)
+        if mine.shape != theirs.shape:
+            return None
+        first, second = np.lexsort(mine.T[::-1]), np.lexsort(theirs.T[::-1])
+        if not np.array_equal(mine[first], theirs[second]):
+            return None
+        rows = np.empty_like(first)
+        rows[first] = second
+        return torch.from_numpy(rows)
+
+    @classmethod
+    def aligned(cls, lead: Split, split: Split, what: str) -> Int[Tensor, " n"]:
+        """`order`, or a refusal naming what was read."""
+        rows = cls.order(lead, split)
+        if rows is None:
+            raise ValueError(f"the groups of a blended ensemble read different words for {what}")
+        return rows
 
     @override
     def domain_logits(self, runs: list[Run]) -> tuple[dict[str, Split], dict[str, dict[Head, Float[Tensor, "n v"]]]]:
         """Each group's domains under its own config, scored in the blend's partition; per domain and head the
         weighted mean of the groups' log-probabilities, after checking that every group read the same words."""
         reads = [replace(group, partition=self.partition).domain_logits(runs) for group in self.groups]
-        lead, _ = reads[0]
+        lead, lead_logits = reads[0]
+        rows = [{name: torch.arange(len(split.y)) for name, split in lead.items()}]
         for domains, _ in reads[1:]:
-            if domains.keys() != lead.keys() or not all(self.agree(lead[name], domains[name]) for name in lead):
+            if domains.keys() != lead.keys():
                 raise ValueError("the groups of a blended ensemble read different words for the scored domains")
+            rows.append({name: self.aligned(lead[name], domains[name], f"the scored domain {name}") for name in lead})
         logits = {
             name: {
                 head: torch.stack(
-                    [w * logits[name][head] for w, (_, logits) in zip(self.weights, reads, strict=True)]
+                    [
+                        w * read[1][name][head][order[name]]
+                        for w, read, order in zip(self.weights, reads, rows, strict=True)
+                    ]
                 ).sum(0)
                 for head in Head
             }
-            for name in lead
+            for name in lead_logits
         }
         return lead, logits
 
     def blend(self, read: Read, what: str) -> tuple[Split, Float[Tensor, "n v"]]:
-        """The first group's split and the weighted mean of every group's log-probabilities for it, after checking
-        that every group read the same words in the same order."""
+        """The first group's split and the weighted mean of every group's log-probabilities for it, each group's rows
+        put in the first group's order by word key."""
         reads = (read(group) for group in self.groups)
         lead, first = next(reads)
         parts = [first]
         for split, part in reads:
-            if not self.agree(lead, split) or part.shape != first.shape:
-                raise ValueError(f"the groups of a blended ensemble read different words for {what}")
-            parts.append(part)
+            parts.append(part[self.aligned(lead, split, what)])
         return lead, torch.stack([w * part for w, part in zip(self.weights, parts, strict=True)]).sum(0)
 
     @override

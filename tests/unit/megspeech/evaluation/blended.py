@@ -42,6 +42,24 @@ class Shuffled(ExportedModel):
         return {name: replace(split, y=split.y + 1) for name, split in domains.items()}, logits
 
 
+def rowwise(split: Split, rows: torch.Tensor) -> Split:
+    """`split` with its word rows reordered: row i of the result is row rows[i] of the original."""
+    inverse = torch.empty_like(rows)
+    inverse[rows] = torch.arange(len(rows))
+    index = torch.where(split.index >= 0, inverse[split.index.clamp(min=0)], split.index)
+    return replace(split, y=split.y[rows], token=split.token[rows], index=index)
+
+
+class Reversed(ExportedModel):
+    """Reads the same words as its peers, in the opposite row order."""
+
+    @override
+    def run_context(self, run: Run) -> tuple[Split, torch.Tensor]:
+        split, context = super().run_context(run)
+        rows = torch.arange(len(split.y)).flip(0)
+        return rowwise(split, rows), context[rows]
+
+
 def pair(tmp_path: Path, *, second: type[ExportedModel] = ExportedModel) -> Blended:
     first = replace(loaded(tmp_path), names=("a", "b"), log_prior=torch.zeros(VOCAB_SIZE))
     other = loaded(tmp_path)
@@ -92,10 +110,36 @@ def test_blend_refuses_different_words(tmp_path: Path) -> None:
         pair(tmp_path, second=Shuffled).blend(lambda group: group.run_context(run), run.name)
 
 
-def test_agree(tmp_path: Path) -> None:
+def test_keys(tmp_path: Path) -> None:
     split, _ = loaded(tmp_path).run_context(runs(tmp_path)[POOLED])
-    assert Blended.agree(split, split)
-    assert not Blended.agree(split, replace(split, y=split.y + 1))
+    keys = Blended.keys(split)
+    assert keys.shape == (len(split.y), 3)
+    assert keys[:, 0].tolist() == split.y.tolist()
+
+
+def test_order(tmp_path: Path) -> None:
+    split, _ = loaded(tmp_path).run_context(runs(tmp_path)[POOLED])
+    rows = torch.arange(len(split.y)).flip(0)
+    assert Blended.aligned(split, split, "x").tolist() == list(range(len(split.y)))
+    assert torch.equal(Blended.aligned(split, rowwise(split, rows), "x"), rows)
+    assert Blended.order(split, replace(split, y=split.y + 1)) is None
+
+
+def test_aligned(tmp_path: Path) -> None:
+    split, _ = loaded(tmp_path).run_context(runs(tmp_path)[POOLED])
+    assert len(Blended.aligned(split, split, "x")) == len(split.y)
+    with pytest.raises(ValueError, match="different words for x"):
+        Blended.aligned(split, replace(split, y=split.y + 1), "x")
+
+
+def test_blend_aligns_rows_by_word(tmp_path: Path) -> None:
+    """A group that lists the same words in another row order blends to the same result."""
+    run = runs(tmp_path)[POOLED]
+    read = lambda group: group.run_context(run)  # noqa: E731
+    same_split, same = pair(tmp_path).blend(read, run.name)
+    split, moved = pair(tmp_path, second=Reversed).blend(read, run.name)
+    assert torch.equal(split.y, same_split.y)
+    assert torch.allclose(moved, same, atol=1e-5)
 
 
 def test_domain_logits(tmp_path: Path) -> None:
@@ -112,7 +156,7 @@ def test_domain_logits(tmp_path: Path) -> None:
 
 
 def test_domain_logits_refuses_different_words(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="different words for the scored domains"):
+    with pytest.raises(ValueError, match="different words for the scored domain"):
         pair(tmp_path, second=Shuffled).domain_logits(runs(tmp_path))
 
 
