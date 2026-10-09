@@ -14,6 +14,8 @@ DRIFT = 600e-6
 RUN = 130
 START = 20.0
 OFFSET = 0.025
+FINE_WINDOW = 5
+STRAY = 30
 
 
 def burst(seed: int, seconds: int) -> np.ndarray:
@@ -107,6 +109,31 @@ def test_clock() -> None:
     assert clock.fitted
     assert clock.offset == pytest.approx(OFFSET, abs=0.005)
     assert clock.drift == pytest.approx(DRIFT, abs=0.5 * DRIFT)
+
+
+def disturbed(alignment: Alignment, windows: list[int]) -> Envelope:
+    """A play at `START + OFFSET` whose `windows` (of `alignment`'s) are heard `STRAY` late."""
+    samples = played(alignment, [START + OFFSET], DRIFT).samples.copy()
+    for window in windows:
+        begin = round((START + OFFSET) * RATE) + window * alignment.window
+        samples[begin : begin + alignment.window] = samples[begin - STRAY : begin + alignment.window - STRAY]
+    return Envelope(samples)
+
+
+def test_clock_stray_window() -> None:
+    alignment = Alignment(reference().reference, window=FINE_WINDOW * RATE)
+    clock = alignment.clock(disturbed(alignment, [3]), START)
+    assert clock.fitted
+    assert clock.offset == pytest.approx(OFFSET, abs=0.003)
+    assert clock.drift == pytest.approx(DRIFT, abs=0.2 * DRIFT)
+
+
+def test_clock_too_many_strays(caplog: pytest.LogCaptureFixture) -> None:
+    alignment = Alignment(reference().reference, window=FINE_WINDOW * RATE)
+    with caplog.at_level(logging.WARNING):
+        clock = alignment.clock(disturbed(alignment, [1, 3, 5]), START)
+    assert not clock.fitted
+    assert "windows on the line" in caplog.text
 
 
 def test_clock_out_of_bounds(caplog: pytest.LogCaptureFixture) -> None:

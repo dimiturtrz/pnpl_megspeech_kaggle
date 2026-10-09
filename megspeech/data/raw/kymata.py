@@ -49,11 +49,11 @@ RESCAN_OFFSET = 20
 SESSION = 1
 TASK = "Kymata"
 WORKERS = 4
+"""Recordings converted at once: one holds ~3 GB in float64 while it is filtered, and SSS with movement doubles that."""
 EVENT_WORKERS = 8
 """Events-only rewrites at once: they read one audio channel, not the whole recording."""
 AUDIO_CHANNEL = "MISC006"
 """The channel carrying the stimulus audio."""
-"""Recordings converted at once: one holds ~3 GB in float64 while it is filtered, and SSS with movement doubles that."""
 SOURCE = re.compile(r"sub-E(?P<subject>\d+)(?P<rescan>b?)_task-en_run-(?P<run>\d+)_meg\.fif")
 STIMULUS_TRIGGER = 3
 """The trigger code that marks the start of each of a run's two plays of the clip."""

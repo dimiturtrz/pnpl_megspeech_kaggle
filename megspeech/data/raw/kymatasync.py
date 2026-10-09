@@ -16,6 +16,7 @@ import pandas as pd
 from jaxtyping import Float
 from scipy.io import wavfile
 from scipy.signal import butter, fftconvolve, resample_poly, sosfiltfilt
+from scipy.stats import theilslopes
 
 LOG = logging.getLogger(__name__)
 
@@ -79,8 +80,13 @@ FALLBACK = Clock(nominal=0.0, offset=0.021, drift=537e-6, fitted=False)
 """The audit's constant model: its offset and drift stand in for a play whose own fit is not believable."""
 OFFSET_BOUNDS = (0.0, 0.060)
 DRIFT_BOUNDS = (400e-6, 700e-6)
-MAX_RESIDUAL = 0.015
-"""Seconds a window's lag may stray from the fitted line before the fit is not believable."""
+MAX_RESIDUAL = 0.009
+"""Seconds a window's lag may stray from the play's robust line and still count: three robust sigmas (1.4826 x the
+median absolute residual, 3.0 ms over the 1296 windows of Kymata's 162 plays). The recorded envelope's shape biases a
+window by up to ~6.5 ms (the 99th percentile); a disturbed window strays 13 ms and more."""
+MIN_INLIERS = 1 / np.sqrt(2)
+"""Share of a play's windows that must lie on its line: Theil-Sen breaks down past 1 - 1/sqrt(2) (~29%) strays, so a
+play with more has no line to judge them against."""
 
 
 @dataclass(frozen=True)
@@ -157,24 +163,21 @@ class Alignment:
         return np.array(centres), np.array(lags)
 
     def clock(self, recorded: Envelope, nominal: float, offsets: tuple[float, float] = OFFSET_BOUNDS) -> Clock:
-        """The play's fitted `Clock`, or `FALLBACK`'s constants if its recording is too short, the fit leaves the
-        measured offset and drift ranges, or a window strays from the line."""
+        """The play's fitted `Clock`: a Theil-Sen line through its windows' lags, refitted by least squares through
+        the windows within `MAX_RESIDUAL` of it. `FALLBACK`'s constants instead if its recording is too short, fewer
+        than `MIN_INLIERS` of its windows lie on the line, or the fit leaves the measured offset and drift ranges."""
         first = round(nominal * RATE)
         base = first / RATE
         needed = first + len(self.reference.samples) + LAG_HIGH
         if first + LAG_LOW < 0 or needed > len(recorded.samples):
             return Clock.fallen(nominal, "the recording does not cover the play")
         centres, lags = self.lags(recorded, nominal)
-        drift, offset = np.polyfit(centres, lags, 1)
-        residual = float(np.abs(lags - (offset + drift * centres)).max())
-        believable = (
-            offsets[0] <= offset <= offsets[1]
-            and DRIFT_BOUNDS[0] <= drift <= DRIFT_BOUNDS[1]
-            and residual <= MAX_RESIDUAL
-        )
+        robust = theilslopes(lags, centres)
+        inliers = np.abs(lags - (robust.intercept + robust.slope * centres)) <= MAX_RESIDUAL
+        if inliers.mean() < MIN_INLIERS:
+            return Clock.fallen(nominal, f"only {inliers.sum()} of {len(inliers)} windows on the line")
+        drift, offset = np.polyfit(centres[inliers], lags[inliers], 1)
+        believable = offsets[0] <= offset <= offsets[1] and DRIFT_BOUNDS[0] <= drift <= DRIFT_BOUNDS[1]
         if not believable:
-            return Clock.fallen(
-                nominal,
-                f"fit offset {offset * 1e3:.1f} ms drift {drift * 1e6:.0f} ppm residual {residual * 1e3:.1f} ms",
-            )
+            return Clock.fallen(nominal, f"fit offset {offset * 1e3:.1f} ms drift {drift * 1e6:.0f} ppm")
         return Clock(base, float(offset), float(drift))
