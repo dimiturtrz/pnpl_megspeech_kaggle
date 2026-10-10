@@ -36,6 +36,21 @@ while VAL predicted a gain.
 Six distinct Deep CSVs score exactly .68883. Adding a few members does not flip any argmax on the public rows,
 so public cannot rank changes that small.
 
+## Greedy member selection fits the selecting ruler
+
+Caruana forward selection with replacement over m11wd's 36 members (tau .5 macro, 15 steps). All 36 members
+equally weighted: VAL .6547, LT .7172.
+
+| select on | selecting ruler | other ruler |
+|---|---|---|
+| VAL | .672 (+.018) | LT ≈.691 (−.026) |
+| LT | .743 (+.026) | VAL ≈.646 (−.009) |
+
+Each direction gains on the ruler it selects on and loses on the other. The two rulers want different families:
+VAL picks masc27w singles (one alone scores VAL .664, above the full blend), and LT picks the speech-target
+fine-tunes. Equal weights over all members has the best held-out score both ways, so no subset was submitted.
+Script: `tmp/greedy_deep.py` (job scratch).
+
 ## Working rule
 
 Trust a change when VAL and LT move the same way. When they disagree, LT is the better guide to direction,
