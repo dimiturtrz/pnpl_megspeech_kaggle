@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 from megspeech.data.raw.runs import DEEP
-from megspeech.model.input.subjects import SubjectLayer
+from megspeech.model.input.subjects import SubjectLayer, Unseen
 from megspeech.training.regularise.anchor import Anchor
 
 GENERATOR = torch.Generator().manual_seed(0)
@@ -50,3 +50,12 @@ def test_step() -> None:
     pulled = layer.weight.detach().clone()
     Anchor().step(model, 1.0)
     assert torch.equal(layer.weight, pulled)
+
+
+def test_step_toward_mean() -> None:
+    layer, _, model = anchored()
+    weight = layer.weight.detach().clone()
+    Anchor(10.0, Unseen.MEAN).step(model, 0.05)
+    assert torch.allclose(layer.weight, 0.5 * weight + 0.5 * weight.mean(dim=0))
+    assert Anchor.of(0.5, LR, STEPS, Unseen.MEAN).toward is Unseen.MEAN
+    assert Anchor.of(0.5, LR, STEPS).toward is Unseen.DEEP

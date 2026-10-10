@@ -25,6 +25,7 @@ from megspeech.evaluation.scoring.telemetry import Telemetry
 from megspeech.model.branch import Branch
 from megspeech.model.fusion import Fusion
 from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
+from megspeech.model.input.subjects import Unseen
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.anchors import Anchors
 from megspeech.objective.context import Objective
@@ -213,7 +214,7 @@ class Trainer:
         optimiser and its one-cycle schedule, the anchor, the weight average, and the loss terms."""
         optim = self.config.optim
         model = self.auxiliary.trained(net, self.compiled)
-        anchor = Anchor.of(optim.anchor, optim.lr, total)
+        anchor = Anchor.of(optim.anchor, optim.lr, total, Unseen(optim.anchor_toward))
         optimizer = self.optimizer(model, anchor, tuple(net.encoder()), net.fusion.encoders())
         peaks = [group["lr"] for group in optimizer.param_groups]
         schedule = Scheduled(torch.optim.lr_scheduler.OneCycleLR(optimizer, peaks, total_steps=total))

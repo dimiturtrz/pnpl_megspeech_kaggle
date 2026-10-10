@@ -19,12 +19,14 @@ from megspeech.training.hook import StepHook
 @dataclass(frozen=True)
 class Anchor(StepHook):
     """Each step pulls every subject's matrix toward the Deep one's by `strength` times the step's learning rate,
-    as AdamW's decoupled decay pulls toward 0; 0 never pulls."""
+    as AdamW's decoupled decay pulls toward 0; 0 never pulls. `toward` names the matrix pulled to: the Deep one's, or
+    the mean of every subject's."""
 
     strength: float = 0.0
+    toward: Unseen = Unseen.DEEP
 
     @classmethod
-    def of(cls, keep: float, lr: float, steps: int) -> "Anchor":
+    def of(cls, keep: float, lr: float, steps: int, toward: Unseen = Unseen.DEEP) -> "Anchor":
         """The strength under which a deviation no gradient restores keeps `keep` of itself after `steps` steps of
         the run's one-cycle schedule peaking at `lr`: the product of `1 - strength * lr_t` is `exp(-strength * sum
         lr_t)`."""
@@ -35,7 +37,7 @@ class Anchor(StepHook):
             total += float(schedule.get_last_lr()[0])
             probe.step()
             schedule.step()
-        return cls(math.log(1 / keep) / total)
+        return cls(math.log(1 / keep) / total, toward)
 
     def groups(self, model: nn.Module, weight_decay: float) -> list[dict[str, object]]:
         """`model`'s parameters as optimiser groups: the subject matrices decay toward 0 only when not anchored."""
@@ -46,6 +48,6 @@ class Anchor(StepHook):
 
     @override
     def step(self, model: nn.Module, lr: float) -> None:
-        """One step's pull of every subject matrix in `model` toward the Deep one's."""
+        """One step's pull of every subject matrix in `model` toward `toward`'s."""
         for layer in (m for m in model.modules() if isinstance(m, SubjectLayer)):
-            layer.shrink(1 - self.strength * lr, Unseen.DEEP)
+            layer.shrink(1 - self.strength * lr, self.toward)
