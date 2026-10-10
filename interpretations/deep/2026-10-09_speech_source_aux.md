@@ -39,3 +39,32 @@ Sense-making of our own results. Sources: `bd show megspeech-7gf.132` / `7gf.147
 - Broad: HuBERT aux has never been trained into a bgmix Broad stem. The Deep-member adapt (xsp s4-ft-s5, ruler .5054) was the wrong stem, so it says nothing about aux on Broad. Queued as bq63 (`ema-bgmix05-w15-hub-s{0,1}`).
 - Window mismatch (1.0 s aux vs 1.5 s) not tested for aux kinds.
 - M vs aux on a common protocol (same val rule, same epoch selection) is untested; the +.017 val gap could partly be protocol.
+
+## Update 2026-10-10: family adds to the m11 blend
+
+More speech-source families were added to the 27-member m11 base (public .68883). The added members are mwhi
+(Whisper-medium L24 aux, s1-6), md2v (s1-8) and mw2v (wav2vec2 aux, masc warm, s3-4). Each blend is scored on CPU
+with `--local` at tau 0.5.
+
+| blend | members | VAL | local test |
+|---|---|---|---|
+| m11wd (+mwhi 1-6, +md2v 1-3) | 36 | .6550 | .7173 |
+| m11wd2 (+mwhi 1-6, +md2v 1-6) | 39 | .6551 | .7197 |
+| m11wd3 (+mwhi 1-6, +md2v 1-8) | 41 | .6501 | .7215 |
+| m11w2v (+mw2v 3-4) | 29 | .6527 | .7063 |
+
+Single md2v members span LT .679-.725 (s1-8), so per-seed spread is wider than any gap between these blends.
+
+**Reading.**
+
+- Every gap between these blends is inside noise: at most .005 on VAL and .015 on local test, with
+  overlapping intervals.
+- Adding seeds of a family already present no longer moves the blend. The blend's gain has to come from a new
+  mechanism, not from more members.
+- Two members are too few to judge a family, so m11w2v says nothing about wav2vec2 aux as a family.
+
+**Public.** m11wd is armed for the 10-11 Deep slots. Its public score against .68883 is the only test of the
+mwhi/md2v family that is not the ruler; the ruler-vs-public table (`2026-10-10_ruler_vs_public.md`) shows LT
+ranks Deep submissions only loosely.
+
+**Not ruled out.** mw2v at 6+ seeds, queued as bq99 (s5-8).
