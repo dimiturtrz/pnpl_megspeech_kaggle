@@ -60,6 +60,18 @@ Top-10 balanced accuracy on the 47 classes present:
 3. **What MEG adds is .217 on Sherlock1 and .136 on TheMoth,** read as the blend minus the pooled probe. The other
    half of the gap sits in what MEG adds, and that is where 11× less TheMoth training could act.
 
+**Not story memorisation.** Repeated text could let a timing probe recall words from passages seen in training.
+Few VAL 5-grams appear anywhere in subject 0's training text: 79/3423 (2.3%) for Sherlock1, 29/2705 (1.1%) for
+TheMoth. These are spread thinly across many runs, and the VAL passage itself is not in train. On the words outside
+any shared 5-gram, the probe scores about what it scores on every word:
+
+| VAL run | words outside shared 5-grams (n) | timing only | all words |
+|---|---|---|---|
+| Sherlock1 | 1162 | .507 | .514 |
+| TheMoth | 1154 | .438 | .440 |
+
+The 146 / 72 words inside shared 5-grams do score higher (.642 / .625), but they are too few to move the totals.
+
 **Not ruled out:** whether the MEG half is quantity or stimulus.
 
 - **Prior test.** `--data.narrator_weight 0.5` (megspeech-7gf.47) shifts draws from the Sherlock narrator's runs
