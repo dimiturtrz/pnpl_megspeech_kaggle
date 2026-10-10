@@ -54,6 +54,12 @@ Keep .25 is also the best keep on the blend, not only on the single model.
 On public the two post-steps add: shrink alone +.008, Sinkhorn alone +.011, both +.019 over the plain blend. So
 neither step uses up the other's gain.
 
+Adding 11 members (the `w15l60` family s0–4, stems and adapts, plus one `smn-ac03` pair) with both steps on
+(`b-bxl60k25s`, 40 members) raised the ruler +.004 (.6631) but cost .0055 public (0.61709 vs 0.62262). The ruler
+and public disagree on the sign. The ruler cannot see the 7 zero-shot subjects, and it scores ses-11, a text
+every subject also read. Which of the two blinds this is, we have not tested. Working rule: the 29-member blend
+stays the Broad base, and a family is added only on a public A/B.
+
 On the blend the shrink adds +.006 on the ruler, against +.020 for the single model. On top of Sinkhorn it adds
 +.0075 public. Inference: averaging 29 members already cancels part of each member's per-subject overfit, so
 the shrink and the ensemble overlap. The two post-steps compose: on the ruler, Sinkhorn adds more on top of the
