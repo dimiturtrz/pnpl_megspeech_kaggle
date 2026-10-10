@@ -1,9 +1,14 @@
+from types import SimpleNamespace
+from typing import cast
+
 import pytest
 import torch
 
+from megspeech.data.raw.runs import Run
+from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.scoring.evaluator import Evaluator
-from megspeech.evaluation.studies.pooledbalance import GROUPS, PooledBalance, Unseen
+from megspeech.evaluation.studies.pooledbalance import GROUPS, Parts, PooledBalance, Unseen
 
 CLASSES = 40
 ROWS = 400
@@ -27,6 +32,12 @@ def parts() -> dict[int, Unseen]:
 
 def test_alone() -> None:
     result = study().alone(parts())
+    assert set(result) == {0.0, 0.5, 1.0}
+    assert set(result[0.0]) == {1, 2}
+
+
+def test_pooled() -> None:
+    result = study().pooled(parts())
     assert set(result) == {0.0, 0.5, 1.0}
     assert set(result[0.0]) == {1, 2}
 
@@ -63,3 +74,22 @@ def test_report() -> None:
     text = study().report(parts())
     assert "per-subject" in text
     assert "pooled" in text
+
+
+def test_read() -> None:
+    seen = torch.tensor([True, False, False])
+    runs = [SimpleNamespace(subject=1), SimpleNamespace(subject=2)]
+    contexts = {1: torch.arange(12.0).reshape(3, 4), 2: torch.zeros(3, 4)}
+    splits = {
+        1: SimpleNamespace(novel=lambda _: torch.tensor([1, 2]), y=torch.tensor([5, 6, 7])),
+        2: SimpleNamespace(novel=lambda _: torch.tensor([1]), y=torch.tensor([5, 6, 7])),
+    }
+    loaded = SimpleNamespace(
+        broad=lambda rs: rs,
+        run_context=lambda run: (splits[run.subject], contexts[run.subject]),
+        evaluator=SimpleNamespace(seen=seen, min_novel=2),
+    )
+    read = Parts.read(cast("LoadedModel", loaded), cast("list[Run]", runs))
+    assert set(read) == {1}
+    assert torch.equal(read[1].logits, contexts[1][1:])
+    assert torch.equal(read[1].y, torch.tensor([6, 7]))

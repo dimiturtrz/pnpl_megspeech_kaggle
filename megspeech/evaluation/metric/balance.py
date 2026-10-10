@@ -31,11 +31,11 @@ class Sinkhorn:
         groups: Int[Tensor, " n"] | None = None,
     ) -> Float[Tensor, "n v"]:
         balanced = scores.clone()
-        for rows in self.parts(groups):
+        for rows in self._parts(groups):
             balanced[rows] = self.shift(scores[rows], log_prior)
         return balanced
 
-    def parts(self, groups: Int[Tensor, " n"] | None) -> list[Int[Tensor, " n"] | slice]:
+    def _parts(self, groups: Int[Tensor, " n"] | None) -> list[Int[Tensor, " n"] | slice]:
         """The row selectors balanced separately: every row together, or one per distinct value of `groups`."""
         if not self.per_subject or groups is None:
             return [slice(None)]

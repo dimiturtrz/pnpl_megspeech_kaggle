@@ -9,7 +9,8 @@ import torch
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 
-from megspeech.data.raw.runs import DEEP, SOURCES
+from megspeech.data.raw.runs import DEEP
+from megspeech.model.input.sources import Sources
 
 
 class Shared(nn.Module):
@@ -40,19 +41,6 @@ class Unseen(StrEnum):
     def targets(self, weight: Float[Tensor, "s c c"]) -> Float[Tensor, "s c c"]:
         """The matrix each subject is pulled toward."""
         return TARGETS[self](weight)
-
-
-class Sources:
-    """The subjects grouped by recording source."""
-
-    @staticmethod
-    def means(weight: Float[Tensor, "s c c"]) -> Float[Tensor, "s c c"]:
-        """Each subject's matrix replaced by the mean over the subjects of its source; a subject in no `SOURCES`
-        range is its own source."""
-        owner = {subject: group for group, ids in enumerate(SOURCES) for subject in ids}
-        groups = torch.tensor([owner.get(i, len(SOURCES) + i) for i in range(len(weight))], device=weight.device)
-        same = (groups[:, None] == groups[None]).to(weight.dtype)
-        return torch.einsum("ij,jcd->icd", same / same.sum(dim=1, keepdim=True), weight)
 
 
 FALLBACKS: dict[Unseen, Callable[[Tensor], Tensor]] = {

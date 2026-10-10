@@ -76,3 +76,10 @@ def test_sinkhorn_per_subject_balances_each_subject_alone() -> None:
 def test_sinkhorn_per_subject_without_groups_is_pooled() -> None:
     scores, _ = two_subjects()
     assert torch.equal(Sinkhorn(50, per_subject=True)(scores, PRIOR), Sinkhorn(50)(scores, PRIOR))
+
+
+def test_shift() -> None:
+    shifted = Sinkhorn(200).shift(SCORES, PRIOR)
+    mass = column_mass(shifted)
+    assert torch.allclose(mass, mass.mean().expand_as(mass), atol=1e-4)
+    assert torch.equal(Sinkhorn().shift(SCORES, PRIOR), SCORES)
