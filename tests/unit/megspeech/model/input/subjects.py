@@ -1,7 +1,7 @@
 import torch
 
 from megspeech.data.raw.runs import DEEP
-from megspeech.model.input.subjects import Reading, Shared, SubjectLayer, Unseen
+from megspeech.model.input.subjects import Reading, Shared, Sources, SubjectLayer, Unseen
 
 GENERATOR = torch.Generator().manual_seed(0)
 
@@ -71,3 +71,22 @@ def test_unseen_matrix() -> None:
 def test_shared_forward() -> None:
     x = torch.randn(2, 4, 3, generator=GENERATOR)
     assert torch.equal(Shared().forward(x, torch.tensor([0, 5])), x)
+
+
+def test_means() -> None:
+    weight = torch.randn(36, 3, 3)
+    means = Sources.means(weight)
+    assert torch.allclose(means[1], weight[1:13].mean(dim=0), atol=1e-6)
+    assert torch.allclose(means[12], means[1], atol=1e-6)
+    assert torch.allclose(means[13], weight[13:23].mean(dim=0), atol=1e-6)
+    assert torch.allclose(means[32], weight[23:33].mean(dim=0), atol=1e-6)
+    assert torch.equal(means[DEEP], weight[DEEP])
+    assert torch.allclose(means[34], weight[34])
+
+
+def test_targets() -> None:
+    weight = torch.randn(3, 2, 2)
+    assert torch.equal(Unseen.MEAN.targets(weight), weight.mean(dim=0).expand_as(weight))
+    assert torch.equal(Unseen.DEEP.targets(weight), weight[DEEP].expand_as(weight))
+    assert torch.equal(Unseen.SOURCE.targets(weight)[DEEP], weight[DEEP])
+    assert torch.allclose(Unseen.SOURCE.targets(weight)[1], weight[1:].mean(dim=0), atol=1e-6)

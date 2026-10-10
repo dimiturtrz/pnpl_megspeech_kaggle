@@ -22,6 +22,10 @@ from megspeech.data.raw.smn4lang import SMN4LANG
 DEEP = 0
 """The Deep track's subject: the one the official split, the validation domains and the Kaggle test belong to."""
 
+SOURCES = (range(DEEP, DEEP + 1), range(1, 13), range(13, 23), range(23, 33))
+"""Subject-id ranges recorded under one source: subject 0 alone, then 1-12, 13-22 and 23-32 (the `GROUPS` of
+`megspeech.evaluation.studies.pooledbalance`, the Broad track's recording sources); any other id is its own source."""
+
 
 class Partition(StrEnum):
     TRAIN = "train"

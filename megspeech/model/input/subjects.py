@@ -9,7 +9,7 @@ import torch
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 
-from megspeech.data.raw.runs import DEEP
+from megspeech.data.raw.runs import DEEP, SOURCES
 
 
 class Shared(nn.Module):
@@ -30,15 +30,43 @@ class Unseen(StrEnum):
     """The Deep subject's matrix, the one trained on the most words."""
     MEAN = "mean"
     """The mean of every subject's matrix."""
+    SOURCE = "source"
+    """Pulled toward: the mean of the matrices of the subjects sharing the pulled subject's recording source. Read
+    through, as an unseen subject: the mean of every subject's matrix."""
 
     def matrix(self, weight: Float[Tensor, "s c c"]) -> Float[Tensor, "c c"]:
         return FALLBACKS[self](weight)
+
+    def targets(self, weight: Float[Tensor, "s c c"]) -> Float[Tensor, "s c c"]:
+        """The matrix each subject is pulled toward."""
+        return TARGETS[self](weight)
+
+
+class Sources:
+    """The subjects grouped by recording source."""
+
+    @staticmethod
+    def means(weight: Float[Tensor, "s c c"]) -> Float[Tensor, "s c c"]:
+        """Each subject's matrix replaced by the mean over the subjects of its source; a subject in no `SOURCES`
+        range is its own source."""
+        owner = {subject: group for group, ids in enumerate(SOURCES) for subject in ids}
+        groups = torch.tensor([owner.get(i, len(SOURCES) + i) for i in range(len(weight))], device=weight.device)
+        same = (groups[:, None] == groups[None]).to(weight.dtype)
+        return torch.einsum("ij,jcd->icd", same / same.sum(dim=1, keepdim=True), weight)
 
 
 FALLBACKS: dict[Unseen, Callable[[Tensor], Tensor]] = {
     Unseen.IDENTITY: lambda weight: torch.eye(weight.shape[-1], dtype=weight.dtype, device=weight.device),
     Unseen.DEEP: lambda weight: weight[DEEP],
     Unseen.MEAN: lambda weight: weight.mean(dim=0),
+    Unseen.SOURCE: lambda weight: weight.mean(dim=0),
+}
+
+TARGETS: dict[Unseen, Callable[[Tensor], Tensor]] = {
+    Unseen.IDENTITY: lambda weight: FALLBACKS[Unseen.IDENTITY](weight).expand_as(weight).clone(),
+    Unseen.DEEP: lambda weight: weight[DEEP].expand_as(weight).clone(),
+    Unseen.MEAN: lambda weight: weight.mean(dim=0).expand_as(weight).clone(),
+    Unseen.SOURCE: Sources.means,
 }
 
 
@@ -94,8 +122,7 @@ class SubjectLayer(Shared):
     def shrink(self, keep: float, toward: Unseen) -> None:
         """Pull every subject's matrix toward `toward`'s, keeping `keep` of its own deviation from it."""
         with torch.no_grad():
-            target = toward.matrix(self.weight).clone()
-            self.weight.lerp_(target.expand_as(self.weight), 1 - keep)
+            self.weight.lerp_(toward.targets(self.weight), 1 - keep)
 
     @override
     def forward(self, x: Float[Tensor, "r c t"], subject: Int[Tensor, " r"]) -> Float[Tensor, "r c t"]:

@@ -59,3 +59,14 @@ def test_step_toward_mean() -> None:
     assert torch.allclose(layer.weight, 0.5 * weight + 0.5 * weight.mean(dim=0))
     assert Anchor.of(0.5, LR, STEPS, Unseen.MEAN).toward is Unseen.MEAN
     assert Anchor.of(0.5, LR, STEPS).toward is Unseen.DEEP
+
+
+def test_step_toward_source() -> None:
+    layer = SubjectLayer(14, 3)
+    with torch.no_grad():
+        layer.weight.copy_(torch.randn(14, 3, 3, generator=GENERATOR))
+    weight = layer.weight.detach().clone()
+    Anchor(10.0, Unseen.SOURCE).step(nn.Sequential(layer), 0.05)
+    assert torch.equal(layer.weight[DEEP], weight[DEEP])
+    assert torch.allclose(layer.weight[1], 0.5 * weight[1] + 0.5 * weight[1:13].mean(dim=0), atol=1e-6)
+    assert torch.allclose(layer.weight[13], weight[13], atol=1e-6)

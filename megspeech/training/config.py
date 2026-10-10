@@ -133,7 +133,7 @@ class OptimConfig:
     every other weight. The Deep matrix is what a zero-shot subject is read through."""
     anchor_toward: str = "deep"
     """The matrix `anchor` pulls toward, an `Unseen` value: `deep` the Deep subject's, `mean` the mean of every trained
-    subject's matrix, `identity`."""
+    subject's matrix, `source` the mean over the subjects of its own recording source, `identity`."""
     warm: str = ""
     """A trained run under models/ whose weights the model starts from instead of its initialisation, its context
     config the same as this run's: a run trained on every subject fine-tuned on the Deep subject alone. Empty starts
