@@ -72,6 +72,18 @@ any shared 5-gram, the probe scores about what it scores on every word:
 
 The 146 / 72 words inside shared 5-grams do score higher (.642 / .625), but they are too few to move the totals.
 
+**The probe adds nothing to the blend.** Fusing `blend + w · probe` log-probs before the prior adjustment, tau
+re-chosen on VAL, m11 on its local test (pnpl test, n = 2133):
+
+| w | VAL | local test | Δ [95% CI] |
+|---|---|---|---|
+| 0 | .6537 | .6970 | — |
+| .1 | .6512 | .7008 | +.004 [−.003, +.011] |
+| .25 | .6710 | .6958 | −.003 [−.021, +.016] |
+| .5 | .6644 | .6862 | −.011 [−.028, +.006] |
+
+The MEG models already take log intervals as input, so the timing information is already in the blend.
+
 **Not ruled out:** whether the MEG half is quantity or stimulus.
 
 - **Prior test.** `--data.narrator_weight 0.5` (megspeech-7gf.47) shifts draws from the Sherlock narrator's runs
