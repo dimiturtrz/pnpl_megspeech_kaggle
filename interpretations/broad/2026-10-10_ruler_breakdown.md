@@ -10,7 +10,8 @@
   - **xc5w6all6:** the 29-member blend, scored raw (no unseen fallback, no Sinkhorn), .6329.
   - **xc5a32k25s:** the same 29 members plus the all32 adapt member, with mean fallback k .25 and Sinkhorn
     β .25, .6595.
-  - The two differ in both the balance step and the extra member, so their gap is attributed to neither alone.
+  - The two differ in both the balance step and the extra member. `xc5k25s` (balance, no extra member,
+    .6591) separates them in Reading 1.
 - **Buckets.** Inside a bucket, "macro" is per-subject balanced accuracy over the classes present, averaged over
   subjects. The ruler holds only 41–47 classes, so the frequency quartiles are about 12 classes each and move in
   coarse steps.
@@ -45,9 +46,16 @@ first or last words.
 1. **The step from the raw blend to the submitted blend trades common-word hits for rare-class recall.**
    - Q4's pooled hit rate falls from .848 to .772 while its macro stays level.
    - Q2 and Q3 rise.
-   - This is what Sinkhorn balancing toward the prior should do under a balanced metric. The all32 member is
-     flat on the ruler (.6595 vs .6591 without it), so most of the shift is plausibly the balance step. This
-     is plausible, not isolated.
+   - This is what Sinkhorn balancing toward the prior should do under a balanced metric.
+   - Isolated with `xc5k25s`, which has the same 29 members and the balance step but no all32 member:
+
+| model | 1–12 | 13–22 | 23–32 | Q1 | Q2 | Q3 | Q4 | Q4 pooled hit | ruler |
+|---|---|---|---|---|---|---|---|---|---|
+| xc5w6all6 (raw) | .6607 | .6389 | .5935 | .521 | .675 | .608 | .714 | .848 | .6329 |
+| xc5k25s (balanced) | .6721 | .6655 | .6371 | .536 | .697 | .675 | .710 | .772 | .6591 |
+| xc5a32k25s (+all32) | .6732 | .6667 | .6358 | .536 | .697 | .675 | .710 | .772 | .6595 |
+
+   - The whole shift is the balance step. The all32 member changes no bucket by more than .002.
 2. **The subjects with the fewest ruler words gain most:** 23–32 gain .042, 1–12 gain .013.
    - Fewer words per class make per-subject balanced accuracy noisier and more sensitive to calibration.
    - It is also possible that their source is the most mis-calibrated by the raw prior.
