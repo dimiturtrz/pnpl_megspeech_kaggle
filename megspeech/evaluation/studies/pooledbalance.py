@@ -24,9 +24,12 @@ from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import ADJUSTMENTS, Score
-from megspeech.submission.report import SCORING
+from megspeech.model.input.subjects import Fallback, Unseen
 
 LOG = logging.getLogger(__name__)
+
+SCORING = Scoring(fallback=Fallback(Unseen.DEEP))
+"""The submission's scoring defaults (`megspeech.submission.report.SCORING`), which this layer may not import."""
 
 GROUPS = {"1-12": range(1, 13), "13-22": range(13, 23), "23-32": range(23, 33)}
 """The subject groups the ruler is read by."""
