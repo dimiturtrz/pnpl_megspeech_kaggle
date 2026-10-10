@@ -80,10 +80,23 @@ times. A second arm kept only words of classes that subjects 23–32 also have.
 - The deficit belongs to subjects 23–32 themselves, meaning their source or recordings. The lever is per-source
   (calibration, anchoring, or a source token), not more words.
 
+## Balancing scope: pooled vs per-subject
+
+The Kaggle submission balances test rows pooled over subjects; the ruler balances each subject alone. Same
+`xc5w6all6` logits, 32 subjects, `megspeech.evaluation.studies.pooledbalance`:
+
+| balancing | ruler | 1–12 | 13–22 | 23–32 |
+|---|---|---|---|---|
+| per subject | .6591 | .6721 | .6655 | .6371 |
+| pooled | .6553 | .6699 | .6613 | .6316 |
+
+Pooled is .004 lower, in every group, most for 23–32. That is below the noise line: directional, with no paired
+interval. The per-subject public submission (`b-xc5k25ps`, UTC 10-11) tests the same axis on public.
+
 ## Not ruled out
 
-- **A per-source prior or calibration step.** Sinkhorn per source rather than pooled is untested. Any such
-  step has to be fitted on training statistics, never the Kaggle test MEG.
+- **A per-source prior or calibration step.** Sinkhorn per source rather than pooled or per subject is untested.
+  Any such step has to be fitted on training statistics, never the Kaggle test MEG.
 - **The cause of subjects 23–32's deficit:** source acoustics or recording quality. Word count is ruled out
   below.
 - **Rare-word balanced sampling on Broad.** Only its Deep use was measured.
