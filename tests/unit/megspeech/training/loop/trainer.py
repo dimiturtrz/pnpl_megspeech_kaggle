@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import cast
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 from torch import nn
@@ -37,6 +38,7 @@ from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.regularise.rightcut import RightCut, Whole
 from megspeech.training.sampling.curriculum import Annealed, Natural, Robust
+from megspeech.training.sampling.pairing import Pairing, Unpaired
 from megspeech.training.sampling.sampler import SamplerConfig
 from megspeech.training.timing_expert import TimingExpert
 
@@ -78,6 +80,10 @@ def test_of(tmp_path: Path) -> None:
     assert made.evaluator.device == CPU
     assert made.prototypes is None
     assert isinstance(made.auxiliary, NoAuxiliary)
+    assert type(made.pairing) is Unpaired
+    paired = RunConfig(optim=OptimConfig(batch=4), sampler=SamplerConfig(pairs=0.5))
+    masc = Corpus(split(n=24), {"a": split(seed=1)}, frozenset(), positions=heard(24))
+    assert isinstance(Trainer.of(masc, paired, cast("DataRoot", tmp_path)).pairing, Pairing)
 
 
 def test_model() -> None:
@@ -258,6 +264,35 @@ def test_fit_telemetry_equivalence() -> None:
         (r.epoch, r.loss, r.macro, r.interval) for r in plain
     ]
     assert all(torch.equal(a, b) for a, b in zip(on.state_dict().values(), off.state_dict().values(), strict=True))
+
+
+def heard(n: int) -> pd.DataFrame:
+    """`n` words: the first half subject 101's hearing of a MASC story, the second subject 102's of the same."""
+    half = n // 2
+    runs = ["sub-101_ses-0_task-MASC1_run-1"] * half + ["sub-102_ses-0_task-MASC1_run-1"] * (n - half)
+    return pd.DataFrame({"run": runs, "position": np.r_[np.arange(half), np.arange(n - half)]})
+
+
+def test_fit_instance_off_is_bit_identical(tmp_path: Path) -> None:
+    """The instance flags at 0 train the same weights from the same seed as a trainer that never heard of them."""
+    root, optim = cast("DataRoot", tmp_path), OptimConfig(epochs=2, batch=4)
+
+    def run(made: Trainer) -> tuple[list[float], dict[str, torch.Tensor]]:
+        net, history = made.fit(split(n=24), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE))
+        return [row.loss for row in history], net.state_dict()
+
+    corpus = Corpus(split(n=24), {"a": split(seed=1)}, frozenset(), positions=heard(24))
+    off = RunConfig(optim=OptimConfig(epochs=2, batch=4, instance=0.0), sampler=SamplerConfig(pairs=0.0))
+    explicit = Trainer.of(corpus, off, root)
+    assert isinstance(explicit.auxiliary, NoAuxiliary)
+    assert type(explicit.pairing) is Unpaired
+    (losses, weights), (plain, reference) = run(explicit), run(trainer(RunConfig(optim=optim)))
+    assert losses == plain
+    assert all(torch.equal(weights[key], value) for key, value in reference.items())
+    on = RunConfig(optim=OptimConfig(epochs=2, batch=4, instance=0.25), sampler=SamplerConfig(pairs=0.5))
+    paired, _ = run(Trainer.of(corpus, on, root))
+    assert all(math.isfinite(loss) for loss in paired)
+    assert paired != plain
 
 
 def scripted(monkeypatch: pytest.MonkeyPatch, bacc10: list[float]) -> None:

@@ -1,5 +1,4 @@
 import torch
-from pnpl.competition.holdout import N_SUBJECTS
 
 from megspeech.data.raw.runs import DEEP
 from megspeech.model.input.subjects import Reading, Shared, SubjectLayer, Unseen
@@ -10,7 +9,14 @@ GENERATOR = torch.Generator().manual_seed(0)
 def test_subjects() -> None:
     subject = torch.tensor([1, 5, 32])
     assert torch.equal(Reading.OWN.subjects(subject), subject)
-    assert Reading.UNSEEN.subjects(subject).tolist() == [N_SUBJECTS] * 3
+    """An unseen reading is past every layer, however many subjects it holds: a 128-row layer reads it through its
+    fallback, not its trained row 40."""
+    assert Reading.UNSEEN.subjects(subject).tolist() == [torch.iinfo(torch.int64).max] * 3
+    layer = SubjectLayer(128, 4, Unseen.MEAN)
+    with torch.no_grad():
+        layer.weight[40].mul_(5.0)
+    x = torch.randn(3, 4, 6, generator=GENERATOR)
+    assert torch.allclose(layer.forward(x, Reading.UNSEEN.subjects(subject)), (1 + 4 / 128) * x)
 
 
 def test_subject_layer_forward() -> None:

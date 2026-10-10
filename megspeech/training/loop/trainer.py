@@ -46,6 +46,7 @@ from megspeech.training.regularise.noise import SAMPLES
 from megspeech.training.regularise.regional import Regional
 from megspeech.training.regularise.rightcut import RightCut, Whole
 from megspeech.training.sampling.curriculum import Curriculum, Natural
+from megspeech.training.sampling.pairing import Pairing, Unpaired
 from megspeech.training.sampling.sampler import Sampler
 from megspeech.training.teacher import Teacher, Untaught
 from megspeech.training.timing_expert import TimingExpert
@@ -90,6 +91,8 @@ class Trainer:
     """The trained run's state whose encoder the model starts from, when the run names one."""
     fused: tuple[Path, ...] = ()
     """The saved runs whose encoders the model reads beside its own (`ContextConfig.fused`)."""
+    pairing: Unpaired = field(default_factory=Unpaired)
+    """What writes cross-subject pairs into each batch's draws (`SamplerConfig.pairs`)."""
 
     @staticmethod
     def corpus(config: RunConfig, root: DataRoot, device: torch.device) -> Corpus:
@@ -117,8 +120,19 @@ class Trainer:
         stemmed = torch.load(root.models() / stem / "model.pt", map_location=device, weights_only=True) if stem else {}
         taught = Teacher.of(config.optim, root, config.data, corpus.positions)
         fused = tuple(root.models() / name for name in config.context.fused)
+        pairing = Pairing.of(config.sampler.pairs, corpus.positions, corpus.train, config.optim.batch)
         return cls(
-            config, evaluator, prototypes, auxiliary, initial, taught, regional, timing, stem=stemmed, fused=fused
+            config,
+            evaluator,
+            prototypes,
+            auxiliary,
+            initial,
+            taught,
+            regional,
+            timing,
+            stem=stemmed,
+            fused=fused,
+            pairing=pairing,
         )
 
     def model(self, train: Split) -> SentenceNet:
@@ -269,6 +283,7 @@ class Trainer:
             if summary := curriculum.summary(train, epoch, optim.epochs, weights):
                 LOG.info("epoch %d draw weights against base %s", epoch, summary)
             draws = torch.multinomial(weights, per_epoch * optim.batch, replacement=True)
+            draws = self.pairing.drawn(draws, weights, optim.batch)
             terms = torch.stack([self.step(state, train, spans) for spans in draws.split(optim.batch)]).mean(0)
             value = terms.sum().item()
             LOG.info(

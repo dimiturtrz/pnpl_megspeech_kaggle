@@ -2,7 +2,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from pnpl.competition.holdout import N_SUBJECTS
+import torch
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import FEATURES
@@ -12,6 +12,8 @@ from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.text import RULER
 from megspeech.model.input.subjects import Reading
 from tests.unit.megspeech.evaluation.loaded import CPU, NAMES, POOLED, SPOKEN, TESTED, runs
+
+PAST = torch.iinfo(torch.int64).max
 
 
 def reader(tmp_path: Path, reading: Reading = Reading.OWN) -> Reader:
@@ -36,7 +38,7 @@ def test_splits(tmp_path: Path) -> None:
     assert list(splits) == every[POOLED:TESTED]
     rows, split = splits[every[POOLED]]
     assert (rows["run"] == NAMES[POOLED]).all()
-    assert split.subject.tolist() == [N_SUBJECTS] * len(SPOKEN)
+    assert split.subject.tolist() == [PAST] * len(SPOKEN)
 
 
 def test_read(tmp_path: Path) -> None:
@@ -44,7 +46,7 @@ def test_read(tmp_path: Path) -> None:
     every = runs(tmp_path)
     (_, split), *_ = reader(tmp_path).splits(every[POOLED : POOLED + 1]).values()
     assert reader(tmp_path).read(NAMES[POOLED], split).subject.tolist() == [1] * len(SPOKEN)
-    assert reader(tmp_path, Reading.UNSEEN).read(NAMES[POOLED], split).subject.tolist() == [N_SUBJECTS] * len(SPOKEN)
+    assert reader(tmp_path, Reading.UNSEEN).read(NAMES[POOLED], split).subject.tolist() == [PAST] * len(SPOKEN)
     with pytest.raises(FileNotFoundError):
         replace(reader(tmp_path), data=DataConfig(features="frozen")).read(NAMES[POOLED], split)
 

@@ -37,6 +37,10 @@ class SamplerConfig:
     (`megspeech.training.sampling.curriculum.Prioritised`); an unseen span counts at the highest difficulty so far,
     and none draws below a quarter or above four times its weight. Negative is self-paced, drawing the hard least
     (noisy trials may be unlearnable). 0 turns the tilt off; composes with `robust`."""
+    pairs: float = 0.0
+    """Share of each batch's spans drawn as cross-subject pairs (`megspeech.training.sampling.pairing`): half of them
+    drawn at the base weights among the MASC spans another subject also heard, the other half one other subject's
+    hearing of each; 0 draws every span alone, and a batch then rarely holds a pair (megspeech-7gf.147.2)."""
     visibility: float = 0.0
     """Exponent `beta` of a span's draw weight `(1 + seen) ** -beta` in the times training has drawn it, so unseen spans
     draw first and the corpus is rotated through; 0 turns it off; composes with `robust`."""

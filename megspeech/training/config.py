@@ -98,6 +98,10 @@ class OptimConfig:
     regresses each word's log duration and sentence position from the `tap`, and the encoder receives its gradient
     times -`adversary`, so the MEG embedding is trained to hold none of the timing the onsets already give; 0 trains
     no adversary (megspeech-7gf.98)."""
+    instance: float = 0.0
+    """Weight of the cross-subject instance term (`megspeech.objective.auxiliary.instance`): InfoNCE over each word's
+    local encoder embedding, its positives the same MASC token heard by another subject, its negatives every other
+    word of the batch; `SamplerConfig.pairs` co-batches such pairs. 0 creates no head (megspeech-7gf.147.2)."""
     adversary_ramp: float = 2.0
     """Epochs over which the reversal's strength rises linearly from 0 to `adversary`: the adversary must be able to
     read timing before reversing its gradient means anything."""

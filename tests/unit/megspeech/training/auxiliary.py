@@ -19,6 +19,7 @@ from megspeech.model.words.conv import ConvConfig
 from megspeech.model.words.heads import WordHead
 from megspeech.objective.auxiliary.acoustic import Acoustic, AcousticTerm
 from megspeech.objective.auxiliary.adversarial import TimingTerm
+from megspeech.objective.auxiliary.instance import InstanceTerm
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
@@ -139,6 +140,17 @@ def test_of(tmp_path: Path) -> None:
     loud = Auxiliary.of(OptimConfig(acoustic=0.4), root, CPU, WORDS)
     assert [(type(t), t.weight) for t in loud.terms] == [(AcousticTerm, 0.4)]
     assert cast("AcousticTerm", loud.terms[0]).speech.rows.tolist() == [0, -1]
+
+
+def test_of_instance(tmp_path: Path) -> None:
+    """The instance term needs MASC words to find any cross-subject positive."""
+    root = cast("DataRoot", Root(tmp_path))
+    with pytest.raises(ValueError, match="MASC instance"):
+        Auxiliary.of(OptimConfig(instance=0.25), root, CPU, WORDS)
+    masc = pd.DataFrame({"run": ["sub-101_ses-0_task-MASC1_run-1", "sub-102_ses-0_task-MASC1_run-1"], "position": 0})
+    paired = Auxiliary.of(OptimConfig(instance=0.25), root, CPU, masc)
+    assert [(type(t), t.weight) for t in paired.terms] == [(InstanceTerm, 0.25)]
+    assert cast("Joint", paired).tapped(paired.terms[0]) is Tap.WORD
 
 
 def test_joint_trained_tagged() -> None:

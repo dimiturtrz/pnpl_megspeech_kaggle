@@ -18,6 +18,7 @@ from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.acoustic import AcousticTerm
 from megspeech.objective.auxiliary.adversarial import TimingTerm
+from megspeech.objective.auxiliary.instance import InstanceTerm
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
@@ -78,6 +79,7 @@ class Auxiliary(ABC):
             (optim.next_word, lambda: NextWordTerm(weight=optim.next_word)),
             (optim.prev_word, lambda: PreviousWordTerm(weight=optim.prev_word)),
             (optim.adversary, lambda: TimingTerm.of(1.0, words, device)),
+            (optim.instance, lambda: InstanceTerm.of(optim.instance, words, device)),
             (optim.window, lambda: WindowTerm(optim.window, Lexicon.load(Lexicon.path(root)).to(device))),
             (
                 optim.acoustic,

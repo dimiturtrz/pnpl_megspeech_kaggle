@@ -7,7 +7,6 @@ from typing import override
 
 import torch
 from jaxtyping import Float, Int
-from pnpl.competition.holdout import N_SUBJECTS
 from torch import Tensor, nn
 
 from megspeech.data.raw.runs import DEEP
@@ -61,7 +60,8 @@ class Reading(StrEnum):
 
     OWN = "own"
     UNSEEN = "unseen"
-    """A subject past every trained one, as a zero-shot Kaggle test subject is."""
+    """A subject past every matrix of any subject layer, as a zero-shot Kaggle test subject is: a layer over more
+    than the Kaggle subjects (MASC, Armeni, Gwilliams rows) must not read it through a trained subject's matrix."""
 
     def subjects(self, subject: Int[Tensor, " n"]) -> Int[Tensor, " n"]:
         return READINGS[self](subject)
@@ -69,7 +69,7 @@ class Reading(StrEnum):
 
 READINGS: dict[Reading, Callable[[Tensor], Tensor]] = {
     Reading.OWN: lambda subject: subject,
-    Reading.UNSEEN: lambda subject: torch.full_like(subject, N_SUBJECTS),
+    Reading.UNSEEN: lambda subject: torch.full_like(subject, torch.iinfo(subject.dtype).max),
 }
 
 

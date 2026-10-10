@@ -44,7 +44,7 @@ def main() -> None:
     config = tree.parse(args)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    corpus = Corpus.load(config.data, root, Device.CUDA.as_torch())
+    corpus = Corpus.load(config.data, root, Device.best().as_torch())
     train, validation, log_prior = corpus.train, corpus.validation, corpus.train.log_prior()
     trainer = Trainer.of(corpus, config, root)
     model, history = trainer.fit(train, validation, log_prior)
