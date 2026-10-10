@@ -49,6 +49,11 @@ equally weighted: VAL .6547, LT .7172.
 Each direction gains on the ruler it selects on and loses on the other. The two rulers want different families:
 VAL picks masc27w singles (one alone scores VAL .664, above the full blend), and LT picks the speech-target
 fine-tunes. Equal weights over all members has the best held-out score both ways, so no subset was submitted.
+
+Public already scored each family alone. The VAL-favoured family is the weaker one: `masc15` (masc27w only) 0.66166,
+against 0.68283 for `xspft7` (w2v speech-target only), 0.68066 for hub+mhub, 0.66983 for whisper and 0.66416 for d2v.
+Every mix of masc27w with a speech-target family reaches 0.68883, above any single family. So public sides with LT
+on which family is stronger, and neither ruler's subset beats the mix.
 Script: `tmp/greedy_deep.py` (job scratch).
 
 ## Working rule
