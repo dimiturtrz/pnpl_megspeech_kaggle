@@ -65,10 +65,25 @@ first or last words.
    - A sampler that draws rare words more often was tried on Deep (`--sampler.balance 0.5`). It was null at
      the macro: rare recall went up and common-word top-1 went down.
 
+## Word-count-matched subsample
+
+Each subject in 1–12 was cut to 310 random ruler words, the 23–32 mean, and rescored. This was repeated 200
+times. A second arm kept only words of classes that subjects 23–32 also have.
+
+| model | 1–12 full | 1–12 at 310 words | 1–12 at 310, 23–32 classes | 23–32 |
+|---|---|---|---|---|
+| xc5w6all6 (raw) | .6607 | .6834 ± .011 | .6787 ± .012 | .5935 |
+| xc5k25s (balanced) | .6721 | .6960 ± .011 | .6910 ± .012 | .6371 |
+
+- Fewer words raise the score, because the rarest classes drop out of a small sample. So word count does not
+  explain the deficit; the matched gap is wider than the raw one (.085 raw, .054 balanced).
+- The deficit belongs to subjects 23–32 themselves, meaning their source or recordings. The lever is per-source
+  (calibration, anchoring, or a source token), not more words.
+
 ## Not ruled out
 
 - **A per-source prior or calibration step.** Sinkhorn per source rather than pooled is untested. Any such
   step has to be fitted on training statistics, never the Kaggle test MEG.
-- **The cause of subjects 23–32's deficit:** source acoustics, recording quality, or simply fewer words. It
-  needs a word-count-matched subsample.
+- **The cause of subjects 23–32's deficit:** source acoustics or recording quality. Word count is ruled out
+  below.
 - **Rare-word balanced sampling on Broad.** Only its Deep use was measured.
