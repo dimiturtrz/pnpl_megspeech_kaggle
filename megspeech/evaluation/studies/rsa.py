@@ -295,14 +295,19 @@ class Study:
             return None
         return Geometry(Centroids.fit(words, directory).means.numpy())
 
-    def teachers(self) -> dict[str, Geometry]:  # devtools-ignore: test-mirror
-        """Every teacher whose vectors exist; a missing cache is logged and skipped."""
+    def training(self, subject: int | None = None) -> pd.DataFrame:  # devtools-ignore: test-mirror
+        """The training partition's words, of `subject` alone when given."""
+        runs = [run for run in Run.discover(self.root.raw()) if run.partition is Partition.TRAIN]
+        return self.loaded.spoken([run for run in runs if subject in (None, run.subject)])[1]
+
+    def teachers(self, subject: int | None = None) -> dict[str, Geometry]:  # devtools-ignore: test-mirror
+        """Every teacher whose vectors exist, fitted on `subject`'s training words; a missing cache is logged and
+        skipped."""
         teachers = {"one-hot": Geometry.one_hot()}
         t5 = Prototypes.path(self.root)
         if t5.exists():
             teachers["t5-large h12"] = Geometry(Prototypes.load(t5).vectors.numpy())
-        runs = [run for run in Run.discover(self.root.raw()) if run.partition is Partition.TRAIN]
-        words = self.loaded.spoken(runs)[1]
+        words = self.training(subject)
         for name in CACHED:
             cached = self.cached(name, words)
             if cached is None:
