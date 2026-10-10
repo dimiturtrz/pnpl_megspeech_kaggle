@@ -18,6 +18,11 @@ class Crop:
     start: int
     length: int
 
+    @classmethod
+    def many(cls, starts: tuple[int, ...], lengths: tuple[int, ...]) -> tuple["Crop", ...]:
+        """One crop per start, `lengths` running alongside."""
+        return tuple(cls(start, length) for start, length in zip(starts, lengths, strict=True))
+
     def __call__(self, x: Float[Tensor, "b c t"]) -> Float[Tensor, "b c s"]:
         cut = x[..., self.start : self.start + self.length]
         present = cut.ne(0).any(dim=1, keepdim=True)

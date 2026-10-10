@@ -7,6 +7,7 @@ from megspeech.data.constants import CHANNELS
 from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.words.base import WordEncoder
 from megspeech.model.words.conv import ConvWords
+from megspeech.model.words.expert import Crop
 from megspeech.model.words.experts import ExpertWords
 from megspeech.model.words.megxl import POOLED, RESOLVED, FeatureWords
 from megspeech.model.words.spanned import SpanWords
@@ -19,7 +20,9 @@ BUILDERS: dict[Encoder, Callable[[ContextConfig, int], WordEncoder]] = {
     Encoder.CACHED: lambda context, _: FeatureWords(context.conv, POOLED),
     Encoder.RESOLVED: lambda context, _: FeatureWords(context.conv, RESOLVED),
     Encoder.TRAINED: lambda context, _: FeatureWords(context.conv, context.conv.width),
-    Encoder.EXPERTS: lambda context, channels: ExpertWords(context.conv, channels, context.crops),
+    Encoder.EXPERTS: lambda context, channels: ExpertWords(
+        context.conv, channels, Crop.many(context.starts, context.lengths)
+    ),
 }
 
 

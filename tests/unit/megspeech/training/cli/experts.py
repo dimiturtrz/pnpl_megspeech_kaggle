@@ -78,7 +78,7 @@ def test_weights() -> None:
 def test_config() -> None:
     config = assembly().config(rhythm=True)
     assert config.context.encoder is Encoder.EXPERTS
-    assert config.context.crops == (Crop(0, 50), Crop(0, 10), Crop(10, 10))
+    assert Crop.many(config.context.starts, config.context.lengths) == (Crop(0, 50), Crop(0, 10), Crop(10, 10))
     assert config.context.conv == SMALL
     assert config.context.rhythm
     assert config.context.width == SHAPE["width"]
@@ -119,7 +119,7 @@ def test_state() -> None:
     x[0, :, 30:] = 0
     subject = torch.zeros(4, dtype=torch.long)
     with torch.no_grad():
-        pairs = zip(parts.experts, config.context.crops, strict=True)
+        pairs = zip(parts.experts, Crop.many(config.context.starts, config.context.lengths), strict=True)
         joined = torch.cat([loaded(run).embed(crop(x), subject) for run, crop in pairs], dim=-1)
         expected = loaded(parts.stack).embed(joined[..., None], subject)
         assert torch.allclose(composite.embed(x, subject), expected, atol=1e-4)

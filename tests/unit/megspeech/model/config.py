@@ -11,7 +11,6 @@ from megspeech.model.context.intervals import Intervals
 from megspeech.model.context.timing import Clock
 from megspeech.model.pyramid import PyramidConfig
 from megspeech.model.words.conv import ConvConfig
-from megspeech.model.words.expert import Crop
 from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective
 
@@ -71,9 +70,6 @@ def test_latency_retired() -> None:
 
 
 def test_crops() -> None:
-    config = ContextConfig(encoder=Encoder.EXPERTS, starts=(0, 10), lengths=(50, 10))
-    assert config.crops == (Crop(0, 50), Crop(10, 10))
-    assert CONTEXT.crops == ()
     with pytest.raises(ValueError, match="one crop per expert"):
         ContextConfig(encoder=Encoder.EXPERTS)
     with pytest.raises(ValueError, match="one crop per expert"):

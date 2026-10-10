@@ -18,7 +18,6 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.context.intervals import Intervals
 from megspeech.model.context.timing import Clock
 from megspeech.model.words.conv import CONV, ConvConfig
-from megspeech.model.words.expert import Crop
 from megspeech.model.words.spanned import SPANNED, SpannedConfig
 from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective
@@ -128,11 +127,6 @@ class ContextConfig:
 
     def __post_init__(self) -> None:
         Rule.enforce(self, CONTEXT_RULES)
-
-    @property
-    def crops(self) -> tuple[Crop, ...]:
-        """The `experts` encoder's crops of the window, one per expert."""
-        return tuple(Crop(start, length) for start, length in zip(self.starts, self.lengths, strict=True))
 
     def save(self, directory: Path) -> Path:
         path = directory / FILE

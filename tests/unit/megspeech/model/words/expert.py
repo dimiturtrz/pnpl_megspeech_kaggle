@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from megspeech.data.constants import CHANNELS
@@ -29,3 +30,10 @@ def test_embed() -> None:
     expected = expert.words.embed(expert.scale(Crop(5, 10)(x)))
     assert expected.shape == (3, SMALL.width)
     assert torch.allclose(expert.embed(x), expected)
+
+
+def test_many() -> None:
+    assert Crop.many((0, 10), (50, 10)) == (Crop(0, 50), Crop(10, 10))
+    assert Crop.many((), ()) == ()
+    with pytest.raises(ValueError, match="zip"):
+        Crop.many((0,), (1, 2))
