@@ -58,6 +58,24 @@ The pooled stem's `data.subjects` are subject 0 plus the external corpora (ids 1
      spread).
    - Cheap to test. Plausible gain: +0–2 points.
 
+## Update 2026-10-10: richer timing inputs add nothing
+
+`ema-bgmix05-all-w15rich-s0` trains the pooled stem from scratch with `--context.intervals rich` (the timing
+head's onset features: gaps to two neighbours each side and place in the span) instead of `log`, then adapts with
+the usual recipe. The saved configs of stem and adapt both record `rich`. Single seed:
+
+| model | Broad ruler |
+|---|---|
+| all-w15-s0 adapt (`log`) | .6003 |
+| all-w15rich-s0 adapt (`rich`) | .5977 |
+
+- The −.003 is inside the seed SD of .004, so this is null. Experiment 1 above predicted +1–2 points and did not
+  deliver.
+- Removing IOIs costs .038, but adding neighbour gaps and span place gains nothing. The four log-interval inputs
+  already carry what the context head uses from onset timing.
+- **Not ruled out:** timing that onsets cannot give, such as word duration or the speech envelope; and `rich`
+  on Deep, which is queued as `xsp10sem05-hubrich`.
+
 ## Update 2026-10-10: subjects 1–32 ses-12 in the stem hurts
 
 `ema-bgmix05-all32-w15-s0` adds labelled subjects 1–32 ses-12 to the pooled stem (`--data.adapt 12`), then
