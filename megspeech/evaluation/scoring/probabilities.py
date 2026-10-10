@@ -46,7 +46,7 @@ class Words:
         tau: float,
     ) -> "Words":
         ids = split.labelled()
-        context = logits[Head.CONTEXT][ids]
+        context = evaluator.head(logits)[ids]
         adjusted = evaluator.adjusted(context, log_prior, tau)
         return cls(
             ids.cpu(),

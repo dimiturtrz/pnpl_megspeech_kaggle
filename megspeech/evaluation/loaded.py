@@ -26,7 +26,7 @@ class LoadedModel(Reader):
     names: tuple[str, ...] = ()
 
     def context(self, split: Split) -> Float[Tensor, "n v"]:
-        return self.evaluator.logits(self.model, split)[Head.CONTEXT]
+        return self.evaluator.head(self.evaluator.logits(self.model, split))
 
     def labelled(self, split: Split) -> Score:
         """The context head on every labelled word of `split`."""

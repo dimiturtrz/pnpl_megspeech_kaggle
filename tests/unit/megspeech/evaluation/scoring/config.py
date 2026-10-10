@@ -29,3 +29,10 @@ def test_members(tmp_path: Path) -> None:
     (tmp_path / "ab").mkdir()
     (tmp_path / "ab" / METRICS).write_text(json.dumps({"members": ["a", "b"]}))
     assert Scoring.members(tmp_path, ["ab", "c"]) == [tmp_path / "a", tmp_path / "b", tmp_path / "c"]
+
+
+def test_word_share() -> None:
+    assert Scoring().word_share == 0.0
+    assert Scoring(word_share=1.0).word_share == 1.0
+    with pytest.raises(ValueError, match="word_share"):
+        Scoring(word_share=1.5)

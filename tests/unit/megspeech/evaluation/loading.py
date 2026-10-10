@@ -46,6 +46,7 @@ def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert torch.allclose(built.log_prior, (expected / expected.sum()).log())
     assert built.evaluator.seen == frozenset({(7, 8)})
     assert (built.evaluator.min_novel, built.evaluator.balance, built.evaluator.shifts) == (5, Sinkhorn(2), (0, 1))
+    assert Loader.of(DataRoot(tmp_path), ["ab"], Scoring(word_share=0.3), CPU).evaluator.word_share == 0.3
     assert (built.names, built.reading) == (("a", "b"), Reading.UNSEEN)
     with pytest.raises(ValueError, match="an ensemble needs one"):
         Loader.of(DataRoot(tmp_path), ["b", "c"], scoring, CPU)

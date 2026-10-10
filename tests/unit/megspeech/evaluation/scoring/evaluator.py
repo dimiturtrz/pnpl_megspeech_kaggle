@@ -203,3 +203,11 @@ def test_graded_logits() -> None:
     expected = evaluator.graded(Constant(), domains, prior, 0.5)
     assert set(read.domains) == set(expected.domains)
     assert all(torch.equal(read.domains[name][0], expected.domains[name][0]) for name in read.domains)
+
+
+def test_head() -> None:
+    context = torch.tensor([[0.0, -1.0]])
+    logits = {Head.CONTEXT: context, Head.WORD: torch.tensor([[-2.0, 0.0]])}
+    assert torch.equal(Evaluator(CPU).head(logits), context)
+    assert torch.equal(Evaluator(CPU, word_share=1.0).head(logits), logits[Head.WORD])
+    assert torch.allclose(Evaluator(CPU, word_share=0.25).head(logits), torch.tensor([[-0.5, -0.75]]))

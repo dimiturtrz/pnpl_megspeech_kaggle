@@ -34,9 +34,16 @@ class Scoring:
     lowpass: float = 0.0
     """Hz above which every window read is zeroed (`LowPass`); 0 reads the full band. ema9998-s0 at 25/18/12/8/4 Hz:
     0.6445/0.6468/0.6389/0.6248/0.5924 (n=2512): the 12-25 Hz top of the 50 Hz cache carries ~0.006 (4te.5)."""
+    word_share: float = 0.0
+    """Weight of the word head against the context head in the log-probabilities scored and submitted
+    (`Evaluator.head`): 0 the context head, 1 the word head, between them their log-probability mix."""
     partition: Partition = Partition.VALIDATION
     """The labelled partition scored (`DataConfig.ruled`): val selects; the local test only reports, once, on a model
     already chosen (megspeech-7gf.81)."""
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.word_share <= 1.0:
+            raise ValueError(f"word_share is a mixing weight in [0, 1], got {self.word_share}")
 
     @staticmethod
     def members(models: Path, names: list[str]) -> list[Path]:

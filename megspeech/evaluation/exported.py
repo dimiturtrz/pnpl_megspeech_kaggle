@@ -36,7 +36,7 @@ class ExportedModel(LoadedModel):
         span. The context head on a lone word scores near chance (bAcc@10 0.24 vs the word head's 0.39 on Sherlock1,
         0.23 vs 0.29 on TheMoth, n=1296/1216), and 92 of the Deep Kaggle test's 960 rows are lone."""
         logits = self.evaluator.logits(self.model, split)
-        return torch.where(split.lone()[:, None], logits[Head.WORD], logits[Head.CONTEXT])
+        return torch.where(split.lone()[:, None], logits[Head.WORD], self.evaluator.head(logits))
 
     def kaggle_chosen(self, track: Track) -> tuple[Split, Float[Tensor, "n v"]]:
         """`track`'s Kaggle split and its words' `chosen` log-probabilities."""

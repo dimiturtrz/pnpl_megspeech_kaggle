@@ -23,7 +23,6 @@ from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.metric.ruler import Ruler
-from megspeech.evaluation.scoring.score import Head
 
 LOG = logging.getLogger(__name__)
 
@@ -198,7 +197,7 @@ class Memorisation:
         frames = []
         for name, split in splits.items():
             rows = table[table["run"].isin([run.name for run in ruled[name]])]
-            context = held.evaluator.logits(held.model, split)[Head.CONTEXT]
+            context = held.evaluator.head(held.evaluator.logits(held.model, split))
             adjusted = held.evaluator.adjusted(context, held.log_prior, tau)
             hits = Ruler().hits(adjusted, split.y.clamp(min=0)).cpu().numpy()
             novel = np.isin(np.arange(len(split.y)), split.novel(held.evaluator.seen).cpu().numpy())

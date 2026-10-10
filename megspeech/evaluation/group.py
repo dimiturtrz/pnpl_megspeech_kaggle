@@ -39,6 +39,7 @@ class Group:
             balance=scoring.balance,
             shifts=scoring.shifts,
             adapted=scoring.adapted,
+            word_share=scoring.word_share,
         )
         return ExportedModel(
             **{field.name: getattr(reader, field.name) for field in fields(Reader)},

@@ -36,12 +36,19 @@ class Evaluator:
     """Samples every window is read moved by; the reads' log-probabilities are averaged (test-time augmentation)."""
     adapted: bool = False
     """Read every split through a copy of the model whose batch-norm statistics are the split's own (`adapt`)."""
+    word_share: float = 0.0
+    """Weight of the word head in the log-probabilities every selection and submission reads (`head`): 0 the context
+    head, 1 the word head, between them their log-probability mix."""
 
     def logits(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
         """Both heads' log-probabilities for every word of `split`, averaged over the `shifts`, in word order."""
         model = self.adapt(model, split) if self.adapted else model
         reads = [self.read(model, replace(split, windows=split.windows.shifted(shift))) for shift in self.shifts]
         return {head: torch.stack([read[head].log_softmax(-1) for read in reads]).mean(0) for head in Head}
+
+    def head(self, logits: dict[Head, Float[Tensor, "n v"]]) -> Float[Tensor, "n v"]:
+        """The log-probabilities scored and submitted: the `word_share` mix of the word and context heads."""
+        return (1 - self.word_share) * logits[Head.CONTEXT] + self.word_share * logits[Head.WORD]
 
     def adapt(self, model: nn.Module, split: Split) -> nn.Module:
         """A copy of `model` whose batch-norm statistics are re-estimated on `split`'s unlabelled windows, every
@@ -106,14 +113,15 @@ class Evaluator:
         """One domain's report from its already computed logits: every labelled word scored, out-of-vocabulary
         words only lending their spans context."""
         labelled, dense, novel = split.labelled(), split.kaggle_like(), split.novel(self.seen)
-        context, word, y = logits[Head.CONTEXT][labelled], logits[Head.WORD][labelled], split.y[labelled]
-        unseen, novel_y = logits[Head.CONTEXT][novel], split.y[novel]
+        head = self.head(logits)
+        context, word, y = head[labelled], logits[Head.WORD][labelled], split.y[labelled]
+        unseen, novel_y = head[novel], split.y[novel]
         adjusted = {tau: self.adjusted(unseen, log_prior, tau) for tau in ADJUSTMENTS}
         top1 = Ruler(k=1)
         return Report(
             self.evaluate(context, y, log_prior),
             self.evaluate(word, y, log_prior),
-            self.evaluate(logits[Head.CONTEXT][dense], split.y[dense], log_prior),
+            self.evaluate(head[dense], split.y[dense], log_prior),
             self.evaluate(unseen, novel_y, log_prior),
             {tau: top1.balanced(top1.hits(scores, novel_y), novel_y) for tau, scores in adjusted.items()},
             {
@@ -138,7 +146,7 @@ class Evaluator:
     ) -> Graded:
         """`graded` from each domain's already computed logits: scores logits that come from no single model."""
         counted = self.eligible(domains)
-        return self.grade({name: logits[name][Head.CONTEXT] for name in counted}, counted, log_prior, tau)
+        return self.grade({name: self.head(logits[name]) for name in counted}, counted, log_prior, tau)
 
     def eligible(self, domains: dict[str, Split]) -> dict[str, Split]:
         """The `domains` with enough unseen-span words to count toward selection."""
@@ -189,7 +197,7 @@ class Evaluator:
         reports = {name: self.scored(logits[name], split, log_prior) for name, split in domains.items()}
         counted = self.counted({name: r.novel for name, r in reports.items()})
         macro = Score.mean(counted.values())
-        context = {name: logits[name][Head.CONTEXT] for name in counted}
+        context = {name: self.head(logits[name]) for name in counted}
         interval = self.ruler.interval(self.ruler.macro(self.grade(context, domains, log_prior, macro.tau)))
         chosen = [reports[name] for name in counted]
         top1 = Score.average(r.top1[macro.tau] for r in chosen)
