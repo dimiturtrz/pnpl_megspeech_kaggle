@@ -63,6 +63,9 @@ it on seen subjects too. Inference, not tested: ses-11 is one text, and the adde
 only. Working rule: the 29-member blend
 stays the Broad base, and a family is added only on a public A/B.
 
+That A/B for the HuBERT family: adding the hub adapt (`b-xc5h1k25s`, 30 members) raised the ruler to .6593 but
+scored 0.62253 public against 0.62262, flat. Not added.
+
 On the blend the shrink adds +.006 on the ruler, against +.020 for the single model. On top of Sinkhorn it adds
 +.0075 public. Inference: averaging 29 members already cancels part of each member's per-subject overfit, so
 the shrink and the ensemble overlap. The two post-steps compose: on the ruler, Sinkhorn adds more on top of the
