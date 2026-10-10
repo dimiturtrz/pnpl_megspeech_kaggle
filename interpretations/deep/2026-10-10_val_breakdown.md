@@ -4,8 +4,10 @@
 
 - **Source.** The saved `hits.pt` of `m11xsp7hub6d2v3` (public .68883): per-word top-10 hits on VAL, tau .5. Nothing
   was re-inferred.
-- **Denominator.** VAL only (subject 0, 10% stratified split): Sherlock1 n = 1296, TheMoth n = 1216. VAL selected the
-  members' epochs, so these numbers flatter the blend; the comparison between buckets is what is read here.
+- **Denominator.** VAL only. The blend's members are legacy full-data models (`data.val: official`), so VAL is pnpl's
+  official validation runs `sub-0_ses-11_task-Sherlock1_run-2` and `sub-0_ses-29_task-TheMoth_run-1`, not the 10%
+  stratified split: Sherlock1 n = 1296, TheMoth n = 1216 scored hits. VAL selected the members' epochs, so these
+  numbers flatter the blend; the comparison between buckets is what is read here.
 - **Buckets.** The training-frequency quartiles of the class, with the cuts of the Broad breakdown
   (`../broad/2026-10-10_ruler_breakdown.md`). About 12 classes each. Cells read "macro / pooled hit".
 
@@ -24,9 +26,39 @@
 
 ## Not ruled out
 
-- **Why TheMoth is weaker.** Training quantity is ruled out. VAL is a 10% stratified cut and holds 1308 Sherlock1
-  and 1226 TheMoth words in the training log, so subject 0 trains on about equal word counts per source. What
-  remains is a different speaker and rhythm per story (TheMoth has many tellers, Sherlock1 one reader) or more
-  varied text. A per-source timing-only probe would separate the two.
+- **Why TheMoth is weaker.** An earlier version of this note ruled out training quantity from the VAL word counts
+  (1308 / 1226). That was wrong: those are VAL counts, not training counts. Subject 0 trains on 265,113 labelled
+  Sherlock words and 24,510 TheMoth words, 11× fewer. Training quantity stays a candidate.
 - **Whether the Kaggle Deep test looks like TheMoth or Sherlock1.** Its stimuli differ from both. If it resembles
   neither, TheMoth's gap is the better estimate of the transfer cost.
+
+## Timing alone carries about half the source gap
+
+A probe that uses timing only, with no MEG, trained on subject 0's training words and scored on the same VAL runs.
+
+- **Features:** log duration, log IOI to the previous word, place in sentence, sentence length, log time to
+  sentence end, and edge flags.
+- **Model:** a spline basis, then a multinomial logistic regression.
+- **Script:** scratch only, not committed.
+
+Top-10 balanced accuracy on the 47 classes present:
+
+| reader | Sherlock1 | TheMoth | gap |
+|---|---|---|---|
+| chance / train-frequency prior | .200 / .213 | .200 / .213 | 0 |
+| timing only, trained on all sources | .514 | .440 | .074 |
+| timing only, trained on its own source | .555 | .464 | .091 |
+| the blend (MEG + timing) | .731 | .576 | .155 |
+
+**Reading (inferences, one probe):**
+
+1. **TheMoth's words are less predictable from timing alone.** About half the blend's .155 gap is already there
+   without MEG.
+2. **The gap holds when each source trains its own probe** (.091), even though TheMoth then trains on 11× fewer
+   words. The cause is more likely the stimulus itself, many tellers with varied rhythm against one reader, than
+   the pooled fit favouring Sherlock.
+3. **What MEG adds is .217 on Sherlock1 and .136 on TheMoth,** read as the blend minus the pooled probe. The other
+   half of the gap sits in what MEG adds, and that is where 11× less TheMoth training could act.
+
+**Not ruled out:** whether the MEG half is quantity or stimulus. Weighting TheMoth up in training would test it.
+This is our own idea, not tested.
