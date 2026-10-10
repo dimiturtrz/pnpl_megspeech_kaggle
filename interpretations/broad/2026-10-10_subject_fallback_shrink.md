@@ -57,7 +57,10 @@ neither step uses up the other's gain.
 Adding 11 members (the `w15l60` family s0–4, stems and adapts, plus one `smn-ac03` pair) with both steps on
 (`b-bxl60k25s`, 40 members) raised the ruler +.004 (.6631) but cost .0055 public (0.61709 vs 0.62262). The ruler
 and public disagree on the sign. The ruler cannot see the 7 zero-shot subjects, and it scores ses-11, a text
-every subject also read. Which of the two blinds this is, we have not tested. Working rule: the 29-member blend
+every subject also read. The zero-shot blind is not it: against `b-xc5k25s`, the 40-member CSV changes the argmax on 15.6% of
+seen-subject rows and 15.7% of zero-shot rows (L1 .108 / .109). The change is spread evenly, so the ruler misses
+it on seen subjects too. Inference, not tested: ses-11 is one text, and the added family is better on that text
+only. Working rule: the 29-member blend
 stays the Broad base, and a family is added only on a public A/B.
 
 On the blend the shrink adds +.006 on the ruler, against +.020 for the single model. On top of Sinkhorn it adds
