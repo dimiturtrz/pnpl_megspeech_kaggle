@@ -57,3 +57,20 @@ The pooled stem's `data.subjects` are subject 0 plus the external corpora (ids 1
    - Rationale: the session/subject offset is the dominant variance (domain AUC 1.0, mean shift 0.8 of the
      spread).
    - Cheap to test. Plausible gain: +0–2 points.
+
+## Update 2026-10-10: subjects 1–32 ses-12 in the stem hurts
+
+`ema-bgmix05-all32-w15-s0` adds labelled subjects 1–32 ses-12 to the pooled stem (`--data.adapt 12`), then
+adapts with the usual recipe. Broad ruler (ses-11), single seed:
+
+| model | ruler |
+|---|---|
+| all-w15-s0 adapt (base) | .6003 |
+| all32-w15-s0 stem, unadapted | .5823 |
+| all32-w15-s0 adapt | .5712 |
+
+Adding the data to the stem costs .029 after adapt, and adapting makes the all32 stem worse rather than better.
+Inference, not tested: ses-12 is one text that 32 subjects heard, so the stem's context head memorises it, and
+adapt on the same text doubles that exposure, while the ruler reads a new text. This is the same direction as
+the ended-intervals and cx0 results. Seed s1 was stopped. Not ruled out: ses-12 used at adapt only, which is
+the base recipe already.
