@@ -6,6 +6,7 @@ its unseen-span subset is empty, and the ruler scores all its labelled words ins
 familiar text, not new text; that confound is shared by every model scored on it, so it compares models trained with
 the same subjects held out, never against the Broad or Deep rulers. A subject's score is balanced top-10; the ruler is
 the unweighted mean over subjects at one adjustment for all.
+`--head word` scores the per-word MEG head, since the context head saturates at 1.0 on held-out subjects.
 
     uv run python -m megspeech.evaluation.rulers.heldout NAME --subjects 124 125 126 127 --fallback.unseen mean
 """
@@ -28,7 +29,7 @@ from megspeech.device import Device
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
-from megspeech.evaluation.scoring.score import Score
+from megspeech.evaluation.scoring.score import Head, Score
 from megspeech.model.input.subjects import Reading
 
 LOG = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ class HeldOutRuler:
     """The ruler over the MASC `subjects` held out of training."""
 
     subjects: tuple[int, ...]
+    head: Head = Head.CONTEXT
 
     def runs(self, loaded: LoadedModel, runs: list[Run]) -> dict[int, list[Run]]:
         """Each held subject's MASC runs; an error if the model trained on any of the subjects."""
@@ -72,7 +74,7 @@ class HeldOutRuler:
         labels: list[Tensor] = []
         for _, split in loaded.splits(runs).values():
             labelled = split.labelled()
-            contexts.append(loaded.context(split)[labelled])
+            contexts.append(loaded.evaluator.logits(loaded.model, split)[self.head][labelled])
             labels.append(split.y[labelled])
         return loaded.score(torch.cat(contexts), torch.cat(labels))
 
@@ -101,13 +103,14 @@ def main() -> None:
     parser.add_argument("names", nargs="+", help="trained models under models/, averaged as one")
     parser.add_argument("--subjects", nargs="+", type=int, required=True, help="MASC subjects held out of training")
     parser.add_argument("--device", default=Device.CPU, help="cpu keeps scoring off a GPU a training run owns")
+    parser.add_argument("--head", type=Head, choices=list(Head), default=Head.CONTEXT, help="head to score")
     tree = Tree(Scoring, SCORING)
     tree.arguments(parser)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
     loaded = Loader.of(root, args.names, tree.parse(args), torch.device(args.device))
-    HeldOutRuler(tuple(args.subjects)).select(loaded, Run.everywhere(root))
+    HeldOutRuler(tuple(args.subjects), args.head).select(loaded, Run.everywhere(root))
 
 
 if __name__ == "__main__":

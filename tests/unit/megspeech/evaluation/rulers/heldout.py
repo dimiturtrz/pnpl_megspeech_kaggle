@@ -16,6 +16,7 @@ from megspeech.data.raw.runs import Run
 from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.rulers import heldout as module
 from megspeech.evaluation.rulers.heldout import HeldOutRuler, Lineage
+from megspeech.evaluation.scoring.score import Head
 from megspeech.model.input.subjects import Reading
 from tests.unit.megspeech.evaluation.loaded import SAMPLES, SPOKEN, loaded
 
@@ -86,6 +87,13 @@ def test_subject(tmp_path: Path) -> None:
     every = runs(tmp_path)
     score = HeldOutRuler((124,)).subject(loaded(tmp_path), every[:2])
     assert (score.n, score.bacc10) == (2 * len(SPOKEN), pytest.approx(0.0))
+
+
+def test_subject_head(tmp_path: Path) -> None:
+    """The word head is scored through the same path as the context head and yields a score over the same words."""
+    every = runs(tmp_path)
+    score = HeldOutRuler((124,), Head.WORD).subject(loaded(tmp_path), every[:2])
+    assert score.n == 2 * len(SPOKEN)
 
 
 def test_select(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
