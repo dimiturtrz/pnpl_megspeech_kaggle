@@ -74,3 +74,24 @@ Inference, not tested: ses-12 is one text that 32 subjects heard, so the stem's 
 adapt on the same text doubles that exposure, while the ruler reads a new text. This is the same direction as
 the ended-intervals and cx0 results. Seed s1 was stopped. Not ruled out: ses-12 used at adapt only, which is
 the base recipe already.
+
+## Update 2026-10-10: subject matrices anchored toward their mean at adapt
+
+`--optim.anchor a --optim.anchor_toward mean` leaves share `a` of each subject matrix's deviation from the mean
+of all trained subjects' matrices by the end of adapt; the base decays toward 0 (`a = 1`). The stem is
+all-w15-s0 and the seed is single.
+
+| adapt | Broad ruler |
+|---|---|
+| base (`a = 1`, toward 0) | .6003 |
+| `a = .5` toward mean | .5925 |
+| `a = .25` toward mean | .5909 |
+
+- Both anchored adapts sit about .008 under base, which is twice the seed SD of .004.
+- Halving the anchor again changes nothing. Pulling subject matrices together costs a little and the strength
+  barely matters, so subjects 1–32 do not suffer from too-free matrices at 12 sessions of adapt.
+- **Not ruled out:**
+  - Anchoring at stem time.
+  - Anchoring toward a per-source mean, since subjects 1–12, 13–22 and 23–32 come from different sources.
+  - Using the anchor only for subjects with few words; subjects 23–32 score .594 against .661 for 1–12, on
+    310 vs 1296 ruler words each.
