@@ -39,6 +39,20 @@ The public gain is +.025, against +.020 on the ruler. The ruler cannot see the z
 (identity → mean). With this fallback the single model matches the earlier 29-model blend without Sinkhorn
 (0.604).
 
+## On the 29-member blend (xc5w6all6)
+
+| arm | ruler | public |
+|---|---|---|
+| plain blend | .6329 | .604 |
+| + Sinkhorn β.25 (`b-xc5sink25`) | — | .61513 |
+| + mean fallback keep .25 | .6389 | — |
+| + both (`b-xc5k25s`) | .6591 | **.62262** |
+
+On the blend the shrink adds +.006 on the ruler, against +.020 for the single model. On top of Sinkhorn it adds
++.0075 public. Inference: averaging 29 members already cancels part of each member's per-subject overfit, so
+the shrink and the ensemble overlap. The two post-steps compose: on the ruler, Sinkhorn adds more on top of the
+shrink than the shrink adds alone.
+
 ## Prior art and what this does not rule out
 
 7gf.35.1/.3 shrank toward the **Deep** matrix (keep .5: +.009 public as a single model, .5244 as an ensemble).
