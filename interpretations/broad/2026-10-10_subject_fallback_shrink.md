@@ -66,6 +66,13 @@ stays the Broad base, and a family is added only on a public A/B.
 That A/B for the HuBERT family: adding the hub adapt (`b-xc5h1k25s`, 30 members) raised the ruler to .6593 but
 scored 0.62253 public against 0.62262, flat. Not added.
 
+Greedy selection over the 29 members (Caruana, with replacement, no Sinkhorn) was checked across subject folds:
+select on subjects 1-16, score 17-32, and the reverse. The held-out gain over all-29 is +.003 to +.012, below the
+bar, and the two folds pick different members. The 6-member all-data subset scores below all-29 on both folds
+(.6341 vs .6506, .6177 vs .6272) and on the full ruler with Sinkhorn (.6508 vs .6591). The members whose
+hits correlate least (r ≈ .52, mean .639) are plain `bgmix05` stems against w15 adapts. Script and cached per-member
+ruler probabilities: `tmp/greedy/` (job scratch).
+
 On the blend the shrink adds +.006 on the ruler, against +.020 for the single model. On top of Sinkhorn it adds
 +.0075 public. Inference: averaging 29 members already cancels part of each member's per-subject overfit, so
 the shrink and the ensemble overlap. The two post-steps compose: on the ruler, Sinkhorn adds more on top of the
