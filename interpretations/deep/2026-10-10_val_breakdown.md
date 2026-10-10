@@ -24,7 +24,9 @@
 
 ## Not ruled out
 
-- **Why TheMoth is weaker.** Fewer subject-0 training sessions, a different speaker and rhythm, or more varied
-  text. A count of training words per source and a per-source timing-only probe would separate them.
+- **Why TheMoth is weaker.** Training quantity is ruled out. VAL is a 10% stratified cut and holds 1308 Sherlock1
+  and 1226 TheMoth words in the training log, so subject 0 trains on about equal word counts per source. What
+  remains is a different speaker and rhythm per story (TheMoth has many tellers, Sherlock1 one reader) or more
+  varied text. A per-source timing-only probe would separate the two.
 - **Whether the Kaggle Deep test looks like TheMoth or Sherlock1.** Its stimuli differ from both. If it resembles
   neither, TheMoth's gap is the better estimate of the transfer cost.
