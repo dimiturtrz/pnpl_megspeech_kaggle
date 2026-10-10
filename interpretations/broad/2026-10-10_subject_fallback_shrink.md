@@ -47,6 +47,9 @@ The public gain is +.025, against +.020 on the ruler. The ruler cannot see the z
 | + Sinkhorn β.25 (`b-xc5sink25`) | — | .61513 |
 | + mean fallback keep .25 | .6389 | — |
 | + both (`b-xc5k25s`) | .6591 | **.62262** |
+| + both, keep .1 | .6534 | — |
+
+Keep .25 is also the best keep on the blend, not only on the single model.
 
 On the blend the shrink adds +.006 on the ruler, against +.020 for the single model. On top of Sinkhorn it adds
 +.0075 public. Inference: averaging 29 members already cancels part of each member's per-subject overfit, so
