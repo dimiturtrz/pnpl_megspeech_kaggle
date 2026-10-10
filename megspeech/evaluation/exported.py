@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-from jaxtyping import Float
+from jaxtyping import Float, Int
 from torch import Tensor
 
 from megspeech.data.batching.split import KAGGLE_FEATURES, Split
@@ -43,9 +43,11 @@ class ExportedModel(LoadedModel):
         split = self.kaggle(track)
         return split, self.chosen(split)
 
-    def finished(self, chosen: Float[Tensor, "n v"], tau: float) -> Float[np.ndarray, "n v"]:
-        """`chosen` log-probabilities logit-adjusted by `tau` and normalised."""
-        adjusted = self.evaluator.adjusted(chosen, self.log_prior, tau)
+    def finished(
+        self, chosen: Float[Tensor, "n v"], tau: float, groups: Int[Tensor, " n"] | None = None
+    ) -> Float[np.ndarray, "n v"]:
+        """`chosen` log-probabilities logit-adjusted by `tau` and normalised; balanced per `groups` when asked."""
+        adjusted = self.evaluator.adjusted(chosen, self.log_prior, tau, groups)
         return torch.softmax(adjusted, dim=-1).cpu().numpy()
 
     def probabilities(self, split: Split, tau: float) -> Float[np.ndarray, "n v"]:
@@ -54,5 +56,5 @@ class ExportedModel(LoadedModel):
 
     def kaggle_probabilities(self, track: Track, tau: float) -> Float[np.ndarray, "n v"]:
         """Every row of `track`'s Kaggle test, as `probabilities` reads a split."""
-        _, chosen = self.kaggle_chosen(track)
-        return self.finished(chosen, tau)
+        split, chosen = self.kaggle_chosen(track)
+        return self.finished(chosen, tau, split.subject)

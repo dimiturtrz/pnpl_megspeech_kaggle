@@ -58,6 +58,8 @@ class Pool:
     prior: Float[Tensor, " v"]
     evaluator: Evaluator
     kaggle: Float[Tensor, "m r v"] | None = None
+    kaggle_subject: Int[Tensor, " r"] | None = None
+    """The subject each Kaggle test row is read from, for a per-subject balance."""
 
     @classmethod
     def read(  # devtools-ignore: test-mirror
@@ -67,6 +69,7 @@ class Pool:
         runs = Run.discover(root.raw())
         labels: dict[int, Int[Tensor, " n"]] = {}
         reads: dict[int, list[Float[Tensor, "n v"]]] = {}
+        test_subject: Int[Tensor, " r"] | None = None
         priors: list[Float[Tensor, " v"]] = []
         tests: list[Float[Tensor, "r v"]] = []
         seen: frozenset[tuple[int, ...]] = frozenset()
@@ -84,7 +87,9 @@ class Pool:
                 labels[run.subject] = split.y[novel]
                 reads.setdefault(run.subject, []).append(context[novel])
             if track is not None:
-                tests.append(loaded.kaggle_chosen(track)[1])
+                split, chosen = loaded.kaggle_chosen(track)
+                test_subject = split.subject
+                tests.append(chosen)
             LOG.info("read %s", name)
         if evaluator is None:
             raise ValueError("no members")
@@ -94,6 +99,7 @@ class Pool:
             torch.stack(priors).mean(0),
             replace(evaluator, seen=seen),
             torch.stack(tests) if tests else None,
+            test_subject,
         )
 
     def subjects(self) -> list[int]:
@@ -111,7 +117,9 @@ class Pool:
 
     def finished(self, weights: Float[Tensor, "m v"], tau: float) -> Float[Tensor, "r v"]:
         """The Kaggle test's probabilities under `weights`, logit-adjusted by `tau`."""
-        return torch.softmax(self.evaluator.adjusted(self.tested(weights), self.prior, tau), dim=-1)
+        return torch.softmax(
+            self.evaluator.adjusted(self.tested(weights), self.prior, tau, self.kaggle_subject), dim=-1
+        )
 
     def uniform(self) -> Float[Tensor, "m v"]:
         members, _, vocabulary = self.logp[self.subjects()[0]].shape

@@ -49,3 +49,30 @@ def test_sinkhorn_toward_sets_class_mass_share() -> None:
     """At `toward` the converged class masses follow `softmax(toward * log_prior)`."""
     mass = column_mass(Sinkhorn(200, 0.5)(SCORES, PRIOR)).exp()
     assert torch.allclose(mass / mass.sum(), (0.5 * PRIOR).softmax(-1), atol=1e-4)
+
+
+def two_subjects() -> tuple[torch.Tensor, torch.Tensor]:
+    """Two subjects whose rows lean toward different classes, so a pooled balance cannot fix both."""
+    shift = torch.tensor([3.0, 0.0, 0.0, -3.0])
+    scores = torch.cat([SCORES + shift, SCORES - shift])
+    return scores, torch.tensor([0] * 6 + [1] * 6)
+
+
+def test_sinkhorn_per_subject_off_is_pooled() -> None:
+    scores, groups = two_subjects()
+    assert torch.equal(Sinkhorn(50)(scores, PRIOR, groups), Sinkhorn(50)(scores, PRIOR))
+
+
+def test_sinkhorn_per_subject_balances_each_subject_alone() -> None:
+    scores, groups = two_subjects()
+    balanced = Sinkhorn(200, per_subject=True)(scores, PRIOR, groups)
+    for subject in (0, 1):
+        mass = column_mass(balanced[groups == subject])
+        assert torch.allclose(mass, mass.mean().expand_as(mass), atol=1e-4)
+    pooled = column_mass(Sinkhorn(200)(scores, PRIOR))
+    assert not torch.allclose(column_mass(balanced[groups == 0]), pooled, atol=1e-2)
+
+
+def test_sinkhorn_per_subject_without_groups_is_pooled() -> None:
+    scores, _ = two_subjects()
+    assert torch.equal(Sinkhorn(50, per_subject=True)(scores, PRIOR), Sinkhorn(50)(scores, PRIOR))

@@ -84,10 +84,14 @@ class Evaluator:
         return Score.best(by_tau, len(labels))
 
     def adjusted(
-        self, logits: Float[Tensor, "n v"], log_prior: Float[Tensor, " v"], tau: float
+        self,
+        logits: Float[Tensor, "n v"],
+        log_prior: Float[Tensor, " v"],
+        tau: float,
+        groups: Int[Tensor, " n"] | None = None,
     ) -> Float[Tensor, "n v"]:
-        """`logits` logit-adjusted by `tau`, then balanced over the set."""
-        return self.balance(logits - tau * log_prior, log_prior)
+        """`logits` logit-adjusted by `tau`, then balanced over the set (per `groups` when `balance` asks)."""
+        return self.balance(logits - tau * log_prior, log_prior, groups)
 
     def unseen(self, context: Float[Tensor, "n v"], split: Split, log_prior: Float[Tensor, " v"]) -> Score:
         """The context head on `split`'s unseen-span words."""
