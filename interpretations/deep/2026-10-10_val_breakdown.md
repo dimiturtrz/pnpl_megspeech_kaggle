@@ -60,5 +60,10 @@ Top-10 balanced accuracy on the 47 classes present:
 3. **What MEG adds is .217 on Sherlock1 and .136 on TheMoth,** read as the blend minus the pooled probe. The other
    half of the gap sits in what MEG adds, and that is where 11× less TheMoth training could act.
 
-**Not ruled out:** whether the MEG half is quantity or stimulus. Weighting TheMoth up in training would test it.
-This is our own idea, not tested.
+**Not ruled out:** whether the MEG half is quantity or stimulus.
+
+- **Prior test.** `--data.narrator_weight 0.5` (megspeech-7gf.47) shifts draws from the Sherlock narrator's runs
+  toward the other narrative runs. On one seed it left TheMoth flat (.541 vs .542) and cost Sherlock1 .032.
+- **What that shows.** Re-weighting the same 24.5k TheMoth words does not buy TheMoth, so the MEG half is not a
+  sampling-share problem.
+- **What it leaves open.** More distinct TheMoth-like words could still help. Only new data would test that.
