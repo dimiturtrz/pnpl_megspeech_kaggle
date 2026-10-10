@@ -1,0 +1,66 @@
+# Where the Broad ruler loses: subject, word frequency, span position (2026-10-10)
+
+**Scope.**
+
+- **Source.** Saved `broad_hits.pt` per-word top-10 hits, written by `megspeech/submission/report.py`. Nothing
+  was re-inferred. Each model's saved macro reproduces exactly from the hits.
+- **Ruler.** Subjects 1–32 on Sherlock1 ses-11, words of unseen multi-word spans only, n = 25322. The score per
+  subject is balanced top-10 accuracy (mean per-class hit rate). The ruler is the unweighted mean over subjects.
+- **Models.**
+  - **xc5w6all6:** the 29-member blend, scored raw (no unseen fallback, no Sinkhorn), .6329.
+  - **xc5a32k25s:** the same 29 members plus the all32 adapt member, with mean fallback k .25 and Sinkhorn
+    β .25, .6595.
+  - The two differ in both the balance step and the extra member, so their gap is attributed to neither alone.
+- **Buckets.** Inside a bucket, "macro" is per-subject balanced accuracy over the classes present, averaged over
+  subjects. The ruler holds only 41–47 classes, so the frequency quartiles are about 12 classes each and move in
+  coarse steps.
+
+## Subject group
+
+| subjects | ruler words each | classes | xc5w6all6 | xc5a32k25s |
+|---|---|---|---|---|
+| 1–12 | ~1296 | 47 | .6607 | .6732 |
+| 13–22 | ~665 | 44 | .6389 | .6667 |
+| 23–32 | ~310 | 41 | .5935 | .6358 |
+
+Raw, the worst single subject is 29 at .5181 and the best is 4 at .6807. The groups are different recording
+sources, so subject, source, word count and class set are confounded.
+
+## Training-frequency quartile of the class (Q1 rarest)
+
+| quartile | classes | share of words | xc5w6all6 macro / pooled hit | xc5a32k25s macro / pooled hit |
+|---|---|---|---|---|
+| Q1 | 12 | 3.5% | .521 / .530 | .536 / .551 |
+| Q2 | 12 | 10.7% | .668 / .686 | .688 / .702 |
+| Q3 | 11 | 16.7% | .609 / .632 | .683 / .662 |
+| Q4 | 12 | 69.0% | .714 / .848 | .710 / .772 |
+
+## Position in the span
+
+The raw blend is flat over position: first word .649, middle .635, last .643. There is no deficit for
+first or last words.
+
+## Reading (inferences)
+
+1. **The step from the raw blend to the submitted blend trades common-word hits for rare-class recall.**
+   - Q4's pooled hit rate falls from .848 to .772 while its macro stays level.
+   - Q2 and Q3 rise.
+   - This is what Sinkhorn balancing toward the prior should do under a balanced metric. The all32 member is
+     flat on the ruler (.6595 vs .6591 without it), so most of the shift is plausibly the balance step. This
+     is plausible, not isolated.
+2. **The subjects with the fewest ruler words gain most:** 23–32 gain .042, 1–12 gain .013.
+   - Fewer words per class make per-subject balanced accuracy noisier and more sensitive to calibration.
+   - It is also possible that their source is the most mis-calibrated by the raw prior.
+3. **Position carries no lever.** A span-position refiner would target nothing.
+4. **The rarest classes remain the floor (.52–.54).** They are only 3.5% of words but a quarter of the classes,
+   so in a balanced metric they weigh as much as Q4.
+   - A sampler that draws rare words more often was tried on Deep (`--sampler.balance 0.5`). It was null at
+     the macro: rare recall went up and common-word top-1 went down.
+
+## Not ruled out
+
+- **A per-source prior or calibration step.** Sinkhorn per source rather than pooled is untested. Any such
+  step has to be fitted on training statistics, never the Kaggle test MEG.
+- **The cause of subjects 23–32's deficit:** source acoustics, recording quality, or simply fewer words. It
+  needs a word-count-matched subsample.
+- **Rare-word balanced sampling on Broad.** Only its Deep use was measured.
