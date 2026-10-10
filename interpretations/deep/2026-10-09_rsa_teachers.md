@@ -74,6 +74,13 @@ Command: `CUDA_VISIBLE_DEVICES=-1 MEGSPEECH_DATA=D:/data/neural uv run --no-sync
   directional only, since the CIs overlap almost entirely. It is the pick for the next aux try on other grounds:
   apache-2.0, cached, and no member kind trained on it yet. The seeds are queued as bq67 (7gf.141.8).
 
+## On the 36-member blend (2026-10-10)
+`python -m megspeech.evaluation.studies.rsablend m11wd` (eef38ae) uses the mean softmax of all 36 m11wd members, with
+teacher vectors fitted on subject-0 training words only. Every rho moves by at most .006 from the M table: t5 +.305 /
++.279, xlsr +.132 / +.187, whisper L24 +.166 / +.210, word frequency (a log-count gap, as a control) +.055
+[−.090, +.217]. Averaging 36 members of mixed teachers leaves the geometry where a single no-aux member has it, which
+agrees with the circularity reading above. The frequency control rules out a frequency artefact behind t5's lead.
+
 ## What this does NOT rule out
 - **A real gap between teachers.** The CIs are marginal per teacher over the same word resamples, so they are strongly
   correlated. A paired bootstrap of rho differences (for example t5 minus xlsr) was not run, and it could separate
