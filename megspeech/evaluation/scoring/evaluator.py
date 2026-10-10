@@ -87,7 +87,7 @@ class Evaluator:
         self, logits: Float[Tensor, "n v"], log_prior: Float[Tensor, " v"], tau: float
     ) -> Float[Tensor, "n v"]:
         """`logits` logit-adjusted by `tau`, then balanced over the set."""
-        return self.balance(logits - tau * log_prior)
+        return self.balance(logits - tau * log_prior, log_prior)
 
     def unseen(self, context: Float[Tensor, "n v"], split: Split, log_prior: Float[Tensor, " v"]) -> Score:
         """The context head on `split`'s unseen-span words."""

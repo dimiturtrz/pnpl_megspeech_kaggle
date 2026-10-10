@@ -13,13 +13,17 @@ from torch import Tensor
 
 @dataclass(frozen=True)
 class Sinkhorn:
-    """A per-class shift, `steps` Sinkhorn iterations toward equal posterior mass per class; zero steps is none."""
+    """A per-class shift, `steps` Sinkhorn iterations toward the target posterior mass per class; zero steps is none."""
 
     steps: int = 0
+    toward: float = 0.0
+    """Exponent on the training prior the class masses are balanced toward, `softmax(toward * log_prior)`: 0 is equal
+    mass, 1 the prior itself."""
 
-    def __call__(self, scores: Float[Tensor, "n v"]) -> Float[Tensor, "n v"]:
+    def __call__(self, scores: Float[Tensor, "n v"], log_prior: Float[Tensor, " v"]) -> Float[Tensor, "n v"]:
+        target = (self.toward * log_prior).log_softmax(-1)
         shifted = scores
         for _ in range(self.steps):
-            mass = shifted.log_softmax(-1).logsumexp(0)
-            shifted = shifted - (mass - mass.mean())
+            gap = shifted.log_softmax(-1).logsumexp(0) - target
+            shifted = shifted - (gap - gap.mean())
         return shifted
