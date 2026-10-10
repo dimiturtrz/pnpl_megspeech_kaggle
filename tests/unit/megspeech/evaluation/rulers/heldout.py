@@ -1,3 +1,4 @@
+import json
 import logging
 import sys
 from dataclasses import replace
@@ -9,12 +10,12 @@ import pytest
 
 from core.paths import DataRoot
 from megspeech.data.cache.run_cache import WORD_TABLE
-from megspeech.data.config import DataConfig, Val
+from megspeech.data.config import METRICS, DataConfig, Val
 from megspeech.data.constants import CHANNELS
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.rulers import heldout as module
-from megspeech.evaluation.rulers.heldout import HeldOutRuler
+from megspeech.evaluation.rulers.heldout import HeldOutRuler, Lineage
 from megspeech.model.input.subjects import Reading
 from tests.unit.megspeech.evaluation.loaded import SAMPLES, SPOKEN, loaded
 
@@ -50,6 +51,34 @@ def test_runs(tmp_path: Path) -> None:
     trained = replace(tool, data=replace(tool.data, subjects=(0, 124)))
     with pytest.raises(ValueError, match=r"\[124\]"):
         HeldOutRuler((124, 125)).runs(trained, every)
+
+
+def record(tmp_path: Path, name: str, subjects: list[int], stem: str = "") -> None:
+    directory = DataRoot(tmp_path).models() / name
+    directory.mkdir(parents=True)
+    config = {"data": {"subjects": subjects}, "optim": {"stem": stem, "warm": ""}}
+    (directory / METRICS).write_text(json.dumps({"config": config}))
+
+
+def test_subjects(tmp_path: Path) -> None:
+    """A run's subjects are the union over its stem chain; a cyclic record terminates."""
+    record(tmp_path, "root", [101, 124], stem="child")
+    record(tmp_path, "child", [0, 1], stem="root")
+    assert Lineage(DataRoot(tmp_path).models()).subjects("child") == {0, 1, 101, 124}
+
+
+def test_runs_lineage(tmp_path: Path) -> None:
+    """A clean lineage passes; one whose stem trained on a held subject is refused though the model itself did not."""
+    every = runs(tmp_path)
+    record(tmp_path, "clean-stem", [0, 1])
+    record(tmp_path, "clean", [2], stem="clean-stem")
+    record(tmp_path, "dirty-stem", [0, 124])
+    record(tmp_path, "dirty", [2], stem="dirty-stem")
+    tool = loaded(tmp_path)
+    ruler = HeldOutRuler((124, 125))
+    assert set(ruler.runs(replace(tool, names=("clean",)), every)) == {124, 125}
+    with pytest.raises(ValueError, match=r"\[124\]"):
+        ruler.runs(replace(tool, names=("dirty",)), every)
 
 
 def test_subject(tmp_path: Path) -> None:

@@ -11,14 +11,17 @@ the unweighted mean over subjects at one adjustment for all.
 """
 
 import argparse
+import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
 from torch import Tensor
 
 from core.paths import DataRoot
 from core.tree import Tree
+from megspeech.data.config import METRICS
 from megspeech.data.labels.instances import STORY
 from megspeech.data.raw.runs import Run
 from megspeech.device import Device
@@ -33,6 +36,21 @@ SCORING = Scoring(reading=Reading.UNSEEN)
 
 
 @dataclass(frozen=True)
+class Lineage:
+    """The runs a model descends from: itself and, recursively, each `optim.stem` and `optim.warm` its record names."""
+
+    models: Path
+
+    def subjects(self, name: str, seen: frozenset[str] = frozenset()) -> set[int]:
+        """The subjects `name` and every ancestor trained on."""
+        config = json.loads((self.models / name / METRICS).read_text())["config"]
+        optim = config.get("optim", {})
+        parents = {parent for parent in (optim.get("stem", ""), optim.get("warm", "")) if parent} - seen
+        own = set(config.get("data", {}).get("subjects", ()))
+        return own.union(*(self.subjects(parent, seen | {name} | parents) for parent in parents))
+
+
+@dataclass(frozen=True)
 class HeldOutRuler:
     """The ruler over the MASC `subjects` held out of training."""
 
@@ -40,9 +58,11 @@ class HeldOutRuler:
 
     def runs(self, loaded: LoadedModel, runs: list[Run]) -> dict[int, list[Run]]:
         """Each held subject's MASC runs; an error if the model trained on any of the subjects."""
-        trained = sorted(set(self.subjects) & set(loaded.data.subjects))
+        lineage = Lineage(loaded.root.models())
+        ancestry = set(loaded.data.subjects).union(*(lineage.subjects(name) for name in loaded.names))
+        trained = sorted(set(self.subjects) & ancestry)
         if trained:
-            raise ValueError(f"subjects {trained} are in the model's training subjects, not held out")
+            raise ValueError(f"subjects {trained} are in the model's or its stem's training subjects, not held out")
         masc = [run for run in runs if STORY.fullmatch(run.key[0])]
         return {subject: [run for run in masc if run.subject == subject] for subject in self.subjects}
 
