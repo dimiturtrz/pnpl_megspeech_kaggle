@@ -5,12 +5,12 @@ from dataclasses import dataclass
 from typing import override
 
 import torch
-from jaxtyping import Bool, Float, Int
-from torch import Tensor, nn
+from jaxtyping import Float, Int
+from torch import Tensor
 
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
-from megspeech.objective.term import ContextTerm, Term
+from megspeech.objective.term import ContextTerm, Reading, Term
 
 EPSILON = 1e-12
 """Floor under every probability before its log, so an absent cell contributes 0 and no NaN gradient."""
@@ -45,20 +45,12 @@ class InformedTerm(Term):
         return (joint * (joint.clamp(min=EPSILON).log2() - expected.clamp(min=EPSILON).log2())).sum()
 
     @override
-    def loss(
-        self,
-        head: nn.Module,
-        output: Float[Tensor, "g w _"],
-        target: Int[Tensor, "g w"],
-        inside: Bool[Tensor, "g w"] | None = None,
-    ) -> Float[Tensor, ""]:
-        return self.base.loss(head, output, target, inside) + super().loss(head, output, target, inside)
+    def loss(self, reading: Reading) -> Float[Tensor, ""]:
+        return self.base.loss(reading) + super().loss(reading)
 
     @override
-    def unweighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        return -self.information(output.flatten(0, 1), self.base.hard(target).flatten(), self.prior)
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        return -self.information(reading.output.flatten(0, 1), self.base.hard(reading.target).flatten(), self.prior)
 
     @override
     def labels(self, split: Split) -> Int[Tensor, " n"]:

@@ -5,6 +5,7 @@ import torch
 from megspeech.objective.auxiliary.acoustic import CHUNKS, MIX, PRIOR, TAPS, Acoustic, AcousticTerm
 from megspeech.objective.targets.loudness import LENGTH
 from megspeech.objective.targets.speech import Speech
+from megspeech.objective.term import Reading
 
 WIDTH = 6
 STEPS = 25
@@ -32,21 +33,21 @@ def test_head() -> None:
     assert AcousticTerm.timed
 
 
-def test_weighted() -> None:
+def test_unweighted() -> None:
     """Positive over the words with a target, differentiable into the readout and the lag, 0 when none has one; the
     contrast is over `CHUNKS` chunks a window."""
     aligned = term()
     head = aligned.head(WIDTH)
     output = head(torch.randn(2, 3, WIDTH, STEPS, generator=GENERATOR))
-    value = aligned.unweighted(head, output, TARGET)
-    direct = aligned.weighted(head, output, torch.tensor([[0, 1, -1], [2, -1, -1]]), torch.ones(2, 3))
+    value = aligned.unweighted(aligned.read(head, output, TARGET))
+    direct = aligned.unweighted(Reading(head, output, torch.tensor([[0, 1, -1], [2, -1, -1]]), torch.ones(2, 3)))
     assert direct.item() > 0
     assert CHUNKS == 2
     assert value.item() > 0
     value.backward()
     assert cast("Acoustic", head).project.weight.grad is not None
     assert cast("Acoustic", head).lag.weight.grad is not None
-    assert aligned.unweighted(head, output, torch.full((2, 3), -1)).item() == 0.0
+    assert aligned.unweighted(aligned.read(head, output, torch.full((2, 3), -1))).item() == 0.0
 
 
 def test_learns_a_matched_envelope() -> None:
@@ -55,8 +56,8 @@ def test_learns_a_matched_envelope() -> None:
     head = aligned.head(WIDTH)
     truth = aligned.speech.vectors.float()[torch.tensor([[0, 1, 0], [2, 0, 0]])]
     wrong = truth.roll(1, dims=0)
-    right_loss = aligned.unweighted(head, truth, TARGET)
-    wrong_loss = aligned.unweighted(head, wrong, TARGET)
+    right_loss = aligned.unweighted(aligned.read(head, truth, TARGET))
+    wrong_loss = aligned.unweighted(aligned.read(head, wrong, TARGET))
     assert right_loss.item() < wrong_loss.item()
 
 
@@ -73,7 +74,7 @@ def test_fits() -> None:
     target = torch.arange(n)[None]
     for _ in range(60):
         optimiser.zero_grad()
-        fitted.unweighted(head, head(features[None]), target).backward()
+        fitted.unweighted(fitted.read(head, head(features[None]), target)).backward()
         optimiser.step()
     predicted = head(features[None])[0]
     r = torch.corrcoef(torch.stack([predicted.flatten(), envelope.flatten()]))[0, 1]

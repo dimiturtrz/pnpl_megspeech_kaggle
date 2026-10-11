@@ -31,5 +31,5 @@ def test_unweighted() -> None:
     syntactic = term()
     head = syntactic.head(16)
     uniform = torch.zeros(2, 3, len(TAGS))
-    assert syntactic.loss(head, uniform, TOKENS).item() == pytest.approx(2.0 * math.log(len(TAGS)))
-    assert syntactic.unweighted(head, uniform, torch.full((2, 3), 99)).item() == 0.0
+    assert syntactic.loss(syntactic.read(head, uniform, TOKENS)).item() == pytest.approx(2.0 * math.log(len(TAGS)))
+    assert syntactic.unweighted(syntactic.read(head, uniform, torch.full((2, 3), 99))).item() == 0.0

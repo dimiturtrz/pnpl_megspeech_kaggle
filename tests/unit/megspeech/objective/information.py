@@ -58,15 +58,15 @@ def test_loss() -> None:
     term = InformedTerm(base=base, prior=PRIOR, weight=0.5)
     output = onehot(LABELS)[None]
     target = LABELS[None]
-    expected = base.loss(torch.nn.Identity(), output, target) + 0.5 * term.unweighted(
-        torch.nn.Identity(), output, target
+    expected = base.loss(base.read(torch.nn.Identity(), output, target)) + 0.5 * term.unweighted(
+        term.read(torch.nn.Identity(), output, target)
     )
-    assert torch.isclose(term.loss(torch.nn.Identity(), output, target), expected)
+    assert torch.isclose(term.loss(term.read(torch.nn.Identity(), output, target)), expected)
 
 
 def test_unweighted() -> None:
     term = InformedTerm(base=ContextTerm(0.0, None), prior=PRIOR, weight=0.5)
-    value = term.unweighted(torch.nn.Identity(), onehot(LABELS)[None], LABELS[None])
+    value = term.unweighted(term.read(torch.nn.Identity(), onehot(LABELS)[None], LABELS[None]))
     assert value < 0
 
 

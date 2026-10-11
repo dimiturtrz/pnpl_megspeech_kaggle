@@ -6,6 +6,7 @@ import torch
 from megspeech.objective.auxiliary.window import OFFSETS, Window, WindowTerm
 from megspeech.objective.scorer import DIM
 from megspeech.objective.targets.t5 import Lexicon
+from megspeech.objective.term import Reading
 
 GENERATOR = torch.Generator().manual_seed(0)
 ROWS = torch.ones(2, 4)
@@ -32,14 +33,14 @@ def test_head() -> None:
     assert isinstance(term().head(16), Window)
 
 
-def test_weighted() -> None:
+def test_unweighted() -> None:
     """Positive, differentiable into the projection, 0 when no token is in the lexicon."""
     windowed = term()
     head = windowed.head(16)
     output = head(torch.randn(2, 4, 16, generator=GENERATOR))
-    value = windowed.weighted(head, output, TOKENS, ROWS)
+    value = windowed.unweighted(Reading(head, output, TOKENS, ROWS))
     assert value.ndim == 0
     assert value.item() > 0
     value.backward()
     assert cast("Window", head).project.weight.grad is not None
-    assert windowed.weighted(head, output, torch.full((2, 4), 99), ROWS).item() == 0.0
+    assert windowed.unweighted(Reading(head, output, torch.full((2, 4), 99), ROWS)).item() == 0.0

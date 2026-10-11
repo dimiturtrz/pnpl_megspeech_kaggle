@@ -30,7 +30,7 @@ def test_unweighted() -> None:
     """Tokens 10 and 20 are the lexicon's 2 words; uniform logits cost log 2 per known row, unknown rows nothing."""
     lexical = term()
     head = lexical.head(16)
-    assert lexical.loss(head, torch.zeros(2, 3, 2), TOKENS).item() == pytest.approx(3.0 * math.log(2))
-    assert lexical.unweighted(head, torch.zeros(2, 3, 2), torch.full((2, 3), 99)).item() == 0.0
+    assert lexical.loss(lexical.read(head, torch.zeros(2, 3, 2), TOKENS)).item() == pytest.approx(3.0 * math.log(2))
+    assert lexical.unweighted(lexical.read(head, torch.zeros(2, 3, 2), torch.full((2, 3), 99))).item() == 0.0
     sure = torch.tensor([[[50.0, -50.0], [-50.0, 50.0], [0.0, 0.0]]])
-    assert lexical.unweighted(head, sure, TOKENS[:1]).item() == pytest.approx(0.0, abs=1e-6)
+    assert lexical.unweighted(lexical.read(head, sure, TOKENS[:1])).item() == pytest.approx(0.0, abs=1e-6)

@@ -6,13 +6,14 @@ from dataclasses import dataclass
 from typing import ClassVar, cast, override
 
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Float
 from torch import Tensor, nn
 from torch.nn import functional
 
 from megspeech.objective.auxiliary.semantic import Semantic
 from megspeech.objective.auxiliary.speech import SpeechTerm
 from megspeech.objective.targets.loudness import LENGTH
+from megspeech.objective.term import Reading
 
 CHUNK = 25
 """Frames of one contrasted chunk: 0.5 s, a few syllables, so a chunk's shape identifies it among the batch's."""
@@ -58,16 +59,14 @@ class AcousticTerm(SpeechTerm):
         return Acoustic(width).to(self.speech.vectors.device)
 
     @override
-    def weighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        kinds = target.flatten()
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        kinds = reading.target.flatten()
         truth = self.speech.vectors[kinds.clamp(min=0)]
         chunk = torch.arange(CHUNKS, device=kinds.device)
         chunked = torch.where(kinds[:, None] >= 0, kinds[:, None] * CHUNKS + chunk, -1)
-        return cast("Acoustic", head).loss(
-            output.flatten(0, 1).reshape(-1, CHUNK),
+        return cast("Acoustic", reading.head).loss(
+            reading.output.flatten(0, 1).reshape(-1, CHUNK),
             truth.reshape(-1, CHUNK),
             chunked.flatten(),
-            rows.flatten().repeat_interleave(CHUNKS),
+            reading.rows.flatten().repeat_interleave(CHUNKS),
         )

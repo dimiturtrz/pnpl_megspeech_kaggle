@@ -27,7 +27,7 @@ def test_label_free_pretrain_steps_train_the_encoder() -> None:
     losses = []
     for _ in range(10):
         optimiser.zero_grad()
-        loss = term.loss(model.heads[0], model(inputs)[2], ROWS[SLOT])
+        loss = term.loss(term.read(model.heads[0], model(inputs)[2], ROWS[SLOT]))
         loss.backward()
         optimiser.step()
         losses.append(loss.item())

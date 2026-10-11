@@ -14,7 +14,7 @@ from torch import Tensor, nn
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.objective.auxiliary.reversal import Reversal
-from megspeech.objective.term import AuxiliaryTerm
+from megspeech.objective.term import AuxiliaryTerm, Reading
 
 HIDDEN = 128
 """Width of the adversary's hidden layer."""
@@ -69,10 +69,9 @@ class TimingTerm(AuxiliaryTerm):
         return torch.arange(len(self.targets), device=self.targets.device)
 
     @override
-    def weighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        target = reading.target
         at = target.clamp(min=0)
         valid = self.known[at] & (target != IGNORE)[..., None]
-        error = (output.float() - self.targets[at]).square()
-        return self.averaged(error.flatten(), valid.flatten(), rows[..., None].expand_as(valid).flatten())
+        error = (reading.output.float() - self.targets[at]).square()
+        return self.averaged(error.flatten(), valid.flatten(), reading.rows[..., None].expand_as(valid).flatten())

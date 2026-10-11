@@ -15,7 +15,7 @@ from megspeech.data.spans.spans import Spans
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.context import Objective
 from megspeech.objective.targets.t5 import Lexicon
-from megspeech.objective.term import AuxiliaryTerm, Classified, ContextTerm, DistilledTerm, LabelTerm, WordTerm
+from megspeech.objective.term import AuxiliaryTerm, Classified, ContextTerm, DistilledTerm, LabelTerm, Reading, WordTerm
 from megspeech.objective.topk import TopKMix
 
 CPU = torch.device("cpu")
@@ -35,12 +35,16 @@ def logits() -> torch.Tensor:
     return right
 
 
+def identity(output: torch.Tensor, target: torch.Tensor) -> Reading:
+    return Reading(nn.Identity(), output, target, torch.ones(target.shape))
+
+
 def test_term_loss() -> None:
     """The weight scales the unweighted loss."""
     plain = WordTerm(0.0, None)
     doubled = WordTerm(0.0, None, weight=2.0)
-    once = plain.loss(nn.Identity(), -logits(), Y).item()
-    assert doubled.loss(nn.Identity(), -logits(), Y).item() == pytest.approx(2 * once)
+    once = plain.loss(plain.read(nn.Identity(), -logits(), Y)).item()
+    assert doubled.loss(doubled.read(nn.Identity(), -logits(), Y)).item() == pytest.approx(2 * once)
 
 
 def test_balanced() -> None:
@@ -80,8 +84,10 @@ def test_context_term_unweighted(objective: Objective) -> None:
     """The context term is its objective's loss over every span position."""
     context = ContextTerm(0.1, None, objective=objective)
     flat = objective.loss(logits().flatten(0, 1), Y.flatten(), 0.1)
-    assert torch.equal(context.unweighted(nn.Identity(), logits(), Y), flat)
-    assert context.unweighted(nn.Identity(), logits(), Y) < context.unweighted(nn.Identity(), -logits(), Y)
+    assert torch.equal(context.unweighted(context.read(nn.Identity(), logits(), Y)), flat)
+    assert context.unweighted(context.read(nn.Identity(), logits(), Y)) < context.unweighted(
+        context.read(nn.Identity(), -logits(), Y)
+    )
 
 
 def distilled(share: float, taught: torch.Tensor) -> DistilledTerm:
@@ -102,12 +108,12 @@ def test_distilled_term_unweighted() -> None:
     rows that are padding or unlabelled count in neither."""
     rows = torch.tensor([[0, 1], [IGNORE, 2]])
     agreeing = logits()[[0, 0, 1], [0, 1, 1]].log_softmax(-1)
-    labelled = ContextTerm(0.0, None).unweighted(nn.Identity(), logits(), torch.tensor([[3, 7], [IGNORE, IGNORE]]))
-    assert torch.allclose(distilled(0.0, agreeing).unweighted(nn.Identity(), logits(), rows), labelled)
-    assert torch.allclose(distilled(1.0, agreeing).unweighted(nn.Identity(), logits(), rows), torch.zeros(()))
+    labelled = ContextTerm(0.0, None).unweighted(identity(logits(), torch.tensor([[3, 7], [IGNORE, IGNORE]])))
+    assert torch.allclose(distilled(0.0, agreeing).unweighted(identity(logits(), rows)), labelled)
+    assert torch.allclose(distilled(1.0, agreeing).unweighted(identity(logits(), rows)), torch.zeros(()))
     uniform = torch.full((3, VOCAB_SIZE), -math.log(VOCAB_SIZE))
-    assert distilled(1.0, uniform).unweighted(nn.Identity(), logits(), rows) > 1.0
-    shifted = distilled(1.0, agreeing - 2.0).unweighted(nn.Identity(), logits(), rows)
+    assert distilled(1.0, uniform).unweighted(identity(logits(), rows)) > 1.0
+    shifted = distilled(1.0, agreeing - 2.0).unweighted(identity(logits(), rows))
     assert torch.allclose(shifted, torch.zeros(()), atol=1e-6)
 
 
@@ -117,11 +123,11 @@ def test_distilled_term_temperature() -> None:
     rows = torch.tensor([[0, 1], [IGNORE, 2]])
     agreeing = logits()[[0, 0, 1], [0, 1, 1]]
     hot = DistilledTerm(0.0, None, taught=agreeing, y=torch.tensor([3, 7, IGNORE]), share=1.0, temperature=4.0)
-    assert torch.allclose(hot.unweighted(nn.Identity(), logits(), rows), torch.zeros(()), atol=1e-6)
+    assert torch.allclose(hot.unweighted(hot.read(nn.Identity(), logits(), rows)), torch.zeros(()), atol=1e-6)
     uniform = torch.zeros(3, VOCAB_SIZE)
-    cold = distilled(1.0, uniform).unweighted(nn.Identity(), logits(), rows)
+    cold = distilled(1.0, uniform).unweighted(identity(logits(), rows))
     warm = DistilledTerm(0.0, None, taught=uniform, y=torch.tensor([3, 7, IGNORE]), share=1.0, temperature=4.0)
-    assert not torch.allclose(warm.unweighted(nn.Identity(), logits(), rows), cold)
+    assert not torch.allclose(warm.unweighted(warm.read(nn.Identity(), logits(), rows)), cold)
 
 
 def test_distilled_term_unlabelled() -> None:
@@ -132,13 +138,13 @@ def test_distilled_term_unlabelled() -> None:
     y = torch.tensor([3, 7, IGNORE])
     labelled = DistilledTerm(0.0, None, taught=taught, y=y, share=1.0)
     everywhere = DistilledTerm(0.0, None, taught=taught, y=y, share=1.0, unlabelled=True)
-    assert torch.allclose(labelled.unweighted(nn.Identity(), logits(), rows), torch.zeros(()), atol=1e-6)
-    assert everywhere.unweighted(nn.Identity(), logits(), rows) > 1.0
+    assert torch.allclose(labelled.unweighted(labelled.read(nn.Identity(), logits(), rows)), torch.zeros(()), atol=1e-6)
+    assert everywhere.unweighted(everywhere.read(nn.Identity(), logits(), rows)) > 1.0
 
 
 def test_word_term_unweighted() -> None:
     """The word term is the plain softmax over every span position."""
-    word = WordTerm(0.1, None).unweighted(nn.Identity(), logits(), Y)
+    word = WordTerm(0.1, None).unweighted(identity(logits(), Y))
     expected = functional.cross_entropy(logits().flatten(0, 1), Y.flatten(), ignore_index=IGNORE, label_smoothing=0.1)
     assert torch.equal(word, expected)
 
@@ -146,7 +152,7 @@ def test_word_term_unweighted() -> None:
 def test_classified_unweighted() -> None:
     """Uniform logits over the classified targets cost log(count); an unclassifiable target is masked."""
     uniform = torch.zeros(1, 3, 2)
-    loss = lexical().unweighted(nn.Identity(), uniform, torch.tensor([[10, 20, 99]]))
+    loss = lexical().unweighted(identity(uniform, torch.tensor([[10, 20, 99]])))
     assert loss.item() == pytest.approx(math.log(2))
 
 
@@ -179,13 +185,29 @@ TOKEN_PAIR = torch.tensor([[10, 20]])
 INSIDE = torch.tensor([[True, False]])
 
 
-def test_weighted() -> None:
+def test_term_read() -> None:
+    """A label term reads every row at weight 1, `inside` or not."""
+    head = nn.Identity()
+    reading = WordTerm(0.0, None).read(head, logits(), Y, Y != IGNORE)
+    assert reading.head is head
+    assert torch.equal(reading.rows, torch.ones(Y.shape))
+
+
+def test_auxiliary_term_read() -> None:
+    """An auxiliary term weighs the words inside the 50 at its `vocab_weight`, every row at 1 without `inside`."""
+    head = nn.Identity()
+    emphasised = replace(lexical(), vocab_weight=9.0).read(head, inside_logits(), TOKEN_PAIR, INSIDE)
+    assert torch.equal(emphasised.rows, torch.tensor([[9.0, 1.0]]))
+    assert torch.equal(lexical().read(head, inside_logits(), TOKEN_PAIR).rows, torch.ones(1, 2))
+
+
+def test_unweighted() -> None:
     """Rows at weight 1 are the unweighted loss; a heavier right row lowers the mean toward its zero loss."""
     term = lexical()
-    flat = term.unweighted(nn.Identity(), inside_logits(), TOKEN_PAIR)
-    assert torch.equal(term.weighted(nn.Identity(), inside_logits(), TOKEN_PAIR, torch.ones(1, 2)), flat)
+    flat = term.unweighted(term.read(nn.Identity(), inside_logits(), TOKEN_PAIR))
+    assert torch.equal(term.unweighted(Reading(nn.Identity(), inside_logits(), TOKEN_PAIR, torch.ones(1, 2))), flat)
     wrong = flat.item() * 2
-    heavy = term.weighted(nn.Identity(), inside_logits(), TOKEN_PAIR, torch.tensor([[9.0, 1.0]]))
+    heavy = term.unweighted(Reading(nn.Identity(), inside_logits(), TOKEN_PAIR, torch.tensor([[9.0, 1.0]])))
     assert heavy.item() == pytest.approx(wrong / 10)
 
 
@@ -193,12 +215,19 @@ def test_auxiliary_term_loss() -> None:
     """Weight 1 equals the old loss exactly; above 1 it moves toward the in-vocabulary rows; an all-OOV batch and a
     batch without `inside` read as weight 1."""
     plain = lexical()
-    flat = plain.unweighted(nn.Identity(), inside_logits(), TOKEN_PAIR)
-    assert torch.equal(plain.loss(nn.Identity(), inside_logits(), TOKEN_PAIR, INSIDE), flat)
+    flat = plain.unweighted(plain.read(nn.Identity(), inside_logits(), TOKEN_PAIR))
+    assert torch.equal(plain.loss(plain.read(nn.Identity(), inside_logits(), TOKEN_PAIR, INSIDE)), flat)
     emphasised = replace(plain, vocab_weight=9.0)
-    assert emphasised.loss(nn.Identity(), inside_logits(), TOKEN_PAIR, INSIDE).item() == pytest.approx(flat.item() / 5)
-    assert emphasised.loss(nn.Identity(), inside_logits(), TOKEN_PAIR, torch.zeros(1, 2, dtype=torch.bool)) == flat
-    assert torch.equal(emphasised.loss(nn.Identity(), inside_logits(), TOKEN_PAIR), flat)
+    assert emphasised.loss(emphasised.read(nn.Identity(), inside_logits(), TOKEN_PAIR, INSIDE)).item() == pytest.approx(
+        flat.item() / 5
+    )
+    assert (
+        emphasised.loss(
+            emphasised.read(nn.Identity(), inside_logits(), TOKEN_PAIR, torch.zeros(1, 2, dtype=torch.bool))
+        )
+        == flat
+    )
+    assert torch.equal(emphasised.loss(emphasised.read(nn.Identity(), inside_logits(), TOKEN_PAIR)), flat)
 
 
 def test_auxiliary_term_timed() -> None:
@@ -236,13 +265,39 @@ def test_auxiliary_term_unweighted() -> None:
     term = replace(lexical(), vocab_weight=9.0)
     ones = torch.ones(1, 2)
     assert torch.equal(
-        term.unweighted(nn.Identity(), inside_logits(), TOKEN_PAIR),
-        term.weighted(nn.Identity(), inside_logits(), TOKEN_PAIR, ones),
+        term.unweighted(term.read(nn.Identity(), inside_logits(), TOKEN_PAIR)),
+        term.unweighted(Reading(nn.Identity(), inside_logits(), TOKEN_PAIR, ones)),
     )
     assert torch.equal(
-        replace(term, weight=3.0).unweighted(nn.Identity(), inside_logits(), TOKEN_PAIR),
-        term.unweighted(nn.Identity(), inside_logits(), TOKEN_PAIR),
+        replace(term, weight=3.0).unweighted(identity(inside_logits(), TOKEN_PAIR)),
+        term.unweighted(term.read(nn.Identity(), inside_logits(), TOKEN_PAIR)),
     )
+
+
+def test_emphasis() -> None:
+    """Every row weighs 1 without `inside`; with it, the words inside the 50 weigh `vocab_weight`."""
+    term = replace(lexical(), vocab_weight=9.0)
+    assert torch.equal(term.emphasis(TOKEN_PAIR), torch.ones(1, 2))
+    assert torch.equal(term.emphasis(TOKEN_PAIR, INSIDE), torch.tensor([[9.0, 1.0]]))
+
+
+def test_contrasted() -> None:
+    """The contrast reads every position flattened: its output, the table row its kind names (row 0 for a negative
+    kind, which it is told to drop), the kind itself and its row weight."""
+    seen: list[torch.Tensor] = []
+
+    def contrast(output: torch.Tensor, vectors: torch.Tensor, kinds: torch.Tensor, rows: torch.Tensor) -> torch.Tensor:
+        seen.extend([output, vectors, kinds, rows])
+        return rows.sum()
+
+    output = torch.arange(8.0).reshape(1, 2, 4)
+    table = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
+    reading = Reading(nn.Identity(), output, TOKEN_PAIR, torch.tensor([[2.0, 3.0]]))
+    assert reading.contrasted(contrast, table, torch.tensor([[1, -1]])).item() == 5.0
+    assert torch.equal(seen[0], output.flatten(0, 1))
+    assert torch.equal(seen[1], table[[1, 0]])
+    assert seen[2].tolist() == [1, -1]
+    assert seen[3].tolist() == [2.0, 3.0]
 
 
 def smoothed() -> torch.Tensor:
@@ -261,9 +316,9 @@ def test_word_term_labelled() -> None:
 @pytest.mark.parametrize("term", [WordTerm(0.1, None), ContextTerm(0.1, None)])
 def test_label_term_unweighted(term: LabelTerm) -> None:
     """Share 0 is the head's own loss exactly; share 1 is the top-k term alone, ~0 when every word ranks first."""
-    plain = term.unweighted(nn.Identity(), logits(), Y)
-    off = replace(term, topk=TopKMix(share=0.0, temperature=0.5)).unweighted(nn.Identity(), logits(), Y)
+    plain = term.unweighted(term.read(nn.Identity(), logits(), Y))
+    off = replace(term, topk=TopKMix(share=0.0, temperature=0.5)).unweighted(identity(logits(), Y))
     assert torch.equal(off, plain)
-    full = replace(term, topk=TopKMix(share=1.0)).unweighted(nn.Identity(), logits(), Y)
+    full = replace(term, topk=TopKMix(share=1.0)).unweighted(identity(logits(), Y))
     assert full < 1e-6
-    assert replace(term, topk=TopKMix(share=1.0)).unweighted(nn.Identity(), -logits(), Y) > 1.0
+    assert replace(term, topk=TopKMix(share=1.0)).unweighted(identity(-logits(), Y)) > 1.0

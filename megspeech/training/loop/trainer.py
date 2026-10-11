@@ -218,7 +218,7 @@ class Trainer:
             parts = zip(state.terms, state.readouts, outputs, strict=True)
             inside = batch.target(train.y) != IGNORE
             losses = torch.stack(
-                [term.loss(head, out, batch.target(term.labels(train)), inside) for term, head, out in parts]
+                [term.loss(term.read(head, out, batch.target(term.labels(train)), inside)) for term, head, out in parts]
             )
             value = losses.sum()
         state.curriculum.observe(Observation(spans, outputs[0], batch.target(train.y)))

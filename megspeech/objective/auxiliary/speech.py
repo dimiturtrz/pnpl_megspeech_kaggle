@@ -10,7 +10,7 @@ from torch import Tensor, nn
 from megspeech.data.batching.split import Split
 from megspeech.objective.auxiliary.semantic import Semantic
 from megspeech.objective.targets.speech import Speech
-from megspeech.objective.term import AuxiliaryTerm
+from megspeech.objective.term import AuxiliaryTerm, Reading
 
 
 @dataclass(frozen=True)
@@ -34,10 +34,7 @@ class SpeechTerm(AuxiliaryTerm):
         return self.speech.rows
 
     @override
-    def weighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        kinds = target.flatten()
-        semantic = cast("Semantic", head)
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        semantic = cast("Semantic", reading.head)
         contrast = semantic.softmax_loss if self.softmax else semantic.loss
-        return contrast(output.flatten(0, 1), self.speech.vectors[kinds.clamp(min=0)], kinds, rows.flatten())
+        return reading.contrasted(contrast, self.speech.vectors, reading.target)

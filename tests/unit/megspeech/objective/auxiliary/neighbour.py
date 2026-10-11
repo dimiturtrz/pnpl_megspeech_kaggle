@@ -10,6 +10,7 @@ from megspeech.data.batching.split import SpanInput, Split
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.objective.auxiliary.neighbour import OUTSIDE, NextWordTerm, PreviousWordTerm
+from megspeech.objective.term import Reading
 from tests.unit.megspeech.model.auxiliary import ONSET, SLOT, net, x
 
 TARGET = torch.tensor([[3, OUTSIDE, 7, IGNORE], [5, 6, IGNORE, IGNORE]])
@@ -58,20 +59,20 @@ def test_unweighted() -> None:
     term = NextWordTerm(weight=2.0)
     head = term.head(4)
     uniform = torch.zeros(2, 4, VOCAB_SIZE)
-    assert term.loss(head, uniform, TARGET).item() == pytest.approx(2.0 * math.log(VOCAB_SIZE))
-    assert term.unweighted(head, uniform, torch.full((2, 4), IGNORE)).item() == 0.0
+    assert term.loss(term.read(head, uniform, TARGET)).item() == pytest.approx(2.0 * math.log(VOCAB_SIZE))
+    assert term.unweighted(term.read(head, uniform, torch.full((2, 4), IGNORE))).item() == 0.0
 
 
-def test_weighted() -> None:
+def test_unweighted_rows() -> None:
     """Rows scale each predicted slot's loss; a slot without a heard neighbour contributes nothing."""
     term = NextWordTerm(weight=1.0)
     head = term.head(4)
     uniform = torch.zeros(2, 4, VOCAB_SIZE)
     flat = torch.ones(2, 4)
-    assert term.weighted(head, uniform, TARGET, flat).item() == pytest.approx(math.log(VOCAB_SIZE))
+    assert term.unweighted(Reading(head, uniform, TARGET, flat)).item() == pytest.approx(math.log(VOCAB_SIZE))
     skewed = torch.tensor([[1.0, 9.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0]])
-    assert term.weighted(head, uniform, TARGET, skewed).item() == pytest.approx(math.log(VOCAB_SIZE))
-    assert term.weighted(head, uniform, torch.full((2, 4), IGNORE), flat).item() == 0.0
+    assert term.unweighted(Reading(head, uniform, TARGET, skewed)).item() == pytest.approx(math.log(VOCAB_SIZE))
+    assert term.unweighted(Reading(head, uniform, torch.full((2, 4), IGNORE), flat)).item() == 0.0
 
 
 def test_local() -> None:
@@ -89,7 +90,7 @@ def test_gradient_skips_the_mixer() -> None:
     auxiliary = WithAuxiliary(model, heads, Tap.CONTEXT, (Tap.WORD,))
     output = auxiliary(SpanInput(x(), ONSET, SLOT, torch.zeros(3, dtype=torch.long)))[2]
     target = torch.tensor([[1, 2, IGNORE], [4, IGNORE, IGNORE]])
-    term.loss(head, output, target).backward()
+    term.loss(term.read(head, output, target)).backward()
     assert all(p.grad is None or not p.grad.any() for p in model.context.parameters())
     assert any(p.grad is not None and p.grad.any() for p in model.words.parameters())
     grad = cast("nn.Linear", head.get_submodule("1")).weight.grad

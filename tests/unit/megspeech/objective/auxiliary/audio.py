@@ -5,6 +5,7 @@ import torch
 from megspeech.objective.auxiliary.audio import DIM, TEMPERATURE, AudioTerm, Listening
 from megspeech.objective.targets.loudness import LENGTH
 from megspeech.objective.targets.speech import Speech
+from megspeech.objective.term import Reading
 
 GENERATOR = torch.Generator().manual_seed(0)
 WIDTH = 8
@@ -66,13 +67,13 @@ def test_head() -> None:
     assert isinstance(term.head(WIDTH), Listening)
 
 
-def test_weighted() -> None:
+def test_unweighted() -> None:
     term = AudioTerm(1.0, Speech(torch.tensor([0, 1, 2]), torch.randn(3, LENGTH, generator=GENERATOR)))
     head = term.head(WIDTH)
     output = head(torch.randn(2, 2, WIDTH, TIMES, generator=GENERATOR))
     target = torch.tensor([[0, 1], [2, -1]])
-    loss = term.weighted(head, output, target, torch.ones(2, 2))
+    loss = term.unweighted(Reading(head, output, target, torch.ones(2, 2)))
     loss.backward()
     assert loss.item() > 0
     assert all(p.grad is not None for p in head.parameters())
-    assert term.weighted(head, output, torch.tensor([[0, 1], [-1, -1]]), torch.ones(2, 2)) == 0
+    assert term.unweighted(Reading(head, output, torch.tensor([[0, 1], [-1, -1]]), torch.ones(2, 2))) == 0

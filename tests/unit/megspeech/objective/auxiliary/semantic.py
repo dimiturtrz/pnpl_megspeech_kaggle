@@ -7,6 +7,7 @@ import torch
 from megspeech.objective.auxiliary.semantic import Semantic, SemanticTerm
 from megspeech.objective.scorer import BIAS, DIM, TEMPERATURE
 from megspeech.objective.targets.t5 import Lexicon
+from megspeech.objective.term import Reading
 
 WIDTH = 6
 GENERATOR = torch.Generator().manual_seed(0)
@@ -65,22 +66,23 @@ def test_unweighted() -> None:
     aligned = term()
     head = aligned.head(16)
     projected = head(torch.randn(2, 3, 16, generator=GENERATOR))
-    value = aligned.unweighted(head, projected, TOKENS)
+    value = aligned.unweighted(aligned.read(head, projected, TOKENS))
     assert value.ndim == 0
     assert value.item() > 0
     value.backward()
     assert cast("Semantic", head).project.weight.grad is not None
-    assert aligned.unweighted(head, projected, torch.full((2, 3), 99)).item() == 0.0
+    assert aligned.unweighted(aligned.read(head, projected, torch.full((2, 3), 99))).item() == 0.0
 
 
-def test_weighted() -> None:
+def test_unweighted_rows() -> None:
     """Rows at weight 1 are the unweighted loss; other weights move it; no token in the lexicon is still 0."""
     aligned = term()
     head = aligned.head(16)
     projected = head(torch.randn(2, 3, 16, generator=GENERATOR))
     assert torch.equal(
-        aligned.weighted(head, projected, TOKENS, torch.ones(2, 3)), aligned.unweighted(head, projected, TOKENS)
+        aligned.unweighted(Reading(head, projected, TOKENS, torch.ones(2, 3))),
+        aligned.unweighted(aligned.read(head, projected, TOKENS)),
     )
-    skewed = aligned.weighted(head, projected, TOKENS, torch.tensor([[1.0, 1.0, 1.0], [9.0, 1.0, 1.0]]))
-    assert skewed.item() != aligned.unweighted(head, projected, TOKENS).item()
-    assert aligned.weighted(head, projected, torch.full((2, 3), 99), torch.full((2, 3), 3.0)).item() == 0.0
+    skewed = aligned.unweighted(Reading(head, projected, TOKENS, torch.tensor([[1.0, 1.0, 1.0], [9.0, 1.0, 1.0]])))
+    assert skewed.item() != aligned.unweighted(aligned.read(head, projected, TOKENS)).item()
+    assert aligned.unweighted(Reading(head, projected, torch.full((2, 3), 99), torch.full((2, 3), 3.0))).item() == 0.0

@@ -64,5 +64,7 @@ def test_unweighted() -> None:
     tagged = term()
     uniform = torch.zeros(1, 3, len(CLASSES))
     target = torch.tensor([[3, OTHER, -100]])
-    assert tagged.loss(nn.Identity(), uniform, target).item() == pytest.approx(2.0 * math.log(len(CLASSES)))
-    assert tagged.unweighted(nn.Identity(), uniform, torch.tensor([[-1, -100, -100]])).item() == 0.0
+    assert tagged.loss(tagged.read(nn.Identity(), uniform, target)).item() == pytest.approx(
+        2.0 * math.log(len(CLASSES))
+    )
+    assert tagged.unweighted(tagged.read(nn.Identity(), uniform, torch.tensor([[-1, -100, -100]]))).item() == 0.0

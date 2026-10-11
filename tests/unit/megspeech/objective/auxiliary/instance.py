@@ -9,6 +9,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.spans.spans import Spans
 from megspeech.objective.auxiliary.instance import Apart, InstanceTerm, Similarity, Together
+from megspeech.objective.term import Reading
 
 CPU = torch.device("cpu")
 WORDS = pd.DataFrame(
@@ -98,19 +99,24 @@ def reference(output: torch.Tensor, target: torch.Tensor) -> float:
     return sum(losses) / len(losses)
 
 
-def test_weighted() -> None:
+def test_unweighted() -> None:
     """The anchor-by-anchor InfoNCE; shared embeddings across subjects cost less; weight 0 adds exactly 0; a batch
     without a cross-subject pair costs 0 with finite gradients."""
     made, output = term(), embeddings()
     rows = torch.ones(TARGET.shape)
-    assert made.weighted(Similarity(), output, TARGET, rows).item() == pytest.approx(reference(output, TARGET))
+    assert made.unweighted(Reading(Similarity(), output, TARGET, rows)).item() == pytest.approx(
+        reference(output, TARGET)
+    )
     shared = output.clone()
     shared[0, 2], shared[1, 0] = shared[0, 0], shared[0, 1]
-    assert made.weighted(Similarity(), shared, TARGET, rows) < made.weighted(Similarity(), output, TARGET, rows)
-    assert term(0.0).loss(Similarity(), output, TARGET).item() == 0.0
+    assert made.unweighted(Reading(Similarity(), shared, TARGET, rows)) < made.unweighted(
+        Reading(Similarity(), output, TARGET, rows)
+    )
+    off = term(0.0)
+    assert off.loss(off.read(Similarity(), output, TARGET)).item() == 0.0
     lonely = torch.tensor([[0, 1, 5]])
     leaf = embeddings()[:1].requires_grad_()
-    alone = made.weighted(Similarity(), leaf, lonely, torch.ones(lonely.shape))
+    alone = made.unweighted(Reading(Similarity(), leaf, lonely, torch.ones(lonely.shape)))
     alone.backward()
     assert alone.item() == 0.0
     assert leaf.grad is not None
@@ -162,14 +168,14 @@ def chorus(tokens: int) -> pd.DataFrame:
     return pd.DataFrame({"run": runs, "position": position, "sentence": position})
 
 
-def test_weighted_shuffled_is_log_batch() -> None:
+def test_unweighted_shuffled_is_log_batch() -> None:
     """Unrelated embeddings cost about `ln` of the candidates; the same embedding across subjects costs far less."""
     tokens, width = 32, 1024
     made = InstanceTerm.of(1.0, chorus(tokens), CPU, apart=True)
     target = torch.arange(2 * tokens).view(2, tokens)
     rows = torch.ones(target.shape)
     shuffled = torch.randn(2, tokens, width, generator=torch.Generator().manual_seed(0))
-    loss = made.weighted(Similarity(), shuffled, target, rows).item()
+    loss = made.unweighted(Reading(Similarity(), shuffled, target, rows)).item()
     assert loss == pytest.approx(math.log(2 * tokens - 1), abs=0.1)
     shared = shuffled[:1].expand(2, -1, -1)
-    assert made.weighted(Similarity(), shared, target, rows).item() < loss - 1
+    assert made.unweighted(Reading(Similarity(), shared, target, rows)).item() < loss - 1

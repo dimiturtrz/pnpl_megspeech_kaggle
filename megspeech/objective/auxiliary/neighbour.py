@@ -11,7 +11,7 @@ from torch.nn import functional
 
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
-from megspeech.objective.term import AuxiliaryTerm
+from megspeech.objective.term import AuxiliaryTerm, Reading
 
 OUTSIDE = -1
 """A real word outside the 50: it has no label to be predicted but its own embedding still predicts its neighbour's;
@@ -57,14 +57,12 @@ class NeighbourTerm(AuxiliaryTerm):
         return torch.where((target == IGNORE) | (beside < 0), IGNORE, beside)
 
     @override
-    def weighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        known = self.neighbours(target)
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        known = self.neighbours(reading.target)
         losses = functional.cross_entropy(
-            output.flatten(0, 1).float(), known.flatten(), ignore_index=IGNORE, reduction="none"
+            reading.output.flatten(0, 1).float(), known.flatten(), ignore_index=IGNORE, reduction="none"
         )
-        return self.averaged(losses, (known != IGNORE).flatten(), rows.flatten())
+        return self.averaged(losses, (known != IGNORE).flatten(), reading.rows.flatten())
 
 
 @dataclass(frozen=True)

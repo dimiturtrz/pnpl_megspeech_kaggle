@@ -10,7 +10,7 @@ from torch.nn import functional
 
 from megspeech.objective.scorer import SigmoidScorer
 from megspeech.objective.targets.t5 import Lexicon
-from megspeech.objective.term import AuxiliaryTerm
+from megspeech.objective.term import AuxiliaryTerm, Reading
 
 
 class Semantic(SigmoidScorer):
@@ -71,9 +71,6 @@ class SemanticTerm(AuxiliaryTerm):
         return Semantic(width).to(self.lexicon.vectors.device)
 
     @override
-    def weighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        kinds = self.lexicon.rows(target).flatten()
-        vectors = self.lexicon.vectors[kinds.clamp(min=0)]
-        return cast("Semantic", head).loss(output.flatten(0, 1), vectors, kinds, rows.flatten())
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        semantic = cast("Semantic", reading.head)
+        return reading.contrasted(semantic.loss, self.lexicon.vectors, self.lexicon.rows(reading.target))

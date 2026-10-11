@@ -5,7 +5,8 @@ every heard word's embedding (`AuxiliaryTerm`).
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from typing import ClassVar, override
 
 import torch
@@ -21,26 +22,53 @@ from megspeech.objective.topk import TopKMix
 
 
 @dataclass(frozen=True)
+class Reading:
+    """A readout `head`'s `output` at every span position, against the `target` its word carries, each position's
+    row at its weight in `rows`: what a term scores."""
+
+    head: nn.Module
+    output: Float[Tensor, "g w _"]
+    target: Int[Tensor, "g w"]
+    rows: Float[Tensor, "g w"]
+
+    def contrasted(
+        self,
+        contrast: Callable[
+            [Float[Tensor, "n d"], Float[Tensor, "n e"], Int[Tensor, " n"], Float[Tensor, " n"]], Float[Tensor, ""]
+        ],
+        table: Float[Tensor, "v e"],
+        kinds: Int[Tensor, "g w"],
+    ) -> Float[Tensor, ""]:
+        """`contrast` of every position's output against the `table` row its word `kinds` names, a negative kind
+        naming none."""
+        flat = kinds.flatten()
+        return contrast(self.output.flatten(0, 1), table[flat.clamp(min=0)], flat, self.rows.flatten())
+
+
+@dataclass(frozen=True)
 class Term(ABC):
     """A readout's `weight`ed loss against the label of each span position's word."""
 
     weight: float = field(kw_only=True)
 
-    def loss(
+    def read(
         self,
         head: nn.Module,
         output: Float[Tensor, "g w _"],
         target: Int[Tensor, "g w"],
         inside: Bool[Tensor, "g w"] | None = None,
-    ) -> Float[Tensor, ""]:
-        """`output` of `head` at span positions whose words carry `target`, gathered from `labels`; `inside` marks the
-        positions of words in the vocabulary, which only the auxiliary terms read."""
-        return self.weight * self.unweighted(head, output, target)
+    ) -> Reading:
+        """`output` of `head` at span positions whose words carry `target`, gathered from `labels`, every row at
+        weight 1; `inside` marks the positions of words in the vocabulary, which only the auxiliary terms weigh."""
+        return Reading(head, output, target, torch.ones(target.shape, device=target.device))
+
+    def loss(self, reading: Reading) -> Float[Tensor, ""]:
+        """The `weight`ed loss of `reading`."""
+        return self.weight * self.unweighted(reading)
 
     @abstractmethod
-    def unweighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
-    ) -> Float[Tensor, ""]: ...
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        """The loss of `reading` before the term's weight."""
 
     @abstractmethod
     def labels(self, split: Split) -> Int[Tensor, " n"]:
@@ -58,10 +86,8 @@ class LabelTerm(Term):
     topk: TopKMix = field(default=TopKMix(), kw_only=True)
 
     @override
-    def unweighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        logits, y = output.flatten(0, 1), target.flatten()
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        logits, y = reading.output.flatten(0, 1), reading.target.flatten()
         return self.topk.mixed(self.labelled(logits, y), logits, y, self.classes)
 
     @abstractmethod
@@ -128,15 +154,14 @@ class DistilledTerm(ContextTerm):
         return torch.where(target == IGNORE, IGNORE, self.y[target.clamp(min=0)])
 
     @override
-    def unweighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        target = reading.target
         rows = target.clamp(min=0)
         y = self.hard(target)
-        hard = super().unweighted(head, output, y)
+        hard = super().unweighted(replace(reading, target=y))
         keep = (target != IGNORE if self.unlabelled else y != IGNORE).float()
         teacher = (self.taught[rows].float() / self.temperature).log_softmax(-1)
-        student = (output.float() / self.temperature).log_softmax(-1)
+        student = (reading.output.float() / self.temperature).log_softmax(-1)
         kl = (teacher.exp() * (teacher - student)).sum(-1) * self.temperature**2
         soft = (kl * keep).sum() / keep.sum().clamp(min=1)
         return (1 - self.share) * hard + self.share * soft
@@ -175,30 +200,23 @@ class AuxiliaryTerm(Term):
         share = keep * rows
         return (values * share).sum() / share.sum().clamp(min=torch.finfo(share.dtype).tiny)
 
+    def emphasis(self, target: Int[Tensor, "g w"], inside: Bool[Tensor, "g w"] | None = None) -> Float[Tensor, "g w"]:
+        """Each position's row weight: `vocab_weight` for the words `inside` the 50, 1 for every other, all 1 when
+        nothing marks them."""
+        rows = torch.ones(target.shape, device=target.device)
+        if inside is not None:
+            rows = rows + (self.vocab_weight - 1.0) * inside.float()
+        return rows
+
     @override
-    def loss(
+    def read(
         self,
         head: nn.Module,
         output: Float[Tensor, "g w _"],
         target: Int[Tensor, "g w"],
         inside: Bool[Tensor, "g w"] | None = None,
-    ) -> Float[Tensor, ""]:
-        rows = torch.ones(target.shape, device=target.device)
-        if inside is not None:
-            rows = rows + (self.vocab_weight - 1.0) * inside.float()
-        return self.weight * self.weighted(head, output, target, rows)
-
-    @override
-    def unweighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        return self.weighted(head, output, target, torch.ones(target.shape, device=target.device))
-
-    @abstractmethod
-    def weighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        """The loss with each position's row at its weight in `rows`."""
+    ) -> Reading:
+        return Reading(head, output, target, self.emphasis(target, inside))
 
     @abstractmethod
     def head(self, width: int) -> nn.Module: ...
@@ -232,9 +250,8 @@ class Classified(AuxiliaryTerm):
         return AuxiliaryTerm.averaged(losses, classes != UNKNOWN, rows)
 
     @override
-    def weighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        classes = self.classify(target)
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        classes = self.classify(reading.target)
+        rows = reading.rows
         spread = rows.reshape(*rows.shape, *[1] * (classes.ndim - rows.ndim)).expand_as(classes)
-        return self.masked(output.reshape(-1, self.count()), classes.flatten(), spread.flatten())
+        return self.masked(reading.output.reshape(-1, self.count()), classes.flatten(), spread.flatten())

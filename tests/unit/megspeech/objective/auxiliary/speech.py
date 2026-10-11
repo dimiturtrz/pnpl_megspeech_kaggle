@@ -7,6 +7,7 @@ from megspeech.data.batching.split import Split
 from megspeech.objective.auxiliary.semantic import Semantic
 from megspeech.objective.auxiliary.speech import SpeechTerm
 from megspeech.objective.targets.speech import Speech
+from megspeech.objective.term import Reading
 
 WIDTH = 16
 DIM = 8
@@ -39,12 +40,12 @@ def test_unweighted() -> None:
     aligned = term()
     head = aligned.head(WIDTH)
     projected = head(torch.randn(2, 3, WIDTH, generator=GENERATOR))
-    value = aligned.unweighted(head, projected, torch.tensor([[0, 1, -100], [2, -1, -100]]))
+    value = aligned.unweighted(aligned.read(head, projected, torch.tensor([[0, 1, -100], [2, -1, -100]])))
     assert value.ndim == 0
     assert value.item() > 0
     value.backward()
     assert cast("Semantic", head).project.weight.grad is not None
-    assert aligned.unweighted(head, projected, torch.full((2, 3), -1)).item() == 0.0
+    assert aligned.unweighted(aligned.read(head, projected, torch.full((2, 3), -1))).item() == 0.0
 
 
 def test_softmax() -> None:
@@ -52,13 +53,13 @@ def test_softmax() -> None:
     softmaxed = SpeechTerm(2.0, term().speech, softmax=True)
     head = softmaxed.head(WIDTH)
     projected = head(torch.randn(2, 3, WIDTH, generator=GENERATOR))
-    value = softmaxed.unweighted(head, projected, torch.tensor([[0, 1, -100], [2, -1, -100]]))
+    value = softmaxed.unweighted(softmaxed.read(head, projected, torch.tensor([[0, 1, -100], [2, -1, -100]])))
     assert value.item() > 0
     value.backward()
     assert cast("Semantic", head).project.weight.grad is not None
 
 
-def test_weighted() -> None:
+def test_unweighted_rows() -> None:
     """Rows at weight 1 are the unweighted loss, in both contrasts; a heavier row moves it."""
     target = torch.tensor([[0, 1, -100], [2, -1, -100]])
     for softmax in (False, True):
@@ -66,7 +67,8 @@ def test_weighted() -> None:
         head = aligned.head(WIDTH)
         projected = head(torch.randn(2, 3, WIDTH, generator=GENERATOR))
         assert torch.equal(
-            aligned.weighted(head, projected, target, torch.ones(2, 3)), aligned.unweighted(head, projected, target)
+            aligned.unweighted(Reading(head, projected, target, torch.ones(2, 3))),
+            aligned.unweighted(aligned.read(head, projected, target)),
         )
-        skewed = aligned.weighted(head, projected, target, torch.tensor([[1.0, 1.0, 1.0], [9.0, 1.0, 1.0]]))
-        assert skewed.item() != aligned.unweighted(head, projected, target).item()
+        skewed = aligned.unweighted(Reading(head, projected, target, torch.tensor([[1.0, 1.0, 1.0], [9.0, 1.0, 1.0]])))
+        assert skewed.item() != aligned.unweighted(aligned.read(head, projected, target)).item()

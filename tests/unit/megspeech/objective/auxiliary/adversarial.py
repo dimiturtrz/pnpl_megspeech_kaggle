@@ -7,6 +7,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.spans.spans import Spans
 from megspeech.objective.auxiliary.adversarial import Adversary, TimingTerm
+from megspeech.objective.term import Reading
 
 CPU = torch.device("cpu")
 WORDS = pd.DataFrame({"run": ["a"] * 4, "sentence": [0, 0, 0, 1], "onset": [0.0, 0.2, 0.8, 0.1]})
@@ -52,23 +53,24 @@ def test_unweighted() -> None:
     target = torch.tensor([[0, 1, 2, IGNORE]])
     exact = timing.targets[[0, 1, 2]][None]
     exact = torch.cat([exact, torch.zeros(1, 1, 2)], dim=1)
-    assert timing.unweighted(Adversary(2), exact, target).item() == pytest.approx(0.0)
-    zero = timing.unweighted(Adversary(2), torch.zeros(1, 4, 2), target)
+    assert timing.unweighted(timing.read(Adversary(2), exact, target)).item() == pytest.approx(0.0)
+    zero = timing.unweighted(timing.read(Adversary(2), torch.zeros(1, 4, 2), target))
     kept = timing.targets[[0, 1, 2]][timing.known[[0, 1, 2]]]
     assert zero.item() == pytest.approx(kept.square().mean().item())
 
 
-def test_weighted() -> None:
+def test_unweighted_rows() -> None:
     """Zero predictions cost the known entries' weighted mean square; weight 1 is the unweighted loss."""
     timing = term()
     target = torch.tensor([[0, 1, 2, IGNORE]])
     zero = torch.zeros(1, 4, 2)
     assert torch.equal(
-        timing.weighted(Adversary(2), zero, target, torch.ones(1, 4)), timing.unweighted(Adversary(2), zero, target)
+        timing.unweighted(Reading(Adversary(2), zero, target, torch.ones(1, 4))),
+        timing.unweighted(timing.read(Adversary(2), zero, target)),
     )
     rows = torch.tensor([[1.0, 3.0, 1.0, 1.0]])
     square = timing.targets[[0, 1, 2]].square() * timing.known[[0, 1, 2]]
     weight = rows[0, :3, None] * timing.known[[0, 1, 2]]
-    assert timing.weighted(Adversary(2), zero, target, rows).item() == pytest.approx(
+    assert timing.unweighted(Reading(Adversary(2), zero, target, rows)).item() == pytest.approx(
         ((square * rows[0, :3, None]).sum() / weight.sum()).item()
     )

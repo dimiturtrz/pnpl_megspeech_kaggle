@@ -40,8 +40,8 @@ def test_loss() -> None:
     pronounced = term()
     logits = torch.zeros(2, 3, len(PHONEMES))
     head = pronounced.head(16)
-    assert pronounced.loss(head, logits, TOKENS).item() == pytest.approx(0.5 * math.log(len(PHONEMES)))
-    assert pronounced.loss(head, logits, torch.full((2, 3), 99)).item() == 0.0
+    assert pronounced.loss(pronounced.read(head, logits, TOKENS)).item() == pytest.approx(0.5 * math.log(len(PHONEMES)))
+    assert pronounced.loss(pronounced.read(head, logits, torch.full((2, 3), 99))).item() == 0.0
 
 
 def test_unweighted() -> None:
@@ -49,8 +49,10 @@ def test_unweighted() -> None:
     pronounced = term(2)
     head = pronounced.head(16)
     logits = torch.zeros(2, 3, 2 * len(PHONEMES))
-    assert pronounced.unweighted(head, logits, TOKENS).item() == pytest.approx(math.log(len(PHONEMES)))
+    assert pronounced.unweighted(pronounced.read(head, logits, TOKENS)).item() == pytest.approx(math.log(len(PHONEMES)))
     sure = torch.full((1, 1, 2 * len(PHONEMES)), -50.0)
     sure[0, 0, 3] = 50.0
     sure[0, 0, len(PHONEMES) + 1] = 50.0
-    assert pronounced.unweighted(head, sure, torch.tensor([[10]])).item() == pytest.approx(0.0, abs=1e-6)
+    assert pronounced.unweighted(pronounced.read(head, sure, torch.tensor([[10]]))).item() == pytest.approx(
+        0.0, abs=1e-6
+    )

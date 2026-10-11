@@ -74,8 +74,9 @@ def test_factorised_head_trains_and_scores() -> None:
     batch = held.batch(torch.arange(len(held.index)), WORDS)
     context, _, tagged = model(batch.inputs())
     target = batch.target(held.y)
-    loss = ContextTerm(0.0, None).loss(net.head, context, target) + term.loss(
-        model.heads[0], tagged, batch.target(term.labels(held))
+    plain = ContextTerm(0.0, None)
+    loss = plain.loss(plain.read(net.head, context, target)) + term.loss(
+        term.read(model.heads[0], tagged, batch.target(term.labels(held)))
     )
     loss.backward()
     linear = hierarchy.tag[1]

@@ -24,7 +24,7 @@ from torch.nn import functional
 from megspeech.objective.auxiliary.acoustic import MIX, TAPS
 from megspeech.objective.auxiliary.speech import SpeechTerm
 from megspeech.objective.targets.loudness import LENGTH
-from megspeech.objective.term import AuxiliaryTerm
+from megspeech.objective.term import AuxiliaryTerm, Reading
 
 DIM = 256
 """Width of the shared space: ~5x the envelope window's `LENGTH` frames, so the audio tower can keep every frame."""
@@ -100,11 +100,10 @@ class AudioTerm(SpeechTerm):
         return Listening(width).to(self.speech.vectors.device)
 
     @override
-    def weighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        listening = cast("Listening", head)
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        listening = cast("Listening", reading.head)
+        target = reading.target
         kinds = target.flatten()
         spans = torch.arange(target.shape[0], device=target.device).repeat_interleave(target.shape[1])
         audio = listening.hear(self.speech.vectors[kinds.clamp(min=0)])
-        return listening.loss(output.flatten(0, 1), audio, kinds, spans, rows.flatten())
+        return listening.loss(reading.output.flatten(0, 1), audio, kinds, spans, reading.rows.flatten())

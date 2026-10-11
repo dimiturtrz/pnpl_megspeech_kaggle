@@ -3,11 +3,11 @@ where its response sits in the window. It generalises the neighbour auxiliaries 
 the same in-span shift (`NeighbourTerm.beside`), over five offsets and the t5-large embedding rather than the 50-way
 label."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import cast, override
 
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Float
 from torch import Tensor, nn
 
 from megspeech.data.labels.vocabulary import IGNORE
@@ -15,7 +15,7 @@ from megspeech.objective.auxiliary.neighbour import NeighbourTerm
 from megspeech.objective.auxiliary.semantic import Semantic
 from megspeech.objective.scorer import DIM
 from megspeech.objective.targets.t5 import Lexicon
-from megspeech.objective.term import AuxiliaryTerm
+from megspeech.objective.term import AuxiliaryTerm, Reading
 
 WORDS_PER_SECOND = 4.0
 """Speech rate of the narratives: neighbour `k` begins `k / WORDS_PER_SECOND` seconds after the word."""
@@ -68,16 +68,13 @@ class WindowTerm(AuxiliaryTerm):
         return Window(width).to(self.lexicon.vectors.device)
 
     @override
-    def weighted(
-        self, head: nn.Module, output: Float[Tensor, "g w k d"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        window = cast("Window", head)
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        window = cast("Window", reading.head)
+        output, target = reading.output, reading.target
         weights = self.lag_weights().to(output.device)
         total = output.new_zeros(())
         for at, lag in enumerate(range(-BEFORE, AFTER + 1)):
-            beside = NeighbourTerm.beside(target, lag)
-            kinds = torch.where(target == IGNORE, -1, self.lexicon.rows(beside)).flatten()
-            vectors = self.lexicon.vectors[kinds.clamp(min=0)]
-            loss = window.loss(output[:, :, at].flatten(0, 1), vectors, kinds, rows.flatten())
-            total = total + weights[at] * loss
+            kinds = torch.where(target == IGNORE, -1, self.lexicon.rows(NeighbourTerm.beside(target, lag)))
+            lagged = replace(reading, output=output[:, :, at])
+            total = total + weights[at] * lagged.contrasted(window.loss, self.lexicon.vectors, kinds)
         return total

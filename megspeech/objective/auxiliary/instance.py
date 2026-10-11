@@ -30,7 +30,7 @@ from torch.nn import functional
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.instances import NO_INSTANCE, Instances
 from megspeech.data.labels.vocabulary import IGNORE
-from megspeech.objective.term import AuxiliaryTerm
+from megspeech.objective.term import AuxiliaryTerm, Reading
 
 
 class Similarity(nn.Module):
@@ -125,16 +125,15 @@ class InstanceTerm(AuxiliaryTerm):
         return candidate, candidate & same
 
     @override
-    def weighted(
-        self, head: nn.Module, output: Float[Tensor, "g w _"], target: Int[Tensor, "g w"], rows: Float[Tensor, "g w"]
-    ) -> Float[Tensor, ""]:
-        flat = target.flatten()
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        flat = reading.target.flatten()
         candidate, positive = self.pairs(flat)
+        output = reading.output
         with torch.autocast(output.device.type, enabled=False):
             unit = functional.normalize(output.flatten(0, 1).float(), dim=-1)
-            logits = unit @ unit.T * cast("Similarity", head).scale((flat != IGNORE).sum())
+            logits = unit @ unit.T * cast("Similarity", reading.head).scale((flat != IGNORE).sum())
         open_ = candidate.any(dim=1, keepdim=True)
         spread = torch.where(open_, logits.masked_fill(~candidate, -math.inf), 0.0).logsumexp(dim=1)
         count = positive.sum(dim=1)
         pulled = (logits * positive).sum(dim=1) / count.clamp(min=1)
-        return self.averaged(spread - pulled, count > 0, rows.flatten())
+        return self.averaged(spread - pulled, count > 0, reading.rows.flatten())
