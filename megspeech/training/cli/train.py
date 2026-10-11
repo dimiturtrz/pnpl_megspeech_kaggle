@@ -64,9 +64,10 @@ def main() -> None:
     (out / METRICS).write_text(json.dumps({**summary, "history": [asdict(row) for row in history]}, indent=1))
     LOG.info("best %s", best)
     evaluator = trainer.evaluator
-    evaluator.graded(model, validation, log_prior, best.tau).save(out / "hits.pt")
+    calibration = evaluator.calibration(log_prior, best.tau)
+    evaluator.graded(model, validation, calibration).save(out / "hits.pt")
     if config.telemetry.probs:
-        Probabilities.of(evaluator, model, validation, log_prior, best.tau).save(out / PROBS, "val")
+        Probabilities.of(evaluator, model, validation, calibration).save(out / PROBS, "val")
     loaded = ExportedModel(
         root,
         config.data,

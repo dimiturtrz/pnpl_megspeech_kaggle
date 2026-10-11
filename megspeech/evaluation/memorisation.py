@@ -198,7 +198,7 @@ class Memorisation:
         for name, split in splits.items():
             rows = table[table["run"].isin([run.name for run in ruled[name]])]
             context = held.evaluator.head(held.evaluator.logits(held.model, split))
-            adjusted = held.evaluator.adjusted(context, held.log_prior, tau)
+            adjusted = held.calibration(tau).adjusted(context)
             hits = Ruler().hits(adjusted, split.y.clamp(min=0)).cpu().numpy()
             novel = np.isin(np.arange(len(split.y)), split.novel(held.evaluator.seen).cpu().numpy())
             tagged = heard.tags(split, rows, spoken).assign(

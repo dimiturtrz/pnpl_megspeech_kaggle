@@ -18,6 +18,7 @@ import torch
 
 from core.paths import DataRoot
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.labelweighted import Pool, Shrinkage
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.input.subjects import Fallback, Unseen
@@ -84,7 +85,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     scoring = replace(Scoring(fallback=Fallback(Unseen.DEEP)), aligned=args.aligned)
-    pool = Pool.read(DataRoot.from_config(), args.names, scoring, torch.device(args.device))
+    pool = Pool.read(Group(DataRoot.from_config(), scoring, torch.device(args.device)), args.names)
     full = pool.macro(pool.subjects(), pool.uniform())
     LOG.info("uniform blend, full ruler %.4f tau %g over %d words", full.bacc10, full.tau, full.n)
     folds = CrossFit(pool).run()

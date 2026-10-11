@@ -8,12 +8,9 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-import torch
-
-from core.paths import DataRoot
 from megspeech.data.cache.kaggle import Track
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.labelweighted import Pool, Shrinkage
-from megspeech.evaluation.scoring.config import Scoring
 from megspeech.submission.report import SUBMISSIONS
 
 LOG = logging.getLogger(__name__)
@@ -29,10 +26,11 @@ class LabelWeighted:
 
     @classmethod
     def read(  # devtools-ignore: test-mirror
-        cls, root: DataRoot, names: list[str], scoring: Scoring, device: torch.device, shrinkage: Shrinkage
+        cls, group: Group, names: list[str], shrinkage: Shrinkage
     ) -> "LabelWeighted":
-        """The Broad track's members read once: the ruler's words and the Kaggle test."""
-        return cls(Pool.read(root, names, scoring, device, Track.BROAD), shrinkage, Track.BROAD)
+        """The Broad track's members, loaded as `group` loads them, read once: the ruler's words and the Kaggle
+        test."""
+        return cls(Pool.read(group, names, Track.BROAD), shrinkage, Track.BROAD)
 
     def write(self, raw: Path, out: Path) -> Path:
         """The Kaggle test's rows under the weights fit on the whole ruler, adjusted at the ruler's best `tau` for

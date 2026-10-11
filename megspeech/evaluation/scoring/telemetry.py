@@ -84,4 +84,4 @@ class Telemetry:
         """The selection macro at `row`'s tau with every domain's MEG windows shuffled across its words."""
         if self.shuffled is None:
             return None
-        return self.evaluator.point(model, self.shuffled, log_prior, row.tau)
+        return self.evaluator.point(model, self.shuffled, self.evaluator.calibration(log_prior, row.tau))

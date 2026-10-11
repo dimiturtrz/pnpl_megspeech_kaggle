@@ -13,11 +13,10 @@ import torch
 from jaxtyping import Float, Int
 from torch import Tensor
 
-from core.paths import DataRoot
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Run
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loading import Loader
-from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Score
 
@@ -63,10 +62,11 @@ class Pool:
 
     @classmethod
     def read(  # devtools-ignore: test-mirror
-        cls, root: DataRoot, names: list[str], scoring: Scoring, device: torch.device, track: Track | None = None
+        cls, group: Group, names: list[str], track: Track | None = None
     ) -> "Pool":
-        """Each name loaded alone and read on the Broad ruler's runs; every member must read the same words."""
-        runs = Run.discover(root.raw())
+        """Each name loaded alone as `group` loads it and read on the Broad ruler's runs; every member must read the
+        same words."""
+        runs = Run.discover(group.root.raw())
         labels: dict[int, Int[Tensor, " n"]] = {}
         reads: dict[int, list[Float[Tensor, "n v"]]] = {}
         test_subject: Int[Tensor, " r"] | None = None
@@ -75,7 +75,7 @@ class Pool:
         seen: frozenset[tuple[int, ...]] = frozenset()
         evaluator = None
         for name in names:
-            loaded = Loader.of(root, [name], scoring, device)
+            loaded = Loader.of(group, [name])
             evaluator = evaluator or loaded.evaluator
             seen |= loaded.evaluator.seen
             priors.append(loaded.log_prior)
@@ -118,7 +118,7 @@ class Pool:
     def finished(self, weights: Float[Tensor, "m v"], tau: float) -> Float[Tensor, "r v"]:
         """The Kaggle test's probabilities under `weights`, logit-adjusted by `tau`."""
         return torch.softmax(
-            self.evaluator.adjusted(self.tested(weights), self.prior, tau, self.kaggle_subject), dim=-1
+            self.evaluator.calibration(self.prior, tau).adjusted(self.tested(weights), self.kaggle_subject), dim=-1
         )
 
     def uniform(self) -> Float[Tensor, "m v"]:

@@ -27,6 +27,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import DEEP, Partition, Run
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Ruler
@@ -210,7 +211,7 @@ class Study:
         args = parser.parse_args()
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
         root, device = DataRoot.from_config(), Device.CUDA.as_torch()
-        loaded = Loader.of(root, [args.name], Scoring(partition=args.partition), device)
+        loaded = Loader.of(Group(root, Scoring(partition=args.partition), device), [args.name])
         encoder = Encoder(loaded)
         trained = [r for r in loaded.data.trained(Run.everywhere(root)) if r.subject == DEEP]
         centroids = encoder.centroids(trained)

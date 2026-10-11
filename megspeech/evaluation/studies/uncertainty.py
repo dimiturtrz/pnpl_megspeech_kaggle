@@ -25,6 +25,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Ruler
@@ -73,7 +74,9 @@ class Reading:
     def hits(self, logits: Float[Tensor, "m n v"], labels: Int[Tensor, " n"]) -> Bool[Tensor, "e n"]:
         """Top-k hits at `TAU` of each member, then of the ensemble (the mean of its members' log-probabilities)."""
         rows = [*logits, logits.mean(dim=0)]
-        return torch.stack([Ruler().hits(self.evaluator.adjusted(row, self.log_prior, TAU), labels) for row in rows])
+        return torch.stack(
+            [Ruler().hits(self.evaluator.calibration(self.log_prior, TAU).adjusted(row), labels) for row in rows]
+        )
 
     def frame(
         self, logits: Float[Tensor, "m n v"], labels: Int[Tensor, " n"], domain: str
@@ -216,7 +219,7 @@ class Study:
             return
         runs = Run.discover(root.raw())
         for partition in map(Partition, args.partitions):
-            loaded = Loader.of(root, args.name, Scoring(partition=partition), device)
+            loaded = Loader.of(Group(root, Scoring(partition=partition), device), args.name)
             frame, hits = Members(loaded).partition(runs)
             for line in Tally(frame, hits).lines():
                 LOG.info("%s %s", partition, line)

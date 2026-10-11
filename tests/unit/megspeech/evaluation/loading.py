@@ -12,6 +12,7 @@ from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.evaluation import reader as reader_module
 from megspeech.evaluation.blended import Blended
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.scoring import config as module
@@ -41,15 +42,15 @@ def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (DataRoot(tmp_path).models() / "ab").mkdir()
     (DataRoot(tmp_path).models() / "ab" / METRICS).write_text(json.dumps({"members": ["a", "b"]}))
     scoring = Scoring(balance=Sinkhorn(2), shifts=(0, 1), reading=Reading.UNSEEN)
-    built = Loader.of(DataRoot(tmp_path), ["ab"], scoring, CPU)
+    built = Loader.of(Group(DataRoot(tmp_path), scoring, CPU), ["ab"])
     expected = torch.tensor([1.0, 1.0] + [0.0] * (VOCAB_SIZE - 2)) + 1
     assert torch.allclose(built.log_prior, (expected / expected.sum()).log())
     assert built.evaluator.seen == frozenset({(7, 8)})
     assert (built.evaluator.min_novel, built.evaluator.balance, built.evaluator.shifts) == (5, Sinkhorn(2), (0, 1))
-    assert Loader.of(DataRoot(tmp_path), ["ab"], Scoring(word_share=0.3), CPU).evaluator.word_share == 0.3
+    assert Loader.of(Group(DataRoot(tmp_path), Scoring(word_share=0.3), CPU), ["ab"]).evaluator.word_share == 0.3
     assert (built.names, built.reading) == (("a", "b"), Reading.UNSEEN)
     with pytest.raises(ValueError, match="an ensemble needs one"):
-        Loader.of(DataRoot(tmp_path), ["b", "c"], scoring, CPU)
+        Loader.of(Group(DataRoot(tmp_path), scoring, CPU), ["b", "c"])
 
 
 def test_of_geometry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -58,8 +59,8 @@ def test_of_geometry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     built = Geometry(None, None)
     asked: list[bool] = []
     monkeypatch.setattr(DataConfig, "geometry", lambda _s, _r, _d, *, aligned: asked.append(aligned) or AS_RECORDED)
-    assert Loader.of(DataRoot(tmp_path), ["a"], Scoring(), CPU, built).geometry is built and not asked
-    assert Loader.of(DataRoot(tmp_path), ["a"], Scoring(aligned=True), CPU, built).geometry is AS_RECORDED
+    assert Loader.of(Group(DataRoot(tmp_path), Scoring(), CPU, built), ["a"]).geometry is built and not asked
+    assert Loader.of(Group(DataRoot(tmp_path), Scoring(aligned=True), CPU, built), ["a"]).geometry is AS_RECORDED
     assert asked == [True]
 
 
@@ -68,8 +69,8 @@ def test_of_blended(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     members(tmp_path, monkeypatch, {"a": 5, "b": 5})
     other = DataRoot(tmp_path).models() / "b" / METRICS
     other.write_text(json.dumps({"config": {"data": {"subjects": [0, 1], "adapt": 12}, "selection": {"min_novel": 5}}}))
-    blended = Loader.of(DataRoot(tmp_path), ["a", "b"], Scoring(), CPU, Geometry(None, None))
+    blended = Loader.of(Group(DataRoot(tmp_path), Scoring(), CPU, Geometry(None, None)), ["a", "b"])
     assert isinstance(blended, Blended)
     assert (blended.names, blended.weights) == (("a", "b"), (0.5, 0.5))
     assert blended.adapted_on == 12
-    assert not isinstance(Loader.of(DataRoot(tmp_path), ["a"], Scoring(), CPU, AS_RECORDED), Blended)
+    assert not isinstance(Loader.of(Group(DataRoot(tmp_path), Scoring(), CPU, AS_RECORDED), ["a"]), Blended)

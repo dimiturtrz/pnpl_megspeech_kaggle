@@ -27,6 +27,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import DEEP, Run
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Graded
@@ -169,7 +170,7 @@ class Shuffled:
     def graded(self, domains: dict[str, Split], seed: int) -> Graded:
         shuffled = {name: split.permuted(seed) for name, split in domains.items()}
         loaded = self.loaded
-        return loaded.evaluator.graded(loaded.model, shuffled, loaded.log_prior, self.tau)
+        return loaded.evaluator.graded(loaded.model, shuffled, loaded.calibration(self.tau))
 
 
 def main() -> None:
@@ -179,7 +180,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), Device.CUDA.as_torch()
-    loaded = Loader.of(root, [args.name], Scoring(), device)
+    loaded = Loader.of(Group(root, Scoring(), device), [args.name])
     runs = Run.discover(root.raw())
     held = [run for group in loaded.ruled(runs).values() for run in group]
     trained = [run for run in loaded.data.trained(runs) if run.subject == DEEP][:: args.stride]

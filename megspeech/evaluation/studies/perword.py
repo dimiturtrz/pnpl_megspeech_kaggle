@@ -35,6 +35,7 @@ from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device, Placed
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import TOP
 from megspeech.evaluation.studies.confusion import Lengths
@@ -292,7 +293,7 @@ class Scene:
             len(members),
         )
         test, ids = saved.domains(), saved.ids()
-        loaded = replace(Loader.of(root, members[:1], DEEP, placed.device), partition=Partition.TEST)
+        loaded = replace(Loader.of(Group(root, DEEP, placed.device), members[:1]), partition=Partition.TEST)
         held = loaded.ruled(Run.discover(root.raw()))
         splits, _ = loaded.domains(held)
         _, carried = loaded.spoken([run for runs in held.values() for run in runs])

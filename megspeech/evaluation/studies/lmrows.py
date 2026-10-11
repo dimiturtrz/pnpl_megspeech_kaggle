@@ -25,6 +25,7 @@ from megspeech.data.config import METRICS
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device
 from megspeech.evaluation.exported import ExportedModel
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.probabilities import SECTIONS
 from megspeech.evaluation.scoring.score import Head
@@ -97,7 +98,7 @@ class Dump:
         root = DataRoot.from_config()
         out = root.models() / args.name
         members = json.loads((out / METRICS).read_text())["members"]
-        dump = Dump(Loader.of(root, members, DEEP, torch.device(args.device)))
+        dump = Dump(Loader.of(Group(root, DEEP, torch.device(args.device)), members))
         saved = {
             VAL: dump.section(Partition.VALIDATION),
             SECTIONS[Partition.TEST]: dump.section(Partition.TEST),

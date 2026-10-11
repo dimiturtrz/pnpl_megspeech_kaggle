@@ -9,6 +9,7 @@ import pytest
 from core.paths import DataRoot
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.labelweighted import Shrinkage
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.scoring.config import Scoring
@@ -26,8 +27,8 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.Lo
     scorings: list[Scoring] = []
     written: list[tuple[Track, float, Path]] = []
 
-    def of(_: DataRoot, names: list[str], scoring: Scoring, __: object) -> LoadedModel:
-        scorings.append(scoring)
+    def of(group: Group, names: list[str]) -> LoadedModel:
+        scorings.append(group.scoring)
         return replace(loaded(tmp_path), names=tuple(names))
 
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))

@@ -4,6 +4,7 @@ from pathlib import Path
 import torch
 
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.evaluation.scoring.evaluator import Calibration
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.evaluation.studies.uncertainty import Members, Saved
 from megspeech.evaluation.text import RULER
@@ -16,7 +17,7 @@ def test_saved_probabilities_feed_uncertainty(tmp_path: Path) -> None:
     domains, _ = loaded(tmp_path).domains({RULER: runs(tmp_path)[:1]})
     for name, net in (("one", Favourite()), ("two", Reversed())):
         (tmp_path / name).mkdir()
-        Probabilities.of(loaded(tmp_path).evaluator, net, domains, torch.zeros(VOCAB_SIZE), 1.0).save(
+        Probabilities.of(loaded(tmp_path).evaluator, net, domains, Calibration(torch.zeros(VOCAB_SIZE), 1.0)).save(
             tmp_path / name / PROBS, "val"
         )
     frame, hits = Saved.load([tmp_path / "one", tmp_path / "two"], "val").partition()

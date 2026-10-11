@@ -33,6 +33,7 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device, Placed
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.metric.ruler import Graded, Ruler
 from megspeech.evaluation.scoring.evaluator import Evaluator
@@ -108,11 +109,11 @@ class Board:
                 self.evaluator.evaluate(reads.logp[name], reads.labels[name], self.log_prior) for name in reads.logp
             ]
             tau = Score.mean(by_domain).tau
-        ruler = Ruler()
+        ruler, calibration = Ruler(), self.evaluator.calibration(self.log_prior, tau)
         graded = Graded(
             {
                 name: (
-                    ruler.hits(self.evaluator.adjusted(reads.logp[name], self.log_prior, tau), reads.labels[name]),
+                    ruler.hits(calibration.adjusted(reads.logp[name]), reads.labels[name]),
                     reads.labels[name],
                 )
                 for name in reads.logp
@@ -129,7 +130,7 @@ class Member:
     @staticmethod
     def collect(placed: Placed, scoring: Scoring) -> tuple["Member", dict[Partition, Board]]:
         """One model read on both partitions: its counted domains' unseen-span words, kept on its device."""
-        loaded = Loader.of(placed.root, [placed.name], scoring, placed.device)
+        loaded = Loader.of(Group(placed.root, scoring, placed.device), [placed.name])
         runs = Run.discover(placed.root.raw())
         reads: dict[Partition, Reads] = {}
         boards: dict[Partition, Board] = {}

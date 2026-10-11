@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.evaluator import Calibration, Evaluator
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities, Words
 from megspeech.evaluation.scoring.score import Head
 from tests.unit.megspeech.evaluation.scoring.evaluator import CPU, Constant, split
@@ -37,7 +37,7 @@ def test_record() -> None:
 
 
 def probabilities() -> Probabilities:
-    return Probabilities.of(evaluator(), Constant(), {"a": split(), "b": split(n=8, seed=1)}, PRIOR, 0.5)
+    return Probabilities.of(evaluator(), Constant(), {"a": split(), "b": split(n=8, seed=1)}, Calibration(PRIOR, 0.5))
 
 
 def test_probabilities_of() -> None:
@@ -59,7 +59,7 @@ def test_save(tmp_path: Path) -> None:
     made = probabilities()
     assert made.save(path, "val") == path
     made.save(path, "local-test")
-    Probabilities.of(evaluator(), Constant(), {"c": split()}, PRIOR, 1.0).save(path, "val")
+    Probabilities.of(evaluator(), Constant(), {"c": split()}, Calibration(PRIOR, 1.0)).save(path, "val")
     assert set(Probabilities.stored(path)) == {"val#meta", "val/c", "local-test#meta", "local-test/a", "local-test/b"}
 
 
@@ -68,7 +68,7 @@ def test_load(tmp_path: Path) -> None:
     path = tmp_path / PROBS
     made = probabilities()
     made.save(path, "local-test")
-    Probabilities.of(evaluator(), Constant(), {"c": split()}, PRIOR, 1.0).save(path, "val")
+    Probabilities.of(evaluator(), Constant(), {"c": split()}, Calibration(PRIOR, 1.0)).save(path, "val")
     val = Probabilities.load(path, "val")
     assert list(val.domains) == ["c"]
     assert val.tau == 1.0

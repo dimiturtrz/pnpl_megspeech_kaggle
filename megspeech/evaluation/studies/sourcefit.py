@@ -22,6 +22,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.corpus import Corpus
 from megspeech.data.raw.runs import Run
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.studies.gap import Condition, Locator
@@ -157,7 +158,7 @@ def main() -> None:
     root, device = DataRoot.from_config(), torch.device(args.device)
     scoring, runs = tree.parse(args), Run.discover(root.raw())
     for name in args.runs:
-        loaded: LoadedModel = Loader.of(root, [name], scoring, device)
+        loaded: LoadedModel = Loader.of(Group(root, scoring, device), [name])
         train = Corpus.load(loaded.data, root, device).train
         LOG.info("%s", name)
         for line in SourceFit.of(Locator.of(loaded, train, runs, args.seed)).lines():

@@ -17,6 +17,7 @@ from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.exported import ExportedModel
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.rulers.base import TrackRuler
 from megspeech.evaluation.rulers.broad import BroadRuler
@@ -77,4 +78,4 @@ class Report:
             LOG.info("wrote %s", written)
 
     def loaded(self, scoring: Scoring) -> ExportedModel:
-        return Loader.of(self.root, [self.name], scoring, self.device, self.geometry)
+        return Loader.of(Group(self.root, scoring, self.device, self.geometry), [self.name])

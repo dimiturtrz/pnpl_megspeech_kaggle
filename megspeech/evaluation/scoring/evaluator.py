@@ -106,20 +106,10 @@ class Evaluator:
         self, logits: Float[Tensor, "n v"], labels: Int[Tensor, " n"], log_prior: Float[Tensor, " v"]
     ) -> Score:
         by_tau = {
-            tau: self.ruler.balanced(self.ruler.hits(self.adjusted(logits, log_prior, tau), labels), labels)
+            tau: self.ruler.balanced(self.ruler.hits(self.calibration(log_prior, tau).adjusted(logits), labels), labels)
             for tau in ADJUSTMENTS
         }
         return Score.best(by_tau, len(labels))
-
-    def adjusted(
-        self,
-        logits: Float[Tensor, "n v"],
-        log_prior: Float[Tensor, " v"],
-        tau: float,
-        groups: Int[Tensor, " n"] | None = None,
-    ) -> Float[Tensor, "n v"]:
-        """`logits` read through this evaluator's `calibration` at `tau`."""
-        return self.calibration(log_prior, tau).adjusted(logits, groups)
 
     def calibration(self, log_prior: Float[Tensor, " v"], tau: float) -> Calibration:
         """`log_prior` adjusted by `tau`, balanced as this evaluator balances."""
@@ -141,7 +131,7 @@ class Evaluator:
         head = self.head(logits)
         context, word, y = head[labelled], logits[Head.WORD][labelled], split.y[labelled]
         unseen, novel_y = head[novel], split.y[novel]
-        adjusted = {tau: self.adjusted(unseen, log_prior, tau) for tau in ADJUSTMENTS}
+        adjusted = {tau: self.calibration(log_prior, tau).adjusted(unseen) for tau in ADJUSTMENTS}
         top1 = Ruler(k=1)
         return Report(
             self.evaluate(context, y, log_prior),
@@ -156,11 +146,11 @@ class Evaluator:
             Coverage.of(novel_y),
         )
 
-    def graded(self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], tau: float) -> Graded:
+    def graded(self, model: nn.Module, domains: dict[str, Split], calibration: Calibration) -> Graded:
         """The context head's per-word hits on the unseen spans of every domain that counts toward selection."""
         counted = self.eligible(domains)
         logits = {name: self.logits(model, split) for name, split in counted.items()}
-        return self.graded_logits(logits, counted, self.calibration(log_prior, tau))
+        return self.graded_logits(logits, counted, calibration)
 
     def graded_logits(
         self, logits: dict[str, dict[Head, Float[Tensor, "n v"]]], domains: dict[str, Split], calibration: Calibration
@@ -168,26 +158,21 @@ class Evaluator:
         """`graded` from each domain's already computed logits: scores logits that come from no single model."""
         counted = self.eligible(domains)
         heads = {name: self.head(logits[name]) for name in counted}
-        return self.grade(heads, counted, calibration.log_prior, calibration.tau)
+        return self.grade(heads, counted, calibration)
 
     def eligible(self, domains: dict[str, Split]) -> dict[str, Split]:
         """The `domains` with enough unseen-span words to count toward selection."""
         return {name: split for name, split in domains.items() if len(split.novel(self.seen)) >= self.min_novel}
 
-    def point(self, model: nn.Module, domains: dict[str, Split], log_prior: Float[Tensor, " v"], tau: float) -> float:
-        """The selection macro of `graded` at `tau`."""
-        return self.ruler.point(self.graded(model, domains, log_prior, tau))
+    def point(self, model: nn.Module, domains: dict[str, Split], calibration: Calibration) -> float:
+        """The selection macro of `graded` under `calibration`."""
+        return self.ruler.point(self.graded(model, domains, calibration))
 
     def grade(
-        self,
-        context: dict[str, Float[Tensor, "n v"]],
-        domains: dict[str, Split],
-        log_prior: Float[Tensor, " v"],
-        tau: float,
+        self, context: dict[str, Float[Tensor, "n v"]], domains: dict[str, Split], calibration: Calibration
     ) -> Graded:
         """`graded` from each counted domain's already computed context logits."""
         novel = {name: domains[name].novel(self.seen) for name in context}
-        calibration = self.calibration(log_prior, tau)
         return Graded(
             {
                 name: (
@@ -221,7 +206,9 @@ class Evaluator:
         counted = self.counted({name: r.novel for name, r in reports.items()})
         macro = Score.mean(counted.values())
         context = {name: self.head(logits[name]) for name in counted}
-        interval = self.ruler.interval(self.ruler.macro(self.grade(context, domains, log_prior, macro.tau)))
+        interval = self.ruler.interval(
+            self.ruler.macro(self.grade(context, domains, self.calibration(log_prior, macro.tau)))
+        )
         chosen = [reports[name] for name in counted]
         top1 = Score.average(r.top1[macro.tau] for r in chosen)
         bits = Score.average(r.bits[macro.tau] for r in chosen)

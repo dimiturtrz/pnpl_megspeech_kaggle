@@ -19,6 +19,7 @@ from core.tree import Tree
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
@@ -86,7 +87,7 @@ class Ablation:
         """Each partition's macro of the model as it now stands."""
         loaded = self.loaded
         return " ".join(
-            f"{partition} macro {loaded.evaluator.point(loaded.model, split, loaded.log_prior, self.tau):.4f}"
+            f"{partition} macro {loaded.evaluator.point(loaded.model, split, loaded.calibration(self.tau)):.4f}"
             for partition, split in self.domains.items()
         )
 
@@ -99,7 +100,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    loaded = Loader.of(root, args.names, tree.parse(args), Device.CUDA.as_torch())
+    loaded = Loader.of(Group(root, tree.parse(args), Device.CUDA.as_torch()), args.names)
     sources = Sources.of(loaded.model)
     ablation = Ablation.of(loaded, Run.discover(root.raw()))
     LOG.info("tau %s", ablation.tau)

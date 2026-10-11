@@ -23,9 +23,7 @@ class ExportedModel(LoadedModel):
     def probabilities_of(self, runs: list[Run], tau: float) -> Probabilities:
         """Every labelled word of `runs`' scored domains with its probabilities at `tau`."""
         domains, logits = self.domain_logits(runs)
-        return Probabilities.from_logits(
-            self.evaluator, logits, domains, self.evaluator.calibration(self.log_prior, tau)
-        )
+        return Probabilities.from_logits(self.evaluator, logits, domains, self.calibration(tau))
 
     def kaggle(self, track: Track) -> Split:
         """Every row of `track`'s Kaggle test as this model reads it, each from its own subject's MEG."""
@@ -49,7 +47,7 @@ class ExportedModel(LoadedModel):
         self, chosen: Float[Tensor, "n v"], tau: float, groups: Int[Tensor, " n"] | None = None
     ) -> Float[np.ndarray, "n v"]:
         """`chosen` log-probabilities logit-adjusted by `tau` and normalised; balanced per `groups` when asked."""
-        adjusted = self.evaluator.adjusted(chosen, self.log_prior, tau, groups)
+        adjusted = self.calibration(tau).adjusted(chosen, groups)
         return torch.softmax(adjusted, dim=-1).cpu().numpy()
 
     def probabilities(self, split: Split, tau: float) -> Float[np.ndarray, "n v"]:

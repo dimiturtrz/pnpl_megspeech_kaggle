@@ -94,9 +94,12 @@ class Recorder:
         self.model: object = None
         self.log_prior: object = None
 
-    def graded(self, model: object, domains: dict[str, Split], log_prior: object, tau: float) -> float:
-        self.seen = domains
+    def calibration(self, tau: float) -> float:
         return tau
+
+    def graded(self, model: object, domains: dict[str, Split], calibration: float) -> float:
+        self.seen = domains
+        return calibration
 
 
 def test_graded() -> None:

@@ -78,12 +78,11 @@ class Probabilities:
         evaluator: Evaluator,
         model: nn.Module,
         domains: dict[str, Split],
-        log_prior: Float[Tensor, " v"],
-        tau: float,
+        calibration: Calibration,
     ) -> "Probabilities":
-        """`model`'s predictions on every labelled word of `domains`."""
+        """`model`'s predictions on every labelled word of `domains`, read through `calibration`."""
         logits = {name: evaluator.logits(model, split) for name, split in domains.items()}
-        return cls.from_logits(evaluator, logits, domains, evaluator.calibration(log_prior, tau))
+        return cls.from_logits(evaluator, logits, domains, calibration)
 
     @classmethod
     def from_logits(

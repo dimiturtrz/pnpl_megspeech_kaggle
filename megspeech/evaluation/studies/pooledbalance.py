@@ -19,6 +19,7 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.raw.runs import Run
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
@@ -54,7 +55,10 @@ class PooledBalance:
     def alone(self, parts: dict[int, Unseen]) -> ByTau:
         """Per adjustment, each subject's balanced top-10 with the balancing fit on that subject's words alone."""
         return {
-            tau: {s: self.bacc(self.evaluator.adjusted(p.logits, self.log_prior, tau), p.y) for s, p in parts.items()}
+            tau: {
+                s: self.bacc(self.evaluator.calibration(self.log_prior, tau).adjusted(p.logits), p.y)
+                for s, p in parts.items()
+            }
             for tau in ADJUSTMENTS
         }
 
@@ -65,7 +69,7 @@ class PooledBalance:
         logits = torch.cat([parts[s].logits for s in subjects])
         out: ByTau = {}
         for tau in ADJUSTMENTS:
-            adjusted = self.evaluator.adjusted(logits, self.log_prior, tau).split(sizes)
+            adjusted = self.evaluator.calibration(self.log_prior, tau).adjusted(logits).split(sizes)
             out[tau] = {s: self.bacc(a, parts[s].y) for s, a in zip(subjects, adjusted, strict=True)}
         return out
 
@@ -116,7 +120,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    loaded = Loader.of(root, args.names, tree.parse(args), torch.device(args.device))
+    loaded = Loader.of(Group(root, tree.parse(args), torch.device(args.device)), args.names)
     parts = Parts.read(loaded, Run.discover(root.raw()))
     LOG.info("%d subjects\n%s", len(parts), PooledBalance(loaded.evaluator, loaded.log_prior).report(parts))
 

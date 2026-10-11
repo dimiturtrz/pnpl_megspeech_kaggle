@@ -24,6 +24,7 @@ from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import DEEP
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
@@ -114,7 +115,7 @@ def main() -> None:
         VOCAB_SIZE,
         int(meg.counts.sum()),
     )
-    study = Study(root, Loader.of(root, [blend.members[0]], Scoring(), Device.CPU.as_torch()))
+    study = Study(root, Loader.of(Group(root, Scoring(), Device.CPU.as_torch()), [blend.members[0]]))
     LOG.info(HEADER)
     LOG.info("|---|---|---|---|---|---|---|---|---|---|---|")
     LOG.info(Frequency.of(study.training(DEEP)).markdown(meg))

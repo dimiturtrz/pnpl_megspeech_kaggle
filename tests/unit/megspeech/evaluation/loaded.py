@@ -70,6 +70,14 @@ def loaded(tmp_path: Path, reading: Reading = Reading.OWN) -> ExportedModel:
     )
 
 
+def test_calibration(tmp_path: Path) -> None:
+    """The model's own prior, at the given tau, balanced as its evaluator balances."""
+    model = loaded(tmp_path)
+    calibration = model.calibration(0.5)
+    assert (calibration.log_prior, calibration.tau) == (model.log_prior, 0.5)
+    assert calibration.balance == model.evaluator.balance
+
+
 def test_context(tmp_path: Path) -> None:
     domains, _ = loaded(tmp_path).domains({RULER: runs(tmp_path)[:1]})
     assert loaded(tmp_path).context(domains[RULER]).argmax(dim=1).tolist() == [0] * len(SPOKEN)

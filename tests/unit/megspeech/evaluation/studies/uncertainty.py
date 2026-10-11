@@ -10,7 +10,7 @@ from torch import nn
 
 from megspeech.data.batching.split import SpanInput
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.evaluator import Calibration, Evaluator
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.evaluation.studies.uncertainty import POOLED, Decomposition, Members, Reading, Saved, Tally
 from megspeech.evaluation.text import RULER
@@ -163,7 +163,9 @@ def saved(tmp_path: Path, names: tuple[str, ...] = ("one", "two")) -> Saved:
     for name, net in zip(names, (Favourite(), Reversed()), strict=False):
         (tmp_path / name).mkdir(exist_ok=True)
         evaluator = loaded(tmp_path).evaluator
-        Probabilities.of(evaluator, net, domains, torch.zeros(VOCAB_SIZE), 1.0).save(tmp_path / name / PROBS, "val")
+        Probabilities.of(evaluator, net, domains, Calibration(torch.zeros(VOCAB_SIZE), 1.0)).save(
+            tmp_path / name / PROBS, "val"
+        )
     return Saved.load([tmp_path / name for name in names], "val")
 
 

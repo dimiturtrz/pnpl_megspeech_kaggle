@@ -25,6 +25,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.corpus import Corpus
 from megspeech.data.raw.runs import Run
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.scoring.score import Head
@@ -134,7 +135,7 @@ class Locator:
             name: evaluator.logits(self.loaded.model, condition.apply(split, self.seed))[Head.CONTEXT]
             for name, split in counted.items()
         }
-        graded = evaluator.grade(context, counted, self.loaded.log_prior, self.tau)
+        graded = evaluator.grade(context, counted, self.loaded.calibration(self.tau))
         return evaluator.ruler.point(graded)
 
     def grid(self) -> Grid:
@@ -157,7 +158,7 @@ def main() -> None:
     root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     scoring, runs = tree.parse(args), Run.discover(root.raw())
     for name in args.names:
-        loaded = Loader.of(root, [name], scoring, device)
+        loaded = Loader.of(Group(root, scoring, device), [name])
         train = Corpus.load(loaded.data, root, device).train
         locator = Locator.of(loaded, train, runs, args.seed)
         LOG.info("%s tau %s seed %d", name, locator.tau, args.seed)

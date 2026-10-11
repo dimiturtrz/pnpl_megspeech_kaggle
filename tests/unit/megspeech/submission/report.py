@@ -9,6 +9,7 @@ import torch
 from core.paths import DataRoot
 from megspeech.data.cache.alignment import AS_RECORDED
 from megspeech.data.cache.kaggle import Track
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.probabilities import PROBS, SECTIONS, Probabilities
@@ -25,8 +26,8 @@ def stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scorings: list[Scoring
     """One loaded model behind `Loader.of`, and a Kaggle writer that records the adjustment its rows are written at."""
     every = runs(tmp_path)
 
-    def of(_: DataRoot, names: list[str], scoring: Scoring, __: object, ___: object = None) -> LoadedModel:
-        scorings.append(scoring)
+    def of(group: Group, names: list[str]) -> LoadedModel:
+        scorings.append(group.scoring)
         return replace(loaded(tmp_path), names=tuple(names))
 
     def write(self: module.KaggleWriter, _: LoadedModel, tau: float, path: Path) -> Path:
@@ -80,7 +81,7 @@ def test_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module.Loader, "of", staticmethod(lambda *args: seen.append(args) or loaded(tmp_path)))
     geometry = AS_RECORDED
     Report(ReportConfig(), root, RUN, torch.device("cpu"), geometry).loaded(module.SCORING)
-    assert seen == [(root, [RUN], module.SCORING, torch.device("cpu"), geometry)]
+    assert seen == [(Group(root, module.SCORING, torch.device("cpu"), geometry), [RUN])]
 
 
 def test_in_process_equals_separate_process(

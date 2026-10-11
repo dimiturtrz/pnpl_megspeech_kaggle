@@ -15,6 +15,7 @@ from core.tree import Tree
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.labelweighted import Shrinkage
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.memorisation import Memorisation
@@ -48,14 +49,14 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    device = torch.device(args.device)
+    group = Group(root, tree.parse(args), torch.device(args.device))
     if args.labelweights:
         if args.track is not Track.BROAD:
             parser.error("--labelweights fits on the Broad ruler: pass --track broad")
-        weighted = LabelWeighted.read(root, args.names, tree.parse(args), device, Shrinkage(*args.labelweights))
+        weighted = LabelWeighted.read(group, args.names, Shrinkage(*args.labelweights))
         LOG.info("wrote %s", weighted.write(root.raw(), root.models() / args.out))
         return None
-    loaded = Loader.of(root, args.names, tree.parse(args), device)
+    loaded = Loader.of(group, args.names)
     runs = Run.discover(root.raw())
     if args.local:
         test, label = LocalTest(loaded, runs), "+".join(args.names)

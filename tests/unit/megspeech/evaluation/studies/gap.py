@@ -12,7 +12,7 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import Spans
 from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.evaluator import Calibration, Evaluator
 from megspeech.evaluation.scoring.score import Head, Score
 from megspeech.evaluation.studies.gap import Condition, Grid, Locator, Subset
 
@@ -46,6 +46,9 @@ class Stub:
         self.model = Reader()
         self.evaluator = Evaluator(CPU, min_novel=1)
         self.log_prior = torch.zeros(VOCAB_SIZE)
+
+    def calibration(self, tau: float) -> Calibration:
+        return self.evaluator.calibration(self.log_prior, tau)
 
     def context(self, split: Split) -> Tensor:
         return self.evaluator.logits(self.model, split)[Head.CONTEXT]

@@ -50,5 +50,5 @@ class BroadRuler(TrackRuler):
         for run in loaded.broad(self.runs):
             split, context = loaded.run_context(run)
             counted = loaded.evaluator.eligible({str(run.subject): split})
-            parts.append(loaded.evaluator.grade(dict.fromkeys(counted, context), counted, loaded.log_prior, tau))
+            parts.append(loaded.evaluator.grade(dict.fromkeys(counted, context), counted, loaded.calibration(tau)))
         return Graded({name: hits for part in parts for name, hits in part.domains.items()})

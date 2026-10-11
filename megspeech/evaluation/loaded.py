@@ -10,7 +10,7 @@ from megspeech.data.config import ADAPTED
 from megspeech.data.raw.runs import DEEP, Run
 from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.reader import Reader
-from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.evaluator import Calibration, Evaluator
 from megspeech.evaluation.scoring.score import Epoch, Head, Score
 
 ADAPT_ON_ELEVEN = 11
@@ -32,6 +32,10 @@ class LoadedModel(Reader):
         """The context head on every labelled word of `split`."""
         labelled = split.labelled()
         return self.score(self.context(split)[labelled], split.y[labelled])
+
+    def calibration(self, tau: float) -> Calibration:
+        """This model's prior adjusted by `tau`, balanced as its evaluator balances."""
+        return self.evaluator.calibration(self.log_prior, tau)
 
     def score(self, context: Float[Tensor, "n v"], y: Int[Tensor, " n"]) -> Score:
         """Context-head log-probabilities `context` against labels `y`, scored by this model's evaluator and prior."""
@@ -70,4 +74,4 @@ class LoadedModel(Reader):
     def graded(self, runs: list[Run], tau: float) -> Graded:
         """Every counted domain of `runs` in the scored partition: its unseen-span words' hits at `tau`."""
         domains, logits = self.domain_logits(runs)
-        return self.evaluator.graded_logits(logits, domains, self.evaluator.calibration(self.log_prior, tau))
+        return self.evaluator.graded_logits(logits, domains, self.calibration(tau))

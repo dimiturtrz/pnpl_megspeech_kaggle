@@ -36,6 +36,7 @@ from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import TOP
@@ -178,7 +179,7 @@ class Collected:
     ) -> Float[np.ndarray, "k v"]:
         evaluator = loaded.evaluator
         logits = evaluator.logits(loaded.model, split)[Head.CONTEXT][novel]
-        return torch.softmax(evaluator.adjusted(logits, loaded.log_prior, tau), dim=-1).cpu().numpy()
+        return torch.softmax(loaded.calibration(tau).adjusted(logits), dim=-1).cpu().numpy()
 
     @classmethod
     def of(cls, loaded: LoadedModel, runs: list[Run]) -> "Collected":  # devtools-ignore: test-mirror
@@ -348,7 +349,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    loaded = Loader.of(root, [args.name], Scoring(), torch.device(args.device))
+    loaded = Loader.of(Group(root, Scoring(), torch.device(args.device)), [args.name])
     runs = Run.discover(root.raw())
     collected = Collected.of(loaded, runs)
     words = PRIMARY.words

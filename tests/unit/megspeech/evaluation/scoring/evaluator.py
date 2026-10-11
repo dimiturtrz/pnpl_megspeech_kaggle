@@ -108,14 +108,6 @@ def test_calibration_adjusted() -> None:
     assert torch.allclose(mass, mass.mean().expand_as(mass), atol=1e-3)
 
 
-def test_evaluator_adjusted() -> None:
-    """The evaluator reads `logits` through its own calibration at `tau`."""
-    logits, log_prior = torch.arange(4.0 * VOCAB_SIZE).sin().view(4, VOCAB_SIZE), torch.linspace(-1, 0, VOCAB_SIZE)
-    evaluator = Evaluator(CPU, balance=Sinkhorn(5))
-    expected = evaluator.calibration(log_prior, 0.5).adjusted(logits)
-    assert torch.equal(evaluator.adjusted(logits, log_prior, 0.5), expected)
-
-
 def test_calibration() -> None:
     """The evaluator's calibration carries the prior and tau it was given, and balances as the evaluator does."""
     log_prior, balance = torch.linspace(-1, 0, VOCAB_SIZE), Sinkhorn(5)
@@ -149,7 +141,9 @@ def test_scored() -> None:
 def test_graded() -> None:
     domains = {"a": split(), "b": split(n=8, seed=1)}
     sizes = {name: len(s.novel(frozenset())) for name, s in domains.items()}
-    graded = Evaluator(CPU, min_novel=max(sizes.values())).graded(Constant(), domains, torch.zeros(VOCAB_SIZE), 0.0)
+    graded = Evaluator(CPU, min_novel=max(sizes.values())).graded(
+        Constant(), domains, Calibration(torch.zeros(VOCAB_SIZE), 0.0)
+    )
     assert set(graded.domains) == {name for name, size in sizes.items() if size == max(sizes.values())}
     hits, labels = next(iter(graded.domains.values()))
     assert hits.shape == labels.shape == (max(sizes.values()),)
@@ -166,15 +160,15 @@ def test_eligible() -> None:
 def test_point() -> None:
     domains = {"a": split()}
     study = Evaluator(CPU, min_novel=1)
-    graded = study.graded(Constant(), domains, torch.zeros(VOCAB_SIZE), 0.5)
-    assert study.point(Constant(), domains, torch.zeros(VOCAB_SIZE), 0.5) == study.ruler.point(graded)
+    graded = study.graded(Constant(), domains, Calibration(torch.zeros(VOCAB_SIZE), 0.5))
+    assert study.point(Constant(), domains, Calibration(torch.zeros(VOCAB_SIZE), 0.5)) == study.ruler.point(graded)
 
 
 def test_grade() -> None:
     evaluator, domains = Evaluator(CPU, min_novel=1), {"a": split()}
     context = {"a": evaluator.logits(Constant(), domains["a"])[Head.CONTEXT]}
-    graded = evaluator.grade(context, domains, torch.zeros(VOCAB_SIZE), 0.0)
-    expected = evaluator.graded(Constant(), domains, torch.zeros(VOCAB_SIZE), 0.0)
+    graded = evaluator.grade(context, domains, Calibration(torch.zeros(VOCAB_SIZE), 0.0))
+    expected = evaluator.graded(Constant(), domains, Calibration(torch.zeros(VOCAB_SIZE), 0.0))
     assert all(torch.equal(graded.domains["a"][i], expected.domains["a"][i]) for i in range(2))
 
 
@@ -225,7 +219,7 @@ def test_graded_logits() -> None:
     evaluator, prior = Evaluator(CPU, min_novel=1), torch.zeros(VOCAB_SIZE)
     logits = {name: evaluator.logits(Constant(), s) for name, s in domains.items()}
     read = evaluator.graded_logits(logits, domains, evaluator.calibration(prior, 0.5))
-    expected = evaluator.graded(Constant(), domains, prior, 0.5)
+    expected = evaluator.graded(Constant(), domains, evaluator.calibration(prior, 0.5))
     assert set(read.domains) == set(expected.domains)
     assert all(torch.equal(read.domains[name][0], expected.domains[name][0]) for name in read.domains)
 

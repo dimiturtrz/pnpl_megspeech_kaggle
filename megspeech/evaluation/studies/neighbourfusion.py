@@ -29,6 +29,7 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.score import Head
@@ -126,7 +127,7 @@ def main() -> None:
     scoring = tree.parse(args)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    loaded = Loader.of(root, args.names, scoring, Device.CUDA.as_torch())
+    loaded = Loader.of(Group(root, scoring, Device.CUDA.as_torch()), args.names)
     neighbours = Neighbours.of(loaded.model, Scoring.members(root.models(), args.names), loaded.evaluator.device)
     runs = Run.discover(root.raw())
     tau = loaded.report(runs).tau
@@ -138,7 +139,7 @@ def main() -> None:
         beside = {name: neighbours.scores(split) for name, split in counted.items()}
         for alpha in args.alpha:
             fused = {name: context[name] + alpha * beside[name] for name in counted}
-            graded = held.evaluator.grade(fused, counted, held.log_prior, tau)
+            graded = held.evaluator.grade(fused, counted, held.calibration(tau))
             LOG.info("%s alpha=%s tau %s: %s", partition, alpha, tau, Scored(graded).score())
 
 

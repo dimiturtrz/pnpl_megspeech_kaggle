@@ -14,6 +14,7 @@ from megspeech.data.config import METRICS, DataConfig, Val
 from megspeech.data.constants import CHANNELS
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.exported import ExportedModel
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.rulers import heldout as module
 from megspeech.evaluation.rulers.heldout import HeldOutRuler, Lineage
 from megspeech.evaluation.scoring.score import Head
@@ -109,9 +110,9 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.Lo
     """The CLI reads every model unseen by default and scores the named subjects."""
     seen: list[Reading] = []
 
-    def of(root: DataRoot, names: list[str], scoring: module.Scoring, device: object) -> ExportedModel:
-        seen.append(scoring.reading)
-        return loaded(tmp_path, scoring.reading)
+    def of(group: Group, names: list[str]) -> ExportedModel:
+        seen.append(group.scoring.reading)
+        return loaded(tmp_path, group.scoring.reading)
 
     monkeypatch.setattr(module.Loader, "of", staticmethod(of))
     monkeypatch.setattr(module.DataRoot, "from_config", staticmethod(lambda: DataRoot(tmp_path)))

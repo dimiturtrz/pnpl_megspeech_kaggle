@@ -25,6 +25,7 @@ from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import MAX_WORDS, PAD
 from megspeech.device import Device
+from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Graded, Ruler
@@ -248,7 +249,7 @@ class Held:
 
     def graded(self, domains: dict[str, Split]) -> Scored:
         loaded = self.loaded
-        return Scored(loaded.evaluator.graded(loaded.model, domains, loaded.log_prior, self.tau))
+        return Scored(loaded.evaluator.graded(loaded.model, domains, loaded.calibration(self.tau)))
 
     def report(self, mode: Mode) -> None:
         {Mode.GRID: self.grid, Mode.POSITIONS: self.positions, Mode.BLUR: self.blur, Mode.GAPS: self.gaps}[mode]()
@@ -305,7 +306,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    loaded = Loader.of(root, args.names, tree.parse(args), Device.CUDA.as_torch())
+    loaded = Loader.of(Group(root, tree.parse(args), Device.CUDA.as_torch()), args.names)
     runs = Run.discover(root.raw())
     tau = loaded.report(runs).tau
     kaggle = Timing(loaded.kaggle(Track.DEEP))
