@@ -8,7 +8,7 @@ import torch
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.spans.spans import Spans
-from megspeech.objective.auxiliary.instance import InstanceTerm, Similarity
+from megspeech.objective.auxiliary.instance import Apart, InstanceTerm, Similarity, Together
 
 CPU = torch.device("cpu")
 WORDS = pd.DataFrame(
@@ -51,7 +51,7 @@ def test_scale() -> None:
     assert similarity.scale(torch.tensor(8)).item() == pytest.approx(3 * math.log(8))
 
 
-def test_of() -> None:
+def test_instance_term_of() -> None:
     made = term(0.5)
     assert made.weight == 0.5
     assert made.instance[0] == made.instance[2] == made.instance[4] != made.instance[1]
@@ -115,3 +115,61 @@ def test_weighted() -> None:
     assert alone.item() == 0.0
     assert leaf.grad is not None
     assert torch.isfinite(leaf.grad).all()
+
+
+SENTENCES = pd.DataFrame(
+    {
+        "run": ["sub-101_ses-0_task-MASC1_run-1"] * 3 + ["sub-102_ses-0_task-MASC1_run-1"] * 3,
+        "position": [0, 1, 2, 0, 1, 2],
+        "sentence": [0, 0, 1, 0, 0, 1],
+    }
+)
+"""Two subjects hearing a two-word sentence (rows 0-1, 3-4) and the next sentence's first word (rows 2, 5)."""
+HEARD = torch.tensor([[0, 1, 2], [3, 4, 5]])
+
+
+def test_together_related() -> None:
+    assert not Together().related(torch.tensor([0, 1, 1])).any()
+
+
+def test_apart_of() -> None:
+    assert Apart.of(SENTENCES, CPU).sentence.tolist() == [0, 0, 1, 0, 0, 1]
+
+
+def test_apart_related() -> None:
+    related = Apart(torch.tensor([0, 0, 1])).related(torch.tensor([0, 1, 2, 2]))
+    assert related.tolist() == [[1, 1, 0, 0], [1, 1, 0, 0], [0, 0, 1, 1], [0, 0, 1, 1]]
+
+
+def test_pairs_apart() -> None:
+    """Apart leaves the anchor's sentence out of its negatives, whoever heard it, and keeps its positive; off keeps
+    every other word a candidate."""
+    together = InstanceTerm.of(1.0, SENTENCES, CPU)
+    apart = InstanceTerm.of(1.0, SENTENCES, CPU, apart=True)
+    assert isinstance(together.neighbours, Together) and not isinstance(together.neighbours, Apart)
+    candidate, positive = apart.pairs(HEARD.flatten())
+    assert candidate[0].nonzero().flatten().tolist() == [2, 3, 5]
+    assert positive[0].nonzero().flatten().tolist() == [3]
+    plain, plain_positive = together.pairs(HEARD.flatten())
+    assert plain[0].nonzero().flatten().tolist() == [1, 2, 3, 4, 5]
+    assert torch.equal(plain_positive, positive)
+
+
+def chorus(tokens: int) -> pd.DataFrame:
+    """Subjects 101 and 102 each hearing `tokens` one-word sentences of one story."""
+    runs = ["sub-101_ses-0_task-MASC1_run-1"] * tokens + ["sub-102_ses-0_task-MASC1_run-1"] * tokens
+    position = np.r_[np.arange(tokens), np.arange(tokens)]
+    return pd.DataFrame({"run": runs, "position": position, "sentence": position})
+
+
+def test_weighted_shuffled_is_log_batch() -> None:
+    """Unrelated embeddings cost about `ln` of the candidates; the same embedding across subjects costs far less."""
+    tokens, width = 32, 1024
+    made = InstanceTerm.of(1.0, chorus(tokens), CPU, apart=True)
+    target = torch.arange(2 * tokens).view(2, tokens)
+    rows = torch.ones(target.shape)
+    shuffled = torch.randn(2, tokens, width, generator=torch.Generator().manual_seed(0))
+    loss = made.weighted(Similarity(), shuffled, target, rows).item()
+    assert loss == pytest.approx(math.log(2 * tokens - 1), abs=0.1)
+    shared = shuffled[:1].expand(2, -1, -1)
+    assert made.weighted(Similarity(), shared, target, rows).item() < loss - 1

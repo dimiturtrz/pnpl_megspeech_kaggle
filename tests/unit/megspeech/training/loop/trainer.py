@@ -267,10 +267,12 @@ def test_fit_telemetry_equivalence() -> None:
 
 
 def heard(n: int) -> pd.DataFrame:
-    """`n` words: the first half subject 101's hearing of a MASC story, the second subject 102's of the same."""
+    """`n` words: the first half subject 101's hearing of a MASC story, the second subject 102's of the same, in
+    three-word sentences."""
     half = n // 2
     runs = ["sub-101_ses-0_task-MASC1_run-1"] * half + ["sub-102_ses-0_task-MASC1_run-1"] * (n - half)
-    return pd.DataFrame({"run": runs, "position": np.r_[np.arange(half), np.arange(n - half)]})
+    position = np.r_[np.arange(half), np.arange(n - half)]
+    return pd.DataFrame({"run": runs, "position": position, "sentence": position // 3})
 
 
 def test_fit_instance_off_is_bit_identical(tmp_path: Path) -> None:
@@ -293,6 +295,13 @@ def test_fit_instance_off_is_bit_identical(tmp_path: Path) -> None:
     paired, _ = run(Trainer.of(corpus, on, root))
     assert all(math.isfinite(loss) for loss in paired)
     assert paired != plain
+    apart = RunConfig(
+        optim=OptimConfig(epochs=2, batch=4, instance=0.25, instance_apart=True),
+        sampler=SamplerConfig(pairs=0.75, hearers=3),
+    )
+    chorus, _ = run(Trainer.of(corpus, apart, root))
+    assert all(math.isfinite(loss) for loss in chorus)
+    assert chorus != paired
 
 
 def scripted(monkeypatch: pytest.MonkeyPatch, bacc10: list[float]) -> None:

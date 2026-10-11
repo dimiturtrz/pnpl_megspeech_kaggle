@@ -107,6 +107,9 @@ class OptimConfig:
     """Weight of the cross-subject instance term (`megspeech.objective.auxiliary.instance`): InfoNCE over each word's
     local encoder embedding, its positives the same MASC token heard by another subject, its negatives every other
     word of the batch; `SamplerConfig.pairs` co-batches such pairs. 0 creates no head (megspeech-7gf.147.2)."""
+    instance_apart: bool = False
+    """Leave every other word of a word's own sentence, whoever heard it, out of the instance term's negatives
+    (`megspeech.objective.auxiliary.instance.Apart`): their windows overlap its sound (megspeech-ct5)."""
     adversary_ramp: float = 2.0
     """Epochs over which the reversal's strength rises linearly from 0 to `adversary`: the adversary must be able to
     read timing before reversing its gradient means anything."""

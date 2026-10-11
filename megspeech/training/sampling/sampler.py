@@ -41,6 +41,9 @@ class SamplerConfig:
     """Share of each batch's spans drawn as cross-subject pairs (`megspeech.training.sampling.pairing`): half of them
     drawn at the base weights among the MASC spans another subject also heard, the other half one other subject's
     hearing of each; 0 draws every span alone, and a batch then rarely holds a pair (megspeech-7gf.147.2)."""
+    hearers: int = 2
+    """Hearings drawn of each paired span: the anchor and `hearers - 1` distinct other subjects' spans of it, so the
+    `pairs` share holds `pairs * batch / hearers` sentences; 2 draws one partner (megspeech-ct5)."""
     visibility: float = 0.0
     """Exponent `beta` of a span's draw weight `(1 + seen) ** -beta` in the times training has drawn it, so unseen spans
     draw first and the corpus is rotated through; 0 turns it off; composes with `robust`."""

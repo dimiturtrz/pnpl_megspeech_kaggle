@@ -125,7 +125,7 @@ class Trainer:
         stemmed = torch.load(root.models() / stem / "model.pt", map_location=device, weights_only=True) if stem else {}
         taught = Teacher.of(config.optim, root, config.data, corpus.positions)
         fused = tuple(root.models() / name for name in config.context.fused)
-        pairing = Pairing.of(config.sampler.pairs, corpus.positions, corpus.train, config.optim.batch)
+        pairing = Pairing.of(config.sampler, corpus.positions, corpus.train, config.optim.batch)
         return cls(
             config,
             evaluator,

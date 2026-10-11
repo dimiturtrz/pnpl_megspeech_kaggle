@@ -38,6 +38,22 @@ class Instances:
         subject = subject_of.fillna(NO_INSTANCE).to_numpy(np.int64, copy=True)
         return cls(code.astype(np.int64), subject)
 
+    @classmethod
+    def sentences(cls, words: pd.DataFrame) -> Int[np.ndarray, " n"]:
+        """Each word's sentence code among `words` (`Corpus.positions`), the same for every subject's hearing of a
+        MASC sentence (its story and its first word's position) and outside MASC its run's own `sentence`."""
+        code = cls.of(words).code
+        position = words["position"].to_numpy(np.int64)
+        opening = words.groupby(["run", "sentence"], sort=False)["position"].transform("min").to_numpy(np.int64)
+        masc = code != NO_INSTANCE
+        keys = pd.DataFrame(
+            {
+                "run": np.where(masc, "", words["run"].to_numpy(object)),
+                "at": np.where(masc, code - position + opening, words["sentence"].to_numpy(np.int64)),
+            }
+        )
+        return keys.groupby(["run", "at"], sort=False).ngroup().to_numpy(np.int64, copy=True)
+
     @property
     def heard(self) -> int:
         """Words that are a MASC instance."""

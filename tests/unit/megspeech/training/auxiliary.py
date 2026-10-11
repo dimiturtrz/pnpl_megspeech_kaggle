@@ -20,7 +20,7 @@ from megspeech.model.words.heads import WordHead
 from megspeech.objective.auxiliary.acoustic import Acoustic, AcousticTerm
 from megspeech.objective.auxiliary.adversarial import TimingTerm
 from megspeech.objective.auxiliary.audio import AudioTerm, Listening
-from megspeech.objective.auxiliary.instance import InstanceTerm
+from megspeech.objective.auxiliary.instance import Apart, InstanceTerm, Together
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
@@ -159,10 +159,14 @@ def test_of_instance(tmp_path: Path) -> None:
     root = cast("DataRoot", Root(tmp_path))
     with pytest.raises(ValueError, match="MASC instance"):
         Auxiliary.of(OptimConfig(instance=0.25), root, CPU, WORDS)
-    masc = pd.DataFrame({"run": ["sub-101_ses-0_task-MASC1_run-1", "sub-102_ses-0_task-MASC1_run-1"], "position": 0})
+    runs = ["sub-101_ses-0_task-MASC1_run-1", "sub-102_ses-0_task-MASC1_run-1"]
+    masc = pd.DataFrame({"run": runs, "position": 0, "sentence": 0})
     paired = Auxiliary.of(OptimConfig(instance=0.25), root, CPU, masc)
     assert [(type(t), t.weight) for t in paired.terms] == [(InstanceTerm, 0.25)]
     assert cast("Joint", paired).tapped(paired.terms[0]) is Tap.WORD
+    assert type(cast("InstanceTerm", paired.terms[0]).neighbours) is Together
+    apart = Auxiliary.of(OptimConfig(instance=0.25, instance_apart=True), root, CPU, masc)
+    assert isinstance(cast("InstanceTerm", apart.terms[0]).neighbours, Apart)
 
 
 def test_joint_trained_tagged() -> None:
