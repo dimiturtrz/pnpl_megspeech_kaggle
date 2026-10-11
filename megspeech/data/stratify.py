@@ -95,10 +95,20 @@ class Stratify:
             best = float(costs[pick])
 
     @classmethod
+    def scale(
+        cls, profiles: Float[np.ndarray, "n d"], draws: Int[np.ndarray, "k n"], fraction: float
+    ) -> Float[np.ndarray, " c"]:
+        """Each criterion's unit: its gap's median over the random `draws`, 1 where that median is 0."""
+        totals = cls.totals(profiles, draws)
+        held = np.concatenate([cls.gaps(totals[:, part], totals[:, TRAIN], fraction) for part in (VALIDATION, TEST)])
+        median = np.median(held, axis=0)
+        return np.where(median > 0, median, 1.0)
+
+    @classmethod
     @cache
     def split(cls, source: tuple[Run, ...], count: int) -> Picked:
         """`count` of `source`'s sessions each to validation and test: the assignment of least `cost` over swap
-        searches from `RESTARTS` seeded random ones, each gap scaled by its median over `DRAWS` random ones."""
+        searches from `RESTARTS` seeded random ones, each gap in its `scale` over `DRAWS` random ones."""
         if not count:
             return [], []
         books = tuple(sorted({run.key[0] for run in source}))
@@ -106,15 +116,15 @@ class Stratify:
         base = np.array([TRAIN] * (len(source) - 2 * count) + [VALIDATION] * count + [TEST] * count)
         rng = np.random.default_rng(SEED)
         draws = np.stack([rng.permutation(base) for _ in range(DRAWS)])
-        totals = cls.totals(profiles, draws)
-        held = np.concatenate(
-            [cls.gaps(totals[:, part], totals[:, TRAIN], count / len(source)) for part in (VALIDATION, TEST)]
-        )
-        median = np.median(held, axis=0)
-        scale = np.where(median > 0, median, 1.0)
+        scale = cls.scale(profiles, draws, count / len(source))
         _, assigned = min(
             (cls.search(profiles, start, scale) for start in draws[:RESTARTS]), key=lambda found: found[0]
         )
+        return cls.picked(source, assigned)
+
+    @staticmethod
+    def picked(source: tuple[Run, ...], assigned: Int[np.ndarray, " n"]) -> Picked:
+        """`source`'s sessions `assigned` to `VALIDATION`, then to `TEST`."""
         val, test = (
             [run for run, at in zip(source, assigned, strict=True) if at == part] for part in (VALIDATION, TEST)
         )

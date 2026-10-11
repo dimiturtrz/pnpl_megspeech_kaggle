@@ -16,6 +16,7 @@ from megspeech.data.config import METRICS, READING, DataConfig, Refit, Val
 from megspeech.data.constants import RATE
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.data.sources import Sources
 from megspeech.data.spans.grouping import Grouping
 from megspeech.data.stratify import Picked, Stratify
 
@@ -50,6 +51,14 @@ def test_refitted() -> None:
     assert cases == [(), (), both, (), (Partition.VALIDATION,), both, (), (Partition.VALIDATION,), both]
 
 
+def test_admits(tmp_path: Path) -> None:
+    """Subject 0 trains its training partition and what refits; another subject its training runs and `adapt`."""
+    sherlock, held, other, pooled = (Run(tmp_path / name) for name in (TRAIN, HELD, OTHER, POOLED))
+    assert [CARVED.admits(r) for r in (sherlock, held, other, pooled)] == [True, False, False, False]
+    assert [DataConfig(val=Val.OFFICIAL, refit=Refit.VAL).admits(r) for r in (held, other)] == [True, False]
+    assert [DataConfig(adapt=11).admits(r) for r in (other, pooled)] == [False, True]
+
+
 def runs(path: Path) -> list[Run]:
     keys = [("Sherlock1", s, 1) for s in (1, 2, 3)] + [("Sherlock1", 11, 2), ("Sherlock2", 1, 1), ("Sherlock2", 2, 1)]
     keys += [("TheMoth", s, 1) for s in (1, 2, 29)] + [("TIMIT", 1, 1)]
@@ -71,10 +80,6 @@ def test_stratum() -> None:
 
 def keyed(domains: dict[str, list[Run]]) -> dict[str, list[tuple[str, int, int]]]:
     return {name: [r.key for r in chosen] for name, chosen in domains.items()}
-
-
-def test_source(tmp_path: Path) -> None:
-    assert DataConfig().source(Run(tmp_path / TRAIN)) == ("Sherlock", ("Sherlock1", 1, 1))
 
 
 @pytest.fixture(autouse=True)
@@ -210,14 +215,11 @@ def test_trained(tmp_path: Path) -> None:
     assert not [r for r in pooled if r.subject]
 
 
-def test_thinned(tmp_path: Path) -> None:
-    """A share keeps `ceil(share * n)` whole sessions of each source, nested across shares; 1 keeps every run."""
+def test_train_share(tmp_path: Path) -> None:
+    """A share trains `Sources.thinned` of the pool."""
     every = sessions(tmp_path)
-    full = OFFICIAL.trained(every)
-    half, quarter = (DataConfig(train_share=s, val=Val.OFFICIAL).thinned(full) for s in (0.5, 0.25))
-    assert len(half) == 10 and len(quarter) == 5
-    assert {r.name for r in quarter} < {r.name for r in half} < {r.name for r in full}
-    assert OFFICIAL.thinned(full) == full
+    half = Sources.thinned(OFFICIAL.trained(every), 0.5)
+    assert len(half) == 10
     assert DataConfig(train_share=0.5, val=Val.OFFICIAL).trained(every) == half
 
 
@@ -300,10 +302,6 @@ def test_saved_retired(tmp_path: Path, data: dict[str, object], val: Val, refit:
 def test_saved_strided_refused(tmp_path: Path, retired: dict[str, object]) -> None:
     with pytest.raises(ValueError, match="retired ruler"):
         saved(tmp_path, retired)
-
-
-def test_share() -> None:
-    assert [v.share for v in Val] == [0.1, 0.0, 0.1]
 
 
 def test_samples() -> None:
@@ -527,16 +525,6 @@ def test_weight(tmp_path: Path) -> None:
     assert [DataConfig(narrator_weight=0.5).weight(r) for r in (sherlock, timit, moth)] == [0.5, 1.0, 1.0]
 
 
-def test_sources() -> None:
-    names = pd.Series([f"sub-0_ses-1_task-{task}_run-1" for task in ("Sherlock2", "Alpha", "Sherlock1", "Alpha")])
-    assert DataConfig.sources(names).tolist() == [1, 0, 1, 0]
-
-
-def test_reads() -> None:
-    names = pd.Series([f"sub-0_ses-1_task-{task}_run-1" for task in ("TIMIT3", "Sherlock2", "MOCHATIMIT", "TheMoth")])
-    assert DataConfig.reads(names).tolist() == [True, False, True, False]
-
-
 def test_pooled(tmp_path: Path) -> None:
     """Without a dropped fold the pool is what trains, byte for byte."""
     every = sessions(tmp_path)
@@ -650,18 +638,6 @@ def test_muted_context_subjects() -> None:
         True,
     ]
     assert DataConfig(context_subjects=()).muted(names).tolist() == [False] * 4
-
-
-def test_stratified() -> None:
-    assert [v.stratified for v in (Val.CARVED, Val.OFFICIAL, Val.BALANCED)] == [True, False, True]
-
-
-def test_official_val() -> None:
-    assert [v.official_val for v in (Val.CARVED, Val.OFFICIAL, Val.BALANCED)] == [False, True, True]
-
-
-def test_tests_carved() -> None:
-    assert [v.tests_carved for v in (Val.CARVED, Val.OFFICIAL, Val.BALANCED)] == [False, False, True]
 
 
 def test_reading_fields_retired() -> None:

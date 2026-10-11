@@ -84,3 +84,25 @@ def test_split(tmp_path: Path) -> None:
     assert not {*val} & {*test}
     assert Stratify.split(source, 2) == (val, test)
     assert Stratify.split(source, 0) == ([], [])
+
+
+def test_scale(tmp_path: Path) -> None:
+    """Each criterion's unit is positive: a median gap of 0 (one book only) falls to 1."""
+    profiles = np.stack([Stratify.profile(run, ("Sherlock1",)) for run in paced(tmp_path)])
+    draws = np.array([[VALIDATION, TEST, *[TRAIN] * 6], [TRAIN, TRAIN, VALIDATION, TEST, *[TRAIN] * 4]])
+    scale = Stratify.scale(profiles, draws, 0.125)
+    assert scale.shape == (6,)
+    assert (scale > 0).all()
+    assert scale[-1] == 1.0
+
+
+def mixed(path: Path) -> list[Run]:
+    """Sherlock2's and Sherlock1's sessions interleaved with TheMoth's, out of key order."""
+    keys = [("TheMoth", 2), ("Sherlock2", 1), ("Sherlock1", 3), ("TheMoth", 1), ("Sherlock1", 1)]
+    return [Run(path / f"sub-0_ses-{s}_task-{task}_run-1_meg.h5") for task, s in keys]
+
+
+def test_picked(tmp_path: Path) -> None:
+    source = tuple(mixed(tmp_path))
+    val, test = Stratify.picked(source, np.array([TEST, TRAIN, VALIDATION, TRAIN, VALIDATION]))
+    assert (val, test) == ([source[2], source[4]], [source[0]])

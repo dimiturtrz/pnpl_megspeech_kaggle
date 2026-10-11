@@ -1,21 +1,18 @@
 """What a training run reads: which runs train and at what weight, from which cache, cut how."""
 
-import itertools
 import json
-import math
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass, fields, replace
-from enum import StrEnum
 from pathlib import Path
-from typing import ClassVar, override
+from typing import ClassVar
 
 import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Bool, Int
+from jaxtyping import Bool
 
 from core.paths import DataRoot
+from core.rules import Rule
 from core.tree import Retired, Tree
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.alignment import AS_RECORDED, EVERY, UNALIGNED, Alignment, Geometry, Projection
@@ -23,68 +20,17 @@ from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
 from megspeech.data.raw.runs import DEEP, Partition, Run
+from megspeech.data.sources import READ, Picked, Refit, Sources, Val
 from megspeech.data.spans.grouping import Grouping
-from megspeech.data.stratify import SEED, Picked, Stratify
 
 METRICS = "metrics.json"
 """The record a finished run leaves in its directory, its config under `config`."""
-
-READ = frozenset({"TIMIT", "MOCHATIMIT"})
-"""Tasks of read sentences, the Kaggle test's domain; the rest is narrative (Sherlock, TheMoth)."""
 
 ADAPTED = "Sherlock1"
 """The task whose sessions 11 and 12 subjects 1-32 each hear once."""
 
 NARRATOR = "Sherlock"
 """The stratum read by one voice throughout; every TheMoth story and read sentence has its own speaker."""
-
-
-class Refit(StrEnum):
-    """Which held-out sessions a final fit of an already selected recipe also trains on; whatever trains no longer
-    scores. `VAL` trains val, `ALL` the local test too, subject 0's only."""
-
-    NONE = "none"
-    VAL = "val"
-    ALL = "all"
-
-    @override
-    @classmethod
-    def _missing_(cls, value: object) -> "Refit | None":
-        """The retired boolean `refit`: true trained val, false nothing."""
-        return {True: cls.VAL, False: cls.NONE}.get(value) if isinstance(value, bool) else None
-
-
-class Val(StrEnum):
-    """Which sessions are VAL, selecting epoch and tau; the labelled sessions that report are the LOCAL TEST. `CARVED`:
-    10% of each source's subject-0 training sessions, stratified (`Stratify`: source, sentence length, word
-    diversity); the local test is pnpl's validation and test partitions pooled. `OFFICIAL`, the legacy full-data
-    models': val is pnpl's validation partition, the local test its test partition. `BALANCED`, the retired
-    80/10/10 ruler's runs only (a retired `ruler` maps them here): the carved test half stays out of training and
-    reports, val and the local test each add pnpl's own partition (megspeech-7gf.122)."""
-
-    CARVED = "carved"
-    OFFICIAL = "official"
-    BALANCED = "balanced"
-
-    @property
-    def share(self) -> float:
-        """Of each source's sessions, the share carved out as val."""
-        return {self.CARVED: 0.1, self.OFFICIAL: 0.0, self.BALANCED: 0.1}[self]
-
-    @property
-    def stratified(self) -> bool:
-        """Whether domains are the sources, as the carved sessions are drawn from them."""
-        return self is not Val.OFFICIAL
-
-    @property
-    def official_val(self) -> bool:
-        """Whether pnpl's validation partition is val (and so trains under a val refit) rather than the local test."""
-        return self is not Val.CARVED
-
-    @property
-    def tests_carved(self) -> bool:
-        """Whether `split`'s test half is withheld from training and scored as local test."""
-        return self is Val.BALANCED
 
 
 BALANCED_RULER = {"val": Val.BALANCED}
@@ -187,16 +133,7 @@ class DataConfig:
     20 sensors against 5.1 by chance (n=765256 onsets, megspeech-7gf.77), the acoustic expert's spatial prior."""
 
     def __post_init__(self) -> None:
-        if not 0 < self.train_share <= 1:
-            raise ValueError(f"train_share {self.train_share} is not in (0, 1]")
-        if not 0 <= self.fold < self.folds:
-            raise ValueError(f"fold {self.fold} is not one of the {self.folds} folds")
-        if not -1 <= self.dropped < self.crossfit or (self.dropped >= 0 and self.crossfit == 1):
-            raise ValueError(f"dropped fold {self.dropped} is not one of the {self.crossfit} crossfit folds")
-        if self.subspace and self.regions:
-            raise ValueError("a recording keeps either subspace components or region sensors, not both")
-        if self.segment < 0 or (self.segment and self.features):
-            raise ValueError(f"segment {self.segment} must be 0 or positive, and is read from MEG, not features")
+        Rule.enforce(self, DATA_RULES)
 
     @property
     def projected(self) -> bool:
@@ -300,24 +237,24 @@ class DataConfig:
         """`run`'s sampling weight: `read_weight` for a read-sentence task, `narrator_weight` for `NARRATOR`'s
         voice, 1 for the other narrative runs."""
         weights = {**dict.fromkeys(READ, self.read_weight), NARRATOR: self.narrator_weight}
-        return weights.get(self.stratum(run.key[0]), 1.0)
+        return weights.get(Sources.stratum(run.key[0]), 1.0)
 
     @property
     def refitted(self) -> tuple[Partition, ...]:
-        """The official partitions of subject 0 that train too: val's under `OFFICIAL`, both under `Refit.ALL`."""
-        official = (Partition.VALIDATION,) if self.val.official_val else ()
-        return {Refit.NONE: (), Refit.VAL: official, Refit.ALL: (Partition.VALIDATION, Partition.TEST)}[self.refit]
+        """The official partitions of subject 0 that train too: those val holds under a val refit, both under `ALL`."""
+        both = (Partition.VALIDATION, Partition.TEST)
+        return {Refit.NONE: (), Refit.VAL: self.val.carving.held, Refit.ALL: both}[self.refit]
 
     def trains_on(self, run: Run) -> bool:
-        """Whether `run` trains: a `TRAIN` run of a subject in `subjects`, or one of the `refitted` partitions of
-        subject 0; the `adapt` session of every other subject in `subjects`; never another subject's other runs."""
-        adapted = run.subject in self.subjects and run.subject != DEEP and run.key == (ADAPTED, self.adapt, 1)
-        reads = (
-            (run.partition is Partition.TRAIN and run.subject in self.subjects)
-            or (run.partition in self.refitted and run.subject == DEEP and DEEP in self.subjects)
-            or adapted
-        )
-        return reads and (not self.tasks or run.key[0] in self.tasks)
+        """Whether `run` trains: a run of a subject in `subjects` that `admits`, of one of `tasks` when they are set."""
+        return run.subject in self.subjects and self.admits(run) and (not self.tasks or run.key[0] in self.tasks)
+
+    def admits(self, run: Run) -> bool:
+        """Whether `run`'s partition trains for its subject: `TRAIN`, else subject 0's `refitted` partitions and every
+        other subject's `adapt` session; never another subject's other runs."""
+        if run.subject == DEEP:
+            return run.partition in (Partition.TRAIN, *self.refitted)
+        return run.partition is Partition.TRAIN or run.key == (ADAPTED, self.adapt, 1)
 
     def muted(self, names: "pd.Series[str]") -> Bool[np.ndarray, " n"]:
         """Whether each run `name`'s words keep the context head's label from training: the `adapt` runs of subjects
@@ -327,33 +264,16 @@ class DataConfig:
         outside = ~np.isin(subjects, self.context_subjects) if self.context_subjects else np.zeros(len(names), bool)
         return (adapted & (not self.adapt_context)) | outside
 
-    @staticmethod
-    def stratum(task: str) -> str:
-        """The task without its book number: `Sherlock3` reads as `Sherlock`."""
-        return re.sub(r"\d+$", "", task)
-
-    @classmethod
-    def sources(cls, names: "pd.Series[str]") -> Int[np.ndarray, " n"]:
-        """Each run `name`'s dataset (`stratum` of its task) as an index into the sorted datasets present."""
-        strata = Run.tasks(names).map(cls.stratum)
-        return pd.factorize(strata, sort=True)[0].astype(np.int64)
-
-    @classmethod
-    def reads(cls, names: "pd.Series[str]") -> Bool[np.ndarray, " n"]:
-        """Whether each run `name`'s task is read sentences (`READ`) rather than narrative."""
-        return Run.tasks(names).map(cls.stratum).isin(READ).to_numpy()
-
-    def source(self, run: Run) -> tuple[str, tuple[str, int, int]]:
-        return self.stratum(run.key[0]), run.key
+    stratum = staticmethod(Sources.stratum)
+    sources = staticmethod(Sources.indices)
+    reads = staticmethod(Sources.reads)
 
     def split(self, runs: Sequence[Run]) -> dict[Partition, list[Run]]:
         """Subject 0's training sessions `share` holds out for validation and test, `round(share * n)` of each source's
         `n` each, picked by `Stratify`."""
-        deep = sorted((r for r in runs if r.partition is Partition.TRAIN and r.subject == DEEP), key=self.source)
-        sources = [tuple(group) for _, group in itertools.groupby(deep, key=lambda r: self.source(r)[0])]
-        held_out = [
-            self.folded(source, Stratify.split(source, round(self.val.share * len(source)))) for source in sources
-        ]
+        deep = [r for r in runs if r.partition is Partition.TRAIN and r.subject == DEEP]
+        carving = self.val.carving
+        held_out = [self.folded(source, picked) for source, picked in carving.picks(deep)]
         return {
             partition: [run for chosen in held_out for run in chosen[at]]
             for at, partition in enumerate((Partition.VALIDATION, Partition.TEST))
@@ -374,7 +294,7 @@ class DataConfig:
 
     def tested_carved(self, runs: Sequence[Run]) -> list[Run]:
         """Subject 0's sessions `Val.BALANCED` also holds out as local test: `split`'s test half; none otherwise."""
-        return self.split(runs)[Partition.TEST] if self.val.tests_carved else []
+        return self.split(runs)[Partition.TEST] if self.val.carving.tests_carved else []
 
     def trained(self, runs: Sequence[Run]) -> list[Run]:
         """The runs training reads: `trains_on`, less the carved val sessions unless refitting."""
@@ -388,35 +308,15 @@ class DataConfig:
         """`trained` before any `dropped` fold leaves."""
         excluded = {r.name for r in self.carved(runs)} if self.refit is Refit.NONE else set()
         excluded |= {r.name for r in self.tested_carved(runs)}
-        return self.thinned([r for r in runs if self.trains_on(r) and r.name not in excluded])
+        return Sources.thinned([r for r in runs if self.trains_on(r) and r.name not in excluded], self.train_share)
 
     def fold_of(self, runs: Sequence[Run], folds: int) -> dict[str, int]:
-        """Each pooled run's name to its fold of `folds`: a source's distinct recording keys, sorted, dealt round-robin,
-        every run (subject) of a key in its fold, so neighbouring words of a session never straddle folds."""
-        pool = sorted(self.pooled(runs), key=self.source)
-        fold: dict[str, int] = {}
-        for _, group in itertools.groupby(pool, key=lambda r: self.source(r)[0]):
-            members = list(group)
-            dealt = {key: at % folds for at, key in enumerate(sorted({r.key for r in members}))}
-            fold |= {r.name: dealt[r.key] for r in members}
-        return fold
-
-    def thinned(self, runs: Sequence[Run]) -> list[Run]:
-        """`runs` cut to `train_share` of each source's sessions: the leading `ceil(share * n)` of a seeded permutation
-        of the source's sessions, so the share's subsets nest; every run when the share is 1."""
-        if self.train_share == 1:
-            return list(runs)
-        ordered = sorted(runs, key=self.source)
-        kept: set[str] = set()
-        for _, group in itertools.groupby(ordered, key=lambda r: self.source(r)[0]):
-            sessions = list(group)
-            order = np.random.default_rng(SEED).permutation(len(sessions))
-            kept |= {sessions[i].name for i in order[: math.ceil(self.train_share * len(sessions))]}
-        return [r for r in runs if r.name in kept]
+        """Each pooled run's name to its fold of `folds`, dealt by source (`Sources.dealt`)."""
+        return Sources.dealt(self.pooled(runs), folds)
 
     def domain(self, run: Run) -> str:
-        """The domain `run` is scored in: its source under `CARVED` or `folds`, else its task."""
-        return self.stratum(run.key[0]) if self.val.stratified or self.folds > 1 else run.key[0]
+        """The domain `run` is scored in: its source under a stratified ruler or `folds`, else its task."""
+        return Sources.stratum(run.key[0]) if self.val.carving.stratified or self.folds > 1 else run.key[0]
 
     def official(self, runs: Sequence[Run], *partitions: Partition) -> list[Run]:
         """Subject 0's runs of the official `partitions`; other subjects' never count."""
@@ -427,11 +327,10 @@ class DataConfig:
         the carved sessions, or pnpl's validation partition under `OFFICIAL`; the local test pnpl's test partition,
         with its validation partition too under `CARVED`, and under `BALANCED` the
         carved test half as well."""
-        if partition is Partition.VALIDATION:
-            chosen = [*self.official(runs, *([partition] if self.val.official_val else [])), *self.carved(runs)]
-        else:
-            pooled = [] if self.val.official_val else [Partition.VALIDATION]
-            chosen = [*self.official(runs, partition, *pooled), *self.tested_carved(runs)]
+        carving = self.val.carving
+        official = {Partition.VALIDATION: carving.held, Partition.TEST: carving.tested}[partition]
+        carved = {Partition.VALIDATION: self.carved, Partition.TEST: self.tested_carved}[partition](runs)
+        chosen = [*self.official(runs, *official), *carved]
         names = sorted({self.domain(r) for r in chosen})
         return {name: [r for r in chosen if self.domain(r) == name] for name in names}
 
@@ -447,10 +346,25 @@ class DataConfig:
         """The words of `table` the grouping carries, at this config's rate (`Grouping.carried`)."""
         return RunCache.carried(table, self.grouping, self.rate)
 
-    def ruled(self, runs: Sequence[Run], partition: Partition) -> dict[str, list[Run]]:
-        """The domains `partition` is scored over: validation's (`held`) or test's (`tested`)."""
-        return {Partition.VALIDATION: self.held, Partition.TEST: self.tested}[partition](runs)
+    ruled = scored
 
+
+DATA_RULES: tuple[Rule[DataConfig], ...] = (
+    Rule(lambda d: not 0 < d.train_share <= 1, lambda d: f"train_share {d.train_share} is not in (0, 1]"),
+    Rule(lambda d: not 0 <= d.fold < d.folds, lambda d: f"fold {d.fold} is not one of the {d.folds} folds"),
+    Rule(
+        lambda d: not -1 <= d.dropped < d.crossfit or (d.dropped >= 0 and d.crossfit == 1),
+        lambda d: f"dropped fold {d.dropped} is not one of the {d.crossfit} crossfit folds",
+    ),
+    Rule(
+        lambda d: d.subspace and bool(d.regions),
+        lambda _: "a recording keeps either subspace components or region sensors, not both",
+    ),
+    Rule(
+        lambda d: d.segment < 0 or bool(d.segment and d.features),
+        lambda d: f"segment {d.segment} must be 0 or positive, and is read from MEG, not features",
+    ),
+)
 
 UNREAD = frozenset({"grouping", "fold", "crossfit", "dropped"})
 READING = tuple(field.name for field in fields(DataConfig) if field.name not in UNREAD)
