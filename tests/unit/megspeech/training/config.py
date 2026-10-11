@@ -142,6 +142,14 @@ def test_acoustic_needs_the_envelope_geometry() -> None:
         RunConfig(optim=OptimConfig(tap=Tap.TIME))
 
 
+def test_listens() -> None:
+    assert not OptimConfig().listens
+    assert OptimConfig(acoustic=0.3).listens
+    assert OptimConfig(heads=0.0, audio=1.0).listens
+    with pytest.raises(ValueError, match="cut"):
+        RunConfig(optim=OptimConfig(audio=1.0), data=DataConfig(window=2.0))
+
+
 def test_acoustic_refuses_the_pyramid() -> None:
     with pytest.raises(ValueError, match="pyramid"):
         RunConfig(

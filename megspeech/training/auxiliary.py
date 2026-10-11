@@ -18,6 +18,7 @@ from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.acoustic import AcousticTerm
 from megspeech.objective.auxiliary.adversarial import TimingTerm
+from megspeech.objective.auxiliary.audio import AudioTerm
 from megspeech.objective.auxiliary.instance import InstanceTerm
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
@@ -85,6 +86,7 @@ class Auxiliary(ABC):
                 optim.acoustic,
                 lambda: AcousticTerm(optim.acoustic, Speech.gather(Loudness.directory(root), words).to(device)),
             ),
+            (optim.audio, lambda: AudioTerm(optim.audio, Speech.gather(Loudness.directory(root), words).to(device))),
         )
         terms = tuple(replace(build(), vocab_weight=optim.vocab_weight) for weight, build in builders if weight)
         return Joint(terms, optim.tap) if terms else NoAuxiliary()

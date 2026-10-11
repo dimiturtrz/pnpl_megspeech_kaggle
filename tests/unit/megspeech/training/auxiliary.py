@@ -19,6 +19,7 @@ from megspeech.model.words.conv import ConvConfig
 from megspeech.model.words.heads import WordHead
 from megspeech.objective.auxiliary.acoustic import Acoustic, AcousticTerm
 from megspeech.objective.auxiliary.adversarial import TimingTerm
+from megspeech.objective.auxiliary.audio import AudioTerm, Listening
 from megspeech.objective.auxiliary.instance import InstanceTerm
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
@@ -142,6 +143,17 @@ def test_of(tmp_path: Path) -> None:
     assert cast("AcousticTerm", loud.terms[0]).speech.rows.tolist() == [0, -1]
 
 
+def test_of_audio(tmp_path: Path) -> None:
+    """The label-free audio contrast reads the same envelopes as the acoustic term."""
+    root = cast("DataRoot", Root(tmp_path))
+    with pytest.raises(FileNotFoundError):
+        Auxiliary.of(OptimConfig(heads=0.0, audio=0.7), root, CPU, WORDS)
+    Targets(np.ones((2, LENGTH), np.float16)).save(Loudness.directory(root) / "a.npy")
+    heard = Auxiliary.of(OptimConfig(heads=0.0, audio=0.7), root, CPU, WORDS)
+    assert [(type(t), t.weight) for t in heard.terms] == [(AudioTerm, 0.7)]
+    assert cast("AudioTerm", heard.terms[0]).speech.rows.tolist() == [0, -1]
+
+
 def test_of_instance(tmp_path: Path) -> None:
     """The instance term needs MASC words to find any cross-subject positive."""
     root = cast("DataRoot", Root(tmp_path))
@@ -171,6 +183,10 @@ def test_joint_acoustic_taps_the_time_course() -> None:
     trained = Joint((loud, semantic()), Tap.CONTEXT).trained(model, identity)
     assert trained.taps == (Tap.TIME, Tap.CONTEXT)
     assert isinstance(trained.heads[0], Acoustic)
+    heard = AudioTerm(1.0, Speech(torch.tensor([0, -1]), torch.zeros(1, LENGTH)))
+    listening = Joint((heard,), Tap.WORD).trained(net(), identity)
+    assert listening.taps == (Tap.TIME,)
+    assert isinstance(listening.heads[0], Listening)
 
 
 def test_tapped() -> None:

@@ -60,6 +60,11 @@ class OptimConfig:
     the 50 Hz speech envelope heard over the window, contrasted chunk by chunk against the batch's true chunks
     (Défossez et al. 2023); a dense target the 50 labels' and the word-level targets' sparse supervision lacks. 0
     creates no head and reads no envelope (megspeech-7gf.125.1)."""
+    audio: float = 0.0
+    """Weight of the audio contrastive term (`megspeech.objective.auxiliary.audio`): the same windows and envelopes as
+    `acoustic`, each embedded by its own tower and aligned by CLIP's symmetric InfoNCE across the batch's spans,
+    subjects and languages. With `heads` 0 it is the label-free all-language encoder pretrain (megspeech-7gf.109.3);
+    0 creates no head and reads no envelope."""
     speech: float = 0.0
     """Weight of the speech auxiliary (`megspeech.objective.auxiliary.speech`): every training word whose chapter audio
     is aligned, SigLIP-aligned to the wav2vec2 latent of its 0.5 s of heard speech (Défossez et al. 2023), one target
@@ -171,6 +176,11 @@ class OptimConfig:
     pretrained: float = 0.1
     """Retired with the end-to-end MEG-XL encoder it scaled; kept so the configs saved with it still load."""
 
+    @property
+    def listens(self) -> bool:
+        """Whether a term reads the window's time course against its envelope."""
+        return bool(self.acoustic or self.audio)
+
 
 @dataclass(frozen=True)
 class StopConfig:
@@ -242,16 +252,16 @@ RUN_RULES: tuple[Rule[RunConfig], ...] = (
         lambda _: "optim.tap time reads the window's time course, which only the acoustic head asks for",
     ),
     Rule(
-        lambda r: bool(r.optim.acoustic) and r.context.encoder is not Encoder.CONV,
-        lambda r: f"optim.acoustic reads the conv encoder's time features, not encoder {r.context.encoder}",
+        lambda r: r.optim.listens and r.context.encoder is not Encoder.CONV,
+        lambda r: f"optim.acoustic/audio read the conv encoder's time features, not encoder {r.context.encoder}",
     ),
     Rule(
-        lambda r: bool(r.optim.acoustic) and r.data.cut() != DataConfig().cut(),
-        lambda r: f"optim.acoustic's envelopes are cut {DataConfig().cut()}, not {r.data.cut()}",
+        lambda r: r.optim.listens and r.data.cut() != DataConfig().cut(),
+        lambda r: f"optim.acoustic/audio's envelopes are cut {DataConfig().cut()}, not {r.data.cut()}",
     ),
     Rule(
-        lambda r: bool(r.optim.acoustic) and r.context.conv.pyramid.active,
-        lambda _: "optim.acoustic reads the encoder's time course beside the heads, which the pyramid readout corrects",
+        lambda r: r.optim.listens and r.context.conv.pyramid.active,
+        lambda _: "optim.acoustic/audio read the encoder's time course beside the heads, which the pyramid corrects",
     ),
     Rule(
         lambda r: r.stop.patience < 0,
