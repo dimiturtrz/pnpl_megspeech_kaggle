@@ -34,7 +34,7 @@ from megspeech.data.labels.syntax import TAGS, PartsOfSpeech
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import PAD
-from megspeech.device import Device
+from megspeech.device import Device, Placed
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import TOP
 from megspeech.evaluation.studies.confusion import Lengths
@@ -278,8 +278,9 @@ class Scene:
     """Each scored word's `run`, `onset` and heard `word`, in the scored order."""
 
     @classmethod
-    def of(cls, root: DataRoot, name: str, device: torch.device) -> "Scene":  # devtools-ignore: test-mirror
-        members = json.loads((root.models() / name / METRICS).read_text())["members"]
+    def of(cls, placed: Placed) -> "Scene":  # devtools-ignore: test-mirror
+        root = placed.root
+        members = json.loads((root.models() / placed.name / METRICS).read_text())["members"]
         directories = [root.models() / member for member in members]
         val, saved = Saved.load(directories, VAL), Saved.load(directories, TEST)
         finishes = Finishes.fit(val)
@@ -291,7 +292,7 @@ class Scene:
             len(members),
         )
         test, ids = saved.domains(), saved.ids()
-        loaded = replace(Loader.of(root, members[:1], DEEP, device), partition=Partition.TEST)
+        loaded = replace(Loader.of(root, members[:1], DEEP, placed.device), partition=Partition.TEST)
         held = loaded.ruled(Run.discover(root.raw()))
         splits, _ = loaded.domains(held)
         _, carried = loaded.spoken([run for runs in held.values() for run in runs])
@@ -318,7 +319,7 @@ class Scene:
         args = parser.parse_args()
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
         root = DataRoot.from_config()
-        return root, args, cls.of(root, args.name, torch.device(args.device))
+        return root, args, cls.of(Placed(root, args.name, torch.device(args.device)))
 
 
 class Report:

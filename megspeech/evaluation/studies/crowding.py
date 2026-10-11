@@ -26,6 +26,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Self
 
 import numpy as np
 import torch
@@ -211,7 +212,7 @@ class Saved:
     members: list[Probabilities]
 
     @classmethod
-    def load(cls, directories: Sequence[Path], section: str) -> "Saved":
+    def load(cls, directories: Sequence[Path], section: str) -> Self:
         return cls([Probabilities.load(directory / PROBS, section) for directory in directories])
 
     def lead(self, name: str) -> Words:

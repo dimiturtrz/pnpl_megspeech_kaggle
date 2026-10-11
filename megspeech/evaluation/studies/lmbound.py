@@ -36,6 +36,7 @@ from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import PRIMARY, Vocabulary
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
+from megspeech.device import Placed
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.probabilities import PROBS, SECTIONS, Probabilities
 from megspeech.evaluation.studies.crowding import TAUS, TEST, VAL, Arm, Finish, Rows, Section
@@ -130,12 +131,12 @@ class Causal:
     bos: int
 
     @classmethod
-    def load(cls, root: DataRoot, name: str, device: torch.device) -> "Causal":  # devtools-ignore: test-mirror
-        path = root.foreign(name)
-        model = AutoModelForCausalLM.from_pretrained(path, dtype=torch.float16).to(device).eval()
+    def load(cls, placed: Placed) -> "Causal":  # devtools-ignore: test-mirror
+        path = placed.root.foreign(placed.name)
+        model = AutoModelForCausalLM.from_pretrained(path, dtype=torch.float16).to(placed.device).eval()
         tokenizer = AutoTokenizer.from_pretrained(path, token=False)
         if tokenizer is None or tokenizer.bos_token_id is None:
-            raise FileNotFoundError(name)
+            raise FileNotFoundError(placed.name)
         return cls(model, lambda texts: [list(ids) for ids in tokenizer(texts)["input_ids"]], tokenizer.bos_token_id)
 
     def pieces(self, words: Sequence[str]) -> list[list[int]]:
@@ -298,7 +299,7 @@ class Study:
         if cache.exists():
             saved = torch.load(cache)
             return Table(saved["scores"], saved["unigram"])
-        lm = Causal.load(root, args.lm, torch.device(args.device))
+        lm = Causal.load(Placed(root, args.lm, torch.device(args.device)))
         table = Table.scored(lm.score, wanted)
         torch.save({"scores": table.scores, "unigram": table.unigram}, cache)
         return table

@@ -216,11 +216,6 @@ def test_fit() -> None:
     assert frame["n"].iloc[0] == VOCAB_SIZE * PER_CLASS
 
 
-def test_clear() -> None:
-    frame = pd.DataFrame({"lo": [0.1, -0.2, -0.5], "hi": [0.3, 0.2, -0.1]})
-    assert Regression.clear(frame).tolist() == [True, False, True]
-
-
 def test_run(tmp_path: Path) -> None:
     record = Study(described(), tmp_path / "cause.json", DRAWS).run()
     assert record["n"] == VOCAB_SIZE * PER_CLASS

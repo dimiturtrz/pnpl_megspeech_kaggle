@@ -37,6 +37,7 @@ from torch import Tensor
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.spans.spans import PAD
+from megspeech.device import Placed
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.evaluation.studies.crowding import TAUS, TEST, TOP, VAL, Arm, Finish, Rows, Section
@@ -314,7 +315,7 @@ class Study:
         wanted = [EMPTY, *val.wanted(), *test.wanted(), *kaggle.contexts()]
         cache = out / f"lmsoft-{args.lm}.pt"
         known: dict[Context, Tensor] = torch.load(cache) if cache.exists() else {}
-        table = Batched(Causal.load(root, args.lm, torch.device(args.device))).table(wanted, known)
+        table = Batched(Causal.load(Placed(root, args.lm, torch.device(args.device)))).table(wanted, known)
         torch.save(table.scores, cache)
         channels = kaggle.others(table)
         study = Study(val, test)

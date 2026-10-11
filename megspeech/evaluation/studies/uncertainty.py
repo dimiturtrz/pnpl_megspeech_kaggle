@@ -13,7 +13,6 @@ seed shares is invisible to it, and the aleatoric share is an upper bound.
 import argparse
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -31,8 +30,8 @@ from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
-from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.evaluation.scoring.score import Head
+from megspeech.evaluation.studies.crowding import Saved as Crowding
 from megspeech.model.ensemble import Ensemble
 
 LOG = logging.getLogger(__name__)
@@ -141,14 +140,8 @@ class Members:
 
 
 @dataclass(frozen=True)
-class Saved:
+class Saved(Crowding):
     """Member runs' saved predictions (`probs.pt`), read as an ensemble without loading any model."""
-
-    members: list[Probabilities]
-
-    @classmethod
-    def load(cls, directories: list[Path], section: str) -> "Saved":
-        return cls([Probabilities.load(directory / PROBS, section) for directory in directories])
 
     def partition(self) -> tuple[pd.DataFrame, dict[str, Bool[Tensor, "e n"]]]:
         """Every counted domain's scored (unseen-span) words, as `Members.partition` reads them live."""
@@ -158,7 +151,7 @@ class Saved:
         for name, words in first.domains.items():
             if int(words.novel.sum()) < first.min_novel:
                 continue
-            aligned = [member.domains[name] for member in self.members]
+            aligned = self.words(name)
             if any(not torch.equal(other.ids, words.ids) for other in aligned):
                 raise ValueError(f"members' saved words differ in domain {name}")
             logits = torch.stack([other.logits[words.novel] for other in aligned])

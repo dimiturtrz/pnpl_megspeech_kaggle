@@ -7,6 +7,7 @@ import torch
 
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.device import Placed
 from megspeech.evaluation.loading import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.studies import diversity as module
@@ -69,7 +70,7 @@ def test_collect(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     every = runs(tmp_path)
     monkeypatch.setattr(module.Loader, "of", staticmethod(lambda *_: replace(loaded(tmp_path), model=Favourite())))
     monkeypatch.setattr(module.Run, "discover", classmethod(lambda *_: every))
-    member, boards = Member.collect(loaded(tmp_path).root, "x", Scoring(), CPU)
+    member, boards = Member.collect(Placed(loaded(tmp_path).root, "x", CPU), Scoring())
     assert member.name == "x"
     assert set(member.reads) == set(boards) == {VAL, TEST}
     assert isinstance(Run, type)

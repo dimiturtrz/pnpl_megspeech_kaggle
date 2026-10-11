@@ -22,7 +22,7 @@ import cmudict
 import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Bool, Float, Int
+from jaxtyping import Float, Int
 from sklearn.linear_model import LogisticRegression
 from torch import Tensor
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -331,11 +331,6 @@ class Regression:
             },
             index=list(self.columns),
         )
-
-    @staticmethod
-    def clear(frame: pd.DataFrame) -> Bool[np.ndarray, " f"]:
-        """Coefficients whose interval excludes zero."""
-        return ((frame["lo"] > 0) | (frame["hi"] < 0)).to_numpy()
 
 
 class Study:

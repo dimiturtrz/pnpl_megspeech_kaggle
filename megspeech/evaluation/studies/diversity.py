@@ -32,7 +32,7 @@ from torch import Tensor
 from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.device import Device
+from megspeech.device import Device, Placed
 from megspeech.evaluation.loading import Loader, Scoring
 from megspeech.evaluation.metric.ruler import Graded, Ruler
 from megspeech.evaluation.scoring.evaluator import Evaluator
@@ -127,12 +127,10 @@ class Member:
     reads: dict[Partition, Reads]
 
     @staticmethod
-    def collect(
-        root: DataRoot, name: str, scoring: Scoring, device: torch.device
-    ) -> tuple["Member", dict[Partition, Board]]:
-        """One model read on both partitions: its counted domains' unseen-span words, kept on `device`."""
-        loaded = Loader.of(root, [name], scoring, device)
-        runs = Run.discover(root.raw())
+    def collect(placed: Placed, scoring: Scoring) -> tuple["Member", dict[Partition, Board]]:
+        """One model read on both partitions: its counted domains' unseen-span words, kept on its device."""
+        loaded = Loader.of(placed.root, [placed.name], scoring, placed.device)
+        runs = Run.discover(placed.root.raw())
         reads: dict[Partition, Reads] = {}
         boards: dict[Partition, Board] = {}
         for partition in PARTITIONS:
@@ -149,7 +147,7 @@ class Member:
                 {domain: split.y[novel[domain]] for domain, split in counted.items()},
             )
             boards[partition] = Board(held.evaluator, held.log_prior)
-        return Member(name, reads), boards
+        return Member(placed.name, reads), boards
 
 
 @dataclass(frozen=True)
@@ -253,7 +251,7 @@ def main() -> None:
     boards: dict[Partition, Board] = {}
     for name in args.names:
         try:
-            member, own = Member.collect(root, name, scoring, device)
+            member, own = Member.collect(Placed(root, name, device), scoring)
         except (OSError, KeyError, ValueError, RuntimeError) as error:
             LOG.warning("skipped %s: %s: %s", name, type(error).__name__, error)
             continue

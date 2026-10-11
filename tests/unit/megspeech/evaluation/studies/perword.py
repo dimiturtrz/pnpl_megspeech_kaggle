@@ -13,7 +13,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
-from megspeech.device import Device
+from megspeech.device import Device, Placed
 from megspeech.evaluation.studies.perword import (
     BUCKETS,
     Attributes,
@@ -209,9 +209,9 @@ def test_opened(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     root = cast(DataRoot, SimpleNamespace(path=tmp_path))
     calls: list[tuple[str, str]] = []
 
-    def of(found: DataRoot, name: str, device: torch.device) -> Scene:
-        calls.append((name, device.type))
-        assert found is root
+    def of(placed: Placed) -> Scene:
+        calls.append((placed.name, placed.device.type))
+        assert placed.root is root
         return scene
 
     monkeypatch.setattr(sys, "argv", ["perword", "blend"])

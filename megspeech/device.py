@@ -1,8 +1,11 @@
 """The compute devices the project names: one vocabulary for torch devices, autocast and `map_location`."""
 
+from dataclasses import dataclass
 from enum import StrEnum
 
 import torch
+
+from core.paths import DataRoot
 
 
 class Device(StrEnum):
@@ -16,3 +19,12 @@ class Device(StrEnum):
 
     def as_torch(self) -> torch.device:
         return torch.device(self.value)
+
+
+@dataclass(frozen=True)
+class Placed:
+    """A model or LM named under the data root, and the device it is read onto."""
+
+    root: DataRoot
+    name: str
+    device: torch.device
