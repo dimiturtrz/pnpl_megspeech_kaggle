@@ -280,13 +280,14 @@ layers = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "megspeech.training layers: step hooks -> regularisers and sampling -> config -> auxiliary -> loop -> CLIs"
+name = "megspeech.training layers: step hooks -> regularisers and sampling -> auxiliary -> optim -> config -> loop -> CLIs"
 type = "layers"
 layers = [
     "megspeech.training.cli",
     "megspeech.training.loop",
-    "megspeech.training.auxiliary",
     "megspeech.training.config",
+    "megspeech.training.optim",
+    "megspeech.training.auxiliary",
     "megspeech.training.regularise | megspeech.training.sampling",
     "megspeech.training.hook",
 ]

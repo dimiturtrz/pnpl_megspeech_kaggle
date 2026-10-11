@@ -33,8 +33,7 @@ from megspeech.objective.scorer import DIM
 from megspeech.objective.targets.loudness import LENGTH, Loudness
 from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.objective.targets.t5 import Lexicon
-from megspeech.training.auxiliary import Auxiliary, Joint, NoAuxiliary
-from megspeech.training.config import OptimConfig
+from megspeech.training.auxiliary import Auxiliary, AuxiliaryConfig, Joint, NoAuxiliary
 
 CPU = torch.device("cpu")
 GENERATOR = torch.Generator().manual_seed(0)
@@ -93,52 +92,55 @@ def test_joint_neighbour_taps_the_word() -> None:
 
 def test_of(tmp_path: Path) -> None:
     root = cast("DataRoot", Root(tmp_path))
-    assert isinstance(Auxiliary.of(OptimConfig(), root, CPU, WORDS), NoAuxiliary)
+    assert isinstance(Auxiliary.of(AuxiliaryConfig(), 0.0, root, CPU, WORDS), NoAuxiliary)
     with pytest.raises(FileNotFoundError):
-        Auxiliary.of(OptimConfig(semantic=1.0), root, CPU, WORDS)
+        Auxiliary.of(AuxiliaryConfig(semantic=1.0), 0.0, root, CPU, WORDS)
     with pytest.raises(FileNotFoundError):
-        Auxiliary.of(OptimConfig(phonetic=1.0), root, CPU, WORDS)
+        Auxiliary.of(AuxiliaryConfig(phonetic=1.0), 0.0, root, CPU, WORDS)
     semantic().lexicon.save(Lexicon.path(root))
     phonetic().pronunciation.save(Pronunciation.path(root))
-    made = Auxiliary.of(OptimConfig(semantic=0.5), root, CPU, WORDS)
+    made = Auxiliary.of(AuxiliaryConfig(semantic=0.5), 0.0, root, CPU, WORDS)
     assert isinstance(made, Joint)
     assert [type(t) for t in made.terms] == [SemanticTerm]
     assert made.tap is Tap.WORD
-    assert cast("Joint", Auxiliary.of(OptimConfig(semantic=0.5, tap=Tap.CONTEXT), root, CPU, WORDS)).tap is Tap.CONTEXT
-    both = Auxiliary.of(OptimConfig(semantic=0.5, phonetic=1.0), root, CPU, WORDS)
+    assert (
+        cast("Joint", Auxiliary.of(AuxiliaryConfig(semantic=0.5, tap=Tap.CONTEXT), 0.0, root, CPU, WORDS)).tap
+        is Tap.CONTEXT
+    )
+    both = Auxiliary.of(AuxiliaryConfig(semantic=0.5, phonetic=1.0), 0.0, root, CPU, WORDS)
     assert [type(t) for t in both.terms] == [SemanticTerm, PhoneticTerm]
     assert both.terms[1].weight == 1.0
-    worded = Auxiliary.of(OptimConfig(semantic=0.5, lexical=2.0), root, CPU, WORDS)
+    worded = Auxiliary.of(AuxiliaryConfig(semantic=0.5, lexical=2.0), 0.0, root, CPU, WORDS)
     assert [type(t) for t in worded.terms] == [SemanticTerm, LexicalTerm]
-    neighbours = Auxiliary.of(OptimConfig(next_word=0.3, prev_word=0.2), root, CPU, WORDS)
+    neighbours = Auxiliary.of(AuxiliaryConfig(next_word=0.3, prev_word=0.2), 0.0, root, CPU, WORDS)
     assert [(type(t), t.weight) for t in neighbours.terms] == [(NextWordTerm, 0.3), (PreviousWordTerm, 0.2)]
-    windowed = Auxiliary.of(OptimConfig(semantic=0.5, window=0.3), root, CPU, WORDS)
+    windowed = Auxiliary.of(AuxiliaryConfig(semantic=0.5, window=0.3), 0.0, root, CPU, WORDS)
     assert [type(t) for t in windowed.terms] == [SemanticTerm, WindowTerm]
     assert windowed.terms[1].weight == 0.3
-    spelled = Auxiliary.of(OptimConfig(phonetic=1.0, positions=2), root, CPU, WORDS)
+    spelled = Auxiliary.of(AuxiliaryConfig(phonetic=1.0, positions=2), 0.0, root, CPU, WORDS)
     assert cast("PhoneticTerm", spelled.terms[0]).positions == 2
     with pytest.raises(FileNotFoundError):
-        Auxiliary.of(OptimConfig(syntactic=1.0), root, CPU, WORDS)
+        Auxiliary.of(AuxiliaryConfig(syntactic=1.0), 0.0, root, CPU, WORDS)
     PartsOfSpeech(torch.tensor([10, 20]), torch.tensor([7, 15])).save(PartsOfSpeech.path(root))
-    tagged = Auxiliary.of(OptimConfig(phonetic=1.0, syntactic=0.3), root, CPU, WORDS)
+    tagged = Auxiliary.of(AuxiliaryConfig(phonetic=1.0, syntactic=0.3), 0.0, root, CPU, WORDS)
     assert [type(t) for t in tagged.terms] == [PhoneticTerm, SyntacticTerm]
     with pytest.raises(FileNotFoundError):
-        Auxiliary.of(OptimConfig(tagging=1.0), root, CPU, WORDS)
+        Auxiliary.of(AuxiliaryConfig(tagging=1.0), 0.0, root, CPU, WORDS)
     ContextTags(np.array(["a", "b"]), np.array([0.5, 1.5]), np.array([3, 5])).save(ContextTags.path(root))
-    tags = Auxiliary.of(OptimConfig(tagging=0.5), root, CPU, WORDS.assign(onset=[0.5, 9.0]))
+    tags = Auxiliary.of(AuxiliaryConfig(tagging=0.5), 0.0, root, CPU, WORDS.assign(onset=[0.5, 9.0]))
     assert cast("TagTerm", tags.terms[0]).tags.tolist() == [3, -1]
-    timed = Auxiliary.of(OptimConfig(adversary=1.0), root, CPU, WORDS.assign(sentence=0, onset=[0.0, 0.2]))
+    timed = Auxiliary.of(AuxiliaryConfig(), 1.0, root, CPU, WORDS.assign(sentence=0, onset=[0.0, 0.2]))
     assert [type(t) for t in timed.terms] == [TimingTerm]
     with pytest.raises(FileNotFoundError):
-        Auxiliary.of(OptimConfig(speech=1.0), root, CPU, WORDS)
+        Auxiliary.of(AuxiliaryConfig(speech=1.0), 0.0, root, CPU, WORDS)
     Targets(np.ones((2, DIM), np.float16)).save(Targets.directory(root) / "a.npy")
-    heard = Auxiliary.of(OptimConfig(speech=1.0, semantic=0.5), root, CPU, WORDS)
+    heard = Auxiliary.of(AuxiliaryConfig(speech=1.0, semantic=0.5), 0.0, root, CPU, WORDS)
     assert [type(t) for t in heard.terms] == [SpeechTerm, SemanticTerm]
     assert cast("SpeechTerm", heard.terms[0]).speech.rows.tolist() == [0, -1]
     with pytest.raises(FileNotFoundError):
-        Auxiliary.of(OptimConfig(acoustic=1.0), root, CPU, WORDS)
+        Auxiliary.of(AuxiliaryConfig(acoustic=1.0), 0.0, root, CPU, WORDS)
     Targets(np.ones((2, LENGTH), np.float16)).save(Loudness.directory(root) / "a.npy")
-    loud = Auxiliary.of(OptimConfig(acoustic=0.4), root, CPU, WORDS)
+    loud = Auxiliary.of(AuxiliaryConfig(acoustic=0.4), 0.0, root, CPU, WORDS)
     assert [(type(t), t.weight) for t in loud.terms] == [(AcousticTerm, 0.4)]
     assert cast("AcousticTerm", loud.terms[0]).speech.rows.tolist() == [0, -1]
 
@@ -147,12 +149,12 @@ def test_of_audio(tmp_path: Path) -> None:
     """The label-free audio contrast reads the same envelopes as the acoustic term."""
     root = cast("DataRoot", Root(tmp_path))
     with pytest.raises(FileNotFoundError):
-        Auxiliary.of(OptimConfig(heads=0.0, audio=0.7), root, CPU, WORDS)
+        Auxiliary.of(AuxiliaryConfig(audio=0.7), 0.0, root, CPU, WORDS)
     Targets(np.ones((2, LENGTH), np.float16)).save(Loudness.directory(root) / "a.npy")
-    heard = Auxiliary.of(OptimConfig(heads=0.0, audio=0.7), root, CPU, WORDS)
+    heard = Auxiliary.of(AuxiliaryConfig(audio=0.7), 0.0, root, CPU, WORDS)
     assert [(type(t), t.weight) for t in heard.terms] == [(AudioTerm, 0.7)]
     assert cast("AudioTerm", heard.terms[0]).speech.rows.tolist() == [0, -1]
-    both = Auxiliary.of(OptimConfig(acoustic=0.3, audio=0.7), root, CPU, WORDS).terms
+    both = Auxiliary.of(AuxiliaryConfig(acoustic=0.3, audio=0.7), 0.0, root, CPU, WORDS).terms
     assert cast("AcousticTerm", both[0]).speech is cast("AudioTerm", both[1]).speech
 
 
@@ -160,14 +162,14 @@ def test_of_instance(tmp_path: Path) -> None:
     """The instance term needs MASC words to find any cross-subject positive."""
     root = cast("DataRoot", Root(tmp_path))
     with pytest.raises(ValueError, match="MASC instance"):
-        Auxiliary.of(OptimConfig(instance=0.25), root, CPU, WORDS)
+        Auxiliary.of(AuxiliaryConfig(instance=0.25), 0.0, root, CPU, WORDS)
     runs = ["sub-101_ses-0_task-MASC1_run-1", "sub-102_ses-0_task-MASC1_run-1"]
     masc = pd.DataFrame({"run": runs, "position": 0, "sentence": 0})
-    paired = Auxiliary.of(OptimConfig(instance=0.25), root, CPU, masc)
+    paired = Auxiliary.of(AuxiliaryConfig(instance=0.25), 0.0, root, CPU, masc)
     assert [(type(t), t.weight) for t in paired.terms] == [(InstanceTerm, 0.25)]
     assert cast("Joint", paired).tapped(paired.terms[0]) is Tap.WORD
     assert type(cast("InstanceTerm", paired.terms[0]).neighbours) is Together
-    apart = Auxiliary.of(OptimConfig(instance=0.25, instance_apart=True), root, CPU, masc)
+    apart = Auxiliary.of(AuxiliaryConfig(instance=0.25, instance_apart=True), 0.0, root, CPU, masc)
     assert isinstance(cast("InstanceTerm", apart.terms[0]).neighbours, Apart)
 
 
@@ -193,6 +195,18 @@ def test_joint_acoustic_taps_the_time_course() -> None:
     listening = Joint((heard,), Tap.WORD).trained(net(), identity)
     assert listening.taps == (Tap.TIME,)
     assert isinstance(listening.heads[0], Listening)
+
+
+def test_listens() -> None:
+    assert AuxiliaryConfig(acoustic=0.3).listens
+    assert AuxiliaryConfig(audio=1.0).listens
+    assert not AuxiliaryConfig(semantic=1.0).listens
+
+
+def test_time_tap_refused() -> None:
+    assert AuxiliaryConfig(tap=Tap.CONTEXT).tap is Tap.CONTEXT
+    with pytest.raises(ValueError, match="acoustic head"):
+        AuxiliaryConfig(tap=Tap.TIME)
 
 
 def test_tapped() -> None:

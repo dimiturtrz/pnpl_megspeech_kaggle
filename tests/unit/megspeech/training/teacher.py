@@ -17,8 +17,7 @@ from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head
 from megspeech.objective.term import ContextTerm, DistilledTerm
 from megspeech.training import teacher as module
-from megspeech.training.config import OptimConfig
-from megspeech.training.teacher import CrossFitted, Ensembled, Teacher, Untaught
+from megspeech.training.teacher import CrossFitted, Ensembled, Teacher, TeacherConfig, Untaught
 
 CPU = torch.device("cpu")
 WORDS = 4
@@ -32,8 +31,8 @@ def train() -> Split:
 def test_of(tmp_path: Path) -> None:
     root = DataRoot(tmp_path)
     data, words = DataConfig(), pd.DataFrame()
-    assert isinstance(Teacher.of(OptimConfig(), root, data, words), Untaught)
-    assert Teacher.of(OptimConfig(teacher="ens", distil=0.3, temperature=2.0), root, data, words) == Ensembled(
+    assert isinstance(Teacher.of(TeacherConfig(), root, data, words), Untaught)
+    assert Teacher.of(TeacherConfig(teacher="ens", distil=0.3, temperature=2.0), root, data, words) == Ensembled(
         root.models(), "ens", 0.3, 2.0
     )
 
@@ -91,14 +90,14 @@ def test_of_crossfitted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     root = DataRoot(tmp_path)
     runs = [Run(tmp_path / f"sub-0_ses-{s}_task-Sherlock1_run-1_meg.h5") for s in range(1, 5)]
     monkeypatch.setattr(module.Run, "everywhere", classmethod(lambda *_: runs))
-    optim = OptimConfig(teacher="ens", teacher_folds=2)
+    taught = TeacherConfig(teacher="ens", teacher_folds=2)
     words = pd.DataFrame({"run": [r.name for r in runs]})
-    teacher = Teacher.of(optim, root, DataConfig(val=Val.OFFICIAL, tasks=("Sherlock1",)), words)
+    teacher = Teacher.of(taught, root, DataConfig(val=Val.OFFICIAL, tasks=("Sherlock1",)), words)
     assert isinstance(teacher, CrossFitted)
     assert teacher.held.tolist() == [0, 1, 0, 1]
     with pytest.raises(ValueError, match="in no crossfit fold"):
         Teacher.of(
-            optim, root, DataConfig(val=Val.OFFICIAL), pd.DataFrame({"run": ["sub-0_ses-9_task-Sherlock1_run-1"]})
+            taught, root, DataConfig(val=Val.OFFICIAL), pd.DataFrame({"run": ["sub-0_ses-9_task-Sherlock1_run-1"]})
         )
 
 

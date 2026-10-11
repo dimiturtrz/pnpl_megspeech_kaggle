@@ -59,7 +59,7 @@ class Member:
     @classmethod
     def load(cls, net: SentenceNet, directory: Path, device: torch.device) -> "Member":
         """`net` with the two neighbour heads of `directory`'s saved list, each over the word embedding."""
-        weights: dict[str, float] = json.loads((directory / METRICS).read_text())["config"]["optim"]
+        weights = Tree.flat(json.loads((directory / METRICS).read_text())["config"]["optim"])
         if not (weights.get("next_word") and weights.get("prev_word")):
             raise ValueError(
                 f"{directory.name} has no neighbour heads: train with --optim.next_word and --optim.prev_word"

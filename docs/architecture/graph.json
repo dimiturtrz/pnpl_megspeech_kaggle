@@ -1521,6 +1521,12 @@
     {
       "kind": "import",
       "source": "megspeech.evaluation.studies.acoustic",
+      "target": "core.tree",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.acoustic",
       "target": "megspeech.data.batching.split",
       "weight": 1
     },
@@ -6015,6 +6021,12 @@
     {
       "kind": "import",
       "source": "megspeech.training.auxiliary",
+      "target": "core.rules",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.auxiliary",
       "target": "megspeech.data.labels.context_tags",
       "weight": 1
     },
@@ -6136,12 +6148,6 @@
       "kind": "import",
       "source": "megspeech.training.auxiliary",
       "target": "megspeech.objective.term",
-      "weight": 1
-    },
-    {
-      "kind": "import",
-      "source": "megspeech.training.auxiliary",
-      "target": "megspeech.training.config",
       "weight": 1
     },
     {
@@ -6507,12 +6513,6 @@
     {
       "kind": "import",
       "source": "megspeech.training.config",
-      "target": "megspeech.model.auxiliary",
-      "weight": 1
-    },
-    {
-      "kind": "import",
-      "source": "megspeech.training.config",
       "target": "megspeech.model.config",
       "weight": 1
     },
@@ -6520,6 +6520,12 @@
       "kind": "import",
       "source": "megspeech.training.config",
       "target": "megspeech.submission.config",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.config",
+      "target": "megspeech.training.optim",
       "weight": 1
     },
     {
@@ -6699,12 +6705,6 @@
     {
       "kind": "import",
       "source": "megspeech.training.loop.trainer",
-      "target": "megspeech.training.ramp",
-      "weight": 1
-    },
-    {
-      "kind": "import",
-      "source": "megspeech.training.loop.trainer",
       "target": "megspeech.training.regularise.anchor",
       "weight": 1
     },
@@ -6766,6 +6766,30 @@
       "kind": "import",
       "source": "megspeech.training.loop.trainer",
       "target": "megspeech.training.timing_expert",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.optim",
+      "target": "megspeech.training.auxiliary",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.optim",
+      "target": "megspeech.training.ramp",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.optim",
+      "target": "megspeech.training.teacher",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.optim",
+      "target": "megspeech.training.transfer",
       "weight": 1
     },
     {
@@ -7244,12 +7268,6 @@
     },
     {
       "kind": "import",
-      "source": "megspeech.training.teacher",
-      "target": "megspeech.training.config",
-      "weight": 1
-    },
-    {
-      "kind": "import",
       "source": "megspeech.training.timing_expert",
       "target": "core.paths",
       "weight": 1
@@ -7288,6 +7306,12 @@
       "kind": "import",
       "source": "megspeech.training.timing_expert",
       "target": "megspeech.model.context.timing_only",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.transfer",
+      "target": "core.paths",
       "weight": 1
     },
     {
@@ -7467,6 +7491,12 @@
     {
       "kind": "calls",
       "source": "core.tree.Tree.arguments",
+      "target": "core.tree.Tree.flags",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.tree.Tree.arguments",
       "target": "core.tree.Tree.leaves",
       "weight": 1
     },
@@ -7480,6 +7510,12 @@
       "kind": "calls",
       "source": "core.tree.Tree.coerce",
       "target": "core.coercion.Coercion.read",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "core.tree.Tree.flags",
+      "target": "core.tree.Tree._nodes",
       "weight": 1
     },
     {
@@ -11312,6 +11348,12 @@
     },
     {
       "kind": "calls",
+      "source": "megspeech.evaluation.rulers.heldout.Lineage.subjects",
+      "target": "core.tree.Tree.flat",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
       "source": "megspeech.evaluation.rulers.heldout.main",
       "target": "core.paths.DataRoot.from_config",
       "weight": 1
@@ -12268,6 +12310,12 @@
       "kind": "calls",
       "source": "megspeech.evaluation.studies.acoustic.Readout.__call__",
       "target": "megspeech.model.sentence.SentenceNet.heard_timed",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.studies.acoustic.Readout.load",
+      "target": "core.tree.Tree.flat",
       "weight": 1
     },
     {
@@ -17548,6 +17596,12 @@
       "kind": "holds",
       "source": "megspeech.evaluation.studies.neighbourfusion.Member",
       "target": "megspeech.model.sentence.SentenceNet",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.studies.neighbourfusion.Member.load",
+      "target": "core.tree.Tree.flat",
       "weight": 1
     },
     {
@@ -25797,7 +25851,7 @@
     {
       "kind": "references",
       "source": "megspeech.training.auxiliary.Auxiliary",
-      "target": "megspeech.training.config.OptimConfig",
+      "target": "megspeech.training.auxiliary.AuxiliaryConfig",
       "weight": 1
     },
     {
@@ -25954,6 +26008,18 @@
       "kind": "construct",
       "source": "megspeech.training.auxiliary.Auxiliary.of",
       "target": "megspeech.training.auxiliary.NoAuxiliary",
+      "weight": 1
+    },
+    {
+      "kind": "holds",
+      "source": "megspeech.training.auxiliary.AuxiliaryConfig",
+      "target": "megspeech.model.auxiliary.Tap",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.training.auxiliary.AuxiliaryConfig.__post_init__",
+      "target": "core.rules.Rule.enforce",
       "weight": 1
     },
     {
@@ -26577,6 +26643,12 @@
     {
       "kind": "calls",
       "source": "megspeech.training.cli.train.main",
+      "target": "core.tree.Tree.flags",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.training.cli.train.main",
       "target": "core.tree.Tree.parse",
       "weight": 1
     },
@@ -26642,12 +26714,6 @@
     },
     {
       "kind": "holds",
-      "source": "megspeech.training.config.OptimConfig",
-      "target": "megspeech.model.auxiliary.Tap",
-      "weight": 1
-    },
-    {
-      "kind": "holds",
       "source": "megspeech.training.config.RunConfig",
       "target": "megspeech.data.config.DataConfig",
       "weight": 1
@@ -26683,12 +26749,6 @@
       "weight": 1
     },
     {
-      "kind": "holds",
-      "source": "megspeech.training.config.RunConfig",
-      "target": "megspeech.training.config.OptimConfig",
-      "weight": 1
-    },
-    {
       "kind": "references",
       "source": "megspeech.training.config.RunConfig",
       "target": "megspeech.training.config.RunConfig",
@@ -26698,6 +26758,12 @@
       "kind": "holds",
       "source": "megspeech.training.config.RunConfig",
       "target": "megspeech.training.config.StopConfig",
+      "weight": 1
+    },
+    {
+      "kind": "holds",
+      "source": "megspeech.training.config.RunConfig",
+      "target": "megspeech.training.optim.OptimConfig",
       "weight": 1
     },
     {
@@ -27231,12 +27297,6 @@
     {
       "kind": "calls",
       "source": "megspeech.training.loop.trainer.Trainer.state",
-      "target": "megspeech.training.ramp.Ramp.of",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.training.loop.trainer.Trainer.state",
       "target": "megspeech.training.regularise.anchor.Anchor.of",
       "weight": 1
     },
@@ -27322,6 +27382,30 @@
       "kind": "calls",
       "source": "megspeech.training.loop.trainer.Trainer.terms",
       "target": "megspeech.training.teacher.Teacher.taught",
+      "weight": 1
+    },
+    {
+      "kind": "holds",
+      "source": "megspeech.training.optim.OptimConfig",
+      "target": "megspeech.training.auxiliary.AuxiliaryConfig",
+      "weight": 1
+    },
+    {
+      "kind": "holds",
+      "source": "megspeech.training.optim.OptimConfig",
+      "target": "megspeech.training.ramp.AdversaryConfig",
+      "weight": 1
+    },
+    {
+      "kind": "holds",
+      "source": "megspeech.training.optim.OptimConfig",
+      "target": "megspeech.training.teacher.TeacherConfig",
+      "weight": 1
+    },
+    {
+      "kind": "holds",
+      "source": "megspeech.training.optim.OptimConfig",
+      "target": "megspeech.training.transfer.TransferConfig",
       "weight": 1
     },
     {
@@ -28288,6 +28372,18 @@
       "kind": "calls",
       "source": "megspeech.training.pretrain.windows.Sessions.assert_clean",
       "target": "megspeech.training.pretrain.windows.Sessions.official",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.training.ramp.AdversaryConfig",
+      "target": "megspeech.training.ramp.Ramp",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.training.ramp.AdversaryConfig.ramp",
+      "target": "megspeech.training.ramp.Ramp.of",
       "weight": 1
     },
     {
@@ -29313,13 +29409,13 @@
     {
       "kind": "references",
       "source": "megspeech.training.teacher.Teacher",
-      "target": "megspeech.training.config.OptimConfig",
+      "target": "megspeech.training.teacher.Teacher",
       "weight": 1
     },
     {
       "kind": "references",
       "source": "megspeech.training.teacher.Teacher",
-      "target": "megspeech.training.teacher.Teacher",
+      "target": "megspeech.training.teacher.TeacherConfig",
       "weight": 1
     },
     {
@@ -29435,6 +29531,18 @@
       "source": "megspeech.training.timing_expert.TimingExpert.load",
       "target": "core.paths.DataRoot.models",
       "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.training.transfer.TransferConfig",
+      "target": "core.paths.DataRoot",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.training.transfer.TransferConfig.weights",
+      "target": "core.paths.DataRoot.models",
+      "weight": 1
     }
   ],
   "nodes": [
@@ -29487,7 +29595,7 @@
       "role": null
     },
     {
-      "descendants": 254,
+      "descendants": 256,
       "id": "megspeech",
       "label": "megspeech",
       "level": "module",
@@ -31191,7 +31299,7 @@
       "role": null
     },
     {
-      "descendants": 41,
+      "descendants": 43,
       "id": "megspeech.training",
       "label": "training",
       "level": "module",
@@ -31324,6 +31432,14 @@
       "label": "trainer",
       "level": "module",
       "parent": "megspeech.training.loop",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.training.optim",
+      "label": "optim",
+      "level": "module",
+      "parent": "megspeech.training",
       "role": null
     },
     {
@@ -31522,6 +31638,14 @@
       "descendants": 0,
       "id": "megspeech.training.timing_expert",
       "label": "timing_expert",
+      "level": "module",
+      "parent": "megspeech.training",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.training.transfer",
+      "label": "transfer",
       "level": "module",
       "parent": "megspeech.training",
       "role": null
@@ -35536,6 +35660,14 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.training.auxiliary.AuxiliaryConfig",
+      "label": "AuxiliaryConfig",
+      "level": "class",
+      "parent": "megspeech.training.auxiliary",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.training.auxiliary.Joint",
       "label": "Joint",
       "level": "class",
@@ -35616,14 +35748,6 @@
     },
     {
       "descendants": 0,
-      "id": "megspeech.training.config.OptimConfig",
-      "label": "OptimConfig",
-      "level": "class",
-      "parent": "megspeech.training.config",
-      "role": "satellite"
-    },
-    {
-      "descendants": 0,
       "id": "megspeech.training.config.RunConfig",
       "label": "RunConfig",
       "level": "class",
@@ -35692,6 +35816,14 @@
       "label": "Trainer",
       "level": "class",
       "parent": "megspeech.training.loop.trainer",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.training.optim.OptimConfig",
+      "label": "OptimConfig",
+      "level": "class",
+      "parent": "megspeech.training.optim",
       "role": "satellite"
     },
     {
@@ -35956,6 +36088,14 @@
       "label": "Sessions",
       "level": "class",
       "parent": "megspeech.training.pretrain.windows",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.training.ramp.AdversaryConfig",
+      "label": "AdversaryConfig",
+      "level": "class",
+      "parent": "megspeech.training.ramp",
       "role": "satellite"
     },
     {
@@ -36248,6 +36388,14 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.training.teacher.TeacherConfig",
+      "label": "TeacherConfig",
+      "level": "class",
+      "parent": "megspeech.training.teacher",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.training.teacher.Untaught",
       "label": "Untaught",
       "level": "class",
@@ -36260,6 +36408,14 @@
       "label": "TimingExpert",
       "level": "class",
       "parent": "megspeech.training.timing_expert",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.training.transfer.TransferConfig",
+      "label": "TransferConfig",
+      "level": "class",
+      "parent": "megspeech.training.transfer",
       "role": "satellite"
     },
     {
@@ -36570,6 +36726,22 @@
       "descendants": 0,
       "id": "core.tree.Tree.coerce",
       "label": "coerce",
+      "level": "method",
+      "parent": "core.tree.Tree",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.tree.Tree.flags",
+      "label": "flags",
+      "level": "method",
+      "parent": "core.tree.Tree",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "core.tree.Tree.flat",
+      "label": "flat",
       "level": "method",
       "parent": "core.tree.Tree",
       "role": null
@@ -49896,6 +50068,22 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.training.auxiliary.AuxiliaryConfig.__post_init__",
+      "label": "__post_init__",
+      "level": "method",
+      "parent": "megspeech.training.auxiliary.AuxiliaryConfig",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.training.auxiliary.AuxiliaryConfig.listens",
+      "label": "listens",
+      "level": "method",
+      "parent": "megspeech.training.auxiliary.AuxiliaryConfig",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.training.auxiliary.Joint.tapped",
       "label": "tapped",
       "level": "method",
@@ -50180,14 +50368,6 @@
       "label": "main",
       "level": "method",
       "parent": "megspeech.training.cli.train",
-      "role": null
-    },
-    {
-      "descendants": 0,
-      "id": "megspeech.training.config.OptimConfig.listens",
-      "label": "listens",
-      "level": "method",
-      "parent": "megspeech.training.config.OptimConfig",
       "role": null
     },
     {
@@ -51240,6 +51420,14 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.training.ramp.AdversaryConfig.ramp",
+      "label": "ramp",
+      "level": "method",
+      "parent": "megspeech.training.ramp.AdversaryConfig",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.training.ramp.Ramp.of",
       "label": "of",
       "level": "method",
@@ -52156,6 +52344,14 @@
       "label": "save",
       "level": "method",
       "parent": "megspeech.training.timing_expert.TimingExpert",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.training.transfer.TransferConfig.weights",
+      "label": "weights",
+      "level": "method",
+      "parent": "megspeech.training.transfer.TransferConfig",
       "role": null
     }
   ]

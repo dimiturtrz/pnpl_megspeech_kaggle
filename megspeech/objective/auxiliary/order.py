@@ -19,10 +19,10 @@ class HeadOrder:
         "window",
         "acoustic",
     )
-    """The `OptimConfig` weights in the order their terms are built."""
+    """The auxiliary weights (`AuxiliaryConfig`, and `AdversaryConfig.adversary`) in the order their terms are built."""
 
     @classmethod
-    def position(cls, weights: Mapping[str, float], name: str) -> int:
+    def position(cls, weights: Mapping[str, object], name: str) -> int:
         """Where the head of weight `name` sits among the heads a run with these `weights` saved."""
         if not weights.get(name):
             raise ValueError(f"{name} has weight 0: no head was trained for it")

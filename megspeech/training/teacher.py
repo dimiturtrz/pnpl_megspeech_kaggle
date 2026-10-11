@@ -4,7 +4,7 @@ training word (knowledge distillation, Hinton et al. 2015; born-again networks, 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import override
+from typing import ClassVar, override
 
 import pandas as pd
 import torch
@@ -19,7 +19,31 @@ from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head
 from megspeech.model.ensemble import Ensemble
 from megspeech.objective.term import ContextTerm, DistilledTerm
-from megspeech.training.config import OptimConfig
+
+
+@dataclass(frozen=True)
+class TeacherConfig:
+    """Who the context head is distilled from; the `optim.distillation` group, its leaves also under their flat
+    `--optim.<name>` flags."""
+
+    FLAT: ClassVar[bool] = True
+
+    teacher: str = ""
+    """A trained run or ensemble under models/ whose context-head distribution on every labelled training word the
+    context head is also trained toward (`megspeech.training.teacher`); empty trains on the labels alone."""
+    teacher_folds: int = 1
+    """Cross-fitted teacher: `teacher` names `<teacher>-f0 ... <teacher>-f{K-1}`, each trained at `data.crossfit` K with
+    `data.dropped` its own fold, and a training word is taught by the model that never trained on its session
+    (megspeech-7gf.130); 1 reads `teacher` alone."""
+    distil: float = 0.5
+    """Share of the context loss that is the KL to the `teacher`'s distribution, the rest the label's; read only
+    with a teacher."""
+    temperature: float = 1.0
+    """Temperature both the teacher's and the student's distributions are softened by in the KL; read only with a
+    teacher."""
+    unlabelled: bool = False
+    """Distil on every training word in a span, the ~60% outside the 50 too, not only the labelled; read only with a
+    teacher."""
 
 
 class Teacher(ABC):
@@ -29,17 +53,19 @@ class Teacher(ABC):
     def taught(self, context: ContextTerm, train: Split, evaluator: Evaluator) -> ContextTerm: ...
 
     @staticmethod
-    def of(optim: OptimConfig, root: DataRoot, data: DataConfig, positions: pd.DataFrame) -> "Teacher":
+    def of(config: TeacherConfig, root: DataRoot, data: DataConfig, positions: pd.DataFrame) -> "Teacher":
         """Nobody without a `teacher` run; that run under `root`'s models otherwise, or with `teacher_folds` its fold
         runs, each teaching the words of the `data` sessions it held out.
         `positions` holds each training word's `run`."""
-        if not optim.teacher:
+        if not config.teacher:
             return Untaught()
-        whole = Ensembled(root.models(), optim.teacher, optim.distil, optim.temperature, unlabelled=optim.unlabelled)
-        if optim.teacher_folds == 1:
+        whole = Ensembled(
+            root.models(), config.teacher, config.distil, config.temperature, unlabelled=config.unlabelled
+        )
+        if config.teacher_folds == 1:
             return whole
-        held = positions["run"].map(data.fold_of(Run.everywhere(root), optim.teacher_folds))
-        return CrossFitted.over(whole, optim.teacher_folds, held)
+        held = positions["run"].map(data.fold_of(Run.everywhere(root), config.teacher_folds))
+        return CrossFitted.over(whole, config.teacher_folds, held)
 
 
 class Untaught(Teacher):

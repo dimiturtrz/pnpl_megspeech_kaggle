@@ -70,6 +70,52 @@ def test_arguments() -> None:
         parser.parse_args(["--inner.shape", "oval"])
 
 
+@dataclass(frozen=True)
+class Group:
+    FLAT: ClassVar[bool] = True
+    gain: float = 1.0
+
+
+@dataclass(frozen=True)
+class Split:
+    group: Group = Group()
+    inner: Inner = Inner()
+
+
+def test_flags() -> None:
+    assert tree().flags("inner.rate") == ("--inner.rate",)
+    assert Tree(Split).flags("group.gain") == ("--group.gain", "--gain")
+    assert Tree(Split).flags("inner.rate") == ("--inner.rate",)
+
+
+def test_flat_branch_answers_to_both_flags() -> None:
+    parser = argparse.ArgumentParser()
+    Tree(Split).arguments(parser)
+    assert Tree(Split).parse(parser.parse_args(["--gain", "2"])).group.gain == 2.0
+    assert Tree(Split).parse(parser.parse_args(["--group.gain", "3"])).group.gain == 3.0
+
+
+def test_flat_record_of_a_split_group_loads() -> None:
+    assert Tree(Split).load({"gain": 2.0}, saved=True) == Split(Group(2.0))
+
+
+@dataclass(frozen=True)
+class Scoped:
+    split: Split = Split()
+    gain: float = 0.0
+
+
+def test_stray_resolves_inside_its_branch_first() -> None:
+    assert Tree(Scoped).load({"split": {"gain": 2.0}, "gain": 1.0}) == Scoped(Split(Group(2.0)), 1.0)
+    with pytest.raises(KeyError, match="'gain' names 2 leaves"):
+        Tree(Scoped).lift({"split": {"inner": {"gain": 2.0}}})
+
+
+def test_flat() -> None:
+    assert Tree.flat({"group": {"gain": 2.0}, "steps": 3}) == {"gain": 2.0, "steps": 3}
+    assert Tree.flat({"gain": 2.0}) == {"gain": 2.0}
+
+
 def test_parse() -> None:
     assert parsed() == Outer()
     out = parsed("--inner.shape", "square", "--names", "a", "b", "--no-fast", "--sizes", "4", "--other.rate", "1")

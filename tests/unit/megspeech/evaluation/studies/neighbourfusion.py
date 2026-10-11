@@ -19,7 +19,9 @@ from megspeech.model.ensemble import Ensemble
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig
 from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
-from megspeech.training.config import OptimConfig, RunConfig
+from megspeech.training.auxiliary import AuxiliaryConfig
+from megspeech.training.config import RunConfig
+from megspeech.training.optim import OptimConfig
 
 CPU = torch.device("cpu")
 LOUD = 10.0
@@ -75,7 +77,7 @@ def test_beside() -> None:
 def test_load(tmp_path: Path) -> None:
     net = real_net()
     directory = tmp_path / "run"
-    saved(directory, OptimConfig(semantic=0.0, next_word=0.3, prev_word=0.2))
+    saved(directory, OptimConfig(auxiliaries=AuxiliaryConfig(semantic=0.0, next_word=0.3, prev_word=0.2)))
     width = net.words.width
     heads = nn.ModuleList([NextWordTerm(weight=0.3).head(width), PreviousWordTerm(weight=0.2).head(width)])
     torch.save({f"heads.{k}": v for k, v in heads.state_dict().items()}, directory / HEADS)
@@ -84,7 +86,7 @@ def test_load(tmp_path: Path) -> None:
         assert all(torch.equal(a, b) for a, b in zip(mine.parameters(), theirs.parameters(), strict=True))
     assert loaded.net is net
     bare = tmp_path / "bare"
-    saved(bare, OptimConfig(next_word=0.3))
+    saved(bare, OptimConfig(auxiliaries=AuxiliaryConfig(next_word=0.3)))
     with pytest.raises(ValueError, match="no neighbour heads"):
         Member.load(net, bare, CPU)
 
@@ -92,7 +94,7 @@ def test_load(tmp_path: Path) -> None:
 def test_of(tmp_path: Path) -> None:
     with pytest.raises(TypeError, match="wraps the ensemble"):
         Neighbours.of(nn.Identity(), [tmp_path], CPU)
-    saved(tmp_path / "run", OptimConfig(next_word=0.3, prev_word=0.3))
+    saved(tmp_path / "run", OptimConfig(auxiliaries=AuxiliaryConfig(next_word=0.3, prev_word=0.3)))
     net = real_net()
     heads = nn.ModuleList(
         [NextWordTerm(weight=0.3).head(net.words.width), PreviousWordTerm(weight=0.3).head(net.words.width)]

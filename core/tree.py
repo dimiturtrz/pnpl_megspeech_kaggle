@@ -8,6 +8,8 @@ A saved config reloads through `load`, which also accepts a flat record from bef
 branch of the root goes to the one leaf of that name, and a key misplaced inside a branch goes there too. A config
 class retires what it dropped through three optional class attributes: `RETIRED` (`Retired` per dropped field),
 `RENAMED` (old leaf name to new) and `LEGACY` (what a record that predates a field implies, applied by a saved load).
+A branch class split out of a flat one declares `FLAT`: its leaves also answer to their flags from before the split,
+the branch's own name left out (`--optim.semantic` for `--optim.auxiliaries.semantic`).
 """
 
 import argparse
@@ -26,6 +28,7 @@ SEPARATOR = "."
 RETIRED = "RETIRED"
 RENAMED = "RENAMED"
 LEGACY = "LEGACY"
+FLAT = "FLAT"
 
 
 @dataclass(frozen=True)
@@ -70,19 +73,36 @@ class Tree[T: DataclassInstance]:
                 yield f"{prefix}{field.name}", hints[field.name], value
 
     def arguments(self, parser: argparse.ArgumentParser) -> None:
-        """One flag per leaf, defaulting to the tree's value; `coerce` types what the command line gives as text."""
+        """One flag per leaf, defaulting to the tree's value, a `FLAT` branch's leaves also under their flat flag;
+        `coerce` types what the command line gives as text."""
         for path, kind, value in self.leaves():
-            flag, dest, shown = f"--{path}", path, "default %(default)s"
+            flags, dest, shown = self.flags(path), path, "default %(default)s"
             if kind is bool:
-                parser.add_argument(flag, dest=dest, default=value, help=shown, action=argparse.BooleanOptionalAction)
+                parser.add_argument(*flags, dest=dest, default=value, help=shown, action=argparse.BooleanOptionalAction)
             elif get_origin(kind) is tuple:
-                parser.add_argument(flag, dest=dest, default=value, help=shown, nargs="*")
+                parser.add_argument(*flags, dest=dest, default=value, help=shown, nargs="*")
             elif isinstance(kind, type) and issubclass(kind, StrEnum):
                 parser.add_argument(
-                    flag, dest=dest, default=value, help=shown, choices=[member.value for member in kind]
+                    *flags, dest=dest, default=value, help=shown, choices=[member.value for member in kind]
                 )
             else:
-                parser.add_argument(flag, dest=dest, default=value, help=shown)
+                parser.add_argument(*flags, dest=dest, default=value, help=shown)
+
+    def flags(self, path: str) -> tuple[str, ...]:
+        """The command-line spellings of the leaf at `path`: its own, then under a `FLAT` branch the one without it."""
+        flat = {SEPARATOR.join(branch) for branch, kind in self._nodes() if getattr(kind, FLAT, False)}
+        parts = path.split(SEPARATOR)
+        kept = (part for at, part in enumerate(parts) if SEPARATOR.join(parts[: at + 1]) not in flat)
+        return tuple(dict.fromkeys((f"--{path}", f"--{SEPARATOR.join(kept)}")))
+
+    @staticmethod
+    def flat[V](record: Mapping[str, V]) -> dict[str, V]:
+        """A saved record's leaves by name, whichever branches hold them: the flat record a reader that cannot
+        import the config class looks a field up in, before or after its group was split out."""
+        named: dict[str, V] = {}
+        for key, value in record.items():
+            named |= Tree.flat(value) if isinstance(value, Mapping) else {key: value}
+        return named
 
     def parse(self, namespace: argparse.Namespace) -> T:
         values = vars(namespace)
@@ -142,8 +162,11 @@ class Tree[T: DataclassInstance]:
             by_name.setdefault(path.rsplit(SEPARATOR, 1)[-1], []).append(path)
         renames = self._table(RENAMED)
         flat, strays = self._place(self.root, "", values, renames)
-        for key, value in strays.items():
-            paths = by_name.get(str(renames.get(key, key)), [])
+        for stray, value in strays.items():
+            prefix, _, key = stray.rpartition(SEPARATOR)
+            everywhere = by_name.get(str(renames.get(key, key)), [])
+            within = [path for path in everywhere if path.startswith(f"{prefix}{SEPARATOR}")]
+            paths = within if len(within) == 1 else everywhere
             if len(paths) != 1:
                 raise KeyError(f"{key!r} names {len(paths)} leaves of {self.root.__name__}")
             flat[paths[0]] = value
@@ -152,8 +175,9 @@ class Tree[T: DataclassInstance]:
     def _place(
         self, kind: type, prefix: str, values: Mapping[str, object], renames: Mapping[str, object]
     ) -> tuple[dict[str, object], dict[str, object]]:
-        """Sort a record into the leaves it names by path and the strays no class here has (found by leaf name
-        anywhere), after `kind` retires its dropped fields."""
+        """Sort a record into the leaves it names by path and the strays no class here has, by the path they were
+        found at (placed by leaf name, inside their branch first, then anywhere), after `kind` retires its dropped
+        fields."""
         hints = get_type_hints(kind)
         names = {field.name for field in fields(kind)}
         flat: dict[str, object] = {}
@@ -166,7 +190,7 @@ class Tree[T: DataclassInstance]:
             elif key in names and key not in renames:
                 flat[f"{prefix}{key}"] = value
             else:
-                strays[key] = value
+                strays[f"{prefix}{key}"] = value
         return flat, strays
 
     @staticmethod

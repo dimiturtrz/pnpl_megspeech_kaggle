@@ -86,7 +86,7 @@ class WordEncoder(nn.Module, ABC):
         return self.placed(embedded, slot), self.placed(pooled, slot)
 
     def backbone(self) -> tuple[nn.Parameter, ...]:
-        """The parameters `OptimConfig.encoder_lr` scales: everything, but for an encoder over a pretrained trunk."""
+        """The parameters `TransferConfig.encoder_lr` scales: everything, but for an encoder over a pretrained trunk."""
         return tuple(self.parameters())
 
     def normalise(self, x: Float[Tensor, "b c t"], present: Bool[Tensor, "b 1 t"]) -> Float[Tensor, "b c t"]:

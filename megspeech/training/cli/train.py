@@ -32,7 +32,7 @@ def main() -> None:
     origin = argparse.ArgumentParser(add_help=False)
     origin.add_argument("--origin", help="a run whose recorded config the flags start from (default: the warm run)")
     warm = argparse.ArgumentParser(add_help=False, parents=[origin])
-    warm.add_argument("--optim.warm", dest="warm", default="")
+    warm.add_argument(*Tree(RunConfig).flags("optim.transfer.warm"), dest="warm", default="")
     known, _ = warm.parse_known_args()
     start = known.origin or known.warm
     saved = RunConfig.saved(DataRoot.from_config().models() / start) if start else None

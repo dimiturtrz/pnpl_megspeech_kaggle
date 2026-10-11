@@ -4,7 +4,7 @@ MEG-XL was pretrained on 150 s of continuous MEG, not on 1 s windows: its tempor
 word. One pass of the trunk over a span's segment (`Split.segmented`) gives every channel's tokens, each 240 ms; a word
 is read from the tokens covering its first `read` samples, each token reduced by a learned projection shared over
 channels, the channels' components flattened into the word's embedding. The trunk trains at a fraction of the other
-layers' rate (`OptimConfig.encoder_lr`), so the pretrained weights move gently.
+layers' rate (`TransferConfig.encoder_lr`), so the pretrained weights move gently.
 """
 
 from dataclasses import dataclass

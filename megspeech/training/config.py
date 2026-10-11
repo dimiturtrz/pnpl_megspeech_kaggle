@@ -1,7 +1,6 @@
 """Everything a training run is made of, and the record a finished run leaves of it."""
 
 import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,179 +9,11 @@ from core.tree import Tree
 from megspeech.data.config import METRICS, DataConfig, Refit
 from megspeech.evaluation.scoring.score import Epoch, SelectionConfig
 from megspeech.evaluation.scoring.telemetry import TelemetryConfig
-from megspeech.model.auxiliary import Tap
 from megspeech.model.config import CONTEXT, ContextConfig, Encoder
 from megspeech.submission.config import ReportConfig
+from megspeech.training.optim import OptimConfig
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.sampling.sampler import SamplerConfig
-
-
-@dataclass(frozen=True)
-class OptimConfig:
-    epochs: int = 40
-    batch: int = 64
-    lr: float = 1e-3
-    weight_decay: float = 0.05
-    label_smoothing: float = 0.1
-    clip: float = math.inf
-    seed: int = 0
-    ema: float = 0.0
-    """Decay of the weight average scored and kept; 0 keeps the raw weights. At 0.999 the average spans ~1000
-    steps, about half an epoch of the ~1750 a sentence-path epoch takes."""
-    heads: float = 1.0
-    """Weight of the two 50-way heads' losses (context and word). 0 trains an expert (megspeech-6ow.3): the encoder
-    learns from the auxiliary terms alone, never the 50 words, and the run keeps its last epoch, since the heads it
-    would be selected on are untrained."""
-    semantic: float = 0.0
-    """Weight of the semantic auxiliary (`megspeech.objective.auxiliary.semantic`): every heard word's window, the
-    ~60% outside the 50 included, SigLIP-aligned to the word's t5-large layer-12 embedding, d'Ascoli et al.'s
-    objective. It supervises ~2.5x the windows the heads see; 0 trains the heads alone and never reads the lexicon."""
-    window: float = 0.0
-    """Weight of the window auxiliary (`megspeech.objective.auxiliary.window`): every heard word's window also predicts
-    the t5-large embeddings of the words at offsets -1 to +3 of its span, each offset weighted by the share of its
-    0.2-0.5 s response the 1 s window holds, since at ~4 words/s it mixes the responses to ~4 words
-    (megspeech-7gf.108); 0 never reads the lexicon."""
-    lexical: float = 0.0
-    """Weight of the lexical auxiliary: every heard word's window, in or out of the 50, classified into its word among
-    the ~25k distinct words of the lexicon (`megspeech.objective.auxiliary.lexical`). Word identity, where the
-    semantic auxiliary aligns to a frozen embedding; 0 never reads the lexicon."""
-    phonetic: float = 0.0
-    """Weight of the phonetic auxiliary: every heard word's window, in or out of the 50, classified into the first of
-    its 39 ARPAbet phonemes (`megspeech.data.labels.phonemes`). Speech MEG decodes phonetic features (Gwilliams et al.
-    2022), and the onset phoneme is what the window's first ~100 ms hear; 0 never reads the table."""
-    syntactic: float = 0.0
-    """Weight of the syntactic auxiliary: every heard word's window, in or out of the 50, classified into its 17-way
-    universal part of speech as spaCy tags it in its sentence (`megspeech.data.labels.syntax`): dense placeholder
-    classes for the windows the 50 leave unlabelled, where the ~25k-way lexical target is sparse; 0 never reads it."""
-    acoustic: float = 0.0
-    """Weight of the acoustic auxiliary (`megspeech.objective.auxiliary.acoustic`): every training word whose chapter
-    audio is aligned, its window's per-timestep encoder features read through a learned channel mix and lag into
-    the 50 Hz speech envelope heard over the window, contrasted chunk by chunk against the batch's true chunks
-    (Défossez et al. 2023); a dense target the 50 labels' and the word-level targets' sparse supervision lacks. 0
-    creates no head and reads no envelope (megspeech-7gf.125.1)."""
-    audio: float = 0.0
-    """Weight of the audio contrastive term (`megspeech.objective.auxiliary.audio`): the same windows and envelopes as
-    `acoustic`, each embedded by its own tower and aligned by CLIP's symmetric InfoNCE across the batch's spans,
-    subjects and languages. With `heads` 0 it is the label-free all-language encoder pretrain (megspeech-7gf.109.3);
-    0 creates no head and reads no envelope."""
-    speech: float = 0.0
-    """Weight of the speech auxiliary (`megspeech.objective.auxiliary.speech`): every training word whose chapter audio
-    is aligned, SigLIP-aligned to the wav2vec2 latent of its 0.5 s of heard speech (Défossez et al. 2023), one target
-    per word token, not per word type as the semantic auxiliary's; 0 never reads the targets."""
-    speech_source: str = ""
-    """The targets the speech auxiliary aligns to, a directory of `<run>.npy` under processed/speech: empty is the
-    wav2vec2 latents, `hubert-large-ll60k` / `data2vec-audio-large` those teachers' (a
-    `megspeech.objective.targets.speech.Reading.stem`, 7gf.141.6), `gpt2-large` the in-context text states of
-    `megspeech.objective.targets.context` (megspeech-7gf.101)."""
-    speech_centred: bool = False
-    """Centre each run's speech targets on its own mean (`Targets.centred`), removing the direction every target
-    shares: raw, two random targets' cosine is ~0.6, so the L2-normalised SigLIP target is mostly that one direction."""
-    speech_softmax: bool = False
-    """Contrast the speech targets by softmax over the batch's kinds, not independent sigmoids: the sigmoid contrast
-    cannot learn a word-identity oracle in 40 epochs where the 50-way heads learn it in 4."""
-    vocab_weight: float = 1.0
-    """Each row of a word in the 50 weighs this against 1 for the others in every auxiliary term's mean, normalised by
-    the weights (megspeech-7gf.126); 1 weighs every row alike."""
-    tagging: float = 0.0
-    """Weight of the tag auxiliary (`megspeech.objective.auxiliary.tagging`): every training word's embedding classified
-    into its in-context part of speech (`megspeech.data.labels.context_tags`), 11 universal tags and `OTHER`. It trains
-    the tag head a `tagged` word head (`ConvConfig.head`) mixes its per-tag readouts by; 0 never reads the table."""
-    next_word: float = 0.0
-    """Weight of the next-word auxiliary (`megspeech.objective.auxiliary.neighbour`): each word slot's local encoder
-    embedding, before the span transformer whatever the `tap`, predicts the next word's 50-way label in its span
-    (ignored where that word is outside the 50, absent or in another span); 0 creates no head."""
-    mi: float = 0.0
-    """Weight of the OVMI auxiliary (`megspeech.objective.information`): minus the mutual information in bits between
-    the word and the context head's softmax over each batch's labelled words, the confusion rows weighted by the
-    training prior as `Ruler.information` weighs them. Maximising it rewards predictions both confident and spread
-    over the 50 words; 0 adds no term."""
-    prev_word: float = 0.0
-    """Weight of the previous-word auxiliary, the next-word one's mirror; 0 creates no head."""
-    adversary: float = 0.0
-    """Strength of the timing adversary's gradient reversal (`megspeech.objective.auxiliary.adversarial`): a head
-    regresses each word's log duration and sentence position from the `tap`, and the encoder receives its gradient
-    times -`adversary`, so the MEG embedding is trained to hold none of the timing the onsets already give; 0 trains
-    no adversary (megspeech-7gf.98)."""
-    instance: float = 0.0
-    """Weight of the cross-subject instance term (`megspeech.objective.auxiliary.instance`): InfoNCE over each word's
-    local encoder embedding, its positives the same MASC token heard by another subject, its negatives every other
-    word of the batch; `SamplerConfig.pairs` co-batches such pairs. 0 creates no head (megspeech-7gf.147.2)."""
-    instance_apart: bool = False
-    """Leave every other word of a word's own sentence, whoever heard it, out of the instance term's negatives
-    (`megspeech.objective.auxiliary.instance.Apart`): their windows overlap its sound (megspeech-ct5)."""
-    adversary_ramp: float = 2.0
-    """Epochs over which the reversal's strength rises linearly from 0 to `adversary`: the adversary must be able to
-    read timing before reversing its gradient means anything."""
-    timing: str = ""
-    """A timing expert (`megspeech.training.cli.timing`) whose head is loaded into the model's `rhythm` head and frozen,
-    its logits added to the context head's in training and in every read after: a product of experts in which the
-    MEG path learns only what timing leaves (megspeech-7gf.100); empty trains no such expert."""
-    tap: Tap = Tap.WORD
-    """What every auxiliary head reads: the encoder's word embedding, or the span transformer's output at the word
-    (d'Ascoli et al. train that output of every heard word toward t5; the context head alone sees only the 50's)."""
-    positions: int = 1
-    """Leading phonemes the phonetic auxiliary classifies, up to `megspeech.data.labels.phonemes.POSITIONS`: a 0.5 s
-    window hears ~4 of ~0.1 s, and 1 is the onset phoneme alone."""
-    balance: float = 0.0
-    """Class-weight exponent of the cross-entropies: each class weighs `count ** -balance` over the training labels,
-    mean 1, so 0.5 is 1/sqrt(count) (the PNPL 2025 phoneme winner's). The metric is balanced accuracy, and the
-    ruler's `tau` already corrects the class prior after training (Menon et al. 2021 logit adjustment); balancing
-    during training overlaps it, so an arm asks whether it adds beyond `tau`. SigLIP's context loss is unweighted."""
-    topk: float = 0.0
-    """Share of the smooth top-k loss (Berrada et al. 2018, k=10) blended into both 50-way heads' losses, over the same
-    logits and `balance` class weights (`TopKMix`); 0 trains their own losses alone."""
-    topk_temperature: float = 1.0
-    """The top-k term's smoothing in raw logits: 1 is the cross-entropy's own, the paper's tau 1 is 10."""
-    topk_margin: float = 1.0
-    """The raw-logit gap the label must hold over the 10th competitor before its top-k term is ~0."""
-    anchor: float = 1.0
-    """Share of each subject matrix's deviation from the Deep subject's that the run's decay leaves by its end, were
-    its gradient never to restore it (`megspeech.training.regularise.anchor`); 1 decays the matrices toward 0 like
-    every other weight. The Deep matrix is what a zero-shot subject is read through."""
-    anchor_toward: str = "deep"
-    """The matrix `anchor` pulls toward, an `Unseen` value: `deep` the Deep subject's, `mean` the mean of every trained
-    subject's matrix, `source` the mean over the subjects of its own recording source, `identity`."""
-    warm: str = ""
-    """A trained run under models/ whose weights the model starts from instead of its initialisation, its context
-    config the same as this run's: a run trained on every subject fine-tuned on the Deep subject alone. Empty starts
-    from scratch."""
-    teacher: str = ""
-    """A trained run or ensemble under models/ whose context-head distribution on every labelled training word the
-    context head is also trained toward (`megspeech.training.teacher`); empty trains on the labels alone."""
-    teacher_folds: int = 1
-    """Cross-fitted teacher: `teacher` names `<teacher>-f0 ... <teacher>-f{K-1}`, each trained at `data.crossfit` K with
-    `data.dropped` its own fold, and a training word is taught by the model that never trained on its session
-    (megspeech-7gf.130); 1 reads `teacher` alone."""
-    distil: float = 0.5
-    """Share of the context loss that is the KL to the `teacher`'s distribution, the rest the label's; read only
-    with a teacher."""
-    temperature: float = 1.0
-    """Temperature both the teacher's and the student's distributions are softened by in the KL; read only with a
-    teacher."""
-    unlabelled: bool = False
-    """Distil on every training word in a span, the ~60% outside the 50 too, not only the labelled; read only with a
-    teacher."""
-    last: bool = False
-    """Keep the last epoch, not the best on validation: a stage-1 encoder trained to the end of its schedule, its word
-    head converged where the context head selected at its best epoch reads an immature one (megspeech-7gf.117)."""
-    stem: str = ""
-    """A trained run under models/ whose encoder (scaler, whitener, subject layer, word CNN and word head) the model
-    starts from, the span transformer and context head fresh; empty starts the encoder from scratch."""
-    encoder_lr: float = 1.0
-    """The encoder's learning rate as a share of `lr`, its decay alike; 0 freezes it: a `stem` encoder kept while the
-    span transformer trains on top of it."""
-    fused_lr: tuple[float, ...] = ()
-    """Each `context.fused` encoder's learning rate as a share of `lr`, its decay alike, one per encoder; 0 freezes it.
-    Empty trains them all at `lr`."""
-    compiled: bool = True
-    """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
-    pretrained: float = 0.1
-    """Retired with the end-to-end MEG-XL encoder it scaled; kept so the configs saved with it still load."""
-
-    @property
-    def listens(self) -> bool:
-        """Whether a term reads the window's time course against its envelope."""
-        return bool(self.acoustic or self.audio)
 
 
 @dataclass(frozen=True)
@@ -234,7 +65,7 @@ class RunConfig:
     def saved(cls, directory: Path) -> "RunConfig":
         """The config a run in `directory` recorded, flat records from before the tree included, its data section
         under the retired `extra`/`share`/`stratify` fields migrated to `val` and `refit`, its sampler knobs from
-        `optim` to `sampler`."""
+        `optim` to `sampler`, its flat auxiliary, adversary, teacher and transfer knobs into their `optim` groups."""
         return Tree(cls).load(json.loads((directory / METRICS).read_text())["config"], saved=True)
 
 
@@ -251,19 +82,15 @@ RUN_RULES: tuple[Rule[RunConfig], ...] = (
         lambda r: f"fused_lr {r.optim.fused_lr} gives a rate for each of the fused {r.context.fused}",
     ),
     Rule(
-        lambda r: r.optim.tap is Tap.TIME,
-        lambda _: "optim.tap time reads the window's time course, which only the acoustic head asks for",
-    ),
-    Rule(
-        lambda r: r.optim.listens and r.context.encoder is not Encoder.CONV,
+        lambda r: r.optim.auxiliaries.listens and r.context.encoder is not Encoder.CONV,
         lambda r: f"optim.acoustic/audio read the conv encoder's time features, not encoder {r.context.encoder}",
     ),
     Rule(
-        lambda r: r.optim.listens and r.data.cut() != DataConfig().cut(),
+        lambda r: r.optim.auxiliaries.listens and r.data.cut() != DataConfig().cut(),
         lambda r: f"optim.acoustic/audio's envelopes are cut {DataConfig().cut()}, not {r.data.cut()}",
     ),
     Rule(
-        lambda r: r.optim.listens and r.context.conv.pyramid.active,
+        lambda r: r.optim.auxiliaries.listens and r.context.conv.pyramid.active,
         lambda _: "optim.acoustic/audio read the encoder's time course beside the heads, which the pyramid corrects",
     ),
     Rule(

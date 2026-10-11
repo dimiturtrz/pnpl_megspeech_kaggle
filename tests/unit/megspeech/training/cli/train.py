@@ -69,7 +69,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     main()
     tuned = json.loads((DataRoot(tmp_path).models() / "tuned" / METRICS).read_text())["config"]
     assert tuned["context"]["width"] == 32
-    assert tuned["optim"]["warm"] == "base"
+    assert tuned["optim"]["transfer"]["warm"] == "base"
     monkeypatch.setattr(sys, "argv", ["train", "--help"])
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: pytest.fail("help read paths.yaml")))
     with pytest.raises(SystemExit):

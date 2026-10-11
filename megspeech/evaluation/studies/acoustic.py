@@ -17,6 +17,7 @@ import torch
 from jaxtyping import Float
 
 from core.paths import DataRoot
+from core.tree import Tree
 from megspeech.data.batching.split import EVAL_SPANS, Split
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.raw.runs import Run
@@ -73,7 +74,7 @@ class Readout:
     @classmethod
     def load(cls, net: SentenceNet, directory: Path, device: torch.device) -> "Readout":  # devtools-ignore: test-mirror
         """`net` with the acoustic head among `directory`'s saved heads."""
-        weights: dict[str, float] = json.loads((directory / METRICS).read_text())["config"]["optim"]
+        weights = Tree.flat(json.loads((directory / METRICS).read_text())["config"]["optim"])
         prefix = f"heads.{HeadOrder.position(weights, 'acoustic')}."
         saved = torch.load(directory / HEADS, map_location=device, weights_only=True)
         head = Acoustic(Tap.TIME.width(net)).to(device)

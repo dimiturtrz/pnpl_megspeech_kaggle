@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 from megspeech.objective.auxiliary.adversarial import Adversary
-from megspeech.training.ramp import Ramp
+from megspeech.training.ramp import AdversaryConfig, Ramp
 
 
 def ramp() -> Ramp:
@@ -13,6 +13,12 @@ def ramp() -> Ramp:
 def test_of() -> None:
     assert len(ramp().reversals) == 1
     assert Ramp.of(nn.Linear(2, 2), 1.0, 0).over == 1
+
+
+def test_ramp() -> None:
+    made = AdversaryConfig(adversary=0.5, adversary_ramp=2.0).ramp(nn.Sequential(Adversary(4)), total=30, epochs=4)
+    assert (made.target, made.over, len(made.reversals)) == (0.5, 15, 1)
+    assert AdversaryConfig().ramp(nn.Linear(2, 2), total=10, epochs=40).over == 1
 
 
 def test_strength() -> None:

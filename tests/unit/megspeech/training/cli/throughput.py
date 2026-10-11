@@ -12,8 +12,9 @@ from megspeech.data.spans.spans import Spans
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.training.cli import throughput as module
 from megspeech.training.cli.throughput import EpochEstimate, Phase, Throughput, main
-from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig
+from megspeech.training.config import RunConfig, SelectionConfig
 from megspeech.training.loop.trainer import Trainer
+from megspeech.training.optim import OptimConfig
 
 CPU = torch.device("cpu")
 SAMPLES = 50

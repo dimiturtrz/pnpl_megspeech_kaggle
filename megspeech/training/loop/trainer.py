@@ -42,7 +42,6 @@ from megspeech.training.config import RunConfig
 from megspeech.training.hook import Scheduled, StepHook
 from megspeech.training.loop.ema import Ema, Unaveraged
 from megspeech.training.loop.gradnorm import GradNorms
-from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.average import GroupAverage
 from megspeech.training.regularise.bgmix import BGMix, Untouched
@@ -122,16 +121,14 @@ class Trainer:
             prototypes = anchored.reduce(config.context.anchor_dim).vectors
         device = corpus.train.y.device
         evaluator = Evaluator(device, corpus.seen, config.selection.min_novel)
-        warm = config.optim.warm
-        initial = torch.load(root.models() / warm / "model.pt", map_location=device, weights_only=True) if warm else {}
-        auxiliary = Auxiliary.of(config.optim, root, device, corpus.positions)
+        optim = config.optim
+        auxiliary = Auxiliary.of(optim.auxiliaries, optim.adversarial.adversary, root, device, corpus.positions)
         regional = Regional.of(config.augment.spatial, root, device)
-        timing = TimingExpert.load(root, config.optim.timing)
-        stem = config.optim.stem
-        stemmed = torch.load(root.models() / stem / "model.pt", map_location=device, weights_only=True) if stem else {}
-        taught = Teacher.of(config.optim, root, config.data, corpus.positions)
+        timing = TimingExpert.load(root, optim.timing)
+        taught = Teacher.of(optim.distillation, root, config.data, corpus.positions)
         fused = tuple(root.models() / name for name in config.context.fused)
-        pairing = Pairing.of(config.sampler, corpus.positions, corpus.train, config.optim.batch)
+        pairing = Pairing.of(config.sampler, corpus.positions, corpus.train, optim.batch)
+        initial, stem = optim.transfer.weights(root, device)
         return cls(
             config,
             evaluator,
@@ -141,7 +138,7 @@ class Trainer:
             taught,
             regional,
             timing,
-            stem=stemmed,
+            stem=stem,
             fused=fused,
             pairing=pairing,
             tagged=lambda: ContextTags.load(ContextTags.path(root)).tensor(corpus.positions, device),
@@ -183,7 +180,7 @@ class Trainer:
         its `fused_lr`'s."""
         optim = self.config.optim
         fused = self.evaluator.device.type == Device.CUDA
-        shares = {id(p): optim.encoder_lr for p in encoder}
+        shares = {id(p): optim.transfer.encoder_lr for p in encoder}
         for params, share in zip(branches, optim.fused_lr or (1.0,) * len(branches), strict=True):
             shares |= {id(p): share for p in params}
         kept: list[dict[str, object]] = []
@@ -248,7 +245,7 @@ class Trainer:
         peaks = [group["lr"] for group in optimizer.param_groups]
         schedule = Scheduled(torch.optim.lr_scheduler.OneCycleLR(optimizer, peaks, total_steps=total))
         ema = Ema.hook(model, optim.ema)
-        ramp = Ramp.of(model, optim.adversary, round(total * optim.adversary_ramp / optim.epochs))
+        ramp = optim.adversarial.ramp(model, total, optim.epochs)
         return TrainState(
             model,
             optimizer,

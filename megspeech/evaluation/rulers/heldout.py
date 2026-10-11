@@ -46,8 +46,8 @@ class Lineage:
     def subjects(self, name: str, seen: frozenset[str] = frozenset()) -> set[int]:
         """The subjects `name` and every ancestor trained on."""
         config = json.loads((self.models / name / METRICS).read_text())["config"]
-        optim = config.get("optim", {})
-        parents = {parent for parent in (optim.get("stem", ""), optim.get("warm", "")) if parent} - seen
+        optim = Tree.flat(config.get("optim", {}))
+        parents = {str(optim[key]) for key in ("stem", "warm") if optim.get(key)} - seen
         own = set(config.get("data", {}).get("subjects", ()))
         return own.union(*(self.subjects(parent, seen | {name} | parents) for parent in parents))
 

@@ -28,11 +28,12 @@ from megspeech.objective.scorer import DIM
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import ContextTerm, LabelTerm, WordTerm
 from megspeech.objective.topk import TopKMix
-from megspeech.training.auxiliary import Joint, NoAuxiliary
-from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig, StopConfig
+from megspeech.training.auxiliary import AuxiliaryConfig, Joint, NoAuxiliary
+from megspeech.training.config import RunConfig, SelectionConfig, StopConfig
 from megspeech.training.hook import Scheduled
 from megspeech.training.loop.ema import Ema, Unaveraged
 from megspeech.training.loop.trainer import Trainer, TrainState
+from megspeech.training.optim import OptimConfig
 from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
@@ -41,6 +42,7 @@ from megspeech.training.sampling.curriculum import Annealed, Natural, Robust, Sc
 from megspeech.training.sampling.pairing import Pairing, Unpaired
 from megspeech.training.sampling.sampler import SamplerConfig
 from megspeech.training.timing_expert import TimingExpert
+from megspeech.training.transfer import TransferConfig
 
 SAMPLES = 50
 CPU = torch.device("cpu")
@@ -94,7 +96,7 @@ def test_model() -> None:
 
 
 def test_model_warm(tmp_path: Path) -> None:
-    config = RunConfig(optim=OptimConfig(compiled=False, warm="pre"))
+    config = RunConfig(optim=OptimConfig(compiled=False, transfer=TransferConfig(warm="pre")))
     trained = trainer(config).model(split())
     with torch.no_grad():
         for parameter in trained.parameters():
@@ -109,7 +111,7 @@ def test_model_warm(tmp_path: Path) -> None:
 
 
 def test_model_stem(tmp_path: Path) -> None:
-    config = RunConfig(optim=OptimConfig(compiled=False, stem="pre"))
+    config = RunConfig(optim=OptimConfig(compiled=False, transfer=TransferConfig(stem="pre")))
     trained = trainer(config).model(split())
     with torch.no_grad():
         for parameter in trained.parameters():
@@ -137,7 +139,7 @@ def test_optimizer() -> None:
 
 @pytest.mark.parametrize("share", [0.0, 0.1])
 def test_optimizer_encoder_share(share: float) -> None:
-    made = trainer(RunConfig(optim=OptimConfig(lr=0.01, encoder_lr=share)))
+    made = trainer(RunConfig(optim=OptimConfig(lr=0.01, transfer=TransferConfig(encoder_lr=share))))
     net = made.model(split())
     optimizer = made.optimizer(net, Anchor(), tuple(net.encoder()))
     encoder = {id(p) for p in net.encoder()}
@@ -293,19 +295,25 @@ def test_fit_instance_off_is_bit_identical(tmp_path: Path) -> None:
         return [row.loss for row in history], net.state_dict()
 
     corpus = Corpus(split(n=24), {"a": split(seed=1)}, frozenset(), positions=heard(24))
-    off = RunConfig(optim=OptimConfig(epochs=2, batch=4, instance=0.0), sampler=SamplerConfig(pairs=0.0))
+    off = RunConfig(
+        optim=OptimConfig(epochs=2, batch=4, auxiliaries=AuxiliaryConfig(instance=0.0)),
+        sampler=SamplerConfig(pairs=0.0),
+    )
     explicit = Trainer.of(corpus, off, root)
     assert isinstance(explicit.auxiliary, NoAuxiliary)
     assert type(explicit.pairing) is Unpaired
     (losses, weights), (plain, reference) = run(explicit), run(trainer(RunConfig(optim=optim)))
     assert losses == plain
     assert all(torch.equal(weights[key], value) for key, value in reference.items())
-    on = RunConfig(optim=OptimConfig(epochs=2, batch=4, instance=0.25), sampler=SamplerConfig(pairs=0.5))
+    on = RunConfig(
+        optim=OptimConfig(epochs=2, batch=4, auxiliaries=AuxiliaryConfig(instance=0.25)),
+        sampler=SamplerConfig(pairs=0.5),
+    )
     paired, _ = run(Trainer.of(corpus, on, root))
     assert all(math.isfinite(loss) for loss in paired)
     assert paired != plain
     apart = RunConfig(
-        optim=OptimConfig(epochs=2, batch=4, instance=0.25, instance_apart=True),
+        optim=OptimConfig(epochs=2, batch=4, auxiliaries=AuxiliaryConfig(instance=0.25, instance_apart=True)),
         sampler=SamplerConfig(pairs=0.75, hearers=3),
     )
     chorus, _ = run(Trainer.of(corpus, apart, root))

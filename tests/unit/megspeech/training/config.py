@@ -13,7 +13,9 @@ from megspeech.model.context.timing import Clock
 from megspeech.model.pyramid import PyramidConfig
 from megspeech.model.words.conv import ConvConfig
 from megspeech.submission.config import ReportConfig
-from megspeech.training.config import METRICS, OptimConfig, RunConfig, StopConfig
+from megspeech.training.auxiliary import AuxiliaryConfig
+from megspeech.training.config import METRICS, RunConfig, StopConfig
+from megspeech.training.optim import OptimConfig
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.sampling.curriculum import Base
 
@@ -133,27 +135,36 @@ def test_report_defaults_off(tmp_path: Path) -> None:
 
 
 def test_acoustic_needs_the_envelope_geometry() -> None:
-    assert RunConfig(optim=OptimConfig(acoustic=0.5)).optim.acoustic == 0.5
+    assert RunConfig(optim=OptimConfig(auxiliaries=AuxiliaryConfig(acoustic=0.5))).optim.auxiliaries.acoustic == 0.5
     with pytest.raises(ValueError, match="encoder"):
-        RunConfig(optim=OptimConfig(acoustic=0.5), context=ContextConfig(encoder=Encoder.CACHED))
+        RunConfig(
+            optim=OptimConfig(auxiliaries=AuxiliaryConfig(acoustic=0.5)), context=ContextConfig(encoder=Encoder.CACHED)
+        )
     with pytest.raises(ValueError, match="cut"):
-        RunConfig(optim=OptimConfig(acoustic=0.5), data=DataConfig(window=2.0))
+        RunConfig(optim=OptimConfig(auxiliaries=AuxiliaryConfig(acoustic=0.5)), data=DataConfig(window=2.0))
     with pytest.raises(ValueError, match="acoustic head"):
-        RunConfig(optim=OptimConfig(tap=Tap.TIME))
+        RunConfig(optim=OptimConfig(auxiliaries=AuxiliaryConfig(tap=Tap.TIME)))
 
 
-def test_listens() -> None:
-    assert not OptimConfig().listens
-    assert OptimConfig(acoustic=0.3).listens
-    assert OptimConfig(heads=0.0, audio=1.0).listens
+def test_audio_needs_the_envelope_cut() -> None:
     with pytest.raises(ValueError, match="cut"):
-        RunConfig(optim=OptimConfig(audio=1.0), data=DataConfig(window=2.0))
+        RunConfig(optim=OptimConfig(auxiliaries=AuxiliaryConfig(audio=1.0)), data=DataConfig(window=2.0))
+
+
+def test_saved_flat_optim_groups(tmp_path: Path) -> None:
+    """A run saved with every optim knob flat loads each into its group."""
+    flat = {"semantic": 0.5, "adversary": 0.2, "distil": 0.3, "encoder_lr": 0.0, "stem": "pre", "epochs": 3}
+    (tmp_path / METRICS).write_text(json.dumps({"config": {"optim": flat}}))
+    optim = RunConfig.saved(tmp_path).optim
+    assert (optim.auxiliaries.semantic, optim.adversarial.adversary, optim.distillation.distil) == (0.5, 0.2, 0.3)
+    assert (optim.transfer.encoder_lr, optim.transfer.stem, optim.epochs) == (0.0, "pre", 3)
 
 
 def test_acoustic_refuses_the_pyramid() -> None:
     with pytest.raises(ValueError, match="pyramid"):
         RunConfig(
-            optim=OptimConfig(acoustic=0.5), context=ContextConfig(conv=ConvConfig(pyramid=PyramidConfig(taps=(1,))))
+            optim=OptimConfig(auxiliaries=AuxiliaryConfig(acoustic=0.5)),
+            context=ContextConfig(conv=ConvConfig(pyramid=PyramidConfig(taps=(1,)))),
         )
 
 
