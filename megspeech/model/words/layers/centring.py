@@ -54,6 +54,7 @@ class RunCentring(nn.Module):
         mean = self.centre(slots.detach().float(), mask, run.clamp(min=0))
         return slots - (mean[run.clamp(min=0)] * mask[..., None]).to(slots.dtype)
 
+    @torch.compiler.disable
     def centre(
         self, slots: Float[Tensor, "g w e"], mask: Bool[Tensor, "g w"], run: Int[Tensor, "g w"]
     ) -> Float[Tensor, "k e"]:
