@@ -4,6 +4,7 @@ from typing import Self, override
 
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
@@ -113,8 +114,13 @@ class SentenceNet(Span):
         return self.read(self.refine(h, mask), slots)
 
     def refine(self, h: Float[Tensor, "g w h"], mask: Bool[Tensor, "g w"]) -> Float[Tensor, "g w h"]:
-        """`h` refined across its span's `mask`ed words: what the context head reads."""
-        return self.context(h, src_key_padding_mask=~mask)
+        """`h` refined across its span's `mask`ed words: what the context head reads.
+
+        Attention runs on the math kernel: under `torch.compile` the memory-efficient kernel's backward rejects the
+        padding mask's layout ("(*bias): last dimension must be contiguous"), and spans are too short for it to matter.
+        """
+        with sdpa_kernel(SDPBackend.MATH):
+            return self.context(h, src_key_padding_mask=~mask)
 
     def read(
         self, refined: Float[Tensor, "g w h"], slots: Float[Tensor, "g w e"]

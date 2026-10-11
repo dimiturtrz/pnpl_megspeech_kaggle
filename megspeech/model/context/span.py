@@ -5,7 +5,6 @@ from typing import cast, override
 
 from jaxtyping import Bool, Float
 from torch import Tensor, nn
-from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from megspeech.model.context.droplayer import DropPathLayer
 from megspeech.model.context.droppath import DropPath
@@ -14,11 +13,8 @@ from megspeech.model.words.layers.conformer import EXPANSION
 
 
 class SpanConformer(nn.Module):
-    """`nn.TransformerEncoder`'s call over a span of words, a word-wise convolution module after every layer.
-
-    Attention runs on the math kernel: under `torch.compile` the memory-efficient kernel's backward rejects the
-    padding mask's layout ("(*bias): last dimension must be contiguous"), and spans are too short for it to matter.
-    """
+    """`nn.TransformerEncoder`'s call over a span of words, a word-wise convolution module after every layer; its
+    attention kernel is `SentenceNet.refine`'s."""
 
     def __init__(self, width: int, heads: int, layers: int, dropout: float, kernel: int) -> None:
         super().__init__()
@@ -38,9 +34,8 @@ class SpanConformer(nn.Module):
 
     @override
     def forward(self, h: Float[Tensor, "g w d"], src_key_padding_mask: Bool[Tensor, "g w"]) -> Float[Tensor, "g w d"]:
-        with sdpa_kernel(SDPBackend.MATH):
-            for attend, mix, path in zip(self.attend, self.mix, self.paths, strict=True):
-                attended = attend(h, src_key_padding_mask=src_key_padding_mask)
-                mixed = mix(attended, src_key_padding_mask)
-                h = cast(DropPath, path).residual(attended, mixed)
+        for attend, mix, path in zip(self.attend, self.mix, self.paths, strict=True):
+            attended = attend(h, src_key_padding_mask=src_key_padding_mask)
+            mixed = mix(attended, src_key_padding_mask)
+            h = cast(DropPath, path).residual(attended, mixed)
         return h
