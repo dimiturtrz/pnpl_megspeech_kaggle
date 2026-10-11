@@ -23,6 +23,21 @@ from megspeech.model.words.layers.norm import MaskedBatchNorm1d
 
 
 @dataclass(frozen=True)
+class Calibration:
+    """How log-probabilities are read: the training `log_prior` subtracted `tau` times (logit adjustment), then
+    `balance` over the scored set. One calibration reads many sets (val and local test, each domain), so the sets
+    scored are not part of it."""
+
+    log_prior: Float[Tensor, " v"]
+    tau: float
+    balance: Sinkhorn = Sinkhorn()
+
+    def adjusted(self, logits: Float[Tensor, "n v"], groups: Int[Tensor, " n"] | None = None) -> Float[Tensor, "n v"]:
+        """`logits` logit-adjusted by `tau`, then balanced over the set (per `groups` when `balance` asks)."""
+        return self.balance(logits - self.tau * self.log_prior, self.log_prior, groups)
+
+
+@dataclass(frozen=True)
 class Evaluator:
     """Scores a model on validation domains; `seen` marks the word orders training heard, `min_novel` who counts,
     `balance` reshapes each scored set's adjusted scores before their top-k is read."""
@@ -103,8 +118,12 @@ class Evaluator:
         tau: float,
         groups: Int[Tensor, " n"] | None = None,
     ) -> Float[Tensor, "n v"]:
-        """`logits` logit-adjusted by `tau`, then balanced over the set (per `groups` when `balance` asks)."""
-        return self.balance(logits - tau * log_prior, log_prior, groups)
+        """`logits` read through this evaluator's `calibration` at `tau`."""
+        return self.calibration(log_prior, tau).adjusted(logits, groups)
+
+    def calibration(self, log_prior: Float[Tensor, " v"], tau: float) -> Calibration:
+        """`log_prior` adjusted by `tau`, balanced as this evaluator balances."""
+        return Calibration(log_prior, tau, self.balance)
 
     def unseen(self, context: Float[Tensor, "n v"], split: Split, log_prior: Float[Tensor, " v"]) -> Score:
         """The context head on `split`'s unseen-span words."""
@@ -141,18 +160,15 @@ class Evaluator:
         """The context head's per-word hits on the unseen spans of every domain that counts toward selection."""
         counted = self.eligible(domains)
         logits = {name: self.logits(model, split) for name, split in counted.items()}
-        return self.graded_logits(logits, counted, log_prior, tau)
+        return self.graded_logits(logits, counted, self.calibration(log_prior, tau))
 
     def graded_logits(
-        self,
-        logits: dict[str, dict[Head, Float[Tensor, "n v"]]],
-        domains: dict[str, Split],
-        log_prior: Float[Tensor, " v"],
-        tau: float,
+        self, logits: dict[str, dict[Head, Float[Tensor, "n v"]]], domains: dict[str, Split], calibration: Calibration
     ) -> Graded:
         """`graded` from each domain's already computed logits: scores logits that come from no single model."""
         counted = self.eligible(domains)
-        return self.grade({name: self.head(logits[name]) for name in counted}, counted, log_prior, tau)
+        heads = {name: self.head(logits[name]) for name in counted}
+        return self.grade(heads, counted, calibration.log_prior, calibration.tau)
 
     def eligible(self, domains: dict[str, Split]) -> dict[str, Split]:
         """The `domains` with enough unseen-span words to count toward selection."""
@@ -171,10 +187,11 @@ class Evaluator:
     ) -> Graded:
         """`graded` from each counted domain's already computed context logits."""
         novel = {name: domains[name].novel(self.seen) for name in context}
+        calibration = self.calibration(log_prior, tau)
         return Graded(
             {
                 name: (
-                    self.ruler.hits(self.adjusted(logits[novel[name]], log_prior, tau), domains[name].y[novel[name]]),
+                    self.ruler.hits(calibration.adjusted(logits[novel[name]]), domains[name].y[novel[name]]),
                     domains[name].y[novel[name]],
                 )
                 for name, logits in context.items()

@@ -1,6 +1,6 @@
 """One group of trained runs that share a `READING`, loaded for scoring."""
 
-from dataclasses import fields
+from dataclasses import dataclass, fields
 from pathlib import Path
 
 import torch
@@ -16,24 +16,28 @@ from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import SelectionConfig
 
 
+@dataclass(frozen=True)
 class Group:
-    @staticmethod
-    def load(
-        root: DataRoot,
-        directories: list[Path],
-        scoring: Scoring,
-        device: torch.device,
-        geometry: Geometry | None,
-    ) -> ExportedModel:
+    """Where groups load from, how they are scored, on which device; a `geometry` already built in this process
+    stands in for the one `scoring` would build, unless it asks for `aligned`."""
+
+    root: DataRoot
+    scoring: Scoring
+    device: torch.device
+    geometry: Geometry | None = None
+
+    def load(self, directories: list[Path]) -> ExportedModel:
         """The runs in `directories`, which trained at one `READING`, averaged as one model."""
+        scoring = self.scoring
         data = DataConfig.shared(directories, scoring.grouping)
-        model = scoring.network(directories, data.rate, device)
+        model = scoring.network(directories, data.rate, self.device)
+        geometry = self.geometry
         if geometry is None or scoring.aligned:
-            geometry = data.geometry(root, device, aligned=scoring.aligned)
-        reader = Reader(root, data, device, scoring.reading, geometry, scoring.partition)
-        sequences, prior = Heard.under(root, data, device)
+            geometry = data.geometry(self.root, self.device, aligned=scoring.aligned)
+        reader = Reader(self.root, data, self.device, scoring.reading, geometry, scoring.partition)
+        sequences, prior = Heard.under(self.root, data, self.device)
         evaluator = Evaluator(
-            device,
+            self.device,
             sequences,
             SelectionConfig.shared(directories).min_novel,
             balance=scoring.balance,

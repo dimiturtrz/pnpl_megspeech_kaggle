@@ -16,7 +16,7 @@ from torch import Tensor, nn
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import Partition
 from megspeech.device import Device
-from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.evaluator import Calibration, Evaluator
 from megspeech.evaluation.scoring.score import Head
 
 PROBS = "probs.pt"
@@ -38,23 +38,17 @@ class Words:
 
     @classmethod
     def of(
-        cls,
-        evaluator: Evaluator,
-        logits: dict[Head, Float[Tensor, "n v"]],
-        split: Split,
-        log_prior: Float[Tensor, " v"],
-        tau: float,
+        cls, evaluator: Evaluator, logits: dict[Head, Float[Tensor, "n v"]], split: Split, calibration: Calibration
     ) -> "Words":
         ids = split.labelled()
         context = evaluator.head(logits)[ids]
-        adjusted = evaluator.adjusted(context, log_prior, tau)
         return cls(
             ids.cpu(),
             split.y[ids].cpu(),
             torch.isin(ids, split.novel(evaluator.seen)).cpu(),
             context.cpu(),
             logits[Head.WORD][ids].cpu(),
-            torch.softmax(adjusted, dim=-1).cpu(),
+            torch.softmax(calibration.adjusted(context), dim=-1).cpu(),
         )
 
     def record(self) -> dict[str, Tensor]:
@@ -89,7 +83,7 @@ class Probabilities:
     ) -> "Probabilities":
         """`model`'s predictions on every labelled word of `domains`."""
         logits = {name: evaluator.logits(model, split) for name, split in domains.items()}
-        return cls.from_logits(evaluator, logits, domains, log_prior, tau)
+        return cls.from_logits(evaluator, logits, domains, evaluator.calibration(log_prior, tau))
 
     @classmethod
     def from_logits(
@@ -97,12 +91,11 @@ class Probabilities:
         evaluator: Evaluator,
         logits: dict[str, dict[Head, Float[Tensor, "n v"]]],
         domains: dict[str, Split],
-        log_prior: Float[Tensor, " v"],
-        tau: float,
+        calibration: Calibration,
     ) -> "Probabilities":
         """The predictions on every labelled word of `domains` from their already computed logits."""
-        words = {name: Words.of(evaluator, logits[name], split, log_prior, tau) for name, split in domains.items()}
-        return cls(words, tau, log_prior.cpu(), evaluator.min_novel)
+        words = {name: Words.of(evaluator, logits[name], split, calibration) for name, split in domains.items()}
+        return cls(words, calibration.tau, calibration.log_prior.cpu(), evaluator.min_novel)
 
     @staticmethod
     def stored(path: Path) -> dict[str, dict[str, Tensor]]:

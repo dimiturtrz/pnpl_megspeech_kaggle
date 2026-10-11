@@ -1137,19 +1137,13 @@
     {
       "kind": "import",
       "source": "megspeech.evaluation.rulers.broad",
-      "target": "megspeech.data.raw.runs",
-      "weight": 1
-    },
-    {
-      "kind": "import",
-      "source": "megspeech.evaluation.rulers.broad",
-      "target": "megspeech.evaluation.loaded",
-      "weight": 1
-    },
-    {
-      "kind": "import",
-      "source": "megspeech.evaluation.rulers.broad",
       "target": "megspeech.evaluation.metric.ruler",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.rulers.broad",
+      "target": "megspeech.evaluation.rulers.base",
       "weight": 1
     },
     {
@@ -1161,19 +1155,13 @@
     {
       "kind": "import",
       "source": "megspeech.evaluation.rulers.deep",
-      "target": "megspeech.data.raw.runs",
-      "weight": 1
-    },
-    {
-      "kind": "import",
-      "source": "megspeech.evaluation.rulers.deep",
-      "target": "megspeech.evaluation.loaded",
-      "weight": 1
-    },
-    {
-      "kind": "import",
-      "source": "megspeech.evaluation.rulers.deep",
       "target": "megspeech.evaluation.metric.ruler",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.rulers.deep",
+      "target": "megspeech.evaluation.rulers.base",
       "weight": 1
     },
     {
@@ -10075,13 +10063,13 @@
       "weight": 1
     },
     {
-      "kind": "references",
+      "kind": "holds",
       "source": "megspeech.evaluation.group.Group",
       "target": "core.paths.DataRoot",
       "weight": 1
     },
     {
-      "kind": "references",
+      "kind": "holds",
       "source": "megspeech.evaluation.group.Group",
       "target": "megspeech.data.cache.alignment.Geometry",
       "weight": 1
@@ -10093,7 +10081,7 @@
       "weight": 1
     },
     {
-      "kind": "references",
+      "kind": "holds",
       "source": "megspeech.evaluation.group.Group",
       "target": "megspeech.evaluation.scoring.config.Scoring",
       "weight": 1
@@ -10120,12 +10108,6 @@
       "kind": "construct",
       "source": "megspeech.evaluation.group.Group.load",
       "target": "megspeech.evaluation.reader.Reader",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.evaluation.group.Group.load",
-      "target": "megspeech.evaluation.scoring.config.Scoring.network",
       "weight": 1
     },
     {
@@ -10329,6 +10311,12 @@
     {
       "kind": "calls",
       "source": "megspeech.evaluation.loaded.LoadedModel.graded",
+      "target": "megspeech.evaluation.scoring.evaluator.Evaluator.calibration",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.loaded.LoadedModel.graded",
       "target": "megspeech.evaluation.scoring.evaluator.Evaluator.graded_logits",
       "weight": 1
     },
@@ -10432,6 +10420,12 @@
       "kind": "calls",
       "source": "megspeech.evaluation.loading.Loader.of",
       "target": "megspeech.evaluation.blended.Blended.of",
+      "weight": 1
+    },
+    {
+      "kind": "construct",
+      "source": "megspeech.evaluation.loading.Loader.of",
+      "target": "megspeech.evaluation.group.Group",
       "weight": 1
     },
     {
@@ -10861,13 +10855,13 @@
       "weight": 1
     },
     {
-      "kind": "references",
+      "kind": "holds",
       "source": "megspeech.evaluation.rulers.base.TrackRuler",
       "target": "megspeech.data.raw.runs.Run",
       "weight": 1
     },
     {
-      "kind": "references",
+      "kind": "holds",
       "source": "megspeech.evaluation.rulers.base.TrackRuler",
       "target": "megspeech.evaluation.loaded.LoadedModel",
       "weight": 1
@@ -10893,19 +10887,13 @@
     {
       "kind": "references",
       "source": "megspeech.evaluation.rulers.broad.BroadRuler",
-      "target": "megspeech.data.raw.runs.Run",
-      "weight": 1
-    },
-    {
-      "kind": "references",
-      "source": "megspeech.evaluation.rulers.broad.BroadRuler",
-      "target": "megspeech.evaluation.loaded.LoadedModel",
-      "weight": 1
-    },
-    {
-      "kind": "references",
-      "source": "megspeech.evaluation.rulers.broad.BroadRuler",
       "target": "megspeech.evaluation.metric.ruler.Graded",
+      "weight": 1
+    },
+    {
+      "kind": "inherits",
+      "source": "megspeech.evaluation.rulers.broad.BroadRuler",
+      "target": "megspeech.evaluation.rulers.base.TrackRuler",
       "weight": 1
     },
     {
@@ -10915,33 +10903,9 @@
       "weight": 1
     },
     {
-      "kind": "calls",
-      "source": "megspeech.evaluation.rulers.broad.BroadRuler.graded",
-      "target": "megspeech.evaluation.loaded.LoadedModel.broad",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.evaluation.rulers.broad.BroadRuler.graded",
-      "target": "megspeech.evaluation.loaded.LoadedModel.run_context",
-      "weight": 1
-    },
-    {
       "kind": "construct",
       "source": "megspeech.evaluation.rulers.broad.BroadRuler.graded",
       "target": "megspeech.evaluation.metric.ruler.Graded",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.evaluation.rulers.broad.BroadRuler.select",
-      "target": "megspeech.evaluation.loaded.LoadedModel.broad",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.evaluation.rulers.broad.BroadRuler.select",
-      "target": "megspeech.evaluation.loaded.LoadedModel.unseen",
       "weight": 1
     },
     {
@@ -10959,37 +10923,19 @@
     {
       "kind": "references",
       "source": "megspeech.evaluation.rulers.deep.DeepRuler",
-      "target": "megspeech.data.raw.runs.Run",
-      "weight": 1
-    },
-    {
-      "kind": "references",
-      "source": "megspeech.evaluation.rulers.deep.DeepRuler",
-      "target": "megspeech.evaluation.loaded.LoadedModel",
-      "weight": 1
-    },
-    {
-      "kind": "references",
-      "source": "megspeech.evaluation.rulers.deep.DeepRuler",
       "target": "megspeech.evaluation.metric.ruler.Graded",
+      "weight": 1
+    },
+    {
+      "kind": "inherits",
+      "source": "megspeech.evaluation.rulers.deep.DeepRuler",
+      "target": "megspeech.evaluation.rulers.base.TrackRuler",
       "weight": 1
     },
     {
       "kind": "references",
       "source": "megspeech.evaluation.rulers.deep.DeepRuler",
       "target": "megspeech.evaluation.scoring.score.Epoch",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.evaluation.rulers.deep.DeepRuler.graded",
-      "target": "megspeech.evaluation.loaded.LoadedModel.graded",
-      "weight": 1
-    },
-    {
-      "kind": "calls",
-      "source": "megspeech.evaluation.rulers.deep.DeepRuler.select",
-      "target": "megspeech.evaluation.loaded.LoadedModel.report",
       "weight": 1
     },
     {
@@ -11239,6 +11185,12 @@
       "weight": 1
     },
     {
+      "kind": "holds",
+      "source": "megspeech.evaluation.scoring.evaluator.Calibration",
+      "target": "megspeech.evaluation.metric.balance.Sinkhorn",
+      "weight": 1
+    },
+    {
       "kind": "references",
       "source": "megspeech.evaluation.scoring.evaluator.Evaluator",
       "target": "megspeech.data.batching.split.Split",
@@ -11260,6 +11212,12 @@
       "kind": "holds",
       "source": "megspeech.evaluation.scoring.evaluator.Evaluator",
       "target": "megspeech.evaluation.metric.ruler.Ruler",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.evaluation.scoring.evaluator.Evaluator",
+      "target": "megspeech.evaluation.scoring.evaluator.Calibration",
       "weight": 1
     },
     {
@@ -11290,6 +11248,18 @@
       "kind": "calls",
       "source": "megspeech.evaluation.scoring.evaluator.Evaluator.adapt",
       "target": "megspeech.evaluation.scoring.evaluator.Evaluator.sweep",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.scoring.evaluator.Evaluator.adjusted",
+      "target": "megspeech.evaluation.scoring.evaluator.Evaluator.calibration",
+      "weight": 1
+    },
+    {
+      "kind": "construct",
+      "source": "megspeech.evaluation.scoring.evaluator.Evaluator.calibration",
+      "target": "megspeech.evaluation.scoring.evaluator.Calibration",
       "weight": 1
     },
     {
@@ -11331,7 +11301,13 @@
     {
       "kind": "calls",
       "source": "megspeech.evaluation.scoring.evaluator.Evaluator.grade",
-      "target": "megspeech.evaluation.scoring.evaluator.Evaluator.adjusted",
+      "target": "megspeech.evaluation.scoring.evaluator.Evaluator.calibration",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.scoring.evaluator.Evaluator.graded",
+      "target": "megspeech.evaluation.scoring.evaluator.Evaluator.calibration",
       "weight": 1
     },
     {
@@ -11577,6 +11553,12 @@
     {
       "kind": "references",
       "source": "megspeech.evaluation.scoring.probabilities.Probabilities",
+      "target": "megspeech.evaluation.scoring.evaluator.Calibration",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.evaluation.scoring.probabilities.Probabilities",
       "target": "megspeech.evaluation.scoring.evaluator.Evaluator",
       "weight": 1
     },
@@ -11613,6 +11595,12 @@
     {
       "kind": "calls",
       "source": "megspeech.evaluation.scoring.probabilities.Probabilities.of",
+      "target": "megspeech.evaluation.scoring.evaluator.Evaluator.calibration",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.evaluation.scoring.probabilities.Probabilities.of",
       "target": "megspeech.evaluation.scoring.evaluator.Evaluator.logits",
       "weight": 1
     },
@@ -11626,6 +11614,12 @@
       "kind": "references",
       "source": "megspeech.evaluation.scoring.probabilities.Words",
       "target": "megspeech.data.batching.split.Split",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.evaluation.scoring.probabilities.Words",
+      "target": "megspeech.evaluation.scoring.evaluator.Calibration",
       "weight": 1
     },
     {
@@ -11661,7 +11655,7 @@
     {
       "kind": "calls",
       "source": "megspeech.evaluation.scoring.probabilities.Words.of",
-      "target": "megspeech.evaluation.scoring.evaluator.Evaluator.adjusted",
+      "target": "megspeech.evaluation.scoring.evaluator.Calibration.adjusted",
       "weight": 1
     },
     {
@@ -30832,7 +30826,7 @@
       "label": "Group",
       "level": "class",
       "parent": "megspeech.evaluation.group",
-      "role": "primary"
+      "role": "satellite"
     },
     {
       "descendants": 0,
@@ -30960,7 +30954,7 @@
       "label": "TrackRuler",
       "level": "class",
       "parent": "megspeech.evaluation.rulers.base",
-      "role": "primary"
+      "role": "satellite"
     },
     {
       "descendants": 0,
@@ -31008,6 +31002,14 @@
       "label": "Scoring",
       "level": "class",
       "parent": "megspeech.evaluation.scoring.config",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.evaluation.scoring.evaluator.Calibration",
+      "label": "Calibration",
+      "level": "class",
+      "parent": "megspeech.evaluation.scoring.evaluator",
       "role": "satellite"
     },
     {
@@ -38604,6 +38606,14 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.evaluation.scoring.evaluator.Calibration.adjusted",
+      "label": "adjusted",
+      "level": "method",
+      "parent": "megspeech.evaluation.scoring.evaluator.Calibration",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.evaluation.scoring.evaluator.Evaluator.adapt",
       "label": "adapt",
       "level": "method",
@@ -38614,6 +38624,14 @@
       "descendants": 0,
       "id": "megspeech.evaluation.scoring.evaluator.Evaluator.adjusted",
       "label": "adjusted",
+      "level": "method",
+      "parent": "megspeech.evaluation.scoring.evaluator.Evaluator",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.evaluation.scoring.evaluator.Evaluator.calibration",
+      "label": "calibration",
       "level": "method",
       "parent": "megspeech.evaluation.scoring.evaluator.Evaluator",
       "role": null

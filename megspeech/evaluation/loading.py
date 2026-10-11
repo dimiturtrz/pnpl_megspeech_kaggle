@@ -26,5 +26,6 @@ class Loader:
         process stands in for the one `scoring` would build, unless it asks for `aligned`."""
         directories = Scoring.members(root.models(), names)
         SelectionConfig.shared(directories)
-        groups = [Group.load(root, group, scoring, device, geometry) for group in DataConfig.partitioned(directories)]
+        group = Group(root, scoring, device, geometry)
+        groups = [group.load(members) for members in DataConfig.partitioned(directories)]
         return groups[0] if len(groups) == 1 else Blended.of(groups)

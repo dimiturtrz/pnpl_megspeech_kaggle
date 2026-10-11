@@ -1,19 +1,19 @@
 """The local Deep ruler: subject 0's val domains, the macro over their unseen spans selecting the adjustment."""
 
 import logging
+from typing import override
 
-from megspeech.data.raw.runs import Run
-from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.metric.ruler import Graded
+from megspeech.evaluation.rulers.base import TrackRuler
 from megspeech.evaluation.scoring.score import Epoch
 
 LOG = logging.getLogger(__name__)
 
 
-class DeepRuler:
-    @staticmethod
-    def select(loaded: LoadedModel, runs: list[Run]) -> Epoch:
-        report = loaded.report(runs)
+class DeepRuler(TrackRuler):
+    @override
+    def select(self) -> Epoch:
+        report = self.loaded.report(self.runs)
         LOG.info(
             "%s", {task: (round(r.context.bacc10, 4), round(r.novel.bacc10, 4)) for task, r in report.domains.items()}
         )
@@ -24,6 +24,6 @@ class DeepRuler:
         )
         return report
 
-    @staticmethod
-    def graded(loaded: LoadedModel, runs: list[Run], tau: float) -> Graded:
-        return loaded.graded(runs, tau)
+    @override
+    def graded(self, tau: float) -> Graded:
+        return self.loaded.graded(self.runs, tau)

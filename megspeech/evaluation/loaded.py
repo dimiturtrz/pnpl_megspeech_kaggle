@@ -70,4 +70,4 @@ class LoadedModel(Reader):
     def graded(self, runs: list[Run], tau: float) -> Graded:
         """Every counted domain of `runs` in the scored partition: its unseen-span words' hits at `tau`."""
         domains, logits = self.domain_logits(runs)
-        return self.evaluator.graded_logits(logits, domains, self.log_prior, tau)
+        return self.evaluator.graded_logits(logits, domains, self.evaluator.calibration(self.log_prior, tau))

@@ -11,7 +11,7 @@ from tests.unit.megspeech.evaluation.loaded import loaded, runs
 
 def test_select(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.INFO, logger=module.__name__):
-        report = DeepRuler.select(loaded(tmp_path), runs(tmp_path))
+        report = DeepRuler(loaded(tmp_path), runs(tmp_path)).select()
     assert RULER in report.domains
     assert f"macro {report.macro.bacc10:.4f} tau {report.tau} over {report.macro.n} words" in caplog.text
     novel = [domain.novel for domain in report.domains.values()]
@@ -20,5 +20,5 @@ def test_select(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
 
 
 def test_graded(tmp_path: Path) -> None:
-    graded = DeepRuler.graded(loaded(tmp_path), runs(tmp_path), 0.5)
+    graded = DeepRuler(loaded(tmp_path), runs(tmp_path)).graded(0.5)
     assert RULER in graded.domains

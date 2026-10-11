@@ -10,7 +10,7 @@ from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.spans.spans import Spans
 from megspeech.evaluation.metric.balance import Sinkhorn
-from megspeech.evaluation.scoring.evaluator import Evaluator
+from megspeech.evaluation.scoring.evaluator import Calibration, Evaluator
 from megspeech.evaluation.scoring.score import ADJUSTMENTS, Head, Score
 from megspeech.model.words.layers.norm import MaskedBatchNorm1d
 
@@ -99,13 +99,28 @@ def test_evaluate() -> None:
     assert result.n == 3
 
 
-def test_adjusted() -> None:
+def test_calibration_adjusted() -> None:
     """Unbalanced, `tau` subtracts that share of the log prior; balanced, every class ends with equal mass."""
     logits, log_prior = torch.zeros(4, VOCAB_SIZE), torch.linspace(-1, 0, VOCAB_SIZE)
     logits[:, 0] = 3
-    assert torch.allclose(Evaluator(CPU).adjusted(logits, log_prior, 0.5), logits - 0.5 * log_prior)
-    mass = Evaluator(CPU, balance=Sinkhorn(50)).adjusted(logits, log_prior, 1.0).log_softmax(-1).logsumexp(0)
+    assert torch.allclose(Calibration(log_prior, 0.5).adjusted(logits), logits - 0.5 * log_prior)
+    mass = Calibration(log_prior, 1.0, Sinkhorn(50)).adjusted(logits).log_softmax(-1).logsumexp(0)
     assert torch.allclose(mass, mass.mean().expand_as(mass), atol=1e-3)
+
+
+def test_evaluator_adjusted() -> None:
+    """The evaluator reads `logits` through its own calibration at `tau`."""
+    logits, log_prior = torch.arange(4.0 * VOCAB_SIZE).sin().view(4, VOCAB_SIZE), torch.linspace(-1, 0, VOCAB_SIZE)
+    evaluator = Evaluator(CPU, balance=Sinkhorn(5))
+    expected = evaluator.calibration(log_prior, 0.5).adjusted(logits)
+    assert torch.equal(evaluator.adjusted(logits, log_prior, 0.5), expected)
+
+
+def test_calibration() -> None:
+    """The evaluator's calibration carries the prior and tau it was given, and balances as the evaluator does."""
+    log_prior, balance = torch.linspace(-1, 0, VOCAB_SIZE), Sinkhorn(5)
+    calibration = Evaluator(CPU, balance=balance).calibration(log_prior, 0.5)
+    assert (calibration.log_prior, calibration.tau, calibration.balance) == (log_prior, 0.5, balance)
 
 
 def test_unseen() -> None:
@@ -209,7 +224,7 @@ def test_graded_logits() -> None:
     domains = {"a": split(), "b": split(n=8, seed=1)}
     evaluator, prior = Evaluator(CPU, min_novel=1), torch.zeros(VOCAB_SIZE)
     logits = {name: evaluator.logits(Constant(), s) for name, s in domains.items()}
-    read = evaluator.graded_logits(logits, domains, prior, 0.5)
+    read = evaluator.graded_logits(logits, domains, evaluator.calibration(prior, 0.5))
     expected = evaluator.graded(Constant(), domains, prior, 0.5)
     assert set(read.domains) == set(expected.domains)
     assert all(torch.equal(read.domains[name][0], expected.domains[name][0]) for name in read.domains)

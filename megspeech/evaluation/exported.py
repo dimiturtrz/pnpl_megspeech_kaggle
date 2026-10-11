@@ -23,7 +23,9 @@ class ExportedModel(LoadedModel):
     def probabilities_of(self, runs: list[Run], tau: float) -> Probabilities:
         """Every labelled word of `runs`' scored domains with its probabilities at `tau`."""
         domains, logits = self.domain_logits(runs)
-        return Probabilities.from_logits(self.evaluator, logits, domains, self.log_prior, tau)
+        return Probabilities.from_logits(
+            self.evaluator, logits, domains, self.evaluator.calibration(self.log_prior, tau)
+        )
 
     def kaggle(self, track: Track) -> Split:
         """Every row of `track`'s Kaggle test as this model reads it, each from its own subject's MEG."""

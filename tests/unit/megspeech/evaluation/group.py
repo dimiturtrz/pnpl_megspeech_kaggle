@@ -15,7 +15,7 @@ def test_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The runs of one reading load as one model that remembers their names and the selection that counted them."""
     members(tmp_path, monkeypatch, {"a": 5, "b": 5})
     directories = [DataRoot(tmp_path).models() / name for name in ("a", "b")]
-    loaded = Group.load(DataRoot(tmp_path), directories, Scoring(), CPU, AS_RECORDED)
+    loaded = Group(DataRoot(tmp_path), Scoring(), CPU, AS_RECORDED).load(directories)
     assert loaded.names == ("a", "b")
     assert loaded.evaluator.min_novel == 5
     assert loaded.evaluator.seen == frozenset({(7, 8)})

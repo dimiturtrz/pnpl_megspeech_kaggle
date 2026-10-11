@@ -30,7 +30,7 @@ from megspeech.submission.writer import KaggleWriter
 
 LOG = logging.getLogger(__name__)
 
-RULERS: dict[Track, TrackRuler] = {Track.DEEP: DeepRuler(), Track.BROAD: BroadRuler()}
+RULERS: dict[Track, type[TrackRuler]] = {Track.DEEP: DeepRuler, Track.BROAD: BroadRuler}
 SUBMISSIONS = {Track.DEEP: "submission.csv", Track.BROAD: "broad_submission.csv"}
 HITS = {Track.DEEP: "hits.pt", Track.BROAD: "broad_hits.pt"}
 SCORING = Scoring(fallback=Fallback(Unseen.DEEP))
@@ -44,10 +44,10 @@ class Submission:
 
     def write(self, loaded: ExportedModel, runs: list[Run], out: Path) -> Path:
         """The ruler's hits, the record and the Kaggle test rows under `out`; the submission's path."""
-        ruler = RULERS[self.track]
-        selected = ruler.select(loaded, runs)
+        ruler = RULERS[self.track](loaded, runs)
+        selected = ruler.select()
         out.mkdir(parents=True, exist_ok=True)
-        ruler.graded(loaded, runs, selected.tau).save(out / HITS[self.track])
+        ruler.graded(selected.tau).save(out / HITS[self.track])
         record = {"members": list(loaded.names), "config": {"data": asdict(loaded.data)}, "best": asdict(selected)}
         (out / METRICS).write_text(json.dumps(record, indent=1))
         return KaggleWriter(self.track).write(loaded, selected.tau, out / SUBMISSIONS[self.track])

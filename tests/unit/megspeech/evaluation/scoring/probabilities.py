@@ -18,7 +18,7 @@ def evaluator() -> Evaluator:
 
 def words() -> Words:
     domain = split()
-    return Words.of(evaluator(), evaluator().logits(Constant(), domain), domain, PRIOR, 0.5)
+    return Words.of(evaluator(), evaluator().logits(Constant(), domain), domain, evaluator().calibration(PRIOR, 0.5))
 
 
 def test_words_of() -> None:
@@ -89,5 +89,5 @@ def test_load_missing(tmp_path: Path) -> None:
 def test_probabilities_from_logits() -> None:
     domains = {"a": split(), "b": split(n=8, seed=1)}
     logits = {name: evaluator().logits(Constant(), s) for name, s in domains.items()}
-    made = Probabilities.from_logits(evaluator(), logits, domains, PRIOR, 0.5)
+    made = Probabilities.from_logits(evaluator(), logits, domains, evaluator().calibration(PRIOR, 0.5))
     assert torch.equal(made.domains["b"].probabilities, probabilities().domains["b"].probabilities)

@@ -12,19 +12,20 @@ An adapted model also logs the mean over the subjects outside `data.subjects`, t
 """
 
 import logging
+from typing import override
 
-from megspeech.data.raw.runs import Run
-from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.metric.ruler import Graded
+from megspeech.evaluation.rulers.base import TrackRuler
 from megspeech.evaluation.scoring.score import Score
 
 LOG = logging.getLogger(__name__)
 
 
-class BroadRuler:
-    @staticmethod
-    def select(loaded: LoadedModel, runs: list[Run]) -> Score:
-        scores = loaded.evaluator.counted({run.subject: loaded.unseen(run) for run in loaded.broad(runs)})
+class BroadRuler(TrackRuler):
+    @override
+    def select(self) -> Score:
+        loaded = self.loaded
+        scores = loaded.evaluator.counted({run.subject: loaded.unseen(run) for run in loaded.broad(self.runs)})
         macro = Score.mean(scores.values())
         for subject, score in scores.items():
             LOG.info("subject %2d  bacc10 %.4f  n %d", subject, score.by_tau[macro.tau], score.n)
@@ -41,11 +42,12 @@ class BroadRuler:
         )
         return macro
 
-    @staticmethod
-    def graded(loaded: LoadedModel, runs: list[Run], tau: float) -> Graded:
+    @override
+    def graded(self, tau: float) -> Graded:
         """Each counted subject a domain, its run loaded alone as `select` loads it."""
+        loaded = self.loaded
         parts: list[Graded] = []
-        for run in loaded.broad(runs):
+        for run in loaded.broad(self.runs):
             split, context = loaded.run_context(run)
             counted = loaded.evaluator.eligible({str(run.subject): split})
             parts.append(loaded.evaluator.grade(dict.fromkeys(counted, context), counted, loaded.log_prior, tau))
