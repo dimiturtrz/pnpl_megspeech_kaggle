@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import reduce
+from operator import add
 from typing import ClassVar, override
 
 import torch
@@ -18,7 +20,7 @@ from torch.nn import functional
 
 from megspeech.training.loop.ema import Ema
 from megspeech.training.pretrain.head import Head
-from megspeech.training.pretrain.prototypes import Assignment, Centring, Prototypes
+from megspeech.training.pretrain.prototypes import Assignment, Centring, Prototypes, Scores
 
 Readings = dict[str, Tensor]
 
@@ -167,7 +169,7 @@ class Distillation(Term):
 
     def balanced(self, logits: Float[Tensor, "n k"], temp: float) -> Float[Tensor, "n k"]:
         """`logits` as Sinkhorn-Knopp balances them over prototypes."""
-        return Assignment.sinkhorn(logits, temp, self.config.sinkhorn_iters)
+        return Scores(logits, temp).sinkhorn(self.config.sinkhorn_iters)
 
     @torch.no_grad()
     def teach(
@@ -184,17 +186,15 @@ class Distillation(Term):
 
     def readings(self, probs: Float[Tensor, "n k"]) -> Readings:
         """The teacher's mean entropy and its prototype-usage perplexity over `probs`."""
-        return {
-            f"{self.name}/entropy": Assignment.entropy(probs),
-            f"{self.name}/perplexity": Assignment.perplexity(probs),
-        }
+        assignment = Assignment(probs)
+        return {f"{self.name}/entropy": assignment.entropy(), f"{self.name}/perplexity": assignment.perplexity()}
 
     def distil(
         self, student: Float[Tensor, "n w"], teacher: Float[Tensor, "n k"], keep: Bool[Tensor, " n"] | None = None
     ) -> Float[Tensor, ""]:
         """The cross-entropy of the student's `keep` rows from the teacher's distribution."""
         logits = self.head(student)
-        return Assignment.cross_entropy(logits if keep is None else logits[keep], teacher, self.config.student_temp)
+        return Scores(logits if keep is None else logits[keep], self.config.student_temp).cross_entropy(teacher)
 
 
 class IBot(Distillation):
@@ -270,3 +270,46 @@ class Objective:
 
     def build(self, setup: Setup) -> Term:
         return BUILDERS[self.kind](self.kind.value, self.weight, setup)
+
+
+@dataclass(frozen=True)
+class Terms:
+    """The loss's terms, read and trained as one."""
+
+    terms: tuple[Term, ...]
+
+    @classmethod
+    def of(cls, objectives: tuple[Objective, ...], setup: Setup) -> "Terms":
+        return cls(tuple(objective.build(setup) for objective in objectives))
+
+    @property
+    def views(self) -> int:
+        """Masked views of each window the hungriest term reads."""
+        return max(term.views for term in self.terms)
+
+    @property
+    def cross(self) -> bool:
+        """Whether any term reads the teacher's feature map of each masked view."""
+        return any(term.cross for term in self.terms)
+
+    def parameters(self) -> list[nn.Parameter]:
+        return [parameter for term in self.terms for parameter in term.parameters()]
+
+    def floors(self) -> dict[str, float]:
+        return {name: floor for term in self.terms for name, floor in term.floors().items()}
+
+    def follow(self, decay: float) -> None:
+        for term in self.terms:
+            term.follow(decay)
+
+    def clear(self) -> None:
+        """Drop the gradients of every term's parameters."""
+        for parameter in self.parameters():
+            parameter.grad = None
+
+    def score(self, batch: Batch) -> tuple[Tensor, Readings]:
+        """The weighted total over `batch`, and each term's unweighted loss (`loss/<term>`) then every diagnostic."""
+        scored = [(term, *term.loss(batch)) for term in self.terms]
+        total = reduce(add, (term.weight * loss for term, loss, _ in scored))
+        losses = {f"loss/{term.name}": loss for term, loss, _ in scored}
+        return total, losses | {key: value for _, _, read in scored for key, value in read.items()}

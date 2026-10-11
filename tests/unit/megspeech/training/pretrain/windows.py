@@ -78,6 +78,20 @@ def test_assert_clean() -> None:
         Sessions(()).assert_clean(data, everything)
 
 
+def test_official() -> None:
+    official = Sessions.official(runs())
+    assert official == {r.name for r in runs() if r.partition is not Partition.TRAIN}
+    assert "sub-0_ses-11_task-Sherlock1_run-2" in official
+    assert not official & set(Sessions.of(DataConfig(), runs()).names)
+    assert Sessions.official([run(0, "Sherlock1", 1)]) == set()
+
+
+def test_foreign() -> None:
+    assert Sessions((run(0, "Sherlock1", 1),)).foreign == []
+    assert Sessions((run(0, "Sherlock1", 1), run(1, "Sherlock1", 1))).foreign == ["sub-1_ses-1_task-Sherlock1_run-1"]
+    assert Sessions((run(0, "Sherlock1", 11, 2),)).foreign == ["sub-0_ses-11_task-Sherlock1_run-2"]
+
+
 def test_limited() -> None:
     chosen = Sessions.of(DataConfig(), runs())
     assert chosen.limited(0).names == sorted(chosen.names)

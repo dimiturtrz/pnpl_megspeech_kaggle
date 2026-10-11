@@ -37,6 +37,30 @@ PRECISION = 4
 
 
 @dataclass(frozen=True)
+class Record:
+    """A run's saved per-epoch val, and whether it marked an early stop."""
+
+    val: list[float]
+    """Macro BAcc@10 at every epoch; empty when the history is missing or an epoch has no val."""
+    stopped: bool
+
+    @classmethod
+    def read(cls, directory: Path) -> "Record | None":
+        """The record in `directory`, or nothing when it has none."""
+        path = directory / METRICS
+        if not path.exists():
+            return None
+        saved = json.loads(path.read_text())
+        history = saved.get("history") or []
+        scored = all("macro" in row for row in history)
+        return cls([row["macro"]["bacc10"] for row in history] if scored else [], saved.get("stopped") is True)
+
+    def complete(self, epochs: int) -> bool:
+        """Whether it holds every one of `epochs`, or fewer with the early stop's mark, unlike a crash."""
+        return bool(self.val) and (len(self.val) == epochs or (self.stopped and len(self.val) < epochs))
+
+
+@dataclass(frozen=True)
 class Run:
     """One finished run: its recipe family, the config minus seed, its seed and its val at every epoch."""
 
@@ -50,20 +74,14 @@ class Run:
     def of(cls, directory: Path) -> "Run | None":
         """The run in `directory`, or nothing when it has no complete val-selected history under a loadable config:
         every epoch, or fewer with the record's `stopped` mark (early stop), unlike a crash."""
-        record = directory / METRICS
-        if not record.exists():
+        record = Record.read(directory)
+        if record is None:
             return None
-        saved = json.loads(record.read_text())
-        history = saved.get("history")
         try:
             config = RunConfig.saved(directory)
         except (KeyError, ValueError):
             return None
-        if not history or config.keeps_last or not all("macro" in row for row in history):
-            return None
-        if len(history) != config.optim.epochs and not (
-            saved.get("stopped") is True and len(history) < config.optim.epochs
-        ):
+        if config.keeps_last or not record.complete(config.optim.epochs):
             return None
         seedless = replace(config, optim=replace(config.optim, seed=0))
         return cls(
@@ -71,7 +89,7 @@ class Run:
             cls.family_of(config),
             repr(seedless),
             config.optim.seed,
-            cls.padded([row["macro"]["bacc10"] for row in history], config.optim.epochs),
+            cls.padded(record.val, config.optim.epochs),
         )
 
     @staticmethod

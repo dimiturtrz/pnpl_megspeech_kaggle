@@ -57,34 +57,41 @@ class Prototypes:
         return self.teacher_temp_start + (self.teacher_temp_end - self.teacher_temp_start) * ramp
 
 
-class Assignment:
-    """The distributions over prototypes the objectives compare, and how collapsed they read."""
+@dataclass(frozen=True)
+class Scores:
+    """Each row's logits over the prototypes, read at a softmax temperature."""
 
-    @staticmethod
-    def sinkhorn(logits: Float[Tensor, "n k"], temp: float, iters: int) -> Float[Tensor, "n k"]:
+    logits: Float[Tensor, "n k"]
+    temp: float
+
+    def sinkhorn(self, iters: int) -> Float[Tensor, "n k"]:
         """Each row's distribution over prototypes with the batch's mass spread evenly over them: alternately
         normalise prototypes to 1/k and rows to 1/n for `iters` rounds (Cuturi 2013), then rescale rows to sum to 1."""
-        n, k = logits.shape
-        plan = ((logits - logits.amax()) / temp).exp()
+        n, k = self.logits.shape
+        plan = ((self.logits - self.logits.amax()) / self.temp).exp()
         plan = plan / plan.sum()
         for _ in range(iters):
             plan = plan / plan.sum(dim=0, keepdim=True) / k
             plan = plan / plan.sum(dim=1, keepdim=True) / n
         return plan * n
 
-    @staticmethod
-    def cross_entropy(logits: Float[Tensor, "n k"], probs: Float[Tensor, "n k"], temp: float) -> Float[Tensor, ""]:
+    def cross_entropy(self, probs: Float[Tensor, "n k"]) -> Float[Tensor, ""]:
         """The mean over rows of the cross-entropy of the student's tempered softmax from the teacher's `probs`."""
-        return -(probs * functional.log_softmax(logits / temp, dim=-1)).sum(dim=-1).mean()
+        return -(probs * functional.log_softmax(self.logits / self.temp, dim=-1)).sum(dim=-1).mean()
 
-    @staticmethod
-    def entropy(probs: Float[Tensor, "n k"]) -> Float[Tensor, ""]:
+
+@dataclass(frozen=True)
+class Assignment:
+    """Each row's distribution over the prototypes, and how collapsed they read."""
+
+    probs: Float[Tensor, "n k"]
+
+    def entropy(self) -> Float[Tensor, ""]:
         """The mean row entropy: 0 when each row is one-hot, log k when uniform."""
-        return -(probs * (probs + EPSILON).log()).sum(dim=-1).mean()
+        return -(self.probs * (self.probs + EPSILON).log()).sum(dim=-1).mean()
 
-    @staticmethod
-    def perplexity(probs: Float[Tensor, "n k"]) -> Float[Tensor, ""]:
+    def perplexity(self) -> Float[Tensor, ""]:
         """The effective number of prototypes the rows use: exp of the entropy of their mean, 1 when every row picks
         one prototype, k when they spread evenly."""
-        usage = probs.mean(dim=0)
+        usage = self.probs.mean(dim=0)
         return torch.exp(-(usage * (usage + EPSILON).log()).sum())

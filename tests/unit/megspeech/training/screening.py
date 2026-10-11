@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from megspeech.training.config import RunConfig
-from megspeech.training.screening import Family, Run, Screening
+from megspeech.training.screening import Family, Record, Run, Screening
 
 RISING = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2])
 EARLY = np.array([0.1, 0.5, 0.6, 0.4, 0.3, 0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1])
@@ -36,6 +36,38 @@ def test_of(tmp_path: Path) -> None:
     full = Run.of(tmp_path)
     assert full is not None
     assert len(full.val) == 5
+
+
+def test_of_refuses_unscored_or_unloadable(tmp_path: Path) -> None:
+    config = {"optim": {"epochs": 2}}
+    records: tuple[dict[str, object], ...] = (
+        {"config": config},
+        {"config": config, "history": list[object]()},
+        {"config": config, "history": [{"macro": {"bacc10": 0.1}}, {"loss": 1.0}]},
+        {"config": config, "history": [{"macro": {"bacc10": 0.1}}] * 3, "stopped": True},
+        {"config": {"absent": 1}, "history": [{"macro": {"bacc10": 0.1}}] * 2},
+    )
+    for record in records:
+        (tmp_path / "metrics.json").write_text(json.dumps(record))
+        assert Run.of(tmp_path) is None, record
+
+
+def test_read(tmp_path: Path) -> None:
+    assert Record.read(tmp_path) is None
+    (tmp_path / "metrics.json").write_text(json.dumps({"history": [{"macro": {"bacc10": 0.3}}], "stopped": 1}))
+    assert Record.read(tmp_path) == Record([0.3], stopped=False)
+    (tmp_path / "metrics.json").write_text(json.dumps({"history": [{"loss": 1.0}], "stopped": True}))
+    assert Record.read(tmp_path) == Record([], stopped=True)
+    (tmp_path / "metrics.json").write_text(json.dumps({"history": None}))
+    assert Record.read(tmp_path) == Record([], stopped=False)
+
+
+def test_complete() -> None:
+    assert Record([0.1, 0.2], stopped=False).complete(2)
+    assert not Record([0.1], stopped=False).complete(2)
+    assert Record([0.1], stopped=True).complete(2)
+    assert not Record([0.1, 0.2, 0.3], stopped=True).complete(2)
+    assert not Record([], stopped=True).complete(2)
 
 
 def test_padded() -> None:

@@ -12,10 +12,12 @@ class retires what it dropped through three optional class attributes: `RETIRED`
 
 import argparse
 import dataclasses
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, fields, is_dataclass, replace
 from enum import StrEnum
-from typing import TYPE_CHECKING, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, get_origin, get_type_hints
+
+from core.coercion import Coercion
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
@@ -186,25 +188,6 @@ class Tree[T: DataclassInstance]:
         return replace(node, **changes)
 
     @staticmethod
-    def truth(text: str) -> bool:
-        """`true` or `false`, in any case; `bool` itself reads every non-empty text as true."""
-        truths = {"true": True, "false": False}
-        if text.lower() not in truths:
-            raise ValueError(f"{text!r} is neither true nor false")
-        return truths[text.lower()]
-
-    @classmethod
-    def coerce(cls, kind: object, value: object) -> object:
-        """A JSON or command-line value as the leaf's declared type: text parsed (by the kind's own `parse` if it has
-        one), enums by value, lists as tuples."""
-        if get_origin(kind) is tuple and isinstance(value, Iterable) and not isinstance(value, str):
-            return tuple(cls.coerce(get_args(kind)[0], item) for item in value)
-        parse = getattr(kind, "parse", None)
-        if parse is not None and isinstance(value, str):
-            return parse(value)
-        if kind is bool and isinstance(value, str):
-            return cls.truth(value)
-        scalar = isinstance(kind, type) and issubclass(kind, StrEnum | int | float | str)
-        if scalar and isinstance(value, str | int | float) and not isinstance(value, kind):
-            return kind(value)
-        return value
+    def coerce(kind: object, value: object) -> object:
+        """A JSON or command-line value as the leaf's declared type."""
+        return Coercion.read(kind, value)

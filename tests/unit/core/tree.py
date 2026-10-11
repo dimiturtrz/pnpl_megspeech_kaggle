@@ -1,7 +1,8 @@
 import argparse
 import math
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import IntEnum, StrEnum
+from pathlib import Path
 from typing import ClassVar
 
 import pytest
@@ -114,13 +115,70 @@ def test_coerce() -> None:
     assert Tree.coerce(Pair, "a:2") == Pair("a", 2)
     assert Tree.coerce(tuple[Pair, ...], ["a", "b:3"]) == (Pair("a", 1), Pair("b", 3))
     assert Tree.coerce(Pair, Pair("c", 4)) == Pair("c", 4)
+    for kind, value, expected in COERCED:
+        out = Tree.coerce(kind, value)
+        assert (type(out), out) == (type(expected), expected), (kind, value)
+    for kind, value in KEPT:
+        assert Tree.coerce(kind, value) is value, (kind, value)
+    for kind, value in REFUSED:
+        with pytest.raises(ValueError):
+            Tree.coerce(kind, value)
 
 
-def test_truth() -> None:
-    assert Tree.truth("FALSE") is False
-    assert Tree.truth("true") is True
-    with pytest.raises(ValueError, match="neither"):
-        Tree.truth("no")
+class Name(str):
+    __slots__ = ()
+
+    @classmethod
+    def parse(cls, text: str) -> "Name":
+        return cls(text.upper())
+
+
+class Level(IntEnum):
+    LOW = 1
+    HIGH = 2
+
+
+COERCED: tuple[tuple[object, object, object], ...] = (
+    (tuple[int, ...], ("1", 2), (1, 2)),
+    (tuple[int, ...], [], ()),
+    (tuple[str, int], ["1", 2], ("1", "2")),
+    (tuple[tuple[int, ...], ...], [["1"], []], ((1,), ())),
+    (tuple[str, ...], {"a": 1}, ("a",)),
+    (Name, "ab", Name("AB")),
+    (Name, 3, Name("3")),
+    (bool, "TRUE", True),
+    (bool, 1, True),
+    (bool, 0.0, False),
+    (int, 4.7, 4),
+    (int, " 4 ", 4),
+    (float, True, 1.0),
+    (float, "1e3", 1000.0),
+    (str, 3, "3"),
+    (str, 1.5, "1.5"),
+    (Level, 2, Level.HIGH),
+)
+"""(kind, value, what it reads as, type included), one per equivalence class of `coerce` and its boundaries."""
+
+KEPT: tuple[tuple[object, object], ...] = (
+    (tuple[int, ...], "12"),
+    (tuple[int, ...], 5),
+    (int, True),
+    (bool, True),
+    (bool, None),
+    (int, None),
+    (int, [1]),
+    (str, "x"),
+    (Shape, Shape.ROUND),
+    (Pair, {"name": "a"}),
+    (Pair, 3),
+    (int | None, "4"),
+    (dict[str, int], {"a": "1"}),
+    (Path, "a/b"),
+)
+"""(kind, value) that `coerce` hands back as the very object it was given."""
+
+REFUSED: tuple[tuple[object, object], ...] = ((bool, "yes"), (int, "4.5"), (Shape, "oval"), (Level, 3), (Level, "1"))
+"""(kind, value) that `coerce` refuses with a `ValueError`."""
 
 
 @dataclass(frozen=True)

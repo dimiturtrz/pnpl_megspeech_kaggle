@@ -3,7 +3,7 @@ import math
 import pytest
 import torch
 
-from megspeech.training.pretrain.prototypes import Assignment, Centring, Prototypes
+from megspeech.training.pretrain.prototypes import Assignment, Centring, Prototypes, Scores
 
 
 def test_validates() -> None:
@@ -28,31 +28,30 @@ def test_teacher_temp() -> None:
 def test_sinkhorn() -> None:
     torch.manual_seed(0)
     logits = torch.randn(40, 8)
-    probs = Assignment.sinkhorn(logits, 0.1, 3)
+    probs = Scores(logits, 0.1).sinkhorn(3)
     assert probs.shape == logits.shape
     assert torch.allclose(probs.sum(dim=1), torch.ones(40), atol=1e-5)
-    assert probs.sum(dim=0).std() < Assignment.sinkhorn(logits, 0.1, 0).sum(dim=0).std()
+    assert probs.sum(dim=0).std() < Scores(logits, 0.1).sinkhorn(0).sum(dim=0).std()
     skewed = logits.clone()
     skewed[:, 0] += 2.0
-    assert Assignment.sinkhorn(skewed, 0.5, 50).sum(dim=0).std() < 0.01
-    assert Assignment.sinkhorn(skewed, 0.5, 0).sum(dim=0).std() > 1.0
+    assert Scores(skewed, 0.5).sinkhorn(50).sum(dim=0).std() < 0.01
+    assert Scores(skewed, 0.5).sinkhorn(0).sum(dim=0).std() > 1.0
 
 
 def test_cross_entropy() -> None:
-    logits = torch.zeros(3, 4)
     probs = torch.full((3, 4), 0.25)
-    assert Assignment.cross_entropy(logits, probs, 0.1).item() == pytest.approx(math.log(4))
-    sharp = torch.tensor([[10.0, 0.0, 0.0, 0.0]])
+    assert Scores(torch.zeros(3, 4), 0.1).cross_entropy(probs).item() == pytest.approx(math.log(4))
+    sharp = Scores(torch.tensor([[10.0, 0.0, 0.0, 0.0]]), 1.0)
     one_hot = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
-    assert Assignment.cross_entropy(sharp, one_hot, 1.0) < 1e-3
-    assert Assignment.cross_entropy(sharp, one_hot.roll(1, 1), 1.0) > 5.0
+    assert sharp.cross_entropy(one_hot) < 1e-3
+    assert sharp.cross_entropy(one_hot.roll(1, 1)) > 5.0
 
 
 def test_entropy() -> None:
-    assert Assignment.entropy(torch.full((5, 4), 0.25)).item() == pytest.approx(math.log(4), abs=1e-5)
-    assert Assignment.entropy(torch.eye(4)).item() == pytest.approx(0.0, abs=1e-5)
+    assert Assignment(torch.full((5, 4), 0.25)).entropy().item() == pytest.approx(math.log(4), abs=1e-5)
+    assert Assignment(torch.eye(4)).entropy().item() == pytest.approx(0.0, abs=1e-5)
 
 
 def test_perplexity() -> None:
-    assert Assignment.perplexity(torch.eye(4)).item() == pytest.approx(4.0, rel=1e-4)
-    assert Assignment.perplexity(torch.tensor([[1.0, 0.0, 0.0, 0.0]] * 6)).item() == pytest.approx(1.0, rel=1e-4)
+    assert Assignment(torch.eye(4)).perplexity().item() == pytest.approx(4.0, rel=1e-4)
+    assert Assignment(torch.tensor([[1.0, 0.0, 0.0, 0.0]] * 6)).perplexity().item() == pytest.approx(1.0, rel=1e-4)

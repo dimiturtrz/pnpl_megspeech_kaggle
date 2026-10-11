@@ -10,8 +10,6 @@ import logging
 import math
 import time
 from dataclasses import asdict, dataclass, field
-from functools import reduce
-from operator import add
 from pathlib import Path
 from typing import override
 
@@ -34,7 +32,7 @@ from megspeech.model.words.conv import ConvWords
 from megspeech.model.words.layers.norm import MaskedBatchNorm1d
 from megspeech.training.loop.ema import Ema
 from megspeech.training.pretrain.masking import Channels, Masking, Region
-from megspeech.training.pretrain.objectives import Batch, Kind, Loss, Objective, Readings, Setup, Term
+from megspeech.training.pretrain.objectives import Batch, Kind, Loss, Objective, Readings, Setup, Terms
 from megspeech.training.pretrain.progress import Probing, Progress
 from megspeech.training.pretrain.prototypes import Prototypes
 from megspeech.training.pretrain.windows import Pool, Sessions
@@ -125,6 +123,15 @@ class Student:
     net: SentenceNet
     predictor: Predictor
 
+    def taps(self, view: Float[Tensor, "b c t"]) -> Float[Tensor, "b h t"]:
+        """The encoder's last feature map over `view`, a window as it reads it."""
+        return Target.convolutional(self.net).taps(view)[-1]
+
+    def clear(self) -> None:
+        """Drop the gradients of the encoder and the predictor."""
+        self.net.zero_grad(set_to_none=True)
+        self.predictor.zero_grad(set_to_none=True)
+
 
 @dataclass(frozen=True)
 class Target:
@@ -168,6 +175,49 @@ class Target:
         return torch.stack(
             [functional.layer_norm(m.transpose(1, 2).float(), m.shape[1:2]) for m in maps[-self.top :]]
         ).mean(0)
+
+    def read(
+        self, x: Float[Tensor, "b c t"], subject: Int[Tensor, " b"]
+    ) -> tuple[Float[Tensor, "b h t"], Float[Tensor, "b t h"]]:
+        """The teacher's last feature map of the clean window `x`, and its regression target there."""
+        maps = self.maps(self.prepare(x, subject))
+        return maps[-1], self.target(maps)
+
+
+@dataclass
+class Watch:
+    """An epoch's readings, checked for a non-finite loss or a collapse every `every` steps and at its close."""
+
+    floors: dict[str, float]
+    every: int
+    readings: list[Readings] = field(default_factory=list)
+
+    def add(self, readings: Readings) -> None:
+        """Record a step's readings; on every `every`-th, check the mean of the last `every`."""
+        self.readings.append(readings)
+        if len(self.readings) % self.every == 0:
+            self.check(self.mean(self.readings[-self.every :]))
+
+    def close(self) -> dict[str, float]:
+        """The epoch's mean of each reading, checked."""
+        mean = self.mean(self.readings)
+        self.check(mean)
+        return mean
+
+    @staticmethod
+    def mean(readings: list[Readings]) -> dict[str, float]:
+        """The mean over steps of each reading, synced to the host once."""
+        keys = list(readings[0])
+        means = torch.stack([torch.stack([step[k] for k in keys]) for step in readings]).mean(0)
+        return dict(zip(keys, means.tolist(), strict=True))
+
+    def check(self, mean: dict[str, float]) -> None:
+        """Raise when `mean` (over steps) shows a non-finite loss or a diagnostic under its floor."""
+        if not math.isfinite(mean["loss"]):
+            raise FloatingPointError("non-finite pretraining loss")
+        collapsed = {name: mean[name] for name, floor in self.floors.items() if mean[name] < floor}
+        if collapsed:
+            raise CollapseError(f"under their floors {self.floors}: {collapsed}")
 
 
 @dataclass(frozen=True)
@@ -256,7 +306,7 @@ class Pretrainer:
         self,
         student: Student,
         teacher: Target,
-        terms: list[Term],
+        terms: Terms,
         generator: torch.Generator,
         progress: float = 0.0,
     ) -> Readings:
@@ -266,46 +316,15 @@ class Pretrainer:
         x = self.pool.sample(config.batch, generator).to(self.device)
         subject = torch.full((config.batch,), DEEP, dtype=torch.long, device=self.device)
         with torch.autocast(self.device.type, dtype=torch.bfloat16):
-            clean = teacher.maps(teacher.prepare(x, subject))
-            shown, hidden = zip(
-                *(self.show(student, x, subject, generator) for _ in range(max(t.views for t in terms))),
-                strict=True,
-            )
-            convolutional = teacher.convolutional(student.net)
-            taps = [convolutional.taps(view)[-1] for view in shown]
-            across = [teacher.maps(view)[-1] for view in shown] if any(t.cross for t in terms) else []
-            batch = Batch(taps, list(hidden), clean[-1], teacher.target(clean), across, progress)
-            scored = [(term, *term.loss(batch)) for term in terms]
-        total = reduce(add, (term.weight * loss for term, loss, _ in scored))
-        self.clear(student, terms)
+            clean, target = teacher.read(x, subject)
+            shown, hidden = zip(*(self.show(student, x, subject, generator) for _ in range(terms.views)), strict=True)
+            taps = [student.taps(view) for view in shown]
+            across = [teacher.maps(view)[-1] for view in shown] if terms.cross else []
+            total, readings = terms.score(Batch(taps, list(hidden), clean, target, across, progress))
+        student.clear()
+        terms.clear()
         total.backward()
-        losses = {f"loss/{term.name}": loss.detach() for term, loss, _ in scored}
-        return {"loss": total.detach(), **losses, **{k: v.detach() for _, _, read in scored for k, v in read.items()}}
-
-    @staticmethod
-    def clear(student: Student, terms: list[Term]) -> None:
-        """Drop every gradient the step is about to recompute."""
-        student.net.zero_grad(set_to_none=True)
-        student.predictor.zero_grad(set_to_none=True)
-        for term in terms:
-            for parameter in term.parameters():
-                parameter.grad = None
-
-    @staticmethod
-    def average(stats: list[Readings]) -> dict[str, float]:
-        """The mean over steps of each reading, synced to the host once."""
-        keys = list(stats[0])
-        means = torch.stack([torch.stack([s[k] for k in keys]) for s in stats]).mean(0)
-        return dict(zip(keys, means.tolist(), strict=True))
-
-    @staticmethod
-    def watch(stats: dict[str, float], floors: dict[str, float]) -> None:
-        """Raise when `stats` (a mean over steps) show a non-finite loss or a diagnostic under its floor."""
-        if not math.isfinite(stats["loss"]):
-            raise FloatingPointError("non-finite pretraining loss")
-        collapsed = {name: stats[name] for name, floor in floors.items() if stats[name] < floor}
-        if collapsed:
-            raise CollapseError(f"under their floors {floors}: {collapsed}")
+        return {"loss": total.detach(), **{key: value.detach() for key, value in readings.items()}}
 
     def probed(self, net: SentenceNet, teacher: Target, epoch: int) -> dict[str, float]:
         """The probe's readings after `epoch` if it is due, every `probe.every` epochs and the last; else none."""
@@ -321,11 +340,10 @@ class Pretrainer:
         setup = Setup(
             predictor, config.context.conv.hidden, config.prototypes, config.loss, config.collapse_floor, self.device
         )
-        terms = [objective.build(setup) for objective in config.objectives]
-        floors = {name: floor for term in terms for name, floor in term.floors().items()}
+        terms = Terms.of(config.objectives, setup)
         per_epoch = math.ceil((config.windows or self.pool.total // self.pool.length) / config.batch)
         steps = per_epoch * config.epochs
-        params = [*net.encoder(), *predictor.parameters(), *(p for term in terms for p in term.parameters())]
+        params = [*net.encoder(), *predictor.parameters(), *terms.parameters()]
         optimizer = torch.optim.AdamW(
             params, lr=config.lr, weight_decay=config.weight_decay, fused=self.device.type == Device.CUDA
         )
@@ -337,21 +355,18 @@ class Pretrainer:
         for epoch in range(config.epochs):
             net.train()
             began = time.perf_counter()
-            stats: list[Readings] = []
+            watch = Watch(terms.floors(), config.monitor)
             for step in range(per_epoch):
                 done = epoch * per_epoch + step
-                stats.append(self.step(Student(net, predictor), teacher, terms, generator, done / steps))
+                readings = self.step(Student(net, predictor), teacher, terms, generator, done / steps)
                 nn.utils.clip_grad_norm_(params, config.clip)
                 optimizer.step()
                 schedule.step()
                 decay = self.decay(done, steps)
                 teacher.follow(net, decay)
-                for term in terms:
-                    term.follow(decay)
-                if (step + 1) % config.monitor == 0:
-                    self.watch(self.average(stats[-config.monitor :]), floors)
-            mean = self.average(stats)
-            self.watch(mean, floors)
+                terms.follow(decay)
+                watch.add(readings)
+            mean = watch.close()
             seconds = time.perf_counter() - began
             history.append(Round(epoch, mean["loss"], mean, seconds, self.probed(net, teacher, epoch)))
             LOG.info("%s", asdict(history[-1]))

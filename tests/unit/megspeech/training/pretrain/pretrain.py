@@ -23,7 +23,7 @@ from megspeech.model.words.conv import ConvConfig
 from megspeech.training.config import METRICS
 from megspeech.training.pretrain import pretrain as module
 from megspeech.training.pretrain.masking import Channels, Masking, Region
-from megspeech.training.pretrain.objectives import LOSSES, Kind, Objective, Setup, Term
+from megspeech.training.pretrain.objectives import LOSSES, Kind, Objective, Readings, Setup, Terms
 from megspeech.training.pretrain.pretrain import (
     PREDICTOR,
     CollapseError,
@@ -33,6 +33,7 @@ from megspeech.training.pretrain.pretrain import (
     Round,
     Student,
     Target,
+    Watch,
 )
 from megspeech.training.pretrain.progress import Probing, Progress
 from megspeech.training.pretrain.prototypes import Prototypes
@@ -142,10 +143,30 @@ ALL = (Objective(Kind.REGRESSION), Objective(Kind.IBOT, 0.5), Objective(Kind.DIN
 PROTOS = Prototypes(k=8, bottleneck=6, hidden=10, perplexity_floor=1.0)
 
 
-def terms_of(trainer: Pretrainer, predictor: Predictor) -> list[Term]:
+def terms_of(trainer: Pretrainer, predictor: Predictor) -> Terms:
     config = trainer.config
     setup = Setup(predictor, config.context.conv.hidden, config.prototypes, config.loss, config.collapse_floor, CPU)
-    return [objective.build(setup) for objective in config.objectives]
+    return Terms.of(config.objectives, setup)
+
+
+def test_read() -> None:
+    trainer = pretrainer()
+    teacher = Target.of(net(trainer), 2)
+    x = trainer.pool.sample(3, torch.Generator().manual_seed(0))
+    subject = torch.zeros(3, dtype=torch.long)
+    clean, target = teacher.read(x, subject)
+    maps = teacher.maps(teacher.prepare(x, subject))
+    assert torch.equal(clean, maps[-1])
+    assert torch.equal(target, teacher.target(maps))
+
+
+def test_taps() -> None:
+    trainer = pretrainer()
+    student = net(trainer).eval()
+    shown = student.prepare(trainer.pool.sample(3, torch.Generator().manual_seed(0)), torch.zeros(3, dtype=torch.long))
+    taps = Student(student, Predictor(CHANNELS, 8)).taps(shown)
+    assert torch.equal(taps, Target.convolutional(student).taps(shown)[-1])
+    assert taps.requires_grad
 
 
 def test_show() -> None:
@@ -245,39 +266,63 @@ def test_step_all_objectives() -> None:
         Student(student, predictor), Target.of(student, 2), terms, torch.Generator().manual_seed(0), 0.5
     )
     assert {"loss/ibot", "loss/dino", "loss/koleo", "ibot/perplexity", "dino/entropy", "koleo/nearest"} <= set(stats)
-    expected = torch.stack([term.weight * stats[f"loss/{term.name}"] for term in terms]).sum()
+    expected = torch.stack([term.weight * stats[f"loss/{term.name}"] for term in terms.terms]).sum()
     assert torch.allclose(stats["loss"], expected)
-    assert all(p.grad is not None for term in terms for p in term.parameters())
+    assert all(p.grad is not None for p in terms.parameters())
 
 
 def test_clear() -> None:
-    trainer = pretrainer(replace(CONFIG, objectives=ALL, prototypes=PROTOS))
+    trainer = pretrainer()
     student = net(trainer)
     predictor = Predictor(CHANNELS, 8)
-    terms = terms_of(trainer, predictor)
-    for p in [*student.parameters(), *predictor.parameters(), *(p for t in terms for p in t.parameters())]:
+    for p in [*student.parameters(), *predictor.parameters()]:
         p.grad = torch.ones_like(p)
-    Pretrainer.clear(Student(student, predictor), terms)
+    Student(student, predictor).clear()
     assert all(p.grad is None for p in [*student.parameters(), *predictor.parameters()])
-    assert all(p.grad is None for term in terms for p in term.parameters())
 
 
-def test_average() -> None:
+def readings(*losses: float, spread: float = 0.9) -> list[Readings]:
+    return [{"loss": torch.tensor(loss), "spread": torch.tensor(spread)} for loss in losses]
+
+
+def test_mean() -> None:
     stats = [{"loss": torch.tensor(1.0), "a": torch.tensor(2.0)}, {"loss": torch.tensor(3.0), "a": torch.tensor(4.0)}]
-    assert Pretrainer.average(stats) == {"loss": 2.0, "a": 3.0}
+    assert Watch.mean(stats) == {"loss": 2.0, "a": 3.0}
 
 
-def test_watch() -> None:
+def test_check() -> None:
     floors = {"spread": 0.1, "ibot/perplexity": 2.0}
     healthy = {"loss": 0.3, "spread": 0.9, "ibot/perplexity": 50.0}
-    Pretrainer.watch(healthy, floors)
+    Watch(floors, 1).check(healthy)
     with pytest.raises(CollapseError, match="spread"):
-        Pretrainer.watch(healthy | {"spread": 0.01}, floors)
+        Watch(floors, 1).check(healthy | {"spread": 0.01})
     with pytest.raises(CollapseError, match="perplexity"):
-        Pretrainer.watch(healthy | {"ibot/perplexity": 1.1}, floors)
+        Watch(floors, 1).check(healthy | {"ibot/perplexity": 1.1})
     with pytest.raises(FloatingPointError):
-        Pretrainer.watch(healthy | {"loss": float("nan")}, floors)
-    Pretrainer.watch({"loss": 1.0}, {})
+        Watch(floors, 1).check(healthy | {"loss": float("nan")})
+    Watch({}, 1).check({"loss": 1.0})
+
+
+def test_add() -> None:
+    watch = Watch({"spread": 0.1}, 2)
+    collapsed = readings(1.0, spread=0.0)[0]
+    watch.add(collapsed)
+    assert watch.readings == [collapsed]
+    with pytest.raises(CollapseError):
+        watch.add(collapsed)
+    healthy = Watch({"spread": 0.1}, 2)
+    for step in readings(1.0, 2.0, 3.0):
+        healthy.add(step)
+    assert len(healthy.readings) == 3
+
+
+def test_close() -> None:
+    watch = Watch({"spread": 0.1}, 5)
+    for step in readings(1.0, 3.0):
+        watch.add(step)
+    assert watch.close() == pytest.approx({"loss": 2.0, "spread": 0.9})
+    with pytest.raises(FloatingPointError):
+        Watch({}, 5, readings(math.nan)).close()
 
 
 def test_fit() -> None:

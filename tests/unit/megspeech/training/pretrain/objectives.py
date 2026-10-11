@@ -9,6 +9,7 @@ from megspeech.training.pretrain.objectives import (
     LOSSES,
     Batch,
     Dino,
+    Distillation,
     IBot,
     Kind,
     KoLeo,
@@ -17,8 +18,9 @@ from megspeech.training.pretrain.objectives import (
     Regression,
     Setup,
     Term,
+    Terms,
 )
-from megspeech.training.pretrain.prototypes import Assignment, Centring, Prototypes
+from megspeech.training.pretrain.prototypes import Centring, Prototypes, Scores
 
 B, H, T = 6, 8, 20
 PROTOTYPES = Prototypes(k=8, bottleneck=6, hidden=10, centre_momentum=0.5)
@@ -164,7 +166,7 @@ def test_balanced() -> None:
     logits = torch.randn(32, 8)
     probs = term.balanced(logits, 0.1)
     assert torch.allclose(probs.sum(dim=1), torch.ones(32), atol=1e-5)
-    assert probs.sum(dim=0).std() < Assignment.sinkhorn(logits, 0.1, 0).sum(dim=0).std()
+    assert probs.sum(dim=0).std() < Scores(logits, 0.1).sinkhorn(0).sum(dim=0).std()
 
 
 def test_teach() -> None:
@@ -252,3 +254,80 @@ def test_ko_leo_loss() -> None:
     loss, readings = KoLeo("koleo", 1.0).loss(Batch([maps, maps], [], maps, maps, [], 0.0))
     assert loss.item() == pytest.approx(-math.log(math.sqrt(2)), abs=1e-5)
     assert readings["koleo/nearest"].item() == pytest.approx(math.sqrt(2), abs=1e-5)
+
+
+def all_terms() -> Terms:
+    return Terms.of(tuple(map(Objective, Kind)), setup())
+
+
+def test_of() -> None:
+    built = all_terms()
+    assert [term.name for term in built.terms] == [kind.value for kind in Kind]
+    assert Terms.of((Objective(Kind.KOLEO, 0.1),), setup()).terms[0].weight == 0.1
+
+
+def test_views() -> None:
+    assert all_terms().views == 2
+    assert Terms.of((Objective(Kind.REGRESSION),), setup()).views == 1
+
+
+def test_cross() -> None:
+    assert all_terms().cross
+    assert not Terms.of((Objective(Kind.IBOT),), setup()).cross
+
+
+def test_terms_parameters() -> None:
+    built = all_terms()
+    assert built.parameters() == [p for term in built.terms for p in term.parameters()]
+    assert built.parameters()
+
+
+def test_terms_floors() -> None:
+    assert all_terms().floors() == {
+        "spread": 0.05,
+        "target_spread": 0.05,
+        "ibot/perplexity": PROTOTYPES.perplexity_floor,
+        "dino/perplexity": PROTOTYPES.perplexity_floor,
+    }
+
+
+def test_terms_follow() -> None:
+    built = all_terms()
+    for term in built.terms:
+        for p in term.parameters():
+            p.data.add_(1.0)
+    built.follow(0.0)
+    distilled = [term for term in built.terms if isinstance(term, Distillation)]
+    assert all(
+        torch.equal(t, s)
+        for term in distilled
+        for t, s in zip(term.teacher.parameters(), term.head.parameters(), strict=True)
+    )
+
+
+def test_clear() -> None:
+    built = all_terms()
+    for p in built.parameters():
+        p.grad = torch.ones_like(p)
+    built.clear()
+    assert all(p.grad is None for p in built.parameters())
+
+
+def test_score() -> None:
+    built = all_terms()
+    total, readings = built.score(batch())
+    losses = [name for name in readings if name.startswith("loss/")]
+    assert losses == [f"loss/{kind.value}" for kind in Kind]
+    assert list(readings)[len(losses) :] == [
+        "spread",
+        "target_spread",
+        "target_centre",
+        "ibot/entropy",
+        "ibot/perplexity",
+        "dino/entropy",
+        "dino/perplexity",
+        "koleo/nearest",
+    ]
+    expected = sum(term.weight * readings[f"loss/{term.name}"] for term in built.terms)
+    assert torch.allclose(total, torch.as_tensor(expected))
+    assert total.requires_grad

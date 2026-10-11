@@ -12,6 +12,9 @@ from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.config import DataConfig, Refit, Val
 from megspeech.data.raw.runs import DEEP, Partition, Run
 
+WITHHELD = frozenset({Partition.VALIDATION, Partition.TEST, Partition.POOL})
+"""Official partitions no pretraining session may come from."""
+
 
 class PartitionError(ValueError):
     """A session pretraining may not read was chosen."""
@@ -40,13 +43,21 @@ class Sessions:
     def assert_clean(self, data: DataConfig, runs: Sequence[Run]) -> None:
         """Raise `PartitionError` unless every session is subject 0's, `TRAIN`, and neither carved val nor official
         validation or test."""
-        withheld = {r.name for r in data.carved(runs)} | {
-            r.name for r in runs if r.partition in (Partition.VALIDATION, Partition.TEST, Partition.POOL)
-        }
-        foreign = [r.name for r in self.runs if r.subject != DEEP or r.partition is not Partition.TRAIN]
-        leaked = sorted(withheld & {r.name for r in self.runs})
+        foreign = self.foreign
+        withheld = {r.name for r in data.carved(runs)} | self.official(runs)
+        leaked = sorted(withheld & set(self.names))
         if foreign or leaked or not self.runs:
             raise PartitionError(f"pretraining sessions: {len(self.runs)}, foreign {foreign}, withheld {leaked}")
+
+    @staticmethod
+    def official(runs: Sequence[Run]) -> set[str]:
+        """The official validation and test sessions of `runs`."""
+        return {r.name for r in runs if r.partition in WITHHELD}
+
+    @property
+    def foreign(self) -> list[str]:
+        """The sessions that are not subject 0's `TRAIN` ones."""
+        return [r.name for r in self.runs if r.subject != DEEP or r.partition is not Partition.TRAIN]
 
     def limited(self, count: int) -> "Sessions":
         """The first `count` sessions in name order; every one when `count` is 0."""
