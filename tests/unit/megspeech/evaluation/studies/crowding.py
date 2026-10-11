@@ -1,11 +1,14 @@
+from dataclasses import replace
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.scoring.probabilities import Probabilities, Words
+from megspeech.evaluation.scoring.score import ADJUSTMENTS
 from megspeech.evaluation.studies.crowding import (
     BLOCK,
     GAMMAS,
@@ -15,8 +18,10 @@ from megspeech.evaluation.studies.crowding import (
     Arm,
     Delta,
     Finish,
+    Finishes,
     Grading,
     Rows,
+    Saved,
     Section,
     Study,
 )
@@ -104,7 +109,7 @@ def test_all() -> None:
     assert len(arms[3].grid) == len(TAUS) * len(MIXES)
 
 
-def test_fit() -> None:
+def test_arm_fit() -> None:
     crowd = next(arm for arm in Arm.all() if arm.name == "crowd")
     finish = crowd.fit({"a": rows()}, uniform(), Ruler(k=TOP))
     assert finish.gamma > 0
@@ -152,21 +157,111 @@ def test_record() -> None:
     assert record["domains"] == {"a": (0.1, 0.0, 0.2)}
 
 
-def saved(directory: Path, section: str, novel: torch.Tensor) -> None:
-    data = rows(len(novel))
+def probabilities(novel: torch.Tensor, seed: int = SEED) -> Probabilities:
+    data = rows(len(novel), seed)
     words = Words(torch.arange(len(novel)), data.labels, novel, data.head, data.other, data.head.exp())
-    Probabilities({"a": words}, 0.5, uniform(), 100).save(directory / "probs.pt", section)
+    return Probabilities({"a": words}, 0.5, uniform(), 100)
 
 
-def test_load(tmp_path: Path) -> None:
+def saved(directory: Path, section: str, novel: torch.Tensor) -> None:
+    probabilities(novel).save(directory / "probs.pt", section)
+
+
+def members(seed: int = SEED) -> Saved:
+    novel = torch.arange(WORDS) % 4 != 0
+    lead, other = probabilities(novel), probabilities(novel, seed)
+    tiny = replace(lead.domains["a"], novel=torch.arange(WORDS) < 3)
+    return Saved(
+        [
+            replace(lead, domains={"a": lead.domains["a"], "tiny": tiny}),
+            replace(other, domains={"a": other.domains["a"], "tiny": other.domains["a"]}),
+        ]
+    )
+
+
+def written(root: Path) -> list[Path]:
     novel = torch.arange(WORDS) % 4 != 0
     for member in ("m1", "m2"):
-        (tmp_path / member).mkdir()
-        saved(tmp_path / member, "val", novel)
-    lone = {"a": torch.arange(WORDS) < 200}
-    section = Section.load([tmp_path / "m1", tmp_path / "m2"], "val", lone)
-    assert len(section.domains["a"]) == int(novel.sum())
+        (root / member).mkdir()
+        saved(root / member, "val", novel)
+    return [root / "m1", root / "m2"]
+
+
+def test_section_load(tmp_path: Path) -> None:
+    section = Section.load(written(tmp_path), "val", {"a": torch.arange(WORDS) < 200})
+    assert len(section.domains["a"]) == WORDS - WORDS // 4
     assert len(section.lone["a"]) == 200
+
+
+def test_saved_load(tmp_path: Path) -> None:
+    assert len(Saved.load(written(tmp_path), "val").members) == 2
+
+
+def test_section_load_disagreeing(tmp_path: Path) -> None:
+    for seed, member in enumerate(("m1", "m2")):
+        (tmp_path / member).mkdir()
+        probabilities(torch.ones(WORDS, dtype=torch.bool), seed).save(tmp_path / member / "probs.pt", "val")
+    with pytest.raises(ValueError, match="members disagree on the words of a in val"):
+        Section.load([tmp_path / "m1", tmp_path / "m2"], "val", {})
+
+
+def test_lead() -> None:
+    found = members()
+    assert found.lead("tiny") is found.members[0].domains["tiny"]
+    assert int(found.lead("tiny").novel.sum()) == 3
+
+
+def test_counted() -> None:
+    assert members().counted() == ["a"]
+
+
+def test_words() -> None:
+    assert len(members().words("a")) == 2
+
+
+def test_agreed() -> None:
+    assert members().agreed("a")
+    assert not members(seed=1).agreed("a")
+
+
+def test_domains() -> None:
+    domains = members().domains()
+    assert set(domains) == {"a"}
+    assert len(domains["a"]) == WORDS - WORDS // 4
+
+
+def test_ids() -> None:
+    assert members().ids()["a"].tolist() == [i for i in range(WORDS) if i % 4]
+
+
+def test_lone() -> None:
+    lone = members().lone({"a": torch.arange(WORDS) < 200, "tiny": torch.arange(WORDS) < 3})
+    assert set(lone) == {"a"}
+    assert torch.equal(lone["a"].head, members().words("a")[0].word_logits.float().log_softmax(-1)[:200])
+
+
+def test_log_prior() -> None:
+    assert torch.equal(members().log_prior(), uniform())
+
+
+def test_finishes_fit() -> None:
+    finishes = Finishes.fit(members())
+    assert finishes.context.tau in ADJUSTMENTS
+    assert finishes.word.tau in ADJUSTMENTS
+    assert torch.equal(finishes.log_prior, uniform())
+
+
+def test_prior() -> None:
+    assert Finishes(Finish(0.0), Finish(0.0), uniform()).prior() == pytest.approx(np.full(VOCAB_SIZE, 1 / VOCAB_SIZE))
+
+
+def test_scored() -> None:
+    test = {"a": rows(6), "b": rows(4, seed=1)}
+    context, word = Finishes(Finish(0.0), Finish(1.0), uniform()).scored(test)
+    assert context.domains.tolist() == ["a"] * 6 + ["b"] * 4
+    assert np.allclose(context.probs[:6], test["a"].head.numpy())
+    assert np.allclose(word.probs[6:], (test["b"].other - uniform()).numpy())
+    assert np.array_equal(word.labels, context.labels)
 
 
 def study() -> Study:

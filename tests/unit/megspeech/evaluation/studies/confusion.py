@@ -9,19 +9,8 @@ import torch
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.data.spans.spans import PAD
-from megspeech.evaluation.studies.confusion import Collected, Gains, Heatmap, Lengths, Report, Scored, Structure
-
-PAIR = 2
-
-
-def scored() -> Scored:
-    """Even targets peak on themselves; odd ones peak on their even neighbour, true word second."""
-    labels = np.arange(2 * VOCAB_SIZE) % VOCAB_SIZE
-    probs = np.full((len(labels), VOCAB_SIZE), 0.001)
-    for row, label in enumerate(labels):
-        probs[row, label - label % PAIR] = 0.5
-        probs[row, label] = max(probs[row, label], 0.01)
-    return Scored(labels, probs, np.where(np.arange(len(labels)) < VOCAB_SIZE, "A", "B"))
+from megspeech.evaluation.studies.confusion import Collected, Gains, Heatmap, Lengths, Report, Spellings, Structure
+from tests.unit.megspeech.evaluation.studies.scored import PAIR, scored
 
 
 def paired() -> Structure:
@@ -29,44 +18,6 @@ def paired() -> Structure:
     counts = np.eye(VOCAB_SIZE, dtype=np.int64)
     counts[0, 1] = counts[1, 0] = 3
     return Structure(counts)
-
-
-def test_top1() -> None:
-    assert scored().top1()[:4].tolist() == [0, 0, 2, 2]
-
-
-def test_hits() -> None:
-    assert scored().hits().all()
-
-
-def test_support() -> None:
-    assert (scored().support() == PAIR).all()
-
-
-def test_confusion() -> None:
-    counts = scored().confusion()
-    assert counts[0, 0] == PAIR
-    assert counts[1, 0] == PAIR
-    assert counts[1, 1] == 0
-
-
-def test_recall() -> None:
-    recall = scored().recall()
-    assert recall[0::PAIR].tolist() == [1.0] * (VOCAB_SIZE // PAIR)
-    assert recall[1::PAIR].tolist() == [0.0] * (VOCAB_SIZE // PAIR)
-
-
-def test_recall_absent_target() -> None:
-    one = Scored(np.array([0]), np.eye(VOCAB_SIZE)[:1], np.array(["A"]))
-    assert np.isnan(one.recall()[1])
-
-
-def test_hit_rate() -> None:
-    assert scored().hit_rate().tolist() == [1.0] * VOCAB_SIZE
-
-
-def test_macro() -> None:
-    assert scored().macro() == {"A": 1.0, "B": 1.0, "macro": 1.0}
 
 
 def test_rates() -> None:
@@ -103,18 +54,18 @@ def test_pair_values() -> None:
     assert values.max() == pytest.approx(0.75)
 
 
-def test_letter_counts() -> None:
-    assert Lengths.letter_counts(["a", "it’s"]).tolist() == [1.0, 3.0]
+def test_letters() -> None:
+    assert Spellings(["a", "it’s"]).letters().tolist() == [1.0, 3.0]
 
 
-def test_phoneme_counts(tmp_path: Path) -> None:
+def test_phonemes(tmp_path: Path) -> None:
     """Counts phonemes per aligned word, skipping `oov`/`sil` positions; an unseen word is NaN."""
     events = tmp_path / "events.tsv"
     events.write_text(
         "kind\tsegment\tsentenceidx\twordidx\n"
         "word\tThe\t0\t0\nphoneme\tdh_B\t0\t0\nphoneme\tah_I\t0\t0\nphoneme\tsil_I\t0\t0\n"
     )
-    counts = Lengths.phoneme_counts([events], ["the", "zzz"])
+    counts = Spellings(["the", "zzz"]).phonemes([events])
     assert counts[0] == PAIR
     assert np.isnan(counts[1])
 

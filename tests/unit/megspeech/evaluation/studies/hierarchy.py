@@ -1,14 +1,39 @@
+import logging
+from types import SimpleNamespace
+from typing import cast, override
+
 import numpy as np
+import pandas as pd
 import pytest
 import torch
+from torch import Tensor, nn
 
+from megspeech.data.batching.split import Split
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.data.raw.runs import Run
 from megspeech.evaluation.scoring.evaluator import Evaluator
-from megspeech.evaluation.scoring.score import Score
-from megspeech.evaluation.studies.hierarchy import GRID, THRESHOLDS, Domain, Gate, Grid, Hierarchical, WordTags
+from megspeech.evaluation.scoring.score import Head, Score
+from megspeech.evaluation.studies.hierarchy import (
+    GRID,
+    THRESHOLDS,
+    Balanced,
+    Domain,
+    Gate,
+    Grid,
+    Held,
+    Hierarchical,
+    Natural,
+    Weighting,
+    WordTags,
+)
+from megspeech.model.input.subjects import Fallback, SubjectLayer, Unseen
+from tests.unit.megspeech.evaluation.studies.syntax import table
 
 LOG_PRIOR = torch.zeros(VOCAB_SIZE)
+ONSETS = [0.0, 12.0, 24.0, 36.0, 48.0]
+TARGETS = [0, 2, 4, 1, 3]
+LOGITS = torch.randn(len(ONSETS), VOCAB_SIZE, generator=torch.Generator().manual_seed(0))
 
 
 def domain(seed: int, n: int = 100) -> Domain:
@@ -33,7 +58,7 @@ def test_word_tags_of() -> None:
     assert tags.distribution[2].tolist() == pytest.approx([0.5, 0.5])
 
 
-def test_bonus() -> None:
+def test_word_tags_bonus() -> None:
     tags = WordTags.of(np.array([0, 0, 0, 1, -100]), np.array([1, 1, UNKNOWN, 0, 0]), 2)
     bonus = tags.bonus(np.log(np.array([[0.9, 0.1]])), np.array([0.5, 0.5]))
     assert bonus.shape == (1, VOCAB_SIZE)
@@ -100,3 +125,77 @@ def test_per_domain() -> None:
     grid = Grid({"a": better, "b": better})
     per = grid.per_domain({"a": 4.0, "b": 0.0}, grid.macro(0.0))
     assert per == {"a": (0.4, 10), "b": (0.0, 10)}
+
+
+def test_natural_prior() -> None:
+    assert Natural().prior(np.array([1, 3])).tolist() == [0.25, 0.75]
+
+
+def test_balanced_prior() -> None:
+    assert Balanced().prior(np.array([1, 3])).tolist() == [0.5, 0.5]
+
+
+def test_weighting_bonus() -> None:
+    train, valid = table(0), table(1)
+    found = Natural().bonus(train, valid, ("timing",))
+    assert found.shape == (len(valid.tags), VOCAB_SIZE)
+    assert np.isfinite(found).all()
+
+
+def test_bonuses() -> None:
+    found = Weighting.bonuses(table(0), table(1), ("timing",))
+    assert list(found) == ["natural", "balanced"]
+    assert np.array_equal(found["balanced"], Balanced().bonus(table(0), table(1), ("timing",)))
+
+
+class Fixed(Evaluator):
+    @override
+    def logits(self, model: nn.Module, split: Split) -> dict[Head, Tensor]:
+        return {Head.CONTEXT: LOGITS}
+
+
+def held(min_novel: int = 2) -> Held:
+    heard = pd.DataFrame({"run": [1, *[0] * len(ONSETS)], "onset": [99.0, *ONSETS]})
+    runs = {"a": [cast(Run, SimpleNamespace(name=0))]}
+    return Held(Fixed(torch.device("cpu"), min_novel=min_novel), nn.Identity(), runs, heard, table(0))
+
+
+def split() -> Split:
+    return cast(Split, SimpleNamespace(novel=lambda seen: torch.arange(len(ONSETS)), y=torch.tensor(TARGETS)))
+
+
+def bonus() -> np.ndarray:
+    return np.arange(len(table(0).tags) * VOCAB_SIZE, dtype=float).reshape(-1, VOCAB_SIZE)
+
+
+def test_shrunk() -> None:
+    layer = SubjectLayer(3, 4)
+    with torch.no_grad():
+        layer.weight.add_(torch.randn(3, 4, 4, generator=torch.Generator().manual_seed(0)))
+    before = layer.weight.detach().clone()
+    model = nn.Sequential(layer, nn.Linear(4, 4))
+    assert Held.shrunk(model) is model
+    expected = before.lerp(Unseen.DEEP.targets(before), 1 - Fallback(Unseen.DEEP).keep)
+    assert torch.allclose(layer.weight, expected)
+
+
+def test_domain() -> None:
+    found = held().domain("a", split(), torch.tensor([1, 3]), bonus())
+    assert found.labels.tolist() == [2, 1]
+    assert torch.equal(found.logits, LOGITS[[1, 3]])
+    assert torch.equal(found.bonus, torch.from_numpy(bonus()[[12, 36]]).float())
+
+
+def test_domains() -> None:
+    assert set(held().domains({"a": split()}, bonus())) == {"a"}
+    assert held(min_novel=len(ONSETS) + 1).domains({"a": split()}, bonus()) == {}
+
+
+def test_held_report(caplog: pytest.LogCaptureFixture) -> None:
+    found = held()
+    domains = found.domains({"a": split()}, bonus())
+    official = Grid.of(found.evaluator, LOG_PRIOR, domains, Hierarchical()).macro(0.0).bacc10
+    with caplog.at_level(logging.INFO):
+        found.report({"a": split()}, {"natural": bonus()}, LOG_PRIOR, official)
+    assert sum("leave-one-domain-out" in record.message for record in caplog.records) == 2
+    assert any(record.message.startswith("natural gate") for record in caplog.records)

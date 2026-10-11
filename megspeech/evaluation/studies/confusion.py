@@ -38,9 +38,10 @@ from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
-from megspeech.evaluation.metric.ruler import TOP, Ruler
+from megspeech.evaluation.metric.ruler import TOP
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.score import Head
+from megspeech.evaluation.studies.scored import Scored
 from megspeech.evaluation.studies.timing import PERMUTATIONS
 
 LOG = logging.getLogger(__name__)
@@ -56,55 +57,6 @@ OUT = "confusion"
 CELL = 0.17
 """Inches per heatmap row, so the 50 tick labels stay legible."""
 LABEL_SIZE = 5
-
-
-@dataclass(frozen=True)
-class Scored:
-    """One model's probabilities on the scored words, their labels and the domain each word is from."""
-
-    labels: Int[np.ndarray, " n"]
-    probs: Float[np.ndarray, "n v"]
-    domains: np.ndarray
-
-    def top1(self) -> Int[np.ndarray, " n"]:
-        return self.probs.argmax(axis=1)
-
-    def hits(self) -> Bool[np.ndarray, " n"]:
-        """Whether the true word ranks in the top `TOP`, as the ruler counts it."""
-        return Ruler().hits(torch.from_numpy(self.probs), torch.from_numpy(self.labels)).numpy()
-
-    def support(self) -> Int[np.ndarray, " v"]:
-        return np.bincount(self.labels, minlength=VOCAB_SIZE)
-
-    def confusion(self) -> Int[np.ndarray, "v v"]:
-        """Count of words with true label row predicted as column at top-1."""
-        counts = np.zeros((VOCAB_SIZE, VOCAB_SIZE), dtype=np.int64)
-        np.add.at(counts, (self.labels, self.top1()), 1)
-        return counts
-
-    def recall(self) -> Float[np.ndarray, " v"]:
-        """Top-1 recall per target, NaN for a target with no word."""
-        return self._rate(self.top1() == self.labels)
-
-    def hit_rate(self) -> Float[np.ndarray, " v"]:
-        """Top-`TOP` hit rate per target, NaN for a target with no word."""
-        return self._rate(self.hits())
-
-    def _rate(self, flags: Bool[np.ndarray, " n"]) -> Float[np.ndarray, " v"]:
-        got = np.bincount(self.labels, weights=flags, minlength=VOCAB_SIZE)
-        return np.where(self.support() > 0, got / np.maximum(self.support(), 1), np.nan)
-
-    def macro(self) -> dict[str, float]:
-        """Each domain's balanced top-`TOP` accuracy, and their mean: the selection ruler's number."""
-        flags = self.hits()
-        scores = {}
-        for name in dict.fromkeys(self.domains):
-            here = self.domains == name
-            got = np.bincount(self.labels[here], weights=flags[here], minlength=VOCAB_SIZE)
-            held = np.bincount(self.labels[here], minlength=VOCAB_SIZE)
-            scores[str(name)] = float(np.mean(got[held > 0] / held[held > 0]))
-        scores["macro"] = float(np.mean(list(scores.values())))
-        return scores
 
 
 @dataclass(frozen=True)
@@ -154,19 +106,15 @@ class Structure:
 
 
 @dataclass(frozen=True)
-class Lengths:
-    """Per-target size measures: letters, phonemes and mean seconds to the next onset."""
+class Spellings:
+    """The target words, measured by their letters and by their sounds in the forced alignment."""
 
-    letters: Float[np.ndarray, " v"]
-    phonemes: Float[np.ndarray, " v"]
-    duration: Float[np.ndarray, " v"]
+    words: Sequence[str]
 
-    @staticmethod
-    def letter_counts(words: Sequence[str]) -> Float[np.ndarray, " v"]:
-        return np.array([sum(char.isalpha() for char in word) for word in words], dtype=np.float64)
+    def letters(self) -> Float[np.ndarray, " v"]:
+        return np.array([sum(char.isalpha() for char in word) for word in self.words], dtype=np.float64)
 
-    @staticmethod
-    def phoneme_counts(events: Sequence[Path], words: Sequence[str]) -> Float[np.ndarray, " v"]:
+    def phonemes(self, events: Sequence[Path]) -> Float[np.ndarray, " v"]:
         """Each word's most common phoneme count in the events' forced alignment (NaN if it never occurs)."""
         pieces = []
         for path in events:
@@ -177,7 +125,16 @@ class Lengths:
             pieces.append(named.assign(word=Vocabulary.spelled(named["segment"]))[["word", "count"]])
         merged = pd.concat(pieces, ignore_index=True)
         common = merged.groupby("word")["count"].agg(lambda counted: counted.mode().iloc[0])
-        return np.array([float(common.get(word, np.nan)) for word in words])
+        return np.array([float(common.get(word, np.nan)) for word in self.words])
+
+
+@dataclass(frozen=True)
+class Lengths:
+    """Per-target size measures: letters, phonemes and mean seconds to the next onset."""
+
+    letters: Float[np.ndarray, " v"]
+    phonemes: Float[np.ndarray, " v"]
+    duration: Float[np.ndarray, " v"]
 
     @staticmethod
     def durations(split: Split, novel: Int[Tensor, " k"]) -> Float[np.ndarray, " k"]:
@@ -396,9 +353,10 @@ def main() -> None:
     collected = Collected.of(loaded, runs)
     words = PRIMARY.words
     events = [path for path in sorted(root.raw().rglob(EVENTS)) if path.stat().st_size]
+    spellings = Spellings(words)
     lengths = Lengths(
-        Lengths.letter_counts(words),
-        Lengths.phoneme_counts(events, words),
+        spellings.letters(),
+        spellings.phonemes(events),
         Lengths.mean_by_target(collected.real.labels, collected.duration),
     )
     Report(collected, words, lengths, root.models() / OUT).run()

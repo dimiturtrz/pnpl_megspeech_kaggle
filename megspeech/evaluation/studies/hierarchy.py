@@ -27,9 +27,10 @@ import numpy as np
 import pandas as pd
 import torch
 from jaxtyping import Float, Int
-from torch import Tensor
+from torch import Tensor, nn
 
 from core.paths import DataRoot
+from megspeech.data.batching.split import Split
 from megspeech.data.config import DataConfig
 from megspeech.data.heard import Heard
 from megspeech.data.labels.context_tags import ContextTags
@@ -225,6 +226,100 @@ class Grid:
         )
 
 
+@dataclass(frozen=True)
+class Weighting(ABC):
+    """How the probe weights its classes, and the tag prior p(t) that matches it."""
+
+    name: str
+    balanced: bool
+
+    @abstractmethod
+    def prior(self, counts: Int[np.ndarray, " k"]) -> Float[np.ndarray, " k"]:
+        """p(t) from the training rows' count of each tag."""
+
+    def bonus(self, train: Table, valid: Table, stack: tuple[str, ...]) -> Float[np.ndarray, "m v"]:
+        """Each validation row's log tag likelihood ratio of every word, the posterior stacked over `stack`."""
+        probe = Probe(train, valid, self.balanced)
+        classes, posterior = probe.stacked(stack, {name: probe.probabilities(name) for name in stack})
+        tags = np.where(train.tags == UNKNOWN, UNKNOWN, np.searchsorted(classes, train.tags))
+        words = WordTags.of(train.targets, tags, len(classes))
+        return words.bonus(posterior, self.prior(np.bincount(tags[tags != UNKNOWN], minlength=len(classes))))
+
+    @staticmethod
+    def bonuses(train: Table, valid: Table, stack: tuple[str, ...]) -> dict[str, Float[np.ndarray, "m v"]]:
+        """The bonus under every weighting, by its name."""
+        return {weighting.name: weighting.bonus(train, valid, stack) for weighting in (Natural(), Balanced())}
+
+
+@dataclass(frozen=True)
+class Natural(Weighting):
+    """Classes weighted by their frequency, the prior their share of the training tags."""
+
+    name: str = "natural"
+    balanced: bool = False
+
+    @override
+    def prior(self, counts: Int[np.ndarray, " k"]) -> Float[np.ndarray, " k"]:
+        return counts / counts.sum()
+
+
+@dataclass(frozen=True)
+class Balanced(Weighting):
+    """Classes weighted equally, the prior uniform."""
+
+    name: str = "balanced"
+    balanced: bool = True
+
+    @override
+    def prior(self, counts: Int[np.ndarray, " k"]) -> Float[np.ndarray, " k"]:
+        return np.full(len(counts), 1 / len(counts))
+
+
+@dataclass(frozen=True)
+class Held:
+    """The frozen decoder on the held-out runs: each domain's unseen-span words, as many as count."""
+
+    evaluator: Evaluator
+    model: nn.Module
+    runs: dict[str, list[Run]]
+    heard: pd.DataFrame
+    valid: Table
+
+    @staticmethod
+    def shrunk(model: nn.Module) -> nn.Module:
+        """`model` with every subject layer kept to the subjects the deep fallback reads."""
+        for layer in (module for module in model.modules() if isinstance(module, SubjectLayer)):
+            layer.shrink(Fallback(Unseen.DEEP).keep, Unseen.DEEP)
+        return model
+
+    def domain(self, name: str, split: Split, novel: Int[Tensor, " k"], bonus: Float[np.ndarray, "m v"]) -> Domain:
+        """Domain `name`'s `novel` words of `split`, each given its row of `bonus`."""
+        rows = self.heard[self.heard["run"].isin([run.name for run in self.runs[name]])].iloc[novel.cpu().numpy()]
+        logits = self.evaluator.logits(self.model, split)[Head.CONTEXT][novel]
+        return Domain.of(logits, split.y[novel], rows, self.valid, bonus)
+
+    def domains(self, splits: dict[str, Split], bonus: Float[np.ndarray, "m v"]) -> dict[str, Domain]:
+        """Every domain of `splits` with enough unseen-span words."""
+        return {
+            name: self.domain(name, split, novel, bonus)
+            for name, split in splits.items()
+            if len(novel := split.novel(self.evaluator.seen)) >= self.evaluator.min_novel
+        }
+
+    def report(
+        self,
+        splits: dict[str, Split],
+        bonuses: dict[str, Float[np.ndarray, "m v"]],
+        log_prior: Float[Tensor, " v"],
+        official: float,
+    ) -> None:
+        """Log every arm's grid under every weighting's bonus."""
+        for weighting, bonus in bonuses.items():
+            domains = self.domains(splits, bonus)
+            for arm in (Hierarchical(), Gate()):
+                Grid.of(self.evaluator, log_prior, domains, arm).report(f"{weighting} {arm.name}", official)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("name", help="the decoder under models/ whose logits are narrowed")
@@ -238,9 +333,7 @@ def main() -> None:
     directories = Ensemble.trained(root.models(), args.name)
     data = DataConfig.shared(directories, DataConfig.grouping)
     reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False))
-    model = Ensemble.load([directory / "model.pt" for directory in directories], Unseen.DEEP).to(device)
-    for layer in (module for module in model.modules() if isinstance(module, SubjectLayer)):
-        layer.shrink(Fallback(Unseen.DEEP).keep, Unseen.DEEP)
+    model = Held.shrunk(Ensemble.load([directory / "model.pt" for directory in directories], Unseen.DEEP).to(device))
     sequences, log_prior = Heard.under(root, data, device)
     evaluator = Evaluator(device, sequences, SelectionConfig.shared(directories).min_novel)
     runs = Run.discover(root.raw())
@@ -251,30 +344,12 @@ def main() -> None:
     embedded = Embedded(Checkpoint.load(root.models() / (args.embeddings or args.name) / "model.pt").to(device))
     train = Table.of(reader, embedded, {"train": trained}, contexts, timing)
     valid = Table.of(reader, embedded, held, contexts, timing)
-    stack = STACKS[args.stack]
-    bonuses = {}
-    for balanced in (False, True):
-        probe = Probe(train, valid, balanced)
-        classes, posterior = probe.stacked(stack, {name: probe.probabilities(name) for name in stack})
-        tags = np.where(train.tags == UNKNOWN, UNKNOWN, np.searchsorted(classes, train.tags))
-        words = WordTags.of(train.targets, tags, len(classes))
-        counts = np.bincount(tags[tags != UNKNOWN], minlength=len(classes))
-        prior = np.full(len(classes), 1 / len(classes)) if balanced else counts / counts.sum()
-        bonuses["balanced" if balanced else "natural"] = words.bonus(posterior, prior)
+    bonuses = Weighting.bonuses(train, valid, STACKS[args.stack])
     splits, _ = reader.domains(held)
     official = evaluator.report(model, splits, log_prior, 0, 0.0)
     LOG.info("official macro %.4f over %d words, expected %.4f", official.macro.bacc10, official.macro.n, args.official)
     _, heard = reader.load([run for group in held.values() for run in group])
-    for weighting, bonus in bonuses.items():
-        domains = {}
-        for name, split in splits.items():
-            novel = split.novel(evaluator.seen)
-            if len(novel) >= evaluator.min_novel:
-                rows = heard[heard["run"].isin([run.name for run in held[name]])].iloc[novel.cpu().numpy()]
-                logits = evaluator.logits(model, split)[Head.CONTEXT][novel]
-                domains[name] = Domain.of(logits, split.y[novel], rows, valid, bonus)
-        for arm in (Hierarchical(), Gate()):
-            Grid.of(evaluator, log_prior, domains, arm).report(f"{weighting} {arm.name}", args.official)
+    Held(evaluator, model, held, heard, valid).report(splits, bonuses, log_prior, args.official)
 
 
 if __name__ == "__main__":

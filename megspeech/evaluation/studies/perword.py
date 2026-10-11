@@ -36,12 +36,11 @@ from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
 from megspeech.evaluation.loading import Loader
-from megspeech.evaluation.metric.ruler import TOP, Ruler
-from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities, Words
-from megspeech.evaluation.scoring.score import MIN_NOVEL
-from megspeech.evaluation.studies.confusion import Lengths, Scored
-from megspeech.evaluation.studies.crowding import TEST, VAL, Arm, Rows
+from megspeech.evaluation.metric.ruler import TOP
+from megspeech.evaluation.studies.confusion import Lengths
+from megspeech.evaluation.studies.crowding import TEST, VAL, Finishes, Saved
 from megspeech.evaluation.studies.neighbourfusion import DEEP
+from megspeech.evaluation.studies.scored import Scored
 
 LOG = logging.getLogger(__name__)
 
@@ -54,7 +53,6 @@ BUCKETS = 4
 FUNCTION_TAGS = ("ADP", "AUX", "CCONJ", "DET", "PART", "PRON", "SCONJ")
 """Closed-class parts of speech: the words a transcript carries least in its content."""
 OUT = "perword.json"
-FIRST_TWO = 2
 
 
 class Position(StrEnum):
@@ -102,6 +100,38 @@ class Place:
             np.concatenate([self.gap_prev, other.gap_prev]),
             np.concatenate([self.span, other.span + self.span.max(initial=-1) + 1]),
         )
+
+    @classmethod
+    def joined(cls, places: Sequence["Place"]) -> "Place":
+        """`places` concatenated in order, their spans kept distinct."""
+        joined = places[0]
+        for place in places[1:]:
+            joined = joined.concat(place)
+        return joined
+
+
+@dataclass(frozen=True)
+class Located:
+    """The local test's ruled runs by domain, each domain's split and the words the runs carried, in split order."""
+
+    held: dict[str, list[Run]]
+    splits: dict[str, Split]
+    carried: pd.DataFrame
+
+    def place(self, name: str, ids: Int[Tensor, " k"]) -> Place:
+        return Place.of(self.splits[name], ids)
+
+    def spoken(self, name: str, ids: Int[Tensor, " k"]) -> pd.DataFrame:
+        """`ids`' rows of the words `name`'s split was cut from, checked word for word against the split."""
+        runs = [run.name for run in self.held[name]]
+        words = self.carried[self.carried["run"].isin(runs)].reset_index(drop=True)
+        if not np.array_equal(words["token"].to_numpy(), self.splits[name].token.cpu().numpy()):
+            raise ValueError("the carried words and the split disagree")
+        return words.loc[ids.cpu().numpy(), ["run", "onset", "word"]].reset_index(drop=True)
+
+    def agrees(self, name: str, ids: Int[Tensor, " k"], labels: Int[Tensor, " k"]) -> bool:
+        """Whether `name`'s split labels `ids`' words as `labels` does."""
+        return torch.equal(self.splits[name].y[ids], labels)
 
 
 @dataclass(frozen=True)
@@ -193,7 +223,8 @@ class Occurrences:
             columns[f"{name}-hit10"] = np.where(held > 0, got / np.maximum(held, 1), np.nan)
         return pd.DataFrame(columns, index=list(PRIMARY.words))
 
-    def correlations(self, table: pd.DataFrame) -> dict[str, float]:
+    @staticmethod
+    def correlations(table: pd.DataFrame) -> dict[str, float]:
         """Spearman of each word's hit rate against its log prior, duration and count (words with a hit rate)."""
         held = table.dropna(subset=["hit10", "duration", "ioi"])
         return {
@@ -248,63 +279,46 @@ class Scene:
 
     @classmethod
     def of(cls, root: DataRoot, name: str, device: torch.device) -> "Scene":  # devtools-ignore: test-mirror
-        out = root.models() / name
-        members = json.loads((out / METRICS).read_text())["members"]
-        saved = {
-            section: [Probabilities.load(root.models() / member / PROBS, section) for member in members]
-            for section in (VAL, TEST)
-        }
-        log_prior = saved[VAL][0].log_prior.float()
-        val = cls._rows(saved[VAL])[0]
-        finish = Arm.all()[0].fit(val, log_prior, Ruler(k=TOP))
-        alone = Arm.all()[0].fit({key: rows.swapped() for key, rows in val.items()}, log_prior, Ruler(k=TOP))
-        LOG.info("tau %.2f context, %.2f word head, fit on %s (%d members)", finish.tau, alone.tau, VAL, len(members))
-        test, ids = cls._rows(saved[TEST])
+        members = json.loads((root.models() / name / METRICS).read_text())["members"]
+        directories = [root.models() / member for member in members]
+        val, saved = Saved.load(directories, VAL), Saved.load(directories, TEST)
+        finishes = Finishes.fit(val)
+        LOG.info(
+            "tau %.2f context, %.2f word head, fit on %s (%d members)",
+            finishes.context.tau,
+            finishes.word.tau,
+            VAL,
+            len(members),
+        )
+        test, ids = saved.domains(), saved.ids()
         loaded = replace(Loader.of(root, members[:1], DEEP, device), partition=Partition.TEST)
         held = loaded.ruled(Run.discover(root.raw()))
         splits, _ = loaded.domains(held)
         _, carried = loaded.spoken([run for runs in held.values() for run in runs])
-        labels = np.concatenate([rows.labels.numpy() for rows in test.values()])
-        place = [Place.of(splits[name], ids[name]) for name in test]
-        spoken = [cls._spoken(carried, held[name], splits[name], ids[name]) for name in test]
+        located = Located(held, splits, carried)
+        place = Place.joined([located.place(name, ids[name]) for name in test])
+        spoken = pd.concat([located.spoken(name, ids[name]) for name in test], ignore_index=True)
         for name, rows in test.items():
-            if not torch.equal(splits[name].y[ids[name]], rows.labels):
+            if not located.agrees(name, ids[name], rows.labels):
                 raise ValueError(f"the split and the saved probabilities disagree on the words of {name}")
-        domains = np.concatenate([np.full(len(rows.labels), name) for name, rows in test.items()])
-        context, word = (
-            Scored(labels, np.concatenate([fit.scores(rows, log_prior).numpy() for rows in chosen]), domains)
-            for fit, chosen in ((finish, test.values()), (alone, [rows.swapped() for rows in test.values()]))
-        )
-        return cls(
-            Occurrences(context, cls._joined(place)),
-            log_prior.exp().numpy(),
-            finish.tau,
-            word,
-            pd.concat(spoken, ignore_index=True),
-        )
+        context, word = finishes.scored(test)
+        return cls(Occurrences(context, place), finishes.prior(), finishes.context.tau, word, spoken)
 
     @staticmethod
-    def _spoken(carried: pd.DataFrame, runs: list[Run], split: Split, ids: Int[Tensor, " k"]) -> pd.DataFrame:
-        """`ids`' rows of the words `split` was cut from, checked word for word against the split."""
-        words = carried[carried["run"].isin([run.name for run in runs])].reset_index(drop=True)
-        if not np.array_equal(words["token"].to_numpy(), split.token.cpu().numpy()):
-            raise ValueError("the carried words and the split disagree")
-        return words.loc[ids.cpu().numpy(), ["run", "onset", "word"]].reset_index(drop=True)
+    def parser(description: str | None) -> argparse.ArgumentParser:
+        """The arguments every study of a blend's scene takes: the blend and the device its data is read on."""
+        parser = argparse.ArgumentParser(description=description)
+        parser.add_argument("name", help="a blend under models/ whose metrics.json lists members with probs.pt")
+        parser.add_argument("--device", default=Device.CPU)
+        return parser
 
-    @staticmethod
-    def _joined(places: list[Place]) -> Place:
-        joined = places[0]
-        for place in places[1:]:
-            joined = joined.concat(place)
-        return joined
-
-    @staticmethod
-    def _rows(saved: list[Probabilities]) -> tuple[dict[str, Rows], dict[str, Int[Tensor, " k"]]]:
-        """The counted domains' unseen-span words, members averaged, and those words' rows in their split."""
-        names = [name for name, words in saved[0].domains.items() if int(words.novel.sum()) >= MIN_NOVEL]
-        members: dict[str, list[Words]] = {name: [one.domains[name] for one in saved] for name in names}
-        rows = {name: Rows.mean(words, words[0].novel) for name, words in members.items()}
-        return rows, {name: words[0].ids[words[0].novel] for name, words in members.items()}
+    @classmethod
+    def opened(cls, parser: argparse.ArgumentParser) -> tuple[DataRoot, argparse.Namespace, "Scene"]:
+        """The data root, the parsed arguments and the named blend's scene, logging switched on."""
+        args = parser.parse_args()
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+        root = DataRoot.from_config()
+        return root, args, cls.of(root, args.name, torch.device(args.device))
 
 
 class Report:
@@ -322,17 +336,9 @@ class Report:
         )
         table = occurrences.by_word(self.scene.prior, self.attributes)
         LOG.info("per word\n%s", table.round(3).to_string())
-        ranked = table.dropna(subset="hit10").sort_values("hit10")
-        LOG.info(
-            "worst %d\n%s",
-            EXTREMES,
-            ranked.head(EXTREMES)[["n", "hit10", "top1", "duration", "ioi"]].round(3).to_string(),
-        )
-        LOG.info(
-            "best %d\n%s",
-            EXTREMES,
-            ranked.tail(EXTREMES)[["n", "hit10", "top1", "duration", "ioi"]].round(3).to_string(),
-        )
+        ranked = table.dropna(subset="hit10").sort_values("hit10")[["n", "hit10", "top1", "duration", "ioi"]].round(3)
+        LOG.info("worst %d\n%s", EXTREMES, ranked.head(EXTREMES).to_string())
+        LOG.info("best %d\n%s", EXTREMES, ranked.tail(EXTREMES).to_string())
         correlations = occurrences.correlations(table)
         LOG.info("spearman of word hit rate vs %s", correlations)
         content = self._function_split(table)
@@ -380,13 +386,7 @@ class Report:
 
     @staticmethod
     def main() -> None:  # devtools-ignore: test-mirror
-        parser = argparse.ArgumentParser(description=__doc__)
-        parser.add_argument("name", help="a blend under models/ whose metrics.json lists members with probs.pt")
-        parser.add_argument("--device", default=Device.CPU)
-        args = parser.parse_args()
-        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-        root = DataRoot.from_config()
-        scene = Scene.of(root, args.name, torch.device(args.device))
+        root, args, scene = Scene.opened(Scene.parser(__doc__))
         Report(scene, Attributes.of(root), root.models() / args.name / OUT).run()
 
 

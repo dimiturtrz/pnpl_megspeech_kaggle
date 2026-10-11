@@ -1,25 +1,31 @@
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 
+from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
+from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
-from megspeech.evaluation.studies.confusion import Scored
+from megspeech.device import Device
 from megspeech.evaluation.studies.perword import (
     BUCKETS,
     Attributes,
     Confusions,
+    Located,
     Occurrences,
     Place,
     Position,
     Report,
     Scene,
 )
+from megspeech.evaluation.studies.scored import Scored
 
 PER_CLASS = 4
 SPAN = 3
@@ -152,7 +158,70 @@ def test_kept() -> None:
 
 
 def test_joined() -> None:
-    assert len(Scene._joined([place(SPAN), place(SPAN)]).position) == 2 * SPAN
+    joined = Place.joined([place(SPAN), place(SPAN), place(SPAN)])
+    assert len(joined.position) == 3 * SPAN
+    assert joined.span.tolist() == [0, 0, 0, 1, 1, 1, 2, 2, 2]
+
+
+def located() -> Located:
+    tokens = torch.arange(5) + 10
+    stub = cast(Split, SimpleNamespace(index=split().index, onset=split().onset, y=torch.arange(5), token=tokens))
+    carried = pd.DataFrame(
+        {
+            "run": ["other", "r", "r", "r", "r", "r"],
+            "token": [99, *tokens.tolist()],
+            "onset": np.arange(6.0),
+            "word": list("xabcde"),
+        }
+    )
+    return Located({"a": [cast(Run, SimpleNamespace(name="r"))]}, {"a": stub}, carried)
+
+
+def test_place() -> None:
+    assert located().place("a", torch.tensor([1, 4])).position.tolist() == ["middle", "last"]
+
+
+def test_spoken() -> None:
+    found = located().spoken("a", torch.tensor([0, 3]))
+    assert found["word"].tolist() == ["a", "d"]
+    assert list(found.columns) == ["run", "onset", "word"]
+
+
+def test_spoken_disagreeing() -> None:
+    found = located()
+    wrong = Located(found.held, found.splits, found.carried.assign(token=0))
+    with pytest.raises(ValueError, match="the carried words and the split disagree"):
+        wrong.spoken("a", torch.tensor([0]))
+
+
+def test_agrees() -> None:
+    assert located().agrees("a", torch.tensor([1, 2]), torch.tensor([1, 2]))
+    assert not located().agrees("a", torch.tensor([1, 2]), torch.tensor([2, 1]))
+
+
+def test_parser() -> None:
+    args = Scene.parser("about").parse_args(["blend"])
+    assert (args.name, args.device) == ("blend", Device.CPU)
+
+
+def test_opened(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    scene = Scene(occurrences(), np.full(VOCAB_SIZE, 1 / VOCAB_SIZE), 0.5)
+    root = cast(DataRoot, SimpleNamespace(path=tmp_path))
+    calls: list[tuple[str, str]] = []
+
+    def of(found: DataRoot, name: str, device: torch.device) -> Scene:
+        calls.append((name, device.type))
+        assert found is root
+        return scene
+
+    monkeypatch.setattr(sys, "argv", ["perword", "blend"])
+    monkeypatch.setattr(DataRoot, "from_config", staticmethod(lambda: root))
+    monkeypatch.setattr(Scene, "of", staticmethod(of))
+    opened = Scene.opened(Scene.parser(None))
+    assert opened[0] is root
+    assert opened[1].name == "blend"
+    assert opened[2] is scene
+    assert calls == [("blend", "cpu")]
 
 
 def test_run(tmp_path: Path) -> None:

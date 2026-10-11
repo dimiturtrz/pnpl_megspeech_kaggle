@@ -20,172 +20,37 @@ own mean and std, is averaged per word, pooled and per dataset (`DataConfig.stra
 import argparse
 import logging
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import Self
 
-import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Bool, Float, Int
-from torch import Tensor, nn
+from jaxtyping import Float, Int
+from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.config import DataConfig, Val
 from megspeech.data.labels.phonemes import Pronunciation
-from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.studies.templatecontent import PERMUTATIONS, Durations, Rsa
+from megspeech.evaluation.studies.templatemeans import FLOOR, Reliability, Scale, Sums, Templates
 from megspeech.evaluation.studies.timing import Readings
 from megspeech.objective.targets.t5 import Prototypes
 
 LOG = logging.getLogger(__name__)
 
 REPS = 20
-PERMUTATIONS = 1000
 BATCH = 256
 """Windows scored or accumulated per step; small, as the GPU is shared with training."""
 CHUNK = 6
 """Runs loaded on the device at once."""
-FLOOR = 1e-6
 ABSENT = -1e30
 """The score of a word with no training template: finite, so the ruler counts the row, and below every real one."""
 POOLED = "pooled"
-SPLIT_HALF = 2
-
-
-@dataclass
-class Scale:
-    """Per-channel centring and scaling, from the training windows' own moments."""
-
-    mean: Float[Tensor, " c"]
-    std: Float[Tensor, " c"]
-
-    def apply(self, x: Float[Tensor, "b c t"]) -> Float[Tensor, "b c t"]:
-        return (x - self.mean[:, None]) / self.std[:, None]
-
-    def means(self, sums: Float[Tensor, "... c t"], counts: Float[Tensor, "..."]) -> Float[Tensor, "... c t"]:
-        """Scaled means of `sums` over `counts` windows (zero where a cell holds none)."""
-        mean = sums / counts.clamp(min=1)[..., None, None]
-        return torch.where(counts[..., None, None] > 0, (mean - self.mean[:, None]) / self.std[:, None], 0.0)
-
-
-@dataclass(frozen=True)
-class Templates:
-    """Scaled mean window per (group, word) and the trials behind each; a group is a dataset, or all of them."""
-
-    means: Float[Tensor, "g v c t"]
-    counts: Int[Tensor, "g v"]
-
-    def pooled(self) -> "Templates":
-        """One group: every dataset's mean weighted by its trials."""
-        weight = self.counts.float()[..., None, None]
-        total = self.counts.sum(dim=0)
-        mean = (self.means * weight).sum(dim=0) / total.clamp(min=1).float()[:, None, None]
-        return Templates(mean[None], total[None])
-
-    def distance(self, group: int = 0) -> Float[Tensor, "v v"]:
-        """1 - the correlation of every pair of words' flattened templates in `group`."""
-        flat = Readout.standardised(self.means[group].flatten(1))
-        return 1 - flat @ flat.T
-
-
-@dataclass
-class Sums:
-    """Streamed per-(dataset, word) window sums, with the same sums over `reps` random halves of each word's trials,
-    and the per-channel moments of every window."""
-
-    sums: Float[Tensor, "g v c t"]
-    counts: Float[Tensor, "g v"]
-    halves: Float[Tensor, "r g h c t"]
-    half_counts: Float[Tensor, "r g h"]
-    moments: Float[Tensor, "m c"]
-    seen: float
-    generator: torch.Generator
-
-    @classmethod
-    def empty(cls, groups: int, reps: int, shape: tuple[int, int], device: torch.device, seed: int = 0) -> Self:
-        channels, samples = shape
-        return cls(
-            torch.zeros(groups, VOCAB_SIZE, channels, samples, device=device),
-            torch.zeros(groups, VOCAB_SIZE, device=device),
-            torch.zeros(reps, groups, SPLIT_HALF * VOCAB_SIZE, channels, samples, device=device),
-            torch.zeros(reps, groups, SPLIT_HALF * VOCAB_SIZE, device=device),
-            torch.zeros(2, channels, device=device, dtype=torch.float64),
-            0.0,
-            torch.Generator(device=device).manual_seed(seed),
-        )
-
-    def add(self, group: int, x: Float[Tensor, "b c t"], y: Int[Tensor, " b"]) -> None:
-        """Count the labelled windows `x` of dataset `group` in."""
-        self.sums[group].index_add_(0, y, x)
-        self.counts[group] += torch.bincount(y, minlength=VOCAB_SIZE)
-        dealt = torch.randint(0, SPLIT_HALF, (len(y), len(self.halves)), generator=self.generator, device=y.device)
-        for rep in range(len(self.halves)):
-            cell = dealt[:, rep] * VOCAB_SIZE + y
-            self.halves[rep, group].index_add_(0, cell, x)
-            self.half_counts[rep, group] += torch.bincount(cell, minlength=SPLIT_HALF * VOCAB_SIZE)
-        self.moments[0] += x.sum(dim=(0, 2)).double()
-        self.moments[1] += x.pow(2).sum(dim=(0, 2)).double()
-        self.seen += len(y) * x.shape[2]
-
-    def scale(self) -> Scale:
-        mean = self.moments[0] / self.seen
-        std = (self.moments[1] / self.seen - mean**2).clamp(min=FLOOR).sqrt()
-        return Scale(mean.float(), std.float())
-
-    def templates(self, scale: Scale) -> Templates:
-        return Templates(scale.means(self.sums, self.counts), self.counts.long())
-
-    def split(
-        self, scale: Scale, group: int | None
-    ) -> tuple[Float[Tensor, "r v c t"], Float[Tensor, "r v c t"], Bool[Tensor, "r v"]]:
-        """The two half-templates of every word and repeat in `group` (every dataset when None), and where both
-        halves hold a trial."""
-        halves = self.halves.sum(dim=1) if group is None else self.halves[:, group]
-        counts = self.half_counts.sum(dim=1) if group is None else self.half_counts[:, group]
-        means = scale.means(halves, counts)
-        return means[:, :VOCAB_SIZE], means[:, VOCAB_SIZE:], (counts[:, :VOCAB_SIZE] > 0) & (counts[:, VOCAB_SIZE:] > 0)
-
-
-@dataclass(frozen=True)
-class Reliability:
-    """Half-template correlations: each word's with its own other half, and its mean with the other words'."""
-
-    same: Float[Tensor, "r v"]
-    diff: Float[Tensor, "r v"]
-
-    @classmethod
-    def of(cls, a: Float[Tensor, "r v c t"], b: Float[Tensor, "r v c t"], valid: Bool[Tensor, "r v"]) -> "Reliability":
-        """NaN for a word a half of which holds no trial."""
-        first, second = Readout.standardised(a.flatten(2)), Readout.standardised(b.flatten(2))
-        corr = first @ second.transpose(1, 2)
-        pair = valid[:, :, None] & valid[:, None, :] & ~torch.eye(VOCAB_SIZE, dtype=torch.bool, device=a.device)
-        others = pair.sum(dim=2)
-        diff = (corr * pair).sum(dim=2) / others.clamp(min=1)
-        nan = torch.tensor(float("nan"), device=a.device)
-        return cls(
-            torch.where(valid, corr.diagonal(dim1=1, dim2=2), nan),
-            torch.where(valid & (others > 0), diff, nan),
-        )
-
-    def spearman_brown(self) -> Float[Tensor, " v"]:
-        """Each word's full-template reliability `2r / (1 + r)` from its mean half correlation."""
-        half = self.same.nanmean(dim=0)
-        return 2 * half / (1 + half)
-
-    def summary(self, counts: Int[Tensor, " v"]) -> str:
-        """Mean same / different correlation, the Spearman-Brown reliabilities and the trials per word."""
-        brown = self.spearman_brown()
-        held = counts[counts > 0].float()
-        return (
-            f"words={int((~brown.isnan()).sum())} trials/word min={int(held.min())} median={held.median():.0f} "
-            f"max={int(held.max())} same={self.same.nanmean():.4f} diff={self.diff.nanmean():.4f} "
-            f"SB mean={brown.nanmean():.4f} median={brown.nanmedian():.4f} min={brown[~brown.isnan()].min():.4f} "
-            f"max={brown[~brown.isnan()].max():.4f}"
-        )
 
 
 @dataclass(frozen=True)
@@ -269,14 +134,10 @@ class Readout:
     bias: Float[Tensor, "g v"]
     transform: Callable[[Float[Tensor, "b c t"]], Float[Tensor, "b d"]]
 
-    @staticmethod
-    def standardised(flat: Float[Tensor, "... d"]) -> Float[Tensor, "... d"]:
-        return nn.functional.normalize(flat - flat.mean(dim=-1, keepdim=True), dim=-1)
-
     @classmethod
     def correlation(cls, templates: Templates) -> "Readout":
         def transform(x: Float[Tensor, "b c t"]) -> Float[Tensor, "b d"]:
-            return cls.standardised(x.flatten(1))
+            return Templates.standardised(x.flatten(1))
 
         return cls.of(templates, transform, discriminant=False)
 
@@ -298,77 +159,6 @@ class Readout:
         """Every word's score per window of `x` from `group`'s templates; `ABSENT` where it has none."""
         scored = self.transform(x) @ self.means[group].T - self.bias[group]
         return scored.masked_fill(self.counts[group] == 0, ABSENT)
-
-
-@dataclass
-class Durations:
-    """Streamed per-word sums of log duration (onset gap to the next word of the sentence)."""
-
-    total: Float[Tensor, " v"] = field(default_factory=lambda: torch.zeros(VOCAB_SIZE, dtype=torch.float64))
-    counts: Float[Tensor, " v"] = field(default_factory=lambda: torch.zeros(VOCAB_SIZE, dtype=torch.float64))
-
-    def add(self, labels: Int[Tensor, " n"], log_gap: Float[Tensor, " n"]) -> None:
-        """Count in the words whose gap is known (a sentence's last word has none)."""
-        known = ~log_gap.isnan()
-        self.total.index_add_(0, labels[known], log_gap[known].double())
-        self.counts += torch.bincount(labels[known], minlength=VOCAB_SIZE)
-
-    def mean(self) -> Float[Tensor, " v"]:
-        return (self.total / self.counts.clamp(min=1)).float()
-
-
-@dataclass(frozen=True)
-class Rsa:
-    """A word-by-word distance matrix compared with another by Spearman correlation of their upper triangles."""
-
-    permutations: int = PERMUTATIONS
-    seed: int = 0
-
-    @staticmethod
-    def gap(value: Float[Tensor, " v"]) -> Float[Tensor, "v v"]:
-        """Absolute difference of a per-word scalar."""
-        return (value[:, None] - value[None, :]).abs()
-
-    @staticmethod
-    def phonetic(pronunciation: Pronunciation) -> Float[Tensor, "v v"]:
-        """Positions of the first phonemes at which two vocabulary words differ."""
-        spelled = pronunciation.phonemes(torch.from_numpy(Vocabulary.token(pd.Series(PRIMARY.words))))
-        return (spelled[:, None, :] != spelled[None, :, :]).sum(dim=-1).float()
-
-    @staticmethod
-    def semantic(vectors: Float[Tensor, "v d"]) -> Float[Tensor, "v v"]:
-        """Cosine distance of word vectors."""
-        unit = nn.functional.normalize(vectors, dim=-1)
-        return 1 - unit @ unit.T
-
-    @staticmethod
-    def ranks(values: Float[Tensor, " n"]) -> Float[Tensor, " n"]:
-        return torch.from_numpy(pd.Series(values.numpy()).rank().to_numpy(dtype=np.float32))
-
-    def correlate(
-        self, model: Float[Tensor, "v v"], target: Float[Tensor, "v v"], words: Bool[Tensor, " v"]
-    ) -> tuple[float, float, int]:
-        """Spearman r of the two matrices over pairs of `words`, its two-sided permutation p over word relabellings
-        of the model matrix, and the pairs."""
-        kept = torch.nonzero(words).flatten().cpu()
-        rows, cols = torch.triu_indices(len(kept), len(kept), offset=1)
-        sub = model.cpu()[kept][:, kept]
-        order = self.ranks(sub[rows, cols])
-        rank = torch.zeros(len(kept), len(kept))
-        rank[rows, cols] = order
-        rank = rank + rank.T
-        goal = self.ranks(target.cpu()[kept][:, kept][rows, cols])
-        goal = nn.functional.normalize(goal - goal.mean(), dim=0)
-
-        def pearson(vals: Float[Tensor, "... n"]) -> Float[Tensor, "..."]:
-            return nn.functional.normalize(vals - vals.mean(dim=-1, keepdim=True), dim=-1) @ goal
-
-        found = pearson(order)
-        generator = torch.Generator().manual_seed(self.seed)
-        perm = torch.rand(self.permutations, len(kept), generator=generator).argsort(dim=1)
-        null = pearson(rank[perm[:, rows], perm[:, cols]])
-        extreme = int((null.abs() >= found.abs()).sum())
-        return float(found), (1 + extreme) / (1 + self.permutations), len(rows)
 
 
 @dataclass(frozen=True)

@@ -11,7 +11,6 @@ form and whether the next word starts with a vowel.
     uv run python -m megspeech.evaluation.studies.cause m11xsp7hub6d2v3
 """
 
-import argparse
 import json
 import logging
 from collections.abc import Callable, Sequence
@@ -30,9 +29,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import PRIMARY, Vocabulary
-from megspeech.device import Device
-from megspeech.evaluation.studies.confusion import Scored
 from megspeech.evaluation.studies.perword import Attributes, Position, Scene
+from megspeech.evaluation.studies.scored import Scored
 
 LOG = logging.getLogger(__name__)
 
@@ -99,6 +97,21 @@ class Surprisal:
 
 
 @dataclass(frozen=True)
+class Variant:
+    """One CMUdict pronunciation of a spelling: its phones, each vowel carrying a stress digit."""
+
+    phones: list[str]
+
+    def rank(self) -> int:
+        """The strongest stress (`RANK`) on any of its vowels."""
+        return max((RANK[phone[-1]] for phone in self.phones if phone[-1] in RANK), default=0)
+
+    def sounds(self) -> tuple[str, ...]:
+        """Its phones as the forced alignment names them: lower case, no stress digit."""
+        return tuple(phone.rstrip("012").lower() for phone in self.phones)
+
+
+@dataclass(frozen=True)
 class Stress:
     """Lexical stress from CMUdict's pronunciations of each spelling."""
 
@@ -112,12 +125,11 @@ class Stress:
         """The stress rank (`RANK`) of the variant the alignment realised. Where several variants match (`the` as
         DH AH0 or DH AH1) or none does, a function word takes the least stressed (its reduced form, as connected
         speech has it) and a content word the most; NaN for a word CMUdict lacks."""
-        variants = self.variants.get(word.lower().replace("’", "'"), [])
+        variants = [Variant(spelled) for spelled in self.variants.get(word.lower().replace("’", "'"), [])]
         if not variants:
             return float("nan")
-        ranks = [max((RANK[phone[-1]] for phone in variant if phone[-1] in RANK), default=0) for variant in variants]
-        bare = [tuple(phone.rstrip("012").lower() for phone in variant) for variant in variants]
-        matched = [rank for rank, sounds in zip(ranks, bare, strict=True) if sounds == phones] or ranks
+        ranks = [variant.rank() for variant in variants]
+        matched = [variant.rank() for variant in variants if variant.sounds() == phones] or ranks
         return float(min(matched) if function else max(matched))
 
 
@@ -363,15 +375,10 @@ class Study:
 
     @classmethod
     def main(cls) -> None:  # devtools-ignore: test-mirror
-        parser = argparse.ArgumentParser(description=__doc__)
-        parser.add_argument("name", help="a blend under models/ whose metrics.json lists members with probs.pt")
+        parser = Scene.parser(__doc__)
         parser.add_argument("--lm", default="gpt2-large")
         parser.add_argument("--draws", type=int, default=DRAWS)
-        parser.add_argument("--device", default=Device.CPU)
-        args = parser.parse_args()
-        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-        root = DataRoot.from_config()
-        scene = Scene.of(root, args.name, torch.device(args.device))
+        root, args, scene = Scene.opened(parser)
         if scene.spoken is None:
             raise ValueError("the scene carries no spoken words")
         surprisal = Surprisal.load(root, args.lm)

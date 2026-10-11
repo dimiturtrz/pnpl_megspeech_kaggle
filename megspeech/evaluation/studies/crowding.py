@@ -27,6 +27,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+import numpy as np
 import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
@@ -36,6 +37,7 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.evaluation.metric.ruler import Graded, Ruler
 from megspeech.evaluation.scoring.probabilities import META, PROBS, Probabilities, Words
 from megspeech.evaluation.scoring.score import ADJUSTMENTS, MIN_NOVEL
+from megspeech.evaluation.studies.scored import Scored
 from megspeech.model.ensemble import Ensemble
 
 LOG = logging.getLogger(__name__)
@@ -72,9 +74,9 @@ class Rows:
 
     def halves(self, seed: int) -> Int[Tensor, " n"]:
         """Each word's half (0 or 1): `BLOCK`-word blocks, a seeded half of the blocks to each side."""
-        blocks = -(-len(self) // BLOCK)
+        blocks = -(-len(self.labels) // BLOCK)
         side = torch.randperm(blocks, generator=torch.Generator().manual_seed(seed)) % 2
-        return side.repeat_interleave(BLOCK)[: len(self)]
+        return side.repeat_interleave(BLOCK)[: len(self.labels)]
 
     @classmethod
     def mean(cls, words: Sequence[Words], keep: Bool[Tensor, " n"]) -> "Rows":
@@ -100,7 +102,7 @@ class Finish:
     def inclusion(self, domains: Sequence[Rows], log_prior: Float[Tensor, " v"]) -> Float[Tensor, " v"]:
         """Log of each class's add-one top-`TOP` rate over `domains`' words relative to the even share `TOP/VOCAB`,
         under this finish without its penalty."""
-        plain = replace(self, gamma=0.0, crowding=None)
+        plain = Finish(self.tau, mix=self.mix)
         top = torch.cat([plain.scores(rows, log_prior).topk(TOP, dim=1).indices.flatten() for rows in domains])
         words = sum(len(rows) for rows in domains)
         rate = (torch.bincount(top, minlength=VOCAB_SIZE).float() + 1) / (words + VOCAB_SIZE / TOP)
@@ -203,6 +205,79 @@ class Delta:
 
 
 @dataclass(frozen=True)
+class Saved:
+    """Every member's saved probabilities on one section; the first member's words are the reference."""
+
+    members: list[Probabilities]
+
+    @classmethod
+    def load(cls, directories: Sequence[Path], section: str) -> "Saved":
+        return cls([Probabilities.load(directory / PROBS, section) for directory in directories])
+
+    def lead(self, name: str) -> Words:
+        return self.members[0].domains[name]
+
+    def counted(self) -> list[str]:
+        """The domains with at least `MIN_NOVEL` unseen-span words."""
+        return [name for name in self.members[0].domains if int(self.lead(name).novel.sum()) >= MIN_NOVEL]
+
+    def words(self, name: str) -> list[Words]:
+        return [member.domains[name] for member in self.members]
+
+    def agreed(self, name: str) -> bool:
+        """Whether every member holds the same labels for `name`'s words."""
+        return all(torch.equal(words.labels, self.lead(name).labels) for words in self.words(name))
+
+    def domains(self) -> dict[str, Rows]:
+        """The counted domains' unseen-span words, members averaged."""
+        return {name: Rows.mean(self.words(name), self.lead(name).novel) for name in self.counted()}
+
+    def ids(self) -> dict[str, Int[Tensor, " k"]]:
+        """The counted domains' unseen-span words' rows in their split."""
+        return {name: self.lead(name).ids[self.lead(name).novel] for name in self.counted()}
+
+    def lone(self, masks: dict[str, Bool[Tensor, " n"]]) -> dict[str, Rows]:
+        """The `masks`' words of each domain with at least `MIN_NOVEL` of them, graded on the word head."""
+        return {
+            name: Rows.mean(self.words(name), mask).swapped()
+            for name, mask in masks.items()
+            if int(mask.sum()) >= MIN_NOVEL
+        }
+
+    def log_prior(self) -> Float[Tensor, " v"]:
+        return self.members[0].log_prior.float()
+
+
+@dataclass(frozen=True)
+class Finishes:
+    """The tau-only finish of each head, fit on validation, and the prior both subtract."""
+
+    context: Finish
+    word: Finish
+    log_prior: Float[Tensor, " v"]
+
+    @classmethod
+    def fit(cls, val: Saved) -> "Finishes":
+        log_prior, domains = val.log_prior(), val.domains()
+        baseline = Arm.all()[0]
+        swapped = {name: rows.swapped() for name, rows in domains.items()}
+        return cls(
+            baseline.fit(domains, log_prior, Ruler(k=TOP)), baseline.fit(swapped, log_prior, Ruler(k=TOP)), log_prior
+        )
+
+    def prior(self) -> Float[np.ndarray, " v"]:
+        return self.log_prior.exp().numpy()
+
+    def scored(self, test: dict[str, Rows]) -> tuple[Scored, Scored]:
+        """`test`'s words finished on the context head and on the word head, domains concatenated."""
+        labels = np.concatenate([rows.labels.numpy() for rows in test.values()])
+        domains = np.concatenate([np.full(len(rows.labels), name) for name, rows in test.items()])
+        context = np.concatenate([self.context.scores(rows, self.log_prior).numpy() for rows in test.values()])
+        word = np.concatenate([self.word.scores(rows.swapped(), self.log_prior).numpy() for rows in test.values()])
+        return Scored(labels, context, domains), Scored(labels, word, domains)
+
+
+@dataclass(frozen=True)
 class Section:
     """One saved section of every member: the novel words of the domains that count, the lone ones among them."""
 
@@ -212,17 +287,11 @@ class Section:
 
     @classmethod
     def load(cls, directories: Sequence[Path], section: str, lone: dict[str, Bool[Tensor, " n"]]) -> "Section":
-        saved = [Probabilities.load(directory / PROBS, section) for directory in directories]
-        names = [name for name, words in saved[0].domains.items() if int(words.novel.sum()) >= MIN_NOVEL]
-        for name in names:
-            if any(not torch.equal(member.domains[name].labels, saved[0].domains[name].labels) for member in saved):
+        saved = Saved.load(directories, section)
+        for name in saved.counted():
+            if not saved.agreed(name):
                 raise ValueError(f"members disagree on the words of {name} in {section}")
-        words = {name: [member.domains[name] for member in saved] for name in saved[0].domains}
-        domains = {name: Rows.mean(words[name], saved[0].domains[name].novel) for name in names}
-        alone = {
-            name: Rows.mean(words[name], mask).swapped() for name, mask in lone.items() if int(mask.sum()) >= MIN_NOVEL
-        }
-        return cls(domains, alone, saved[0].log_prior.float())
+        return cls(saved.domains(), saved.lone(lone), saved.log_prior())
 
 
 @dataclass(frozen=True)

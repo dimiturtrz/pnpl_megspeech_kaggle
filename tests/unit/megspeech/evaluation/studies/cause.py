@@ -17,9 +17,10 @@ from megspeech.evaluation.studies.cause import (
     Stress,
     Study,
     Surprisal,
+    Variant,
 )
-from megspeech.evaluation.studies.confusion import Scored
 from megspeech.evaluation.studies.perword import Attributes, Occurrences, Place, Position, Scene
+from megspeech.evaluation.studies.scored import Scored
 
 LM_VOCAB = 8
 WINDOW = 4
@@ -132,6 +133,16 @@ def test_stress_of() -> None:
     assert marks.of("a", ("ey",), function=True) == 2
     assert marks.of("a", ("zz",), function=True) == 0
     assert np.isnan(marks.of("zzz", (), function=True))
+
+
+def test_rank() -> None:
+    assert Variant(["DH", "AH0"]).rank() == 0
+    assert Variant(["AE2", "P", "AH1"]).rank() == 2
+    assert Variant(["S", "T"]).rank() == 0
+
+
+def test_sounds() -> None:
+    assert Variant(["DH", "IY0"]).sounds() == ("dh", "iy")
 
 
 def test_read(tmp_path: Path) -> None:
