@@ -37,7 +37,7 @@ from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.regularise.rightcut import RightCut, Whole
-from megspeech.training.sampling.curriculum import Annealed, Natural, Robust
+from megspeech.training.sampling.curriculum import Annealed, Natural, Robust, Schedule
 from megspeech.training.sampling.pairing import Pairing, Unpaired
 from megspeech.training.sampling.sampler import SamplerConfig
 from megspeech.training.timing_expert import TimingExpert
@@ -199,7 +199,7 @@ def test_rows() -> None:
     assert natural.rows(train) == train.capacity(natural.config.optim.batch, train.weight[train.index[:, 0]])
     annealed = trainer(RunConfig(optim=OptimConfig(epochs=3), sampler=SamplerConfig(curriculum=0.9)))
     epochs = range(3)
-    draws = (Annealed(0.9, Natural()).weights(train, epoch, 3) for epoch in epochs)
+    draws = (Annealed(0.9, Natural()).weights(Schedule(train, epoch, 3)) for epoch in epochs)
     assert annealed.rows(train) == max(train.capacity(annealed.config.optim.batch, draw) for draw in draws)
 
 

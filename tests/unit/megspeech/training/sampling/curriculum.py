@@ -15,8 +15,10 @@ from megspeech.training.sampling.curriculum import (
     Base,
     Curriculum,
     Natural,
+    Observation,
     Prioritised,
     Robust,
+    Schedule,
     Stratified,
     Uniform,
 )
@@ -34,19 +36,34 @@ def split(subject: list[int], weight: list[float]) -> Split:
 TRAIN = split([0, 0, 1, 2], [1.0, 3.0, 2.0, 5.0])
 
 
+@pytest.mark.parametrize(("epoch", "epochs", "progress"), [(0, 10, 0.0), (9, 10, 1.0), (3, 7, 0.5), (0, 1, 0.0)])
+def test_progress(epoch: int, epochs: int, progress: float) -> None:
+    assert Schedule(TRAIN, epoch, epochs).progress == progress
+
+
+def test_losses() -> None:
+    """Each span's labelled words' cross-entropy summed, and their count; ignored positions add neither."""
+    target = torch.tensor([[0, 1, IGNORE], [IGNORE, IGNORE, IGNORE]])
+    summed, counts = Observation(torch.tensor([0, 1]), torch.zeros(2, 3, 50), target).losses()
+    assert summed.tolist() == pytest.approx([2 * math.log(50), 0.0])
+    assert counts.tolist() == [2.0, 0.0]
+
+
 def test_natural_weights() -> None:
-    assert Natural().weights(TRAIN, 0, 10).tolist() == [1.0, 3.0, 2.0, 5.0]
+    assert Natural().weights(Schedule(TRAIN, 0, 10)).tolist() == [1.0, 3.0, 2.0, 5.0]
 
 
 def test_uniform_weights() -> None:
-    assert Uniform().weights(TRAIN, 0, 10).tolist() == [1.0] * 4
+    assert Uniform().weights(Schedule(TRAIN, 0, 10)).tolist() == [1.0] * 4
 
 
 def test_annealed_observe() -> None:
     """Annealing wraps its base: uniform spans keep their equal weights inside a subject, and observing reaches it."""
-    assert Annealed(0.9, Uniform()).weights(TRAIN, 9, 10)[:2].tolist() == pytest.approx([0.45, 0.45])
+    assert Annealed(0.9, Uniform()).weights(Schedule(TRAIN, 9, 10))[:2].tolist() == pytest.approx([0.45, 0.45])
     seen = prioritised()
-    Annealed(0.9, seen).observe(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
+    Annealed(0.9, seen).observe(
+        Observation(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
+    )
     assert seen.seen.tolist() == [1.0, 0.0, 0.0, 0.0]
 
 
@@ -58,7 +75,7 @@ def test_annealed_of() -> None:
 @pytest.mark.parametrize(("epoch", "deep"), [(0, 1 / 3), (9, 0.9), (3, 1 / 3 + (0.9 - 1 / 3) / 3)])
 def test_annealed_weights(epoch: int, deep: float) -> None:
     """Subject shares follow the schedule; inside the Deep subject spans keep their 1:3 ratio."""
-    weights = Annealed(0.9, Natural()).weights(TRAIN, epoch, 10)
+    weights = Annealed(0.9, Natural()).weights(Schedule(TRAIN, epoch, 10))
     shares = weights / weights.sum()
     assert float(shares[:2].sum()) == pytest.approx(deep)
     assert float(shares[2]) == pytest.approx((1 - deep) / 2)
@@ -67,7 +84,7 @@ def test_annealed_weights(epoch: int, deep: float) -> None:
 
 def test_annealed_weights_single_subject() -> None:
     lone = split([0, 0], [1.0, 3.0])
-    weights = Annealed(0.9, Natural()).weights(lone, 5, 10)
+    weights = Annealed(0.9, Natural()).weights(Schedule(lone, 5, 10))
     assert torch.allclose(weights / weights.sum(), torch.tensor([0.25, 0.75]))
 
 
@@ -95,11 +112,13 @@ def test_robust_of() -> None:
 
 def test_robust_observe() -> None:
     """Each labelled word's cross-entropy lands in its span's stratum; ignored positions add neither loss nor count."""
-    Natural().observe(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
-    Annealed(0.9, Natural()).observe(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
+    Natural().observe(Observation(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64)))
+    Annealed(0.9, Natural()).observe(
+        Observation(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
+    )
     made = robust([1, 0, 1])
     target = torch.tensor([[0, 1, IGNORE], [3, IGNORE, IGNORE]])
-    made.observe(torch.tensor([0, 2]), torch.zeros(2, 3, 50), target)
+    made.observe(Observation(torch.tensor([0, 2]), torch.zeros(2, 3, 50), target))
     assert made.counts.tolist() == [0.0, 3.0]
     assert made.sums.tolist() == pytest.approx([0.0, 3 * math.log(50)])
 
@@ -111,9 +130,9 @@ def test_robust_weights() -> None:
     made.sums += torch.tensor([4.0, 1.0])
     made.counts += torch.tensor([1.0, 1.0])
     expected = [1.6**2, 3.0, 2 * 1.6**2, 5.0]
-    assert made.weights(TRAIN, 1, 10).tolist() == pytest.approx(expected)
+    assert made.weights(Schedule(TRAIN, 1, 10)).tolist() == pytest.approx(expected)
     assert made.counts.tolist() == [0.0, 0.0]
-    assert made.weights(TRAIN, 2, 10).tolist() == pytest.approx(expected)
+    assert made.weights(Schedule(TRAIN, 2, 10)).tolist() == pytest.approx(expected)
 
 
 def prioritised(power: float = 1.0, visibility: float = 1.0, capped: list[bool] | None = None) -> Prioritised:
@@ -132,19 +151,19 @@ def test_prioritised_of() -> None:
 def test_prioritised_observe() -> None:
     """Draws are counted, difficulty moves halfway to each new loss, and a span with no labelled word keeps its own."""
     made = prioritised()
-    made.observe(torch.tensor([0, 1]), torch.zeros(2, 1, 50), torch.tensor([[0], [IGNORE]]))
+    made.observe(Observation(torch.tensor([0, 1]), torch.zeros(2, 1, 50), torch.tensor([[0], [IGNORE]])))
     assert made.seen.tolist() == [1.0, 1.0, 0.0, 0.0]
     assert made.difficulty.tolist() == pytest.approx([math.log(50), 0.0, 0.0, 0.0])
     logits = torch.zeros(1, 1, 50)
     logits[0, 0, 0] = 1e4
-    made.observe(torch.tensor([0]), logits, torch.tensor([[0]]))
+    made.observe(Observation(torch.tensor([0]), logits, torch.tensor([[0]])))
     assert made.difficulty[0].item() == pytest.approx(math.log(50) / 2)
 
 
 def test_prioritised_weights() -> None:
     made = prioritised(power=0.0)
-    made.observe(torch.tensor([0, 1]), torch.zeros(2, 1, 50), torch.zeros(2, 1, dtype=torch.int64))
-    weights = made.weights(TRAIN, 0, 10)
+    made.observe(Observation(torch.tensor([0, 1]), torch.zeros(2, 1, 50), torch.zeros(2, 1, dtype=torch.int64)))
+    weights = made.weights(Schedule(TRAIN, 0, 10))
     assert weights[:2].tolist() == pytest.approx([0.5, 1.5])
     assert weights[2:].tolist() == pytest.approx([2.0, 5.0])
 
@@ -155,25 +174,25 @@ def test_prioritised_weights_harder_beats_easier() -> None:
     made.difficulty = torch.tensor([1.0, 3.0, 0.0, 0.0])
     mean = (1.0 + 3.0 + 3.0 + 3.0) / 4
     expected = [1.0 / mean, 3.0 * 3.0 / mean, 2.0 * 3.0 / mean, 5.0 * 3.0 / mean]
-    assert made.weights(TRAIN, 0, 10).tolist() == pytest.approx(expected)
+    assert made.weights(Schedule(TRAIN, 0, 10)).tolist() == pytest.approx(expected)
 
 
 def test_prioritised_weights_nothing_observed_is_base() -> None:
-    assert prioritised(power=2.0, visibility=0.0).weights(TRAIN, 0, 10).tolist() == [1.0, 3.0, 2.0, 5.0]
+    assert prioritised(power=2.0, visibility=0.0).weights(Schedule(TRAIN, 0, 10)).tolist() == [1.0, 3.0, 2.0, 5.0]
 
 
 def test_prioritised_weights_floor() -> None:
     made = prioritised(power=1.0, visibility=3.0)
     made.seen = torch.tensor([100.0, 0.0, 0.0, 0.0])
     made.difficulty = torch.tensor([0.1, 5.0, 5.0, 5.0])
-    assert made.weights(TRAIN, 0, 10)[0].item() == pytest.approx(0.25)
+    assert made.weights(Schedule(TRAIN, 0, 10))[0].item() == pytest.approx(0.25)
 
 
 def test_prioritised_weights_capped() -> None:
     """A capped span never exceeds its base weight however hard; an uncapped one does."""
     made = prioritised(visibility=0.0, capped=[False, False, True, False])
     made.difficulty = torch.tensor([1.0, 9.0, 9.0, 1.0])
-    weights = made.weights(TRAIN, 0, 10)
+    weights = made.weights(Schedule(TRAIN, 0, 10))
     assert weights[1].item() > 3.0
     assert weights[2].item() == pytest.approx(2.0)
 
@@ -182,38 +201,38 @@ def test_prioritised_weights_negative_power_and_ceiling() -> None:
     """A negative power ranks the easier span above the harder; none rises past four times its base weight."""
     made = prioritised(power=-1.0, visibility=0.0)
     made.difficulty = torch.tensor([1.0, 3.0, 1.0, 1.0])
-    weights = made.weights(TRAIN, 0, 10)
+    weights = made.weights(Schedule(TRAIN, 0, 10))
     assert weights[0].item() > weights[1].item() / 3.0
     boosted = prioritised(power=5.0, visibility=0.0)
     boosted.difficulty = torch.tensor([1.0, 1.0, 1.0, 100.0])
-    assert boosted.weights(TRAIN, 0, 10)[3].item() == pytest.approx(20.0)
+    assert boosted.weights(Schedule(TRAIN, 0, 10))[3].item() == pytest.approx(20.0)
 
 
-def test_natural_summary() -> None:
-    assert Natural().summary(TRAIN, 0, 10, Natural().weights(TRAIN, 0, 10)) == {}
+def test_curriculum_summary() -> None:
+    assert Natural().summary(Schedule(TRAIN, 0, 10), Natural().weights(Schedule(TRAIN, 0, 10))) == {}
 
 
 def test_annealed_summary() -> None:
     made = Annealed(0.9, Natural())
-    assert made.summary(TRAIN, 0, 10, made.weights(TRAIN, 0, 10)) == {}
+    assert made.summary(Schedule(TRAIN, 0, 10), made.weights(Schedule(TRAIN, 0, 10))) == {}
 
 
 def test_robust_summary() -> None:
     made = robust([0, 1, 0, 1])
-    assert made.summary(TRAIN, 0, 10, made.weights(TRAIN, 0, 10)) == {}
+    assert made.summary(Schedule(TRAIN, 0, 10), made.weights(Schedule(TRAIN, 0, 10))) == {}
 
 
 def test_prioritised_summary() -> None:
     """A prioritised one reports the ratio quantiles, clamp shares and ESS."""
     made = prioritised(power=1.0, visibility=0.0)
-    flat = made.summary(TRAIN, 0, 10, made.weights(TRAIN, 0, 10))
+    flat = made.summary(Schedule(TRAIN, 0, 10), made.weights(Schedule(TRAIN, 0, 10)))
     assert flat["ratio_p50"] == pytest.approx(1.0)
     assert flat["at_floor"] == 0.0
     assert flat["ess"] == pytest.approx((11.0**2 / (1 + 9 + 4 + 25)) / 4)
     made.seen = torch.tensor([100.0, 0.0, 0.0, 0.0])
     tilted = prioritised(power=0.0, visibility=3.0)
     tilted.seen = made.seen
-    out = tilted.summary(TRAIN, 0, 10, tilted.weights(TRAIN, 0, 10))
+    out = tilted.summary(Schedule(TRAIN, 0, 10), tilted.weights(Schedule(TRAIN, 0, 10)))
     assert out["at_floor"] == pytest.approx(0.25)
     assert out["at_ceiling"] == 0.0
     assert out["ratio_p95"] == pytest.approx(1.0)
@@ -222,23 +241,23 @@ def test_prioritised_summary() -> None:
 def test_stratified_of() -> None:
     made = Stratified.of(0.5, TRAIN_STRATA)
     assert made.alpha == 0.5
-    assert made.strata.tolist() == Strata.sourced(TRAIN_STRATA).tolist()
+    assert made.strata.tolist() == Strata(TRAIN_STRATA).sourced().tolist()
 
 
 def test_stratified_weights() -> None:
     """At alpha 1 each stratum's spans sum to the same total whatever its size; at 0 every span draws alike."""
     made = Stratified.of(1.0, TRAIN_STRATA)
-    assert made.strata.tolist() == Strata.sourced(TRAIN_STRATA).tolist()
-    weights = made.weights(TRAIN_STRATA, 0, 10)
+    assert made.strata.tolist() == Strata(TRAIN_STRATA).sourced().tolist()
+    weights = made.weights(Schedule(TRAIN_STRATA, 0, 10))
     totals = torch.zeros(int(made.strata.max()) + 1).index_add_(0, made.strata, weights)
     assert totals.tolist() == pytest.approx([1.0] * len(totals))
-    assert Stratified.of(0.0, TRAIN_STRATA).weights(TRAIN_STRATA, 0, 10).tolist() == [1.0] * 3
+    assert Stratified.of(0.0, TRAIN_STRATA).weights(Schedule(TRAIN_STRATA, 0, 10)).tolist() == [1.0] * 3
 
 
 def test_stratified_summary() -> None:
     made = Stratified.of(1.0, TRAIN_STRATA)
-    made.observe(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
-    assert made.summary(TRAIN_STRATA, 0, 10, made.weights(TRAIN_STRATA, 0, 10)) == {}
+    made.observe(Observation(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64)))
+    assert made.summary(Schedule(TRAIN_STRATA, 0, 10), made.weights(Schedule(TRAIN_STRATA, 0, 10))) == {}
 
 
 def test_base_of() -> None:
@@ -247,12 +266,12 @@ def test_base_of() -> None:
     stratified = Base.STRATIFIED.of(TRAIN_STRATA, 0.5)
     assert isinstance(stratified, Stratified)
     assert stratified.alpha == 0.5
-    assert stratified.strata.tolist() == Strata.sourced(TRAIN_STRATA).tolist()
+    assert stratified.strata.tolist() == Strata(TRAIN_STRATA).sourced().tolist()
 
 
 def test_uniform_summary() -> None:
-    Uniform().observe(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
-    assert Uniform().summary(TRAIN, 0, 10, Uniform().weights(TRAIN, 0, 10)) == {}
+    Uniform().observe(Observation(torch.tensor([0]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64)))
+    assert Uniform().summary(Schedule(TRAIN, 0, 10), Uniform().weights(Schedule(TRAIN, 0, 10))) == {}
 
 
 def test_robust_and_prioritised_both_observe() -> None:
@@ -260,11 +279,11 @@ def test_robust_and_prioritised_both_observe() -> None:
     inner = robust([0, 1, 0, 1])
     outer = Prioritised.of(inner, TRAIN, 1.0, 1.0)
     assert isinstance(outer, Prioritised)
-    outer.observe(torch.tensor([0, 1]), torch.zeros(2, 1, 50), torch.zeros(2, 1, dtype=torch.int64))
+    outer.observe(Observation(torch.tensor([0, 1]), torch.zeros(2, 1, 50), torch.zeros(2, 1, dtype=torch.int64)))
     assert outer.seen.tolist() == [1.0, 1.0, 0.0, 0.0]
     assert inner.counts.tolist() == [1.0, 1.0]
-    assert outer.weights(TRAIN, 1, 10).shape == (4,)
-    assert outer.summary(TRAIN, 1, 10, outer.weights(TRAIN, 1, 10))["ess"] > 0
+    assert outer.weights(Schedule(TRAIN, 1, 10)).shape == (4,)
+    assert outer.summary(Schedule(TRAIN, 1, 10), outer.weights(Schedule(TRAIN, 1, 10)))["ess"] > 0
 
 
 TRAIN_STRATA = replace(SPANNED, source=torch.tensor([0, 0, 0, 1, 1, 1]))
@@ -302,21 +321,23 @@ def test_balanced_labels() -> None:
 def test_balanced_weights() -> None:
     """The base's weights times each span's rarity: the rare word's span draws most."""
     made = balanced(0.5)
-    weights = made.weights(LABELLED, 0, 10)
-    assert torch.equal(weights, Natural().weights(LABELLED, 0, 10) * made.rarity)
+    weights = made.weights(Schedule(LABELLED, 0, 10))
+    assert torch.equal(weights, Natural().weights(Schedule(LABELLED, 0, 10)) * made.rarity)
     assert int(weights.argmax()) == 2
 
 
 def test_balanced_observe() -> None:
     base = prioritised(power=1.0, visibility=0.0)
-    balanced(1.0, base).observe(torch.tensor([3]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
+    balanced(1.0, base).observe(
+        Observation(torch.tensor([3]), torch.zeros(1, 1, 50), torch.zeros(1, 1, dtype=torch.int64))
+    )
     assert base.seen.tolist() == [0.0, 0.0, 0.0, 1.0]
 
 
 def test_balanced_summary() -> None:
     """The rare span's share of the draw rises above its share of the base."""
     made = balanced(1.0)
-    out = made.summary(LABELLED, 0, 10, made.weights(LABELLED, 0, 10))
+    out = made.summary(Schedule(LABELLED, 0, 10), made.weights(Schedule(LABELLED, 0, 10)))
     assert out["rare_share_base"] == pytest.approx(0.25)
     assert out["rare_share"] > out["rare_share_base"]
 

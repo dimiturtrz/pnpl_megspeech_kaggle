@@ -49,20 +49,24 @@ class SamplerConfig:
     draw first and the corpus is rotated through; 0 turns it off; composes with `robust`."""
 
 
+@dataclass(frozen=True)
 class Sampler:
-    """A base distribution (`SamplerConfig.base`) under an ordered chain of modifiers: balanced by word rarity,
-    annealed, then tilted by stratum (`robust`), then by span (`priority`, `visibility`). Each wraps the one before
-    and forwards what training observes to it, so the loss-driven tilts compose."""
+    """A base distribution (`SamplerConfig.base`) under an ordered chain of modifiers, over the spans of `train`:
+    balanced by word rarity, annealed, then tilted by stratum (`robust`), then by span (`priority`, `visibility`).
+    Each wraps the one before and forwards what training observes to it, so the loss-driven tilts compose."""
 
-    @staticmethod
-    def scheduled(config: SamplerConfig, train: Split) -> Curriculum:
+    config: SamplerConfig
+    train: Split
+
+    def scheduled(self) -> Curriculum:
         """The chain's loss-free head, the base balanced by `balance` then annealed by `curriculum`: what sizes a
         batch's word rows."""
+        config, train = self.config, self.train
         balanced = Balanced.of(config.base.of(train, config.alpha), train, config.balance)
         return Annealed.of(config.curriculum, balanced)
 
-    @staticmethod
-    def of(config: SamplerConfig, train: Split) -> Curriculum:
-        """The whole chain over `train`: `scheduled`, then `robust`, then `priority` and `visibility`."""
-        robust = Robust.of(Sampler.scheduled(config, train), train, config.robust)
+    def curriculum(self) -> Curriculum:
+        """The whole chain: `scheduled`, then `robust`, then `priority` and `visibility`."""
+        config, train = self.config, self.train
+        robust = Robust.of(self.scheduled(), train, config.robust)
         return Prioritised.of(robust, train, config.priority, config.visibility, train.reads())

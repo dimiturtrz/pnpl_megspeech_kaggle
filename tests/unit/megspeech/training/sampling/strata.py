@@ -19,9 +19,9 @@ SPANNED = Split.of(
 
 def test_stratify() -> None:
     """Subject, then length tercile, then rate tercile; a second subject's strata sit past the first's."""
-    assert Strata.stratify(SPANNED).tolist() == [8, 0, 4]
+    assert Strata(SPANNED).stratify().tolist() == [8, 0, 4]
     other = replace(SPANNED, subject=torch.ones(6, dtype=torch.int64))
-    assert Strata.stratify(other).tolist() == [17, 9, 13]
+    assert Strata(other).stratify().tolist() == [17, 9, 13]
 
 
 def test_binned() -> None:
@@ -31,8 +31,8 @@ def test_binned() -> None:
 
 def test_strata_sourced() -> None:
     """Spans of one stratum split by source, numbered from 0; an unknown source leaves the strata as `stratify`."""
-    assert Strata.sourced(SPANNED).tolist() == [8, 0, 4]
+    assert Strata(SPANNED).sourced().tolist() == [8, 0, 4]
     sourced = replace(SPANNED, source=torch.tensor([1, 0, 0, 0, 0, 0]))
-    assert Strata.sourced(sourced).tolist() == [2, 0, 1]
+    assert Strata(sourced).sourced().tolist() == [2, 0, 1]
     split_apart = replace(SPANNED, source=torch.tensor([0, 0, 0, 0, 1, 1]))
-    assert Strata.sourced(split_apart).tolist() == [1, 0, 2]
+    assert Strata(split_apart).sourced().tolist() == [1, 0, 2]

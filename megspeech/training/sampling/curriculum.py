@@ -2,9 +2,10 @@
 stratum) that modifiers wrap, each forwarding what training observes to what it wraps: annealed toward the Deep
 subject, tilted toward the strata training fits worst, prioritised span by span by how rarely drawn and how hard."""
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol
+from typing import override
 
 import torch
 from jaxtyping import Bool, Float, Int
@@ -27,52 +28,83 @@ QUARTILE = 0.25
 """Share of the labels training holds, rarest first, whose spans `Balanced` reports the draw's share on."""
 
 
-class Curriculum(Protocol):
-    def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
-        """Each span's draw weight in `epoch` of `epochs`."""
-        ...
+@dataclass(frozen=True)
+class Schedule:
+    """Where training's draw stands: `epoch` of `epochs`, over the spans of `train`."""
 
-    def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
-        """Training's context-head `logits` on the words of `spans`, for a curriculum that draws by its loss."""
-        ...
+    train: Split
+    epoch: int
+    epochs: int
 
-    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
-        """How `weights`, this epoch's draw, sit against the curriculum's own: empty where nothing tilts them."""
-        ...
+    @property
+    def progress(self) -> float:
+        """How far through training `epoch` sits: 0 at the first, 1 at the last."""
+        return self.epoch / max(self.epochs - 1, 1)
 
 
 @dataclass(frozen=True)
-class Uniform:
+class Observation:
+    """Training's context-head `logits` on the words of `spans`, against their `target` labels."""
+
+    spans: Int[Tensor, " b"]
+    logits: Float[Tensor, "b w v"]
+    target: Int[Tensor, "b w"]
+
+    def losses(self) -> tuple[Float[Tensor, " b"], Float[Tensor, " b"]]:
+        """Each span's summed cross-entropy over its labelled words, and their count, without a host sync."""
+        words = functional.cross_entropy(
+            self.logits.detach().flatten(0, 1).float(), self.target.flatten(), ignore_index=IGNORE, reduction="none"
+        )
+        return words.view_as(self.target).sum(dim=1), (self.target != IGNORE).sum(dim=1).float()
+
+
+class Curriculum(ABC):
+    """A draw over training's spans: each span's weight at each point of the schedule, steered by the loss training
+    observes where the curriculum draws by it, and reported against the curriculum's own where something tilts it."""
+
+    @abstractmethod
+    def weights(self, at: Schedule) -> Float[Tensor, " g"]:
+        """Each span's draw weight `at` this point of the schedule."""
+
+    @abstractmethod
+    def observe(self, observed: Observation) -> None:
+        """Training's loss on the spans it just drew, for a curriculum that draws by it."""
+
+    def summary(self, at: Schedule, weights: Float[Tensor, " g"]) -> dict[str, float]:
+        """How `weights`, this epoch's draw, sit against the curriculum's own: empty where nothing tilts them."""
+        return {}
+
+
+class Fixed(Curriculum):
+    """A base draw no loss steers: what training observes goes nowhere."""
+
+    @override
+    def observe(self, observed: Observation) -> None:
+        """Nothing: the draw ignores the loss."""
+
+
+@dataclass(frozen=True)
+class Uniform(Fixed):
     """Every span at weight 1, whichever run or subject heard it."""
 
-    def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
-        return torch.ones(len(train.index), device=train.index.device)
-
-    def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
-        """Nothing: the draw ignores the loss."""
-
-    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
-        """Nothing to report: the draw is not tilted by a loss."""
-        return {}
+    @override
+    def weights(self, at: Schedule) -> Float[Tensor, " g"]:
+        index = at.train.index
+        return torch.ones(len(index), device=index.device)
 
 
 @dataclass(frozen=True)
-class Natural:
+class Natural(Fixed):
     """Every span at its own weight, whichever subject heard it: the mix the corpus holds."""
 
-    def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
+    @override
+    def weights(self, at: Schedule) -> Float[Tensor, " g"]:
+        train = at.train
         return train.weight[train.index[:, 0]]
-
-    def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
-        """Nothing: the draw ignores the loss."""
-
-    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
-        """Nothing to report: the draw is not tilted by a loss."""
-        return {}
 
 
 @dataclass(frozen=True)
-class Annealed:
+class Annealed(Curriculum):
     """Subjects drawn equally at the first epoch, the Deep subject's share then rising linearly to `share` at the
     last; the others split the rest equally, and within a subject each span keeps its own weight.
 
@@ -88,27 +120,26 @@ class Annealed:
         """`base` annealed toward `share`; `base` itself at 0."""
         return cls(share, base) if share else base
 
-    def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
-        weight, subject = self.base.weights(train, epoch, epochs), train.subject[train.index[:, 0]]
+    @override
+    def observe(self, observed: Observation) -> None:
+        """Forwarded to `base`: the schedule ignores the loss."""
+        self.base.observe(observed)
+
+    @override
+    def weights(self, at: Schedule) -> Float[Tensor, " g"]:
+        train = at.train
+        weight, subject = self.base.weights(at), train.subject[train.index[:, 0]]
         present, which = torch.unique(subject, return_inverse=True)
         totals = torch.zeros(len(present), dtype=weight.dtype, device=weight.device).index_add_(0, which, weight)
-        progress = epoch / max(epochs - 1, 1)
+        progress = at.progress
         deep = (1 - progress) / len(present) + progress * self.share
         others = (1 - deep) / max(len(present) - 1, 1)
         shares = torch.where(present == DEEP, deep, others)
         return weight / totals[which] * shares[which]
 
-    def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
-        """Forwarded to `base`: the schedule ignores the loss."""
-        self.base.observe(spans, logits, target)
-
-    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
-        """Nothing to report: the draw is not tilted by a loss."""
-        return {}
-
 
 @dataclass(frozen=True)
-class Stratified:
+class Stratified(Fixed):
     """Each span at `count ** -alpha` of its stratum's span count (`Strata.sourced`: source, subject, span length and
     word rate), so at 1 every stratum draws equally whatever its size and at 0 every span draws alike: balanced
     data rather than a reshaped objective, as inverse-frequency sampling of rare groups (Sagawa et al. 2020)."""
@@ -119,22 +150,16 @@ class Stratified:
     @classmethod
     def of(cls, alpha: float, train: Split) -> "Stratified":
         """The strata of `train` at exponent `alpha`."""
-        return cls(alpha, Strata.sourced(train))
+        return cls(alpha, Strata(train).sourced())
 
-    def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
+    @override
+    def weights(self, at: Schedule) -> Float[Tensor, " g"]:
         counts = torch.bincount(self.strata).float()
         return counts[self.strata].pow(-self.alpha)
 
-    def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
-        """Nothing: the draw ignores the loss."""
-
-    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
-        """Nothing to report: the draw is not tilted by a loss."""
-        return {}
-
 
 @dataclass(frozen=True)
-class Balanced:
+class Balanced(Curriculum):
     """`base`'s draw tilted toward spans of rare target words: each span's weight times the mean, over its labelled
     words, of `share ** -power` for each word's label's share of training's labelled words (normalised to a mean of 1
     over those words; a span with none keeps 1). Rare words are seen more often from balanced data, not a reweighted
@@ -169,17 +194,19 @@ class Balanced:
         valid = (train.index != PAD) & (labels != IGNORE)
         return torch.where(valid, labels, 0), valid
 
-    def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
-        return self.base.weights(train, epoch, epochs) * self.rarity
-
-    def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
+    @override
+    def observe(self, observed: Observation) -> None:
         """Forwarded to `base`: the tilt ignores the loss."""
-        self.base.observe(spans, logits, target)
+        self.base.observe(observed)
 
-    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
+    @override
+    def weights(self, at: Schedule) -> Float[Tensor, " g"]:
+        return self.base.weights(at) * self.rarity
+
+    @override
+    def summary(self, at: Schedule, weights: Float[Tensor, " g"]) -> dict[str, float]:
         """The draw's share on spans holding a word of the rarest `QUARTILE` of labels, under `weights` and `base`'s."""
-        base = self.base.weights(train, epoch, epochs)
-        return {"rare_share": self.share(weights), "rare_share_base": self.share(base)}
+        return {"rare_share": self.share(weights), "rare_share_base": self.share(self.base.weights(at))}
 
     def share(self, weights: Float[Tensor, " g"]) -> float:
         """`weights`' share on spans holding a word of the rarest `QUARTILE` of labels."""
@@ -204,11 +231,12 @@ class Base(StrEnum):
 
 
 @dataclass
-class Robust:
+class Robust(Curriculum):
     """`base`'s draw tilted toward the strata training fits worst: each stratum's spans weighted by its mean word loss
     over the last epoch against every word's, to the `power`, never below `base`'s own weight (group DRO, Sagawa et
     al. 2020, as a sampler rather than a loss: balanced data, not a reshaped objective). A stratum is a subject, a
     span-length bin and a word-rate bin (`stratify`); the loss is training's, so validation never steers the draw.
+    The stratum tilts go unreported: they are already logged by their effect on the loss.
     """
 
     base: Curriculum
@@ -223,21 +251,21 @@ class Robust:
         """`base` tilted at `power` over `train`'s strata; `base` itself at 0."""
         if not power:
             return base
-        strata = Strata.stratify(train)
+        strata = Strata(train).stratify()
         ones = torch.ones(int(strata.max()) + 1, device=strata.device)
         return cls(base, strata, power, ones, torch.zeros_like(ones), torch.zeros_like(ones))
 
-    def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
+    @override
+    def observe(self, observed: Observation) -> None:
         """Each labelled word's cross-entropy summed into its span's stratum, without a host sync, and `base` told."""
-        self.base.observe(spans, logits, target)
-        words = functional.cross_entropy(
-            logits.detach().flatten(0, 1).float(), target.flatten(), ignore_index=IGNORE, reduction="none"
-        )
-        stratum = self.strata[spans]
-        self.sums.index_add_(0, stratum, words.view_as(target).sum(dim=1))
-        self.counts.index_add_(0, stratum, (target != IGNORE).sum(dim=1).float())
+        self.base.observe(observed)
+        summed, counts = observed.losses()
+        stratum = self.strata[observed.spans]
+        self.sums.index_add_(0, stratum, summed)
+        self.counts.index_add_(0, stratum, counts)
 
-    def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
+    @override
+    def weights(self, at: Schedule) -> Float[Tensor, " g"]:
         """`base`'s weights times each span's stratum tilt, refreshed from the losses observed since the last draw;
         a stratum unseen since keeps its tilt."""
         mean = self.sums / self.counts.clamp(min=1)
@@ -245,15 +273,11 @@ class Robust:
         self.tilt = torch.where(self.counts > 0, (mean / overall).clamp(min=1).pow(self.power), self.tilt)
         self.sums.zero_()
         self.counts.zero_()
-        return self.base.weights(train, epoch, epochs) * self.tilt[self.strata]
-
-    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
-        """Nothing to report: the stratum tilts are already logged by their effect on the loss."""
-        return {}
+        return self.base.weights(at) * self.tilt[self.strata]
 
 
 @dataclass
-class Prioritised:
+class Prioritised(Curriculum):
     """`base`'s draw reweighted span by span: `(1 + seen) ** -visibility` for how often training has drawn it, times
     its difficulty (the EMA of its mean word cross-entropy) over the mean difficulty, to the `power`; never below
     `FLOOR` nor above `CEILING` times its `base` weight (a negative `power` is self-paced: it down-weights the
@@ -279,23 +303,23 @@ class Prioritised:
         zeros = torch.zeros(train.index.shape[0], device=train.index.device)
         return cls(base, power, visibility, zeros, zeros.clone(), zeros.bool() if capped is None else capped)
 
-    def observe(self, spans: Int[Tensor, " b"], logits: Float[Tensor, "b w v"], target: Int[Tensor, "b w"]) -> None:
+    @override
+    def observe(self, observed: Observation) -> None:
         """Each drawn span counted, and its difficulty moved halfway to this batch's mean labelled-word loss, without a
         host sync; a span with no labelled word keeps its difficulty. `base` is told too."""
-        self.base.observe(spans, logits, target)
-        words = functional.cross_entropy(
-            logits.detach().flatten(0, 1).float(), target.flatten(), ignore_index=IGNORE, reduction="none"
-        )
-        counts = (target != IGNORE).sum(dim=1).float()
-        loss = words.view_as(target).sum(dim=1) / counts.clamp(min=1)
+        self.base.observe(observed)
+        summed, counts = observed.losses()
+        loss = summed / counts.clamp(min=1)
+        spans = observed.spans
         before = self.difficulty[spans]
         moved = torch.where(before > 0, (before + loss) / 2, loss)
         self.difficulty[spans] = torch.where(counts > 0, moved, before)
         self.seen.index_add_(0, spans, torch.ones_like(loss))
 
-    def weights(self, train: Split, epoch: int, epochs: int) -> Float[Tensor, " g"]:
+    @override
+    def weights(self, at: Schedule) -> Float[Tensor, " g"]:
         """`base`'s weights scaled by each span's visibility and difficulty, floored and capped against them."""
-        base = self.base.weights(train, epoch, epochs)
+        base = self.base.weights(at)
         filled = torch.where(self.difficulty > 0, self.difficulty, self.difficulty.max())
         mean = filled.mean()
         relative = torch.where(mean > 0, filled / mean.clamp(min=torch.finfo(mean.dtype).tiny), torch.ones_like(filled))
@@ -303,10 +327,11 @@ class Prioritised:
         bounded = torch.minimum(torch.maximum(scaled, FLOOR * base), CEILING * base)
         return torch.where(self.capped, torch.minimum(bounded, base), bounded)
 
-    def summary(self, train: Split, epoch: int, epochs: int, weights: Float[Tensor, " g"]) -> dict[str, float]:
+    @override
+    def summary(self, at: Schedule, weights: Float[Tensor, " g"]) -> dict[str, float]:
         """`weights` over `base`'s: the 5th, 50th and 95th percentile of the ratio, the share of spans on `FLOOR` and on
         `CEILING` (a tilt saturating its clamps), and the effective sample size over the span count."""
-        ratio = weights / self.base.weights(train, epoch, epochs)
+        ratio = weights / self.base.weights(at)
         low, mid, high = torch.quantile(ratio, torch.tensor([0.05, 0.5, 0.95], device=ratio.device)).tolist()
         total = weights.double()
         return {

@@ -48,7 +48,7 @@ from megspeech.training.regularise.bgmix import BGMix, Untouched
 from megspeech.training.regularise.noise import SAMPLES
 from megspeech.training.regularise.regional import Regional
 from megspeech.training.regularise.rightcut import RightCut, Whole
-from megspeech.training.sampling.curriculum import Curriculum, Natural
+from megspeech.training.sampling.curriculum import Curriculum, Natural, Observation, Schedule
 from megspeech.training.sampling.pairing import Pairing, Unpaired
 from megspeech.training.sampling.sampler import Sampler
 from megspeech.training.teacher import Teacher, Untaught
@@ -221,7 +221,7 @@ class Trainer:
                 [term.loss(head, out, batch.target(term.labels(train)), inside) for term, head, out in parts]
             )
             value = losses.sum()
-        state.curriculum.observe(spans, outputs[0], batch.target(train.y))
+        state.curriculum.observe(Observation(spans, outputs[0], batch.target(train.y)))
         state.optimizer.zero_grad(set_to_none=True)
         value.backward()
         state.grads.record(nn.utils.clip_grad_norm_(state.model.parameters(), self.config.optim.clip))
@@ -251,7 +251,7 @@ class Trainer:
             model.readouts(),
             ema,
             (anchor, schedule, ema, ramp),
-            Sampler.of(self.config.sampler, train),
+            Sampler(self.config.sampler, train).curriculum(),
             BGMix.of(train, self.config.augment.bgmix, self.config.augment.bgmix_key),
             GroupAverage.of(train, self.config.augment.average, self.config.augment.average_chance),
             GradNorms(tuple(net.encoder())),
@@ -261,9 +261,9 @@ class Trainer:
     def rows(self, train: Split) -> int:
         """Word rows for one batch at the curriculum's draw weights in whichever epoch draws the most words."""
         optim = self.config.optim
-        curriculum = Sampler.scheduled(self.config.sampler, train)
-        epochs = range(optim.epochs)
-        return max(train.capacity(optim.batch, curriculum.weights(train, epoch, optim.epochs)) for epoch in epochs)
+        curriculum = Sampler(self.config.sampler, train).scheduled()
+        schedule = (Schedule(train, epoch, optim.epochs) for epoch in range(optim.epochs))
+        return max(train.capacity(optim.batch, curriculum.weights(at)) for at in schedule)
 
     @staticmethod
     def auxiliary_state(model: nn.Module) -> dict[str, Tensor]:
@@ -287,8 +287,9 @@ class Trainer:
         telemetry = Telemetry.of(self.evaluator, self.config.telemetry, train, validation)
         for epoch in range(optim.epochs):
             model.train()
-            weights = curriculum.weights(train, epoch, optim.epochs)
-            if summary := curriculum.summary(train, epoch, optim.epochs, weights):
+            at = Schedule(train, epoch, optim.epochs)
+            weights = curriculum.weights(at)
+            if summary := curriculum.summary(at, weights):
                 LOG.info("epoch %d draw weights against base %s", epoch, summary)
             draws = torch.multinomial(weights, per_epoch * optim.batch, replacement=True)
             draws = self.pairing.drawn(draws, weights, optim.batch)
