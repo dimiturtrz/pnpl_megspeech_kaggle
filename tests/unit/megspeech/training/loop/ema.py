@@ -1,12 +1,34 @@
 import torch
 from torch import nn
 
-from megspeech.training.loop.ema import Ema
+from megspeech.training.loop.ema import Ema, Unaveraged
 
 
 def model() -> nn.Module:
     torch.manual_seed(0)
     return nn.Linear(3, 2)
+
+
+def test_hook() -> None:
+    """Decay 0 holds no shadow: its average is the model itself."""
+    net = model()
+    assert type(Ema.hook(net, 0.0)) is Unaveraged
+    averaged = Ema.hook(net, 0.9)
+    assert isinstance(averaged, Ema)
+    assert averaged.decay == 0.9
+
+
+def test_unaveraged_step() -> None:
+    net = model()
+    own = [p.detach().clone() for p in net.parameters()]
+    Unaveraged().step(net, 1.0)
+    assert all(torch.equal(p, o) for p, o in zip(net.parameters(), own, strict=True))
+
+
+def test_unaveraged_applied() -> None:
+    net = model()
+    with Unaveraged().applied(net) as inside:
+        assert inside is net
 
 
 def test_of() -> None:
@@ -30,7 +52,7 @@ def test_step() -> None:
     assert all(torch.equal(s, p) for s, p in zip(exact.shadow, net.parameters(), strict=True))
 
 
-def test_applied() -> None:
+def test_ema_applied() -> None:
     net = model()
     ema = Ema.of(net, 0.5)
     own = [p.detach().clone() for p in net.parameters()]

@@ -4,6 +4,7 @@ embedding aligned, its word classified, its leading phonemes classified."""
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from functools import cache
 from typing import override
 
 import pandas as pd
@@ -49,7 +50,10 @@ class Auxiliary(ABC):
     @staticmethod
     def of(optim: OptimConfig, root: DataRoot, device: torch.device, words: pd.DataFrame) -> "Auxiliary":
         """Nothing when every weight is 0, so no table is read; otherwise the terms of the nonzero weights, the speech
-        term's targets those of the training `words` (`Corpus.positions`)."""
+        term's targets those of the training `words` (`Corpus.positions`). A table several terms read is loaded once
+        and shared, so the device holds one copy."""
+        lexicon = cache(lambda: Lexicon.load(Lexicon.path(root)).to(device))
+        loudness = cache(lambda: Speech.gather(Loudness.directory(root), words).to(device))
         builders: tuple[tuple[float, Callable[[], AuxiliaryTerm]], ...] = (
             (
                 optim.speech,
@@ -61,8 +65,8 @@ class Auxiliary(ABC):
                     softmax=optim.speech_softmax,
                 ),
             ),
-            (optim.semantic, lambda: SemanticTerm(optim.semantic, Lexicon.load(Lexicon.path(root)).to(device))),
-            (optim.lexical, lambda: LexicalTerm(optim.lexical, Lexicon.load(Lexicon.path(root)).to(device))),
+            (optim.semantic, lambda: SemanticTerm(optim.semantic, lexicon())),
+            (optim.lexical, lambda: LexicalTerm(optim.lexical, lexicon())),
             (
                 optim.phonetic,
                 lambda: PhoneticTerm(
@@ -81,12 +85,9 @@ class Auxiliary(ABC):
             (optim.prev_word, lambda: PreviousWordTerm(weight=optim.prev_word)),
             (optim.adversary, lambda: TimingTerm.of(1.0, words, device)),
             (optim.instance, lambda: InstanceTerm.of(optim.instance, words, device, apart=optim.instance_apart)),
-            (optim.window, lambda: WindowTerm(optim.window, Lexicon.load(Lexicon.path(root)).to(device))),
-            (
-                optim.acoustic,
-                lambda: AcousticTerm(optim.acoustic, Speech.gather(Loudness.directory(root), words).to(device)),
-            ),
-            (optim.audio, lambda: AudioTerm(optim.audio, Speech.gather(Loudness.directory(root), words).to(device))),
+            (optim.window, lambda: WindowTerm(optim.window, lexicon())),
+            (optim.acoustic, lambda: AcousticTerm(optim.acoustic, loudness())),
+            (optim.audio, lambda: AudioTerm(optim.audio, loudness())),
         )
         terms = tuple(replace(build(), vocab_weight=optim.vocab_weight) for weight, build in builders if weight)
         return Joint(terms, optim.tap) if terms else NoAuxiliary()

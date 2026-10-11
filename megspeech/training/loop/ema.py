@@ -13,9 +13,24 @@ from megspeech.training.hook import StepHook
 
 
 @dataclass(frozen=True)
-class Ema(StepHook):
-    """Shadow state moved toward the model's by `1 - decay` each step; decay 0 tracks the model exactly. The state
-    is the parameters and the floating buffers, so normalisation statistics match the averaged weights."""
+class Unaveraged(StepHook):
+    """The model's own weights, scored as they are: the average at decay 0, which tracks them exactly, kept as no
+    copy and moved by no step."""
+
+    @override
+    def step(self, model: nn.Module, lr: float) -> None:
+        """Nothing moves: the weights are their own average."""
+
+    @contextmanager
+    def applied(self, model: nn.Module) -> Iterator[nn.Module]:
+        """`model` as it is."""
+        yield model
+
+
+@dataclass(frozen=True)
+class Ema(Unaveraged):
+    """Shadow state moved toward the model's by `1 - decay` each step. The state is the parameters and the floating
+    buffers, so normalisation statistics match the averaged weights."""
 
     decay: float
     shadow: list[Tensor]
@@ -25,6 +40,11 @@ class Ema(StepHook):
     @classmethod
     def of(cls, model: nn.Module, decay: float) -> "Ema":
         return cls(decay, [t.clone() for t in cls.state(model)])
+
+    @classmethod
+    def hook(cls, model: nn.Module, decay: float) -> Unaveraged:
+        """The average of `model` at `decay`; at 0 the model itself, which that average would copy every step."""
+        return cls.of(model, decay) if decay else Unaveraged()
 
     @staticmethod
     def state(model: nn.Module) -> list[Tensor]:
@@ -45,6 +65,7 @@ class Ema(StepHook):
         get_ema_multi_avg_fn(self.decay)(self.shadow, self.live(model), None)
 
     @contextmanager
+    @override
     def applied(self, model: nn.Module) -> Iterator[nn.Module]:
         """`model` holding the average for the block, its own state restored after; copied in place so the
         tensors a compiled graph captured stay the ones it reads."""

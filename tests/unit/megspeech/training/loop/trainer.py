@@ -31,7 +31,7 @@ from megspeech.objective.topk import TopKMix
 from megspeech.training.auxiliary import Joint, NoAuxiliary
 from megspeech.training.config import OptimConfig, RunConfig, SelectionConfig, StopConfig
 from megspeech.training.hook import Scheduled
-from megspeech.training.loop.ema import Ema
+from megspeech.training.loop.ema import Ema, Unaveraged
 from megspeech.training.loop.trainer import Trainer, TrainState
 from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
@@ -217,6 +217,15 @@ def test_step() -> None:
     assert value.shape == (len(made.terms(split())),)
     assert not value.requires_grad
     assert any(not torch.equal(a, b) for a, b in zip(before, model.parameters(), strict=True))
+
+
+def test_parameters() -> None:
+    """Listed once, in the model's own order."""
+    made = trainer(RunConfig())
+    state = made.state(made.model(split()), split(), 10)
+    assert state.parameters is state.parameters
+    assert [id(p) for p in state.parameters] == [id(p) for p in state.model.parameters()]
+    assert type(state.ema) is Unaveraged
 
 
 def test_fit() -> None:

@@ -8,6 +8,7 @@ import logging
 import math
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import cast
 
@@ -39,7 +40,7 @@ from megspeech.objective.topk import TopKMix
 from megspeech.training.auxiliary import Auxiliary, NoAuxiliary
 from megspeech.training.config import RunConfig
 from megspeech.training.hook import Scheduled, StepHook
-from megspeech.training.loop.ema import Ema
+from megspeech.training.loop.ema import Ema, Unaveraged
 from megspeech.training.loop.gradnorm import GradNorms
 from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
@@ -68,13 +69,18 @@ class TrainState:
     rows: int
     terms: tuple[Term, ...]
     readouts: tuple[nn.Module, ...]
-    ema: Ema
+    ema: Unaveraged
     hooks: tuple[StepHook, ...]
     curriculum: Curriculum = field(default_factory=Natural)
     bgmix: Untouched = field(default_factory=Untouched)
     average: Untouched = field(default_factory=Untouched)
     grads: GradNorms = field(default_factory=GradNorms)
     cut: Whole = field(default_factory=Whole)
+
+    @cached_property
+    def parameters(self) -> tuple[nn.Parameter, ...]:
+        """The model's parameters, listed once: a step clips their gradients without walking the module tree."""
+        return tuple(self.model.parameters())
 
 
 @dataclass
@@ -216,15 +222,16 @@ class Trainer:
             mixed = state.bgmix.apply(state.average.apply(batch.x, batch, train), batch, train)
             outputs = state.model(batch.inputs(self.regional(self.config.augment(mixed))))
             parts = zip(state.terms, state.readouts, outputs, strict=True)
-            inside = batch.target(train.y) != IGNORE
+            target = batch.target(train.y)
+            inside = target != IGNORE
             losses = torch.stack(
                 [term.loss(term.read(head, out, batch.target(term.labels(train)), inside)) for term, head, out in parts]
             )
             value = losses.sum()
-        state.curriculum.observe(Observation(spans, outputs[0], batch.target(train.y)))
+        state.curriculum.observe(Observation(spans, outputs[0], target))
         state.optimizer.zero_grad(set_to_none=True)
         value.backward()
-        state.grads.record(nn.utils.clip_grad_norm_(state.model.parameters(), self.config.optim.clip))
+        state.grads.record(nn.utils.clip_grad_norm_(state.parameters, self.config.optim.clip))
         state.optimizer.step()
         lr = state.schedule.lr()
         for hook in state.hooks:
@@ -240,7 +247,7 @@ class Trainer:
         optimizer = self.optimizer(model, anchor, tuple(net.encoder()), net.fusion.encoders())
         peaks = [group["lr"] for group in optimizer.param_groups]
         schedule = Scheduled(torch.optim.lr_scheduler.OneCycleLR(optimizer, peaks, total_steps=total))
-        ema = Ema.of(model, optim.ema)
+        ema = Ema.hook(model, optim.ema)
         ramp = Ramp.of(model, optim.adversary, round(total * optim.adversary_ramp / optim.epochs))
         return TrainState(
             model,

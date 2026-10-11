@@ -35,6 +35,8 @@ class GroupAverage(Untouched):
     """Each word's group size; 0 for a word outside the vocabulary."""
     rank: Int[Tensor, " n"]
     """Each word's own position in `order`."""
+    widest: int
+    """The largest group's size, read on the host once so a step never syncs for it."""
     mixed: Tensor = field(default_factory=lambda: torch.zeros((), dtype=torch.long))
 
     @classmethod
@@ -51,7 +53,7 @@ class GroupAverage(Untouched):
         start, size, rank = (torch.zeros_like(train.y) for _ in range(3))
         start[order], size[order], rank[order] = first[key], cells[key], torch.arange(len(order), device=key.device)
         zero = torch.zeros((), dtype=torch.long, device=key.device)
-        return cls(k, p, order, start, size, rank, zero)
+        return cls(k, p, order, start, size, rank, int(size.max()), zero)
 
     @override
     def apply(self, x: Float[Tensor, "r c t"], batch: Batch, train: Split) -> Float[Tensor, "r c t"]:
@@ -59,7 +61,7 @@ class GroupAverage(Untouched):
         rows = BGMix.words(batch)
         word = rows.clamp(min=0)
         size, start = self.size[word], self.start[word]
-        positions = torch.arange(int(self.size.max()), device=x.device)
+        positions = torch.arange(self.widest, device=x.device)
         draw = torch.rand(len(x), len(positions), device=x.device)
         taken = (positions >= size[:, None]) | (positions == (self.rank[word] - start)[:, None])
         values, offset = torch.where(taken, UNUSED, draw).topk(min(self.k - 1, len(positions)), dim=1, largest=False)

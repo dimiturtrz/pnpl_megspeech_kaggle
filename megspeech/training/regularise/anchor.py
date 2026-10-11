@@ -48,6 +48,8 @@ class Anchor(StepHook):
 
     @override
     def step(self, model: nn.Module, lr: float) -> None:
-        """One step's pull of every subject matrix in `model` toward `toward`'s."""
-        for layer in (m for m in model.modules() if isinstance(m, SubjectLayer)):
+        """One step's pull of every subject matrix in `model` toward `toward`'s; at strength 0 none, so the module tree
+        is not walked for a pull that would keep every weight as it is."""
+        layers = model.modules() if self.strength else ()
+        for layer in (m for m in layers if isinstance(m, SubjectLayer)):
             layer.shrink(1 - self.strength * lr, self.toward)

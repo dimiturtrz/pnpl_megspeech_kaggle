@@ -152,6 +152,8 @@ def test_of_audio(tmp_path: Path) -> None:
     heard = Auxiliary.of(OptimConfig(heads=0.0, audio=0.7), root, CPU, WORDS)
     assert [(type(t), t.weight) for t in heard.terms] == [(AudioTerm, 0.7)]
     assert cast("AudioTerm", heard.terms[0]).speech.rows.tolist() == [0, -1]
+    both = Auxiliary.of(OptimConfig(acoustic=0.3, audio=0.7), root, CPU, WORDS).terms
+    assert cast("AcousticTerm", both[0]).speech is cast("AudioTerm", both[1]).speech
 
 
 def test_of_instance(tmp_path: Path) -> None:
