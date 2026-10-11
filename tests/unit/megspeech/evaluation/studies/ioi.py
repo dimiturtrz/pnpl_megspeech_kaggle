@@ -1,11 +1,18 @@
+import argparse
+import logging
+from typing import cast
+
 import numpy as np
 import pytest
 import torch
 
 from megspeech.data.batching.split import Split
+from megspeech.data.raw.runs import Partition
 from megspeech.data.spans.spans import Spans
+from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.metric.ruler import Graded
-from megspeech.evaluation.studies.ioi import Replacement, Timing
+from megspeech.evaluation.studies.ioi import Held, Mode, Redraw, Replacement, Scored, Timing
+from tests.unit.megspeech.evaluation.studies.gap import Stub, split
 
 CPU = torch.device("cpu")
 ONSETS = np.array([0.0, 0.1, 0.4, 10.0, 10.2, 20.0])
@@ -36,7 +43,7 @@ def test_summary() -> None:
     assert "alone=0.333" in timing().summary()
 
 
-def test_grid() -> None:
+def test_timing_grid() -> None:
     """Gaps 0.1, 0.3, 0.2 s all sit on the 250 Hz and millisecond grids; the minimum is 100 ms."""
     report = timing().grid()
     assert "on-1/250=1.000" in report
@@ -44,7 +51,7 @@ def test_grid() -> None:
     assert "min=100.0ms" in report
 
 
-def test_positions() -> None:
+def test_timing_positions() -> None:
     assert timing().positions() == "0:0.150(n=2) 1:0.300(n=1)"
 
 
@@ -68,7 +75,7 @@ def test_buckets() -> None:
 def test_positioned() -> None:
     base = timing()
     graded = Graded({"d": (torch.tensor([True] * 5), torch.arange(5))})
-    report = Timing.positioned({"d": base.split}, frozenset(), graded)
+    report = Scored(graded).positioned({"d": base.split}, frozenset())
     assert "last=1.0000 n=2 second-last=1.0000 n=2 third-last=1.0000 n=1 earlier=nan n=0" in report
 
 
@@ -80,41 +87,46 @@ def test_replaced() -> None:
     assert onset.shape == (3, 9)
 
 
+def redraw(pool: torch.Tensor, seed: int = 0) -> Redraw:
+    base = timing()
+    return Redraw(base.gaps(), base.pair(), pool, torch.Generator().manual_seed(seed))
+
+
 def test_replacement_gaps() -> None:
     """Every replacement fills the pairs only; a shuffle keeps each span's own gaps."""
-    base = timing()
-    real, pair, pool = base.gaps(), base.pair(), torch.tensor([0.5, 0.7])
+    pair = timing().pair()
     for replacement in Replacement:
-        new = replacement.gaps(real, pair, pool, torch.Generator().manual_seed(0))
+        new = replacement.gaps(redraw(torch.tensor([0.5, 0.7])))
         assert (new[~pair] == 0).all()
         assert (new[pair] > 0).all()
-    shuffled = Replacement.SHUFFLE.gaps(real, pair, pool, torch.Generator().manual_seed(0))
+    shuffled = Replacement.SHUFFLE.gaps(redraw(torch.tensor([0.5, 0.7])))
     assert sorted(shuffled[0, :2].tolist()) == pytest.approx([0.1, 0.3])
-    assert Replacement.CONSTANT.gaps(real, pair, pool, torch.Generator()).unique().tolist() == [0.0, 0.5]
+    assert Replacement.CONSTANT.gaps(redraw(torch.tensor([0.5, 0.7]))).unique().tolist() == [0.0, 0.5]
 
 
 def test_shuffled() -> None:
-    base = timing()
-    out = Replacement.shuffled(base.gaps(), base.pair(), torch.ones(1), torch.Generator().manual_seed(1))
-    assert out[1, 0] == pytest.approx(0.2)
+    assert redraw(torch.ones(1), seed=1).shuffled()[1, 0] == pytest.approx(0.2)
 
 
 def test_sampled() -> None:
-    base = timing()
-    out = Replacement.sampled(base.gaps(), base.pair(), torch.tensor([0.5]), torch.Generator())
-    assert out.unique().tolist() == [0.5]
+    assert redraw(torch.tensor([0.5])).sampled().unique().tolist() == [0.5]
 
 
 def test_median() -> None:
-    base = timing()
-    out = Replacement.median(base.gaps(), base.pair(), torch.tensor([0.2, 0.4, 0.9]), torch.Generator())
-    assert out.unique().tolist() == pytest.approx([0.4])
+    assert redraw(torch.tensor([0.2, 0.4, 0.9])).median().unique().tolist() == pytest.approx([0.4])
+
+
+def test_redrawn() -> None:
+    """The constant draw rebuilds every span at the pool's median spacing."""
+    onset = timing().redrawn(Replacement.CONSTANT, torch.tensor([0.5]), torch.Generator()).onset
+    assert onset[0, :3].tolist() == pytest.approx([0.0, 0.5, 1.0])
+    assert onset[2, 1] == 0
 
 
 def test_score() -> None:
     domains = {"d": (torch.tensor([True, False, True, True]), torch.tensor([0, 1, 2, 3]))}
-    assert "n=4" in Timing.score(Graded(domains))
-    assert Timing.score(Graded(domains)).startswith("macro ")
+    assert "n=4" in Scored(Graded(domains)).score()
+    assert Scored(Graded(domains)).score().startswith("macro ")
 
 
 def test_blurred() -> None:
@@ -147,3 +159,60 @@ def test_blurs() -> None:
     base = timing()
     assert arms["real"](base) is base.split
     assert arms["quant20ms"](base).onset.shape == base.split.onset.shape
+
+
+class Partitioned(Stub):
+    partition = Partition.TEST
+
+
+def held() -> Held:
+    domains = {"d": split()}
+    return Held(cast(LoadedModel, Partitioned()), domains, 0.5, timing(), 0)
+
+
+def test_chosen() -> None:
+    flags = {"grid": False, "positions": True, "blur": True}
+    assert Mode.chosen(argparse.Namespace(**flags)) is Mode.POSITIONS
+    assert Mode.chosen(argparse.Namespace(**{**flags, "grid": True})) is Mode.GRID
+    assert Mode.chosen(argparse.Namespace(grid=False, positions=False, blur=False)) is Mode.GAPS
+
+
+def test_held_graded() -> None:
+    """A model reading its own window finds every word of an untouched domain."""
+    assert held().graded(held().domains).score().startswith("macro 1.0000")
+
+
+def test_held_report(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO):
+        held().report(Mode.GRID)
+    assert caplog.messages[0].startswith("kaggle-test gaps")
+    assert caplog.messages[1].startswith("test d gaps")
+
+
+def test_held_grid(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO):
+        held().grid()
+    assert len(caplog.messages) == 2
+    assert "on-1/250" in caplog.messages[1]
+
+
+def test_held_positions(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO):
+        held().positions()
+    assert caplog.messages == [caplog.messages[0]]
+    assert caplog.messages[0].startswith("test tau 0.5 balanced top-10")
+
+
+def test_held_blur(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO):
+        held().blur()
+    assert [message.split()[1] for message in caplog.messages] == [f"onsets={label}" for label in Timing.blurs(0)]
+
+
+def test_held_gaps(caplog: pytest.LogCaptureFixture) -> None:
+    """The statistics first, then the real gaps and every replacement in order, a word reader blind to all."""
+    with caplog.at_level(logging.INFO):
+        held().gaps()
+    scored = [message for message in caplog.messages if " gaps=" in message]
+    assert [message.split()[1] for message in scored] == ["gaps=real", *(f"gaps={r}" for r in Replacement)]
+    assert all("macro 1.0000" in message for message in scored)

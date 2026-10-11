@@ -32,7 +32,7 @@ from megspeech.device import Device
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.score import Head
-from megspeech.evaluation.studies.ioi import Timing
+from megspeech.evaluation.studies.ioi import Scored
 from megspeech.model.auxiliary import Tap
 from megspeech.model.ensemble import Ensemble
 from megspeech.model.input.subjects import Fallback, Unseen
@@ -139,7 +139,7 @@ def main() -> None:
         for alpha in args.alpha:
             fused = {name: context[name] + alpha * beside[name] for name in counted}
             graded = held.evaluator.grade(fused, counted, held.log_prior, tau)
-            LOG.info("%s alpha=%s tau %s: %s", partition, alpha, tau, Timing.score(graded))
+            LOG.info("%s alpha=%s tau %s: %s", partition, alpha, tau, Scored(graded).score())
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ import torch
 
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.studies.gap import Locator
-from megspeech.evaluation.studies.sourcefit import UNSEEN_SUBJECT, Source, SourceFit, Variant
+from megspeech.evaluation.studies.sourcefit import UNSEEN_SUBJECT, Ablated, Source, SourceFit, Variant
 from megspeech.model.context.timing import KAGGLE_GAP
 from tests.unit.megspeech.evaluation.studies.gap import Stub, split
 
@@ -43,20 +43,20 @@ def test_lines() -> None:
 
 
 def test_evenly() -> None:
-    evened = Variant.evenly(split())
+    evened = Ablated(split()).evenly()
     assert evened.onset[0, :SPAN].tolist() == pytest.approx([0.0, KAGGLE_GAP, 2 * KAGGLE_GAP, 3 * KAGGLE_GAP])
 
 
 def test_regapped() -> None:
     base = split()
-    moved = Variant.regapped(base, 0)
+    moved = Ablated(base).regapped(0)
     before = torch.diff(base.onset[:, :SPAN]).sort(dim=1).values
     assert torch.allclose(torch.diff(moved.onset[:, :SPAN]).sort(dim=1).values, before, atol=1e-5)
     assert moved.onset[:, 0].tolist() == base.onset[:, 0].tolist()
 
 
 def test_anonymous() -> None:
-    assert Variant.anonymous(split()).subject.unique().tolist() == [UNSEEN_SUBJECT]
+    assert Ablated(split()).anonymous().subject.unique().tolist() == [UNSEEN_SUBJECT]
 
 
 def test_apply() -> None:

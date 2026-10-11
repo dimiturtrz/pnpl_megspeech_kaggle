@@ -9,7 +9,6 @@ timing alone predicts part of speech; MEG counts only for what it adds beyond it
 """
 
 import argparse
-import itertools
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,9 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn.functional as F
 from jaxtyping import Bool, Float, Int, Shaped
-from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix
 from sklearn.model_selection import GroupKFold, cross_val_predict
@@ -35,6 +32,8 @@ from megspeech.data.raw.runs import DEEP, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.studies.grammar import Grammar
+from megspeech.evaluation.studies.logistic import TorchLogistic
 from megspeech.model.auxiliary import Tap
 from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.sentence import SentenceNet
@@ -44,10 +43,6 @@ LOG = logging.getLogger(__name__)
 
 FOLDS = 3
 """Run-grouped folds the stacker's training inputs are predicted out of, so it never reads a probe's fit."""
-MAX_ITER = 300
-"""L-BFGS iterations a logistic readout may take."""
-TOLERANCE = 1e-6
-"""Gradient infinity-norm at which a logistic readout counts as converged."""
 FLOOR = 1e-6
 """Probability floor under each logged probability: a fold missing a tag predicts it at 0."""
 
@@ -200,53 +195,15 @@ class Probed:
         """The accuracy of always predicting the most frequent tag."""
         return float(np.bincount(self.tags).max() / len(self.tags))
 
-
-@dataclass(frozen=True)
-class Grammar:
-    """A first-order tag grammar: a sentence's first tag's log-probability and each next tag's given the one before,
-    counted add-one on training sentences."""
-
-    start: Float[np.ndarray, " k"]
-    transition: Float[np.ndarray, "k k"]
-
-    @classmethod
-    def of(
-        cls, tags: Int[np.ndarray, " n"], sentences: Int[np.ndarray, " n"], onsets: Float[np.ndarray, " n"], k: int
-    ) -> "Grammar":
-        """The grammar of `tags` (each below `k`) read in onset order within each sentence."""
-        order = np.lexsort((onsets, sentences))
-        tag, sentence = tags[order], sentences[order]
-        follows = sentence[1:] == sentence[:-1]
-        start = np.bincount(tag[np.r_[True, ~follows]], minlength=k) + 1.0
-        pairs = np.ones((k, k))
-        np.add.at(pairs, (tag[:-1][follows], tag[1:][follows]), 1)
-        return cls(np.log(start / start.sum()), np.log(pairs / pairs.sum(1, keepdims=True)))
-
-    def viterbi(self, emissions: Float[np.ndarray, "t k"]) -> Int[np.ndarray, " t"]:
-        """The most probable tag path through one sentence's per-word emission log-likelihoods."""
-        score = self.start + emissions[0]
-        back = np.zeros(emissions.shape, np.int64)
-        for t in range(1, len(emissions)):
-            candidates = score[:, None] + self.transition
-            back[t] = candidates.argmax(0)
-            score = candidates.max(0) + emissions[t]
-        path = [int(score.argmax())]
-        for t in range(len(emissions) - 1, 0, -1):
-            path.append(int(back[t, path[-1]]))
-        return np.array(path[::-1])
-
-    def decode(
-        self, emissions: Float[np.ndarray, "n k"], sentences: Int[np.ndarray, " n"], onsets: Float[np.ndarray, " n"]
-    ) -> Int[np.ndarray, " n"]:
-        """Each sentence's words' tags decoded jointly, in onset order, returned in the rows' order."""
-        order = np.lexsort((onsets, sentences))
-        sentence = sentences[order]
-        bounds = np.flatnonzero(np.r_[True, sentence[1:] != sentence[:-1], True])
-        decoded = np.empty(len(order), np.int64)
-        for begin, end in itertools.pairwise(bounds):
-            rows = order[begin:end]
-            decoded[rows] = self.viterbi(emissions[rows])
-        return decoded
+    def logged(self, name: str, predicted: Int[np.ndarray, " n"], *, confusions: bool) -> None:
+        """Log the `scores` and `recalls` of `predicted` as `name`, then with `confusions` its confusion over the 50's
+        words and over the rest."""
+        scores = {k: (round(b, 4), round(a, 4), n) for k, (b, a, n) in self.scores(predicted).items()}
+        LOG.info("%s (bacc, acc, n) %s", name, scores)
+        LOG.info("%s recall %s", name, {k: (round(r, 3), n) for k, (r, n) in self.recalls(predicted).items()})
+        if confusions:
+            for in_50 in (True, False):
+                LOG.info("%s confusion, in-50 %s:\n%s", name, in_50, self.confusion(predicted, in_50=in_50).to_string())
 
 
 @dataclass(frozen=True)
@@ -318,64 +275,6 @@ class Table:
         if not keys.is_unique:
             raise ValueError("a run holds two words at one onset")
         return keys.get_indexer(pd.MultiIndex.from_arrays([runs, onsets]))
-
-
-class TorchLogistic(ClassifierMixin, BaseEstimator):
-    """Multinomial logistic regression fit by full-batch L-BFGS on the GPU: sklearn's `LogisticRegression(C)` objective
-    (summed cross-entropy plus ||W||^2 / 2C, intercept free) over features standardised on the fit rows."""
-
-    def __init__(
-        self, c: float = 1.0, *, standardize: bool = True, max_iter: int = MAX_ITER, balanced: bool = False
-    ) -> None:
-        self.c = c
-        self.standardize = standardize
-        self.max_iter = max_iter
-        self.balanced = balanced
-
-    def fit(self, x: Float[np.ndarray, "n d"], y: Int[np.ndarray, " n"]) -> "TorchLogistic":
-        """The weights minimising the penalised loss of `y` (any integer labels) on `x`."""
-        self.classes_, targets = np.unique(y, return_inverse=True)
-        device = Device.best().as_torch()
-        features = torch.as_tensor(x, dtype=torch.float32, device=device)
-        self.mean_ = features.mean(0) if self.standardize else torch.zeros(features.shape[1], device=device)
-        scale = features.std(0, correction=0) if self.standardize else torch.ones(features.shape[1], device=device)
-        self.scale_ = torch.where(scale > 0, scale, torch.ones_like(scale))
-        features = (features - self.mean_) / self.scale_
-        labels = torch.as_tensor(targets, device=device)
-        rows = len(labels)
-        counts = torch.bincount(labels, minlength=len(self.classes_)).float()
-        emphasis = rows / (len(self.classes_) * counts) if self.balanced else None
-        weight = torch.zeros(features.shape[1], len(self.classes_), device=device, requires_grad=True)
-        bias = torch.zeros(len(self.classes_), device=device, requires_grad=True)
-        optimiser = torch.optim.LBFGS(
-            [weight, bias], max_iter=self.max_iter, tolerance_grad=TOLERANCE, line_search_fn="strong_wolfe"
-        )
-
-        def closure() -> torch.Tensor:
-            optimiser.zero_grad()
-            loss = F.cross_entropy(features @ weight + bias, labels, weight=emphasis) + 0.5 * weight.square().sum() / (
-                self.c * rows
-            )
-            loss.backward()
-            return loss
-
-        optimiser.step(closure)
-        self.weight_, self.bias_ = weight.detach(), bias.detach()
-        return self
-
-    def predict_log_proba(self, x: Float[np.ndarray, "n d"]) -> Float[np.ndarray, "n k"]:
-        """Each row's log-probability of each of `classes_`."""
-        features = torch.as_tensor(x, dtype=torch.float32, device=self.weight_.device)
-        logits = ((features - self.mean_) / self.scale_) @ self.weight_ + self.bias_
-        return logits.log_softmax(1).double().cpu().numpy()
-
-    def predict_proba(self, x: Float[np.ndarray, "n d"]) -> Float[np.ndarray, "n k"]:
-        """Each row's probability of each of `classes_`."""
-        return np.exp(self.predict_log_proba(x))
-
-    def predict(self, x: Float[np.ndarray, "n d"]) -> Int[np.ndarray, " n"]:
-        """Each row's most probable of `classes_`."""
-        return self.classes_[self.predict_log_proba(x).argmax(1)]
 
 
 @dataclass(frozen=True)
@@ -467,19 +366,7 @@ def main() -> None:
     for balanced in (False, True):
         weighting = "balanced" if balanced else "natural"
         for arm, predicted in Probe(train, valid, balanced).report().items():
-            name = f"{weighting} {arm}"
-            predicted = predicted[known]
-            LOG.info(
-                "%s (bacc, acc, n) %s",
-                name,
-                {k: (round(b, 4), round(a, 4), n) for k, (b, a, n) in scored.scores(predicted).items()},
-            )
-            LOG.info("%s recall %s", name, {k: (round(r, 3), n) for k, (r, n) in scored.recalls(predicted).items()})
-            if arm.startswith("timing+meg-context"):
-                for in_50 in (True, False):
-                    LOG.info(
-                        "%s confusion, in-50 %s:\n%s", name, in_50, scored.confusion(predicted, in_50=in_50).to_string()
-                    )
+            scored.logged(f"{weighting} {arm}", predicted[known], confusions=arm.startswith("timing+meg-context"))
 
 
 if __name__ == "__main__":

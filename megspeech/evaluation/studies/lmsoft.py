@@ -282,11 +282,10 @@ class Study:
         section = self.val.section
         return FUSED.fit(self.val.fused(table, SOFT, channel), section.log_prior, Ruler(k=TOP))
 
-    @staticmethod
-    def share(rows: dict[str, Posteriors]) -> float:
-        """The share of `rows`' words inside the vocabulary."""
-        labels = torch.cat([posteriors.labels for posteriors in rows.values()])
-        return float((labels >= 0).float().mean())
+    def fits(self, table: Table) -> dict[str, dict[str, float]]:
+        """Each channel's `fitted` tau and lam."""
+        finishes = {channel: self.fitted(table, channel) for channel in CHANNELS}
+        return {channel: {"tau": finish.tau, "lam": finish.mix} for channel, finish in finishes.items()}
 
     @staticmethod
     def aligned(rows: Posteriors, graded: Rows, ids: Int[Tensor, " n"]) -> float:
@@ -294,32 +293,6 @@ class Study:
         if not torch.equal(rows.labels[ids], graded.labels):
             raise ValueError("the dumped rows' labels differ from the graded words'")
         return float((rows.head[ids].argmax(-1) == graded.head.argmax(-1)).float().mean())
-
-    @staticmethod
-    def fusion(  # devtools-ignore: test-mirror
-        directories: Sequence[Path], rows: Path, section: str, share: float
-    ) -> tuple[Fusion, dict[str, float]]:
-        graded = Section.load(directories, section, {})
-        saved = Probabilities.load(directories[0] / PROBS, section).domains
-        ids = {name: saved[name].ids[saved[name].novel] for name in graded.domains}
-        dumped = Posteriors.load(str(rows), section)
-        agreement = {name: Study.aligned(dumped[name], graded.domains[name], ids[name]) for name in graded.domains}
-        beliefs = {
-            "oracle": {name: Belief.oracle(dumped[name].labels) for name in graded.domains},
-            SOFT: {name: Belief.soft(dumped[name].head, share) for name in graded.domains},
-        }
-        neighbours = {
-            belief: {name: Neighbours.of(domains[name], dumped[name].index) for name in domains}
-            for belief, domains in beliefs.items()
-        }
-        return Fusion.of(graded, neighbours, ids), agreement
-
-    @staticmethod
-    def kaggle(rows: Path, share: float) -> dict[str, list[Weighted]]:  # devtools-ignore: test-mirror
-        dumped = Posteriors.load(str(rows), KAGGLE)[KAGGLE]
-        neighbours = Neighbours.of(Belief.soft(dumped.head, share), dumped.index)
-        per = [neighbours.channels(row) for row in range(len(dumped.labels))]
-        return {channel: [row[channel] for row in per] for channel in CHANNELS}
 
     @staticmethod
     def main() -> None:  # devtools-ignore: test-mirror
@@ -333,41 +306,90 @@ class Study:
         root = DataRoot.from_config()
         directories = Ensemble.trained(root.models(), args.name)
         out = root.models() / args.name
-        share = Study.share(Posteriors.load(str(out / ROWS), VAL))
-        val, val_aligned = Study.fusion(directories, out / ROWS, VAL, share)
-        test, test_aligned = Study.fusion(directories, out / ROWS, TEST, share)
-        kaggle = Study.kaggle(out / ROWS, share)
-        LOG.info("share %.4f aligned %s %s", share, val_aligned, test_aligned)
-        wanted = [
-            EMPTY,
-            *val.wanted(),
-            *test.wanted(),
-            *(key for rows in kaggle.values() for row in rows for key in row.contexts),
-        ]
+        dumped = Dumped(out / ROWS, Dumped.shared(Posteriors.load(str(out / ROWS), VAL)))
+        val, val_aligned = dumped.fusion(directories, VAL)
+        test, test_aligned = dumped.fusion(directories, TEST)
+        kaggle = dumped.kaggle()
+        LOG.info("share %.4f aligned %s %s", dumped.share, val_aligned, test_aligned)
+        wanted = [EMPTY, *val.wanted(), *test.wanted(), *kaggle.contexts()]
         cache = out / f"lmsoft-{args.lm}.pt"
         known: dict[Context, Tensor] = torch.load(cache) if cache.exists() else {}
         table = Batched(Causal.load(root, args.lm, torch.device(args.device))).table(wanted, known)
         torch.save(table.scores, cache)
-        channels = {
-            channel: torch.stack([row.other(table, CHANNELS[channel]) for row in rows])
-            for channel, rows in kaggle.items()
-        }
-        alone = [row.contexts == (EMPTY,) for row in kaggle["pmi-right"]]
-        lone = max(float(other[torch.tensor(alone)].abs().max()) for other in channels.values())
+        channels = kaggle.others(table)
         study = Study(val, test)
-        finishes = {channel: study.fitted(table, channel) for channel in CHANNELS}
-        fits = {channel: {"tau": finish.tau, "lam": finish.mix} for channel, finish in finishes.items()}
-        saved = {"share": share, "log_prior": val.section.log_prior, "channels": channels, "fits": fits}
+        fits = study.fits(table)
+        saved = {"share": dumped.share, "log_prior": val.section.log_prior, "channels": channels, "fits": fits}
         torch.save(saved, out / KAGGLE_OUT)
         result = {
-            "share": share,
+            "share": dumped.share,
             "aligned": {VAL: val_aligned, TEST: test_aligned},
-            "kaggle-lone-max": lone,
+            "kaggle-lone-max": kaggle.lone(channels),
             "fits": fits,
             **study.run(table, args.seed),
         }
         (out / OUT).write_text(json.dumps(result, indent=1))
         LOG.info("wrote %s", out / OUT)
+
+
+@dataclass(frozen=True)
+class Kaggle:
+    """The Kaggle rows' contexts under the `soft` belief, by channel."""
+
+    weighted: dict[str, list[Weighted]]
+
+    def contexts(self) -> list[Context]:
+        return [key for rows in self.weighted.values() for row in rows for key in row.contexts]
+
+    def others(self, table: Table) -> dict[str, Float[Tensor, "n c"]]:
+        """Each channel's LM channel per row."""
+        return {
+            channel: torch.stack([row.other(table, CHANNELS[channel]) for row in rows])
+            for channel, rows in self.weighted.items()
+        }
+
+    def lone(self, others: dict[str, Float[Tensor, "n c"]]) -> float:
+        """The largest channel magnitude over the rows alone in their span: 0 when the channel is sound."""
+        alone = [row.contexts == (EMPTY,) for row in self.weighted["pmi-right"]]
+        return max(float(other[torch.tensor(alone)].abs().max()) for other in others.values())
+
+
+@dataclass(frozen=True)
+class Dumped:
+    """An ensemble's dumped rows and the share of validation's words inside the vocabulary."""
+
+    path: Path
+    share: float
+
+    @staticmethod
+    def shared(rows: dict[str, Posteriors]) -> float:
+        """The share of `rows`' words inside the vocabulary."""
+        labels = torch.cat([posteriors.labels for posteriors in rows.values()])
+        return float((labels >= 0).float().mean())
+
+    def fusion(  # devtools-ignore: test-mirror
+        self, directories: Sequence[Path], section: str
+    ) -> tuple[Fusion, dict[str, float]]:
+        graded = Section.load(directories, section, {})
+        saved = Probabilities.load(directories[0] / PROBS, section).domains
+        ids = {name: saved[name].ids[saved[name].novel] for name in graded.domains}
+        dumped = Posteriors.load(str(self.path), section)
+        agreement = {name: Study.aligned(dumped[name], graded.domains[name], ids[name]) for name in graded.domains}
+        beliefs = {
+            "oracle": {name: Belief.oracle(dumped[name].labels) for name in graded.domains},
+            SOFT: {name: Belief.soft(dumped[name].head, self.share) for name in graded.domains},
+        }
+        neighbours = {
+            belief: {name: Neighbours.of(domains[name], dumped[name].index) for name in domains}
+            for belief, domains in beliefs.items()
+        }
+        return Fusion.of(graded, neighbours, ids), agreement
+
+    def kaggle(self) -> Kaggle:  # devtools-ignore: test-mirror
+        dumped = Posteriors.load(str(self.path), KAGGLE)[KAGGLE]
+        neighbours = Neighbours.of(Belief.soft(dumped.head, self.share), dumped.index)
+        per = [neighbours.channels(row) for row in range(len(dumped.labels))]
+        return Kaggle({channel: [row[channel] for row in per] for channel in CHANNELS})
 
 
 if __name__ == "__main__":

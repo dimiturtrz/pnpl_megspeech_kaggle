@@ -172,7 +172,7 @@ class Study:
         scores = []
         for seed in SEEDS:
             model, _ = Boosting(seed=seed).fit(train, epochs)
-            scores.append(self.official(Boosting.predict(model, val).cpu()))
+            scores.append(self.official(model.predict(val).cpu()))
         LOG.info("%s epochs %d fold-CE base %.4f -> %.4f official %s", arm.name, epochs, base_loss, min(curve), scores)
         return {"arm": arm.name, "epochs": epochs, "base_ce": base_loss, "boosted_ce": min(curve), "official": scores}
 

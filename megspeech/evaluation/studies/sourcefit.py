@@ -64,23 +64,30 @@ class Variant(StrEnum):
         shuffled = split.permuted(seed)
         timed = {
             Variant.MEG: lambda: shuffled,
-            Variant.EVEN: lambda: self.evenly(shuffled),
-            Variant.GAPS: lambda: self.regapped(shuffled, seed),
-            Variant.SUBJECT: lambda: self.anonymous(shuffled),
-            Variant.BOTH: lambda: self.anonymous(self.evenly(shuffled)),
+            Variant.EVEN: lambda: Ablated(shuffled).evenly(),
+            Variant.GAPS: lambda: Ablated(shuffled).regapped(seed),
+            Variant.SUBJECT: lambda: Ablated(shuffled).anonymous(),
+            Variant.BOTH: lambda: Ablated(Ablated(shuffled).evenly()).anonymous(),
         }
         return timed[self]()
 
-    @staticmethod
-    def evenly(split: Split) -> Split:
+
+@dataclass(frozen=True)
+class Ablated:
+    """A fit subset with one more thing taken from its input."""
+
+    split: Split
+
+    def evenly(self) -> Split:
         """Every span's words at the Kaggle test's typical spacing from zero: only the word count remains of timing."""
+        split = self.split
         valid = split.index >= 0
         rank = (valid.cumsum(-1) - 1).to(split.onset.dtype)
         return replace(split, onset=torch.where(valid, rank * KAGGLE_GAP, split.onset))
 
-    @staticmethod
-    def regapped(split: Split, seed: int) -> Split:
+    def regapped(self, seed: int) -> Split:
         """Every span's gaps between onsets dealt among its own gap slots in a random order."""
+        split = self.split
         valid = split.index[:, 1:] >= 0
         gaps = split.onset[:, 1:] - split.onset[:, :-1]
         keys = torch.rand(gaps.shape, generator=torch.Generator().manual_seed(seed)).to(gaps.device)
@@ -88,9 +95,8 @@ class Variant(StrEnum):
         moved = torch.cumsum(torch.where(valid, gaps.gather(1, order), 0.0), dim=1)
         return replace(split, onset=torch.cat([split.onset[:, :1], torch.where(valid, moved, split.onset[:, 1:])], 1))
 
-    @staticmethod
-    def anonymous(split: Split) -> Split:
-        return replace(split, subject=torch.full_like(split.subject, UNSEEN_SUBJECT))
+    def anonymous(self) -> Split:
+        return replace(self.split, subject=torch.full_like(self.split.subject, UNSEEN_SUBJECT))
 
 
 @dataclass(frozen=True)

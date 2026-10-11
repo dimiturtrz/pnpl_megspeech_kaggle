@@ -29,7 +29,7 @@ import h5py
 import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Bool, Float, Int
+from jaxtyping import Float, Int
 from scipy.fft import next_fast_len
 from scipy.signal import butter, hilbert, sosfiltfilt
 from torch import Tensor
@@ -44,10 +44,9 @@ from megspeech.data.raw.runs import Run
 from megspeech.data.raw.serialised import Serialised
 from megspeech.data.spans.grouping import Grouping
 from megspeech.device import Device
-from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.score import MIN_NOVEL
-from megspeech.evaluation.studies.templates import ABSENT, Noise
+from megspeech.evaluation.studies.shrunklda import Dataset, Harness
 
 LOG = logging.getLogger(__name__)
 
@@ -58,9 +57,6 @@ BIN_SAMPLES = SFREQ // 10
 """0.1 s at the recordings' rate."""
 WINDOW = BINS * BIN_SAMPLES
 COVARIANCE_RUNS = 16
-INNER_STRIDE = 10
-DIM_FRACTIONS = (0.05, 0.1, 0.2, 0.34, 0.52, 0.63, 0.79, 0.89, 0.98)
-"""PCA widths tried on the inner fold, as shares of the feature width."""
 HILBERT_CHUNK = 16
 EPS = 1e-12
 MS = 1000.0
@@ -154,6 +150,23 @@ class Envelope:
 
 
 @dataclass(frozen=True)
+class Source:
+    """One run's h5 file, read whole in a worker process."""
+
+    run: Run
+
+    def covariances(self, bands: tuple[Band, ...]) -> list[Covariance]:
+        meg = Recording.load(self.run).meg
+        return [Covariance.of(band.filtered(meg)) for band in bands]
+
+    def features(
+        self, onsets: Int[np.ndarray, " n"], envelopes: tuple[Envelope, ...]
+    ) -> Float[np.ndarray, "n b k bins"]:
+        meg = Recording.load(self.run).meg
+        return np.stack([envelope.binned(meg, onsets) for envelope in envelopes], axis=1)
+
+
+@dataclass(frozen=True)
 class Extractor:
     """Features of word rows from the runs' h5 files, one process per run."""
 
@@ -161,22 +174,10 @@ class Extractor:
     runs: Mapping[str, Run]
     workers: int = WORKERS
 
-    @staticmethod
-    def covariances(run: Run, bands: tuple[Band, ...]) -> list[Covariance]:
-        meg = Recording.load(run).meg
-        return [Covariance.of(band.filtered(meg)) for band in bands]
-
-    @staticmethod
-    def features(
-        run: Run, onsets: Int[np.ndarray, " n"], envelopes: tuple[Envelope, ...]
-    ) -> Float[np.ndarray, "n b k bins"]:
-        meg = Recording.load(run).meg
-        return np.stack([envelope.binned(meg, onsets) for envelope in envelopes], axis=1)
-
     def projections(self, names: list[str], components: int = COMPONENTS) -> tuple[Envelope, ...]:
         """Each band's envelope pipeline, its whitener fit on the runs `names`."""
         with ProcessPoolExecutor(self.workers) as pool:
-            parts = list(pool.map(self.covariances, [self.runs[name] for name in names], repeat(self.bands)))
+            parts = list(pool.map(Source.covariances, [Source(self.runs[name]) for name in names], repeat(self.bands)))
         merged = [reduce(Covariance.merge, per_band) for per_band in zip(*parts, strict=True)]
         return tuple(Envelope(band, cov.whitener(components)) for band, cov in zip(self.bands, merged, strict=True))
 
@@ -186,8 +187,8 @@ class Extractor:
         onsets = np.round(table["onset"].to_numpy() * SFREQ).astype(np.int64)
         with ProcessPoolExecutor(self.workers) as pool:
             parts = pool.map(
-                self.features,
-                [self.runs[name] for name in rows],
+                Source.features,
+                [Source(self.runs[name]) for name in rows],
                 [onsets[at] for at in rows.values()],
                 repeat(envelopes),
             )
@@ -230,107 +231,6 @@ class Cohort:
         """Every row to extract: the training words, then each domain's, tagged by `part`."""
         parts = {"train": self.train, **self.domains}
         return pd.concat([rows.assign(part=name) for name, rows in parts.items()], ignore_index=True)
-
-
-@dataclass(frozen=True)
-class Dataset:
-    """Feature rows, their word labels and the index of the run each came from."""
-
-    x: Float[Tensor, "n d"]
-    y: Int[Tensor, " n"]
-    group: Int[Tensor, " n"]
-
-    def take(self, mask: Bool[Tensor, " n"]) -> Self:
-        return type(self)(self.x[mask], self.y[mask], self.group[mask])
-
-
-@dataclass(frozen=True)
-class Pca:
-    mean: Float[Tensor, " d"]
-    axes: Float[Tensor, "d d"]
-    """Principal axes as columns, by decreasing variance."""
-
-    @classmethod
-    def fit(cls, x: Float[Tensor, "n d"]) -> Self:
-        mean = x.mean(dim=0)
-        centred = x - mean
-        _, vectors = torch.linalg.eigh((centred.T @ centred).double())
-        return cls(mean, vectors.flip(1).float())
-
-    def project(self, x: Float[Tensor, "n d"], dims: int) -> Float[Tensor, "n k"]:
-        return (x - self.mean) @ self.axes[:, :dims]
-
-
-@dataclass(frozen=True)
-class Lda:
-    """Class means under one Ledoit-Wolf-shrunk pooled covariance, a uniform class prior."""
-
-    means: Float[Tensor, "v k"]
-    precision: Float[Tensor, "k k"]
-    present: Tensor
-
-    @classmethod
-    def fit(cls, z: Float[Tensor, "n k"], y: Int[Tensor, " n"]) -> Self:
-        counts = torch.bincount(y, minlength=VOCAB_SIZE)
-        sums = torch.zeros(VOCAB_SIZE, z.shape[1]).index_add_(0, y, z)
-        means = sums / counts.clamp(min=1)[:, None]
-        residual = z - means[y]
-        total = (residual.T @ residual).double()
-        quartic = residual.pow(2).sum(dim=1).double().pow(2).sum()
-        cov = Noise.shrunk(total, quartic, torch.tensor(float(len(z)), dtype=torch.float64))
-        return cls(means, torch.linalg.inv(cov).float(), counts > 0)
-
-    def scores(self, z: Float[Tensor, "n k"]) -> Float[Tensor, "n v"]:
-        """Every word's discriminant per row; `ABSENT` for a word with no training row."""
-        weights = self.means @ self.precision
-        bias = 0.5 * (weights * self.means).sum(dim=1)
-        return (z @ weights.T - bias).masked_fill(~self.present, ABSENT)
-
-
-@dataclass(frozen=True)
-class Outcome:
-    """The PCA width the inner fold chose and each domain's novel-span top-10 balanced accuracy."""
-
-    dims: int
-    domains: dict[str, float]
-
-    @property
-    def macro(self) -> float:
-        return float(np.mean(list(self.domains.values())))
-
-
-@dataclass(frozen=True)
-class Harness:
-    fractions: tuple[float, ...] = DIM_FRACTIONS
-
-    def dims(self, width: int) -> list[int]:
-        return sorted({max(1, round(share * width)) for share in self.fractions})
-
-    @staticmethod
-    def balanced(scores: Float[Tensor, "n v"], y: Int[Tensor, " n"]) -> float:
-        ruler = Ruler()
-        return ruler.balanced(ruler.hits(scores, y), y)
-
-    def decoded(self, fit: Dataset, test: Dataset, dims: int, pca: Pca) -> float:
-        lda = Lda.fit(pca.project(fit.x, dims), fit.y)
-        return self.balanced(lda.scores(pca.project(test.x, dims)), test.y)
-
-    def inner(self, train: Dataset) -> int:
-        """The PCA width of best balanced accuracy on every `INNER_STRIDE`th training run, fit on the rest."""
-        held = train.group % INNER_STRIDE == 0
-        fit, test = train.take(~held), train.take(held)
-        pca = Pca.fit(fit.x)
-        found = {dims: self.decoded(fit, test, dims, pca) for dims in self.dims(train.x.shape[1])}
-        LOG.info("inner fold %s", " ".join(f"{dims}:{score:.4f}" for dims, score in found.items()))
-        return max(found, key=lambda dims: found[dims])
-
-    def outcome(self, train: Dataset, domains: Mapping[str, Dataset]) -> Outcome:
-        dims = self.inner(train)
-        pca = Pca.fit(train.x)
-        lda = Lda.fit(pca.project(train.x, dims), train.y)
-        return Outcome(
-            dims, {name: self.balanced(lda.scores(pca.project(d.x, dims)), d.y) for name, d in domains.items()}
-        )
 
 
 @dataclass(frozen=True)

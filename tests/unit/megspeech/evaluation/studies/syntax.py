@@ -1,13 +1,14 @@
+import logging
 from dataclasses import replace
 from typing import cast
 
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.linear_model import LogisticRegression
 
 from megspeech.data.labels.phonemes import UNKNOWN
-from megspeech.evaluation.studies.syntax import Grammar, Probe, Probed, Table, Timing, TorchLogistic
+from megspeech.evaluation.studies.logistic import TorchLogistic
+from megspeech.evaluation.studies.syntax import Probe, Probed, Table, Timing
 
 WORDS = pd.DataFrame(
     {
@@ -35,9 +36,6 @@ def table(seed: int, n: int = 120) -> Table:
         np.arange(n, dtype=float),
         np.where(np.arange(n) % 4 == 0, np.arange(n) % 5, -1),
     )
-
-
-ALTERNATING = Grammar.of(np.array([0, 1, 0, 0, 1, 0]), np.array([0, 0, 0, 1, 1, 1]), np.arange(6.0), 2)
 
 
 def test_gaps() -> None:
@@ -136,23 +134,6 @@ def test_predicted() -> None:
     assert probe.predicted(("timing", "meg-word"), probed).shape == (120,)
 
 
-def test_grammar_of() -> None:
-    grammar = Grammar.of(np.array([0, 1, 1]), np.array([0, 0, 1]), np.arange(3.0), 2)
-    assert np.allclose(np.exp(grammar.transition), [[1 / 3, 2 / 3], [1 / 2, 1 / 2]])
-    assert np.exp(ALTERNATING.start).tolist() == pytest.approx([0.75, 0.25])
-    assert np.allclose(np.exp(ALTERNATING.transition), [[1 / 4, 3 / 4], [3 / 4, 1 / 4]])
-
-
-def test_viterbi() -> None:
-    assert ALTERNATING.viterbi(np.zeros((4, 2))).tolist() == [0, 1, 0, 1]
-    assert ALTERNATING.viterbi(np.array([[0.0, 5.0], [0.0, 0.0]])).tolist() == [1, 0]
-
-
-def test_decode() -> None:
-    decoded = ALTERNATING.decode(np.zeros((5, 2)), np.array([1, 0, 1, 0, 1]), np.array([2.0, 1.0, 0.0, 0.0, 1.0]))
-    assert decoded.tolist() == [0, 1, 0, 0, 1]
-
-
 def test_stacked() -> None:
     probe = Probe(table(0), table(1))
     classes, posterior = probe.stacked(("timing",), {"timing": probe.probabilities("timing")})
@@ -183,6 +164,20 @@ def test_confusion() -> None:
     assert outside.to_numpy().sum() == 1
 
 
+def test_logged(caplog: pytest.LogCaptureFixture) -> None:
+    probed = Probed(np.array([0, 1, 1, 2]), np.array([True, True, False, False]), np.array(["x"] * 4))
+    with caplog.at_level(logging.INFO):
+        probed.logged("natural timing", np.array([0, 1, 0, 2]), confusions=False)
+    assert [message.split(" ", 2)[2][:6] for message in caplog.messages] == ["(bacc,", "recall"]
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        probed.logged("natural timing", np.array([0, 1, 0, 2]), confusions=True)
+    assert [message.split(":")[0] for message in caplog.messages[2:]] == [
+        "natural timing confusion, in-50 True",
+        "natural timing confusion, in-50 False",
+    ]
+
+
 def test_majority() -> None:
     assert Probed(np.array([0, 1, 1, 2]), np.ones(4, bool), np.array(["x"] * 4)).majority() == 0.5
 
@@ -199,48 +194,3 @@ def test_report() -> None:
         "timing+meg-context+grammar",
     }
     assert (report["timing"] == probe.valid.tags).mean() > (report["meg-word"] == probe.valid.tags).mean()
-
-
-def overlapping(n: int = 600) -> tuple[np.ndarray, np.ndarray]:
-    generator = np.random.default_rng(0)
-    tags = np.array([5, 7, 9])[np.arange(n) % 3]
-    centres = generator.standard_normal((3, 4)) * 1.5
-    return centres[np.arange(n) % 3] + generator.standard_normal((n, 4)), tags
-
-
-def test_fit() -> None:
-    x, y = overlapping()
-    fitted = TorchLogistic(c=0.1).fit(x, y)
-    assert fitted.classes_.tolist() == [5, 7, 9]
-    assert fitted.weight_.shape == (4, 3)
-    reference = LogisticRegression(C=0.1, max_iter=1000).fit((x - x.mean(0)) / x.std(0), y)
-    assert np.allclose(fitted.weight_.cpu().numpy().T, reference.coef_, atol=2e-2)
-
-
-def test_fit_balanced() -> None:
-    x = np.r_[np.zeros((90, 1)), np.ones((10, 1))] + np.random.default_rng(0).standard_normal((100, 1)) * 0.8
-    y = np.r_[np.zeros(90, int), np.ones(10, int)]
-    natural, balanced = TorchLogistic().fit(x, y).predict(x), TorchLogistic(balanced=True).fit(x, y).predict(x)
-    assert balanced.sum() > natural.sum()
-
-
-def test_predict_log_proba() -> None:
-    x, y = overlapping()
-    reference = LogisticRegression(C=0.1, max_iter=1000).fit((x - x.mean(0)) / x.std(0), y)
-    log_proba = TorchLogistic(c=0.1).fit(x, y).predict_log_proba(x)
-    assert np.abs(log_proba - reference.predict_log_proba((x - x.mean(0)) / x.std(0))).max() < 2e-2
-    assert np.allclose(np.exp(log_proba).sum(1), 1, atol=1e-5)
-
-
-def test_predict_proba() -> None:
-    x, y = overlapping()
-    fitted = TorchLogistic().fit(x, y)
-    assert np.allclose(fitted.predict_proba(x), np.exp(fitted.predict_log_proba(x)))
-
-
-def test_predict() -> None:
-    x, y = overlapping()
-    reference = LogisticRegression(C=0.1, max_iter=1000).fit((x - x.mean(0)) / x.std(0), y)
-    predicted = TorchLogistic(c=0.1).fit(x, y).predict(x)
-    assert set(predicted) <= {5, 7, 9}
-    assert (predicted == reference.predict((x - x.mean(0)) / x.std(0))).mean() > 0.99

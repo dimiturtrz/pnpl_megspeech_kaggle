@@ -176,7 +176,7 @@ class Gate:
     def averaged(self, models: Sequence[Booster], names: tuple[str, ...]) -> Float[Tensor, "n v"]:
         """The `models`' probabilities of every validation row, averaged."""
         val = self.design(self.study.val, names, val=True).to(self.study.device)
-        return torch.stack([Boosting.predict(model, val).exp().cpu() for model in models]).mean(0)
+        return torch.stack([model.predict(val).exp().cpu() for model in models]).mean(0)
 
     def submissions(
         self, subsets: dict[str, tuple[str, ...]], test: "Gate"
@@ -194,7 +194,7 @@ class Gate:
         study, device = self.study, self.study.device
         epochs, models = self.trained(names)
         val = self.design(study.val, names, val=True).to(device)
-        scores = [study.official(Boosting.predict(model, val).cpu()) for model in models]
+        scores = [study.official(model.predict(val).cpu()) for model in models]
         LOG.info("%s epochs %d official %s", label, epochs, scores)
         return {"arm": label, "epochs": epochs, "official": scores, "mean": float(np.mean(scores))}
 

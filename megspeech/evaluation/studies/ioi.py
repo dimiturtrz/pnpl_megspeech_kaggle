@@ -25,6 +25,7 @@ from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import MAX_WORDS, PAD
 from megspeech.device import Device
+from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.metric.ruler import Graded, Ruler
 from megspeech.evaluation.scoring.config import Scoring
@@ -47,6 +48,27 @@ QUANTISE_MS = (20, 50)
 MS = 1000.0
 
 
+@dataclass(frozen=True)
+class Redraw:
+    """A span table's `real` gaps, which of them exist (`pair`), the `pool` new gaps come from and the draw's
+    `generator`."""
+
+    real: Float[Tensor, "g k"]
+    pair: Bool[Tensor, "g k"]
+    pool: Float[Tensor, " p"]
+    generator: torch.Generator
+
+    def shuffled(self) -> Float[Tensor, "g k"]:
+        keys = torch.rand(self.real.shape, generator=self.generator).to(self.real.device).where(self.pair, 2.0)
+        return self.real.gather(1, keys.argsort(dim=1))
+
+    def sampled(self) -> Float[Tensor, "g k"]:
+        return self.pool[torch.randint(len(self.pool), self.real.shape, generator=self.generator).to(self.real.device)]
+
+    def median(self) -> Float[Tensor, "g k"]:
+        return self.pool.median().expand_as(self.real)
+
+
 class Replacement(StrEnum):
     """Where a span's new gaps come from."""
 
@@ -54,39 +76,14 @@ class Replacement(StrEnum):
     POOL = "pool"
     CONSTANT = "constant"
 
-    def gaps(
-        self,
-        real: Float[Tensor, "g k"],
-        pair: Bool[Tensor, "g k"],
-        pool: Float[Tensor, " p"],
-        generator: torch.Generator,
-    ) -> Float[Tensor, "g k"]:
-        """New gaps at every `pair` position of `real`, zero elsewhere."""
+    def gaps(self, draw: Redraw) -> Float[Tensor, "g k"]:
+        """New gaps at every `pair` position of the draw's real gaps, zero elsewhere."""
         drawn = {
-            Replacement.SHUFFLE: self.shuffled,
-            Replacement.POOL: self.sampled,
-            Replacement.CONSTANT: self.median,
-        }[self](real, pair, pool, generator)
-        return drawn * pair
-
-    @staticmethod
-    def shuffled(
-        real: Float[Tensor, "g k"], pair: Bool[Tensor, "g k"], pool: Float[Tensor, " p"], generator: torch.Generator
-    ) -> Float[Tensor, "g k"]:
-        keys = torch.rand(real.shape, generator=generator).to(real.device).where(pair, 2.0)
-        return real.gather(1, keys.argsort(dim=1))
-
-    @staticmethod
-    def sampled(
-        real: Float[Tensor, "g k"], pair: Bool[Tensor, "g k"], pool: Float[Tensor, " p"], generator: torch.Generator
-    ) -> Float[Tensor, "g k"]:
-        return pool[torch.randint(len(pool), real.shape, generator=generator).to(real.device)]
-
-    @staticmethod
-    def median(
-        real: Float[Tensor, "g k"], pair: Bool[Tensor, "g k"], pool: Float[Tensor, " p"], generator: torch.Generator
-    ) -> Float[Tensor, "g k"]:
-        return pool.median().expand_as(real)
+            Replacement.SHUFFLE: draw.shuffled,
+            Replacement.POOL: draw.sampled,
+            Replacement.CONSTANT: draw.median,
+        }[self]()
+        return drawn * draw.pair
 
 
 @dataclass(frozen=True)
@@ -146,14 +143,6 @@ class Timing:
             arms[f"quant{ms}ms"] = lambda timing, ms=ms: timing.quantised(ms / MS)
         return arms
 
-    @staticmethod
-    def score(graded: Graded) -> str:
-        """The macro with its bootstrap interval, then each domain's balanced accuracy and word count."""
-        ruler = Ruler()
-        interval = ruler.interval(ruler.macro(graded))
-        domains = {name: f"{ruler.balanced(hits, y):.4f} n={len(y)}" for name, (hits, y) in graded.domains.items()}
-        return f"macro {ruler.point(graded):.4f} [{interval.low:.4f}, {interval.high:.4f}] {domains}"
-
     def places(self, words: Int[Tensor, " n"]) -> tuple[Int[Tensor, " n"], Int[Tensor, " n"]]:
         """Each of `words` (ids into the split's word rows) by its place counted from its span's start and end."""
         index = self.split.index
@@ -187,19 +176,14 @@ class Timing:
             parts.append(f"{arm} " + " ".join(cells))
         return " | ".join(parts)
 
-    @staticmethod
-    def positioned(domains: dict[str, Split], seen: frozenset[tuple[int, ...]], graded: Graded) -> str:
-        """`buckets` over the scored (unseen-span) words of every graded domain pooled."""
-        placed = [Timing(domains[name]).places(domains[name].novel(seen)) for name in graded.domains]
-        starts, ends = (torch.cat([place[k] for place in placed]) for k in range(2))
-        hits = torch.cat([hit for hit, _ in graded.domains.values()])
-        labels = torch.cat([label for _, label in graded.domains.values()])
-        return Timing.buckets(starts, ends, hits, labels)
-
     def replaced(self, gaps: Float[Tensor, "g k"]) -> Split:
         """`split` whose onsets are rebuilt from `gaps` after each span's first word."""
         onset = torch.cat([gaps.new_zeros(len(gaps), 1), gaps.cumsum(dim=1)], dim=1)
         return replace(self.split, onset=onset)
+
+    def redrawn(self, replacement: Replacement, pool: Float[Tensor, " p"], generator: torch.Generator) -> Split:
+        """`split` whose gaps `replacement` drew anew from `pool`."""
+        return self.replaced(replacement.gaps(Redraw(self.gaps(), self.pair(), pool, generator)))
 
     def blurred(self, onset: Float[Tensor, "g w"]) -> Split:
         """`split` at `onset`, kept in order among its words and re-zeroed at each span's first word."""
@@ -213,6 +197,100 @@ class Timing:
     def quantised(self, step: float) -> Split:
         """Every word onset rounded to the grid of `step` seconds."""
         return self.blurred(torch.round(self.split.onset / step) * step)
+
+
+@dataclass(frozen=True)
+class Scored:
+    """A model's `graded` hits over some domains, as the study reports them."""
+
+    graded: Graded
+
+    def score(self) -> str:
+        """The macro with its bootstrap interval, then each domain's balanced accuracy and word count."""
+        ruler, graded = Ruler(), self.graded
+        interval = ruler.interval(ruler.macro(graded))
+        domains = {name: f"{ruler.balanced(hits, y):.4f} n={len(y)}" for name, (hits, y) in graded.domains.items()}
+        return f"macro {ruler.point(graded):.4f} [{interval.low:.4f}, {interval.high:.4f}] {domains}"
+
+    def positioned(self, domains: dict[str, Split], seen: frozenset[tuple[int, ...]]) -> str:
+        """`Timing.buckets` over the scored (unseen-span) words of every graded domain pooled."""
+        graded = self.graded.domains
+        placed = [Timing(domains[name]).places(domains[name].novel(seen)) for name in graded]
+        starts, ends = (torch.cat([place[k] for place in placed]) for k in range(2))
+        hits = torch.cat([hit for hit, _ in graded.values()])
+        labels = torch.cat([label for _, label in graded.values()])
+        return Timing.buckets(starts, ends, hits, labels)
+
+
+class Mode(StrEnum):
+    """What the study reports per partition: the flag that asks for it, the gap replacements when none does."""
+
+    GRID = "grid"
+    POSITIONS = "positions"
+    BLUR = "blur"
+    GAPS = "gaps"
+
+    @classmethod
+    def chosen(cls, args: argparse.Namespace) -> "Mode":
+        """The first mode whose flag `args` set, in the order the flags take precedence."""
+        return next((mode for mode in (cls.GRID, cls.POSITIONS, cls.BLUR) if getattr(args, mode)), cls.GAPS)
+
+
+@dataclass(frozen=True)
+class Held:
+    """One partition's `domains` as `loaded` scores them at `tau`, beside the Kaggle test's timing."""
+
+    loaded: LoadedModel
+    domains: dict[str, Split]
+    tau: float
+    kaggle: Timing
+    seed: int
+
+    def graded(self, domains: dict[str, Split]) -> Scored:
+        loaded = self.loaded
+        return Scored(loaded.evaluator.graded(loaded.model, domains, loaded.log_prior, self.tau))
+
+    def report(self, mode: Mode) -> None:
+        {Mode.GRID: self.grid, Mode.POSITIONS: self.positions, Mode.BLUR: self.blur, Mode.GAPS: self.gaps}[mode]()
+
+    def grid(self) -> None:
+        """The sample grids of the Kaggle test's gaps and each domain's."""
+        LOG.info("kaggle-test %s", self.kaggle.grid())
+        for name, split in self.domains.items():
+            LOG.info("%s %s %s", self.loaded.partition, name, Timing(split).grid())
+
+    def positions(self) -> None:
+        """The score of the words by their place in the span."""
+        report = self.graded(self.domains).positioned(self.domains, self.loaded.evaluator.seen)
+        LOG.info(
+            "%s tau %s balanced top-10 (per-class recall over classes present in bucket): %s",
+            self.loaded.partition,
+            self.tau,
+            report,
+        )
+
+    def blur(self) -> None:
+        """The score under every onset-blurring arm."""
+        for label, blur in Timing.blurs(self.seed).items():
+            scored = self.graded({name: blur(Timing(split)) for name, split in self.domains.items()})
+            LOG.info("%s onsets=%s tau %s: %s", self.loaded.partition, label, self.tau, scored.score())
+
+    def gaps(self) -> None:
+        """The gap statistics of the Kaggle test and each domain, then the score under real and replaced gaps."""
+        partition = self.loaded.partition
+        LOG.info("kaggle-test %s", self.kaggle.summary())
+        LOG.info("kaggle-test positions %s", self.kaggle.positions())
+        for name, split in self.domains.items():
+            LOG.info("%s %s %s", partition, name, Timing(split).summary())
+            LOG.info("%s %s positions %s", partition, name, Timing(split).positions())
+        LOG.info("%s gaps=%s tau %s: %s", partition, "real", self.tau, self.graded(self.domains).score())
+        pool = self.kaggle.values()
+        for replacement in Replacement:
+            generator = torch.Generator().manual_seed(self.seed)
+            swapped = {
+                name: Timing(split).redrawn(replacement, pool, generator) for name, split in self.domains.items()
+            }
+            LOG.info("%s gaps=%s tau %s: %s", partition, replacement, self.tau, self.graded(swapped).score())
 
 
 def main() -> None:
@@ -231,48 +309,11 @@ def main() -> None:
     runs = Run.discover(root.raw())
     tau = loaded.report(runs).tau
     kaggle = Timing(loaded.kaggle(Track.DEEP))
-    pool = kaggle.values()
+    mode = Mode.chosen(args)
     for partition in (Partition.VALIDATION, Partition.TEST):
         held = replace(loaded, partition=partition)
         domains, _ = held.domains(held.ruled(runs))
-        if args.grid:
-            LOG.info("kaggle-test %s", kaggle.grid())
-            for name, split in domains.items():
-                LOG.info("%s %s %s", partition, name, Timing(split).grid())
-            continue
-        if args.positions:
-            graded = held.evaluator.graded(held.model, domains, held.log_prior, tau)
-            report = Timing.positioned(domains, held.evaluator.seen, graded)
-            LOG.info(
-                "%s tau %s balanced top-10 (per-class recall over classes present in bucket): %s",
-                partition,
-                tau,
-                report,
-            )
-            continue
-        if args.blur:
-            for label, blur in Timing.blurs(args.seed).items():
-                swapped = {name: blur(Timing(split)) for name, split in domains.items()}
-                graded = held.evaluator.graded(held.model, swapped, held.log_prior, tau)
-                LOG.info("%s onsets=%s tau %s: %s", partition, label, tau, Timing.score(graded))
-            continue
-        LOG.info("kaggle-test %s", kaggle.summary())
-        LOG.info("kaggle-test positions %s", kaggle.positions())
-        for name, split in domains.items():
-            LOG.info("%s %s %s", partition, name, Timing(split).summary())
-            LOG.info("%s %s positions %s", partition, name, Timing(split).positions())
-        for label in ("real", *Replacement):
-            generator = torch.Generator().manual_seed(args.seed)
-            swapped = {
-                name: split
-                if label == "real"
-                else Timing(split).replaced(
-                    Replacement(label).gaps(Timing(split).gaps(), Timing(split).pair(), pool, generator)
-                )
-                for name, split in domains.items()
-            }
-            graded = held.evaluator.graded(held.model, swapped, held.log_prior, tau)
-            LOG.info("%s gaps=%s tau %s: %s", partition, label, tau, Timing.score(graded))
+        Held(held, domains, tau, kaggle, args.seed).report(mode)
 
 
 if __name__ == "__main__":

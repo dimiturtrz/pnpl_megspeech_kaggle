@@ -115,10 +115,10 @@ def test_loss() -> None:
     data = design()
     model = Booster(data, hidden=8, dropout=0.0)
     expected = torch.nn.functional.cross_entropy(data.base, data.y).item()
-    assert abs(Boosting.loss(model, data) - expected) < 1e-6
+    assert abs(model.loss(data) - expected) < 1e-6
 
 
 def test_predict() -> None:
     data = design()
-    predicted = Boosting.predict(Booster(data, hidden=8, dropout=0.0), data)
+    predicted = Booster(data, hidden=8, dropout=0.0).predict(data)
     assert torch.allclose(predicted.exp().sum(-1), torch.ones(WORDS), atol=1e-5)

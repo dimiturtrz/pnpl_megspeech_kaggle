@@ -153,6 +153,18 @@ class Booster(nn.Module):
     def forward(self, x: Float[Tensor, "n d"], base: Float[Tensor, "n v"]) -> Float[Tensor, "n v"]:
         return base + self.out(self.body((x - self.mean) / self.scale))
 
+    def loss(self, design: Design) -> float:
+        """Mean cross-entropy on `design`."""
+        self.eval()
+        with torch.no_grad():
+            return float(functional.cross_entropy(self(design.x, design.base), design.y))
+
+    def predict(self, design: Design) -> Float[Tensor, "n v"]:
+        """Log-probabilities for every row of `design`, labelled or not."""
+        self.eval()
+        with torch.no_grad():
+            return self(design.x, design.base).log_softmax(-1)
+
 
 @dataclass(frozen=True)
 class Boosting:
@@ -183,22 +195,8 @@ class Boosting:
                 loss.backward()
                 optimiser.step()
             if watch is not None:
-                losses.append(self.loss(model, watch.labelled()))
+                losses.append(model.loss(watch.labelled()))
         return model, losses
-
-    @staticmethod
-    def loss(model: Booster, design: Design) -> float:
-        """Mean cross-entropy of `model` on `design`."""
-        model.eval()
-        with torch.no_grad():
-            return float(functional.cross_entropy(model(design.x, design.base), design.y))
-
-    @staticmethod
-    def predict(model: Booster, design: Design) -> Float[Tensor, "n v"]:
-        """`model`'s log-probabilities for every row of `design`, labelled or not."""
-        model.eval()
-        with torch.no_grad():
-            return model(design.x, design.base).log_softmax(-1)
 
 
 @dataclass(frozen=True)

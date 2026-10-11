@@ -12,6 +12,7 @@ from megspeech.evaluation.studies.sensors import (
     BANDS,
     DISTANCES,
     Coherence,
+    Coherencies,
     Health,
     Selection,
     Sensors,
@@ -115,10 +116,10 @@ def test_draw() -> None:
     assert np.array_equal(pairs, Coherence.draw(10, 500, 0))
 
 
-def test_coherence_medians() -> None:
+def test_coherencies_medians() -> None:
     values = np.array([[0.5 + 0.1j, -0.5 + 0.2j], [-0.3 - 0.3j, 0.7 + 0.0j], [0.4 + 0.2j, 0.1 + 0.1j]])
     values = np.tile(values, (1, 2))
-    medians = Coherence.medians(values)
+    medians = Coherencies(values).medians()
     assert medians.shape == (4, 2)
     assert medians[0].tolist() == pytest.approx([0.4, 0.2])
 
@@ -132,7 +133,7 @@ def test_study_medians(caplog: pytest.LogCaptureFixture) -> None:
 
 def test_by_distance() -> None:
     values = np.array([[1.0 + 0j], [0.5 + 0j], [0.2 + 0j]])
-    table = Coherence.by_distance(values, np.array([0.0, 0.01, 0.11]))
+    table = Coherencies(values).by_distance(np.array([0.0, 0.01, 0.11]))
     assert table.shape == (1, len(DISTANCES) - 1)
     assert table[0, 0] == pytest.approx(0.75)
     assert table[0, 3] == pytest.approx(0.2)

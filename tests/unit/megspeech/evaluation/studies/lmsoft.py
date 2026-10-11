@@ -13,7 +13,9 @@ from megspeech.evaluation.studies.lmsoft import (
     OOV,
     Batched,
     Belief,
+    Dumped,
     Fusion,
+    Kaggle,
     Neighbours,
     Study,
     Weighted,
@@ -175,14 +177,43 @@ def test_fitted() -> None:
     assert finish.mix >= 0.0
 
 
-def test_share() -> None:
+def test_fits() -> None:
+    made = built()
+    fits = Study(made, made).fits(table(made.wanted()))
+    assert set(fits) == set(CHANNELS)
+    assert all(set(fit) == {"tau", "lam"} for fit in fits.values())
+
+
+def test_shared() -> None:
     rows = Posteriors(
         torch.zeros(4, VOCAB_SIZE),
         torch.zeros(4, VOCAB_SIZE),
         torch.tensor([1, IGNORE, 2, IGNORE]),
         torch.zeros(1, 4, dtype=torch.long),
     )
-    assert Study.share({"a": rows}) == pytest.approx(0.5)
+    assert Dumped.shared({"a": rows}) == pytest.approx(0.5)
+
+
+def kaggle() -> Kaggle:
+    per = [neighbours().channels(row) for row in range(4)]
+    return Kaggle({channel: [row[channel] for row in per] for channel in CHANNELS})
+
+
+def test_contexts() -> None:
+    made = kaggle()
+    assert made.contexts() == [key for rows in made.weighted.values() for row in rows for key in row.contexts]
+    assert EMPTY in made.contexts()
+
+
+def test_others() -> None:
+    made = kaggle()
+    others = made.others(table(made.contexts()))
+    assert {channel: other.shape for channel, other in others.items()} == dict.fromkeys(CHANNELS, (4, VOCAB_SIZE))
+
+
+def test_lone() -> None:
+    made = kaggle()
+    assert made.lone(made.others(table(made.contexts()))) == pytest.approx(0.0)
 
 
 def test_aligned() -> None:

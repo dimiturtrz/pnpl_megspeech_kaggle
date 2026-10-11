@@ -148,22 +148,27 @@ class Coherence:
         second = (first + rng.integers(1, channels, size=count)) % channels
         return np.stack([first, second], axis=1)
 
-    @staticmethod
-    def medians(coherency: Complex[np.ndarray, "p b"]) -> Float[np.ndarray, "b 2"]:
-        """Per band the median |real| and median |imag| part."""
-        return np.stack([np.median(np.abs(coherency.real), axis=0), np.median(np.abs(coherency.imag), axis=0)], axis=1)
 
-    @staticmethod
-    def by_distance(
-        coherency: Complex[np.ndarray, "p b"], distance: Float[np.ndarray, " p"]
-    ) -> Float[np.ndarray, "b d"]:
+@dataclass(frozen=True)
+class Coherencies:
+    """Each sensor pair's band-pooled complex coherency."""
+
+    values: Complex[np.ndarray, "p b"]
+
+    def medians(self) -> Float[np.ndarray, "b 2"]:
+        """Per band the median |real| and median |imag| part."""
+        return np.stack(
+            [np.median(np.abs(self.values.real), axis=0), np.median(np.abs(self.values.imag), axis=0)], axis=1
+        )
+
+    def by_distance(self, distance: Float[np.ndarray, " p"]) -> Float[np.ndarray, "b d"]:
         """Per band the median |coherency| of the pairs in each distance bin (nan for an empty bin)."""
         bins = np.digitize(distance, DISTANCES[1:-1])
-        table = np.full((coherency.shape[1], len(DISTANCES) - 1), np.nan)
+        table = np.full((self.values.shape[1], len(DISTANCES) - 1), np.nan)
         for index in range(table.shape[1]):
             held = bins == index
             if held.any():
-                table[:, index] = np.median(np.abs(coherency[held]), axis=0)
+                table[:, index] = np.median(np.abs(self.values[held]), axis=0)
         return table
 
 
@@ -221,7 +226,7 @@ class Study:
 
     @staticmethod
     def medians(label: str, coherency: Complex[np.ndarray, "p b"]) -> None:
-        for band, (real, imag) in zip(BANDS, Coherence.medians(coherency), strict=True):
+        for band, (real, imag) in zip(BANDS, Coherencies(coherency).medians(), strict=True):
             LOG.info("%s band %g-%g Hz median|real| %.3f median|imag| %.3f", label, *band, real, imag)
 
     def pooled(self, runs: list[Run]) -> None:
@@ -232,7 +237,7 @@ class Study:
         counts = np.bincount(np.digitize(distance, DISTANCES[1:-1]), minlength=len(DISTANCES) - 1)
         self.medians(f"pooled({len(runs)})", stacked)
         LOG.info("median |coherency| by distance bins %s m, pairs per bin %s", DISTANCES, counts)
-        for band, row in zip(BANDS, Coherence.by_distance(stacked, distance), strict=True):
+        for band, row in zip(BANDS, Coherencies(stacked).by_distance(distance), strict=True):
             LOG.info("band %g-%g Hz %s", *band, np.round(row, 3))
 
 

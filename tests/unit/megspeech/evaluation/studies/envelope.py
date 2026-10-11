@@ -3,11 +3,10 @@ from pathlib import Path
 import h5py
 import numpy as np
 import pandas as pd
-import pytest
 import torch
 
 from megspeech.data.constants import SFREQ
-from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
+from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.grouping import Grouping
 from megspeech.evaluation.studies.envelope import (
@@ -16,36 +15,22 @@ from megspeech.evaluation.studies.envelope import (
     Band,
     Cohort,
     Covariance,
-    Dataset,
     Envelope,
     Extractor,
-    Harness,
-    Lda,
     Mechanism,
-    Outcome,
-    Pca,
     Recording,
+    Source,
     Study,
 )
+from megspeech.evaluation.studies.shrunklda import Harness
+from tests.unit.megspeech.evaluation.studies.shrunklda import classes, separable
 
 CHANNELS = 6
 SAMPLES = 2000
-CLASSES = 4
 
 
 def signal() -> np.ndarray:
     return np.random.default_rng(0).standard_normal((CHANNELS, SAMPLES)).astype(np.float32)
-
-
-def classes(n: int) -> torch.Tensor:
-    return torch.arange(n) % CLASSES
-
-
-def separable(n: int = 400, width: int = 5) -> Dataset:
-    y = classes(n)
-    x = torch.randn(n, width, generator=torch.Generator().manual_seed(0)) * 0.1
-    x[:, 0] += y.float()
-    return Dataset(x, y, torch.arange(n) // 10)
 
 
 def test_parse() -> None:
@@ -135,67 +120,6 @@ def test_table() -> None:
     assert list(cohort.table()["part"]) == ["train", "d"]
 
 
-def test_take() -> None:
-    data = separable()
-    assert len(data.take(data.group == 0).y) == 10
-
-
-def test_pca_fit() -> None:
-    pca = Pca.fit(separable().x)
-    assert pca.axes.shape == (5, 5)
-    assert torch.allclose(pca.axes.T @ pca.axes, torch.eye(5), atol=1e-4)
-
-
-def test_project() -> None:
-    data = separable()
-    z = Pca.fit(data.x).project(data.x, 2)
-    assert z.shape == (len(data.y), 2)
-    assert torch.allclose(z.mean(dim=0), torch.zeros(2), atol=1e-4)
-
-
-def test_lda_fit() -> None:
-    lda = Lda.fit(separable().x, separable().y)
-    assert lda.present.sum() == CLASSES
-    assert lda.means.shape == (VOCAB_SIZE, 5)
-
-
-def test_scores() -> None:
-    data = separable()
-    scores = Lda.fit(data.x, data.y).scores(data.x)
-    assert (scores.argmax(dim=1) == data.y).float().mean() > 0.95
-    assert scores[:, CLASSES:].max() < scores[:, :CLASSES].min()
-
-
-def test_macro() -> None:
-    assert Outcome(3, {"a": 0.2, "b": 0.4}).macro == pytest.approx(0.3)
-
-
-def test_dims() -> None:
-    assert Harness().dims(100) == [5, 10, 20, 34, 52, 63, 79, 89, 98]
-
-
-def test_balanced() -> None:
-    y = classes(40)
-    scores = torch.nn.functional.one_hot(y, VOCAB_SIZE).float()
-    assert Harness.balanced(scores, y) == 1.0
-
-
-def test_decoded() -> None:
-    data = separable()
-    assert Harness().decoded(data, data, 3, Pca.fit(data.x)) > 0.9
-
-
-def test_inner() -> None:
-    data = separable()
-    assert 1 <= Harness().inner(data) <= 5
-
-
-def test_outcome() -> None:
-    data = separable()
-    outcome = Harness().outcome(data, {"d": data})
-    assert outcome.domains["d"] > 0.9
-
-
 def test_mechanism_of() -> None:
     """Pure noise sits at the chance ratio; a class-locked feature far above it."""
     n = 4000
@@ -227,7 +151,7 @@ def test_load(tmp_path: Path) -> None:
 
 
 def test_covariances(tmp_path: Path) -> None:
-    out = Extractor.covariances(stored(tmp_path, 1), (Band(30, 45), Band(4, 8)))
+    out = Source(stored(tmp_path, 1)).covariances((Band(30, 45), Band(4, 8)))
     assert len(out) == 2
     assert out[0].seen == SAMPLES
 
@@ -235,7 +159,7 @@ def test_covariances(tmp_path: Path) -> None:
 def test_features(tmp_path: Path) -> None:
     run = stored(tmp_path, 1)
     envelope = Envelope(Band(30, 45), Covariance.of(signal()).whitener(3))
-    out = Extractor.features(run, np.array([10, 20]), (envelope,))
+    out = Source(run).features(np.array([10, 20]), (envelope,))
     assert out.shape == (2, 1, 3, BINS)
 
 

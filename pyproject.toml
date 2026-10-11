@@ -183,7 +183,12 @@ ignore_decorators = ["@model_validator", "@field_validator", "@field_serializer"
 # "don't care" list — a FACT VOCAB, per-repo, parallel to the pep8-naming slot (bd fy5). `model_config`
 # is the universal pydantic base (metaclass-read); add this repo's documented FPs below.
 # >>> LOCAL-SLOT: vulture-ignore-names — this repo's documented dead-code false positives
-ignore_names = ["model_config"]
+ignore_names = [
+    "model_config",
+    "LIBRIBRAIN",  # sourcefit.Source member, reached by iterating the enum
+    "length_spread",  # overlap result field, read through the dataclass repr in the log
+    "wins",  # expertcheck result field, read through the dataclass repr in the log
+]
 # <<< LOCAL-SLOT: vulture-ignore-names
 # >>> LOCAL-SLOT: vulture-scan — edit freely, the template will not overwrite intent here
 paths = ["core", "megspeech"]
