@@ -70,11 +70,13 @@ class Place:
     position: Shaped[np.ndarray, " n"]
     gap_next: Float[np.ndarray, " n"]
     gap_prev: Float[np.ndarray, " n"]
+    span: Int[np.ndarray, " n"]
+    """Each word's span, numbered from 0 and distinct across concatenated places."""
 
     @classmethod
     def of(cls, split: Split, ids: Int[Tensor, " k"]) -> "Place":
         """`ids`' rows of `split`: first, middle or last of their span, seconds to the next and from the previous
-        onset (NaN at a span's end)."""
+        onset (NaN at a span's end), and which span."""
         index, onset = split.index.cpu().numpy(), split.onset.cpu().numpy()
         valid = index != PAD
         slot = np.broadcast_to(np.arange(index.shape[1]), index.shape)[valid]
@@ -83,19 +85,22 @@ class Place:
         rows = len(split.y)
         position = np.full(rows, Position.MIDDLE.value, dtype=object)
         position[index[valid]] = place
+        span = np.full(rows, -1)
+        span[index[valid]] = np.broadcast_to(np.arange(index.shape[0])[:, None], index.shape)[valid]
         gap = onset[:, 1:] - onset[:, :-1]
         both = valid[:, 1:] & valid[:, :-1]
         following, preceding = np.full(rows, np.nan), np.full(rows, np.nan)
         following[index[:, :-1][both]] = gap[both]
         preceding[index[:, 1:][both]] = gap[both]
         keep = ids.cpu().numpy()
-        return cls(position[keep], following[keep], preceding[keep])
+        return cls(position[keep], following[keep], preceding[keep], span[keep])
 
     def concat(self, other: "Place") -> "Place":
         return Place(
             np.concatenate([self.position, other.position]),
             np.concatenate([self.gap_next, other.gap_next]),
             np.concatenate([self.gap_prev, other.gap_prev]),
+            np.concatenate([self.span, other.span + self.span.max(initial=-1) + 1]),
         )
 
 
@@ -236,6 +241,10 @@ class Scene:
     occurrences: Occurrences
     prior: Float[np.ndarray, " v"]
     tau: float
+    word: Scored | None = None
+    """The same words on the members' word head (one window, no context), finished at its own val tau."""
+    spoken: pd.DataFrame | None = None
+    """Each scored word's `run`, `onset` and heard `word`, in the scored order."""
 
     @classmethod
     def of(cls, root: DataRoot, name: str, device: torch.device) -> "Scene":  # devtools-ignore: test-mirror
@@ -248,22 +257,39 @@ class Scene:
         log_prior = saved[VAL][0].log_prior.float()
         val = cls._rows(saved[VAL])[0]
         finish = Arm.all()[0].fit(val, log_prior, Ruler(k=TOP))
-        LOG.info("tau %.2f fit on %s (%d members)", finish.tau, VAL, len(members))
+        alone = Arm.all()[0].fit({key: rows.swapped() for key, rows in val.items()}, log_prior, Ruler(k=TOP))
+        LOG.info("tau %.2f context, %.2f word head, fit on %s (%d members)", finish.tau, alone.tau, VAL, len(members))
         test, ids = cls._rows(saved[TEST])
         loaded = replace(Loader.of(root, members[:1], DEEP, device), partition=Partition.TEST)
-        splits, _ = loaded.domains(loaded.ruled(Run.discover(root.raw())))
-        scores = {name: finish.scores(rows, log_prior).numpy() for name, rows in test.items()}
+        held = loaded.ruled(Run.discover(root.raw()))
+        splits, _ = loaded.domains(held)
+        _, carried = loaded.spoken([run for runs in held.values() for run in runs])
         labels = np.concatenate([rows.labels.numpy() for rows in test.values()])
         place = [Place.of(splits[name], ids[name]) for name in test]
+        spoken = [cls._spoken(carried, held[name], splits[name], ids[name]) for name in test]
         for name, rows in test.items():
             if not torch.equal(splits[name].y[ids[name]], rows.labels):
                 raise ValueError(f"the split and the saved probabilities disagree on the words of {name}")
-        scored = Scored(
-            labels,
-            np.concatenate(list(scores.values())),
-            np.concatenate([np.full(len(rows.labels), name) for name, rows in test.items()]),
+        domains = np.concatenate([np.full(len(rows.labels), name) for name, rows in test.items()])
+        context, word = (
+            Scored(labels, np.concatenate([fit.scores(rows, log_prior).numpy() for rows in chosen]), domains)
+            for fit, chosen in ((finish, test.values()), (alone, [rows.swapped() for rows in test.values()]))
         )
-        return cls(Occurrences(scored, cls._joined(place)), log_prior.exp().numpy(), finish.tau)
+        return cls(
+            Occurrences(context, cls._joined(place)),
+            log_prior.exp().numpy(),
+            finish.tau,
+            word,
+            pd.concat(spoken, ignore_index=True),
+        )
+
+    @staticmethod
+    def _spoken(carried: pd.DataFrame, runs: list[Run], split: Split, ids: Int[Tensor, " k"]) -> pd.DataFrame:
+        """`ids`' rows of the words `split` was cut from, checked word for word against the split."""
+        words = carried[carried["run"].isin([run.name for run in runs])].reset_index(drop=True)
+        if not np.array_equal(words["token"].to_numpy(), split.token.cpu().numpy()):
+            raise ValueError("the carried words and the split disagree")
+        return words.loc[ids.cpu().numpy(), ["run", "onset", "word"]].reset_index(drop=True)
 
     @staticmethod
     def _joined(places: list[Place]) -> Place:

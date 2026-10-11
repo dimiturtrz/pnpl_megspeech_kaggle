@@ -39,7 +39,7 @@ def scored() -> Scored:
 def place(n: int) -> Place:
     position = np.array([Position.FIRST, Position.MIDDLE, Position.LAST] * n, dtype=object)[:n]
     gap = np.linspace(0.1, 1.0, n)
-    return Place(position, gap, gap[::-1].copy())
+    return Place(position, gap, gap[::-1].copy(), np.arange(n) // SPAN)
 
 
 def occurrences() -> Occurrences:
@@ -64,12 +64,14 @@ def test_place_of() -> None:
     assert found.gap_next[:3].tolist() == [0.25, 0.5, pytest.approx(np.nan, nan_ok=True)]
     assert found.gap_prev[1] == 0.25
     assert np.isnan(found.gap_prev[0])
+    assert found.span.tolist() == [0, 0, 0, 1, 1]
 
 
 def test_concat() -> None:
     joined = place(SPAN).concat(place(SPAN))
     assert len(joined.position) == 2 * SPAN
     assert len(joined.gap_next) == 2 * SPAN
+    assert joined.span.tolist() == [0, 0, 0, 1, 1, 1]
 
 
 def test_durations(tmp_path: Path) -> None:
