@@ -5,12 +5,19 @@ import torch
 from torch import nn
 
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.model.config import ContextConfig
+from megspeech.model.hierarchy import Factorised, Flat
 from megspeech.model.readout import ContextReadout
 from megspeech.objective.anchored import AnchoredHead
 from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective
 from megspeech.objective.scorer import DIM
 from tests.unit.megspeech.model.sentence import CONTEXT, GENERATOR
+
+
+def test_hierarchy() -> None:
+    assert isinstance(ContextReadout.hierarchy(ContextConfig()), Flat)
+    assert isinstance(ContextReadout.hierarchy(ContextConfig(hierarchical=True)), Factorised)
 
 
 def test_build() -> None:

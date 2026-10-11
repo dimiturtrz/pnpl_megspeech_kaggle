@@ -6,6 +6,7 @@ the embeddings across the span, and both the isolated-word head and the context 
 
 import logging
 import math
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import cast
@@ -17,6 +18,7 @@ from torch import Tensor, nn
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.corpus import Corpus
+from megspeech.data.labels.context_tags import ContextTags
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.device import Device
 from megspeech.evaluation.scoring.evaluator import Evaluator
@@ -24,6 +26,7 @@ from megspeech.evaluation.scoring.score import Epoch
 from megspeech.evaluation.scoring.telemetry import Telemetry
 from megspeech.model.branch import Branch
 from megspeech.model.fusion import Fusion
+from megspeech.model.hierarchy import Hierarchy
 from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.input.subjects import Unseen
 from megspeech.model.sentence import SentenceNet
@@ -93,6 +96,8 @@ class Trainer:
     """The saved runs whose encoders the model reads beside its own (`ContextConfig.fused`)."""
     pairing: Unpaired = field(default_factory=Unpaired)
     """What writes cross-subject pairs into each batch's draws (`SamplerConfig.pairs`)."""
+    tagged: Callable[[], Int[Tensor, " n"]] = Hierarchy.untagged
+    """The training words' in-context tags, read only by a factorised context head (`ContextConfig.hierarchical`)."""
 
     @staticmethod
     def corpus(config: RunConfig, root: DataRoot, device: torch.device) -> Corpus:
@@ -133,6 +138,7 @@ class Trainer:
             stem=stemmed,
             fused=fused,
             pairing=pairing,
+            tagged=lambda: ContextTags.load(ContextTags.path(root)).tensor(corpus.positions, device),
         )
 
     def model(self, train: Split) -> SentenceNet:
@@ -144,6 +150,7 @@ class Trainer:
         model.fuse(Fusion(Branch.many(self.fused, context, channels), context.branch_drop))
         model.whiten.fit(model.scale(SAMPLES[self.config.context.covariance].windows(train, sample)))
         model.centring.reserve(train.runs())
+        model.hierarchy.admit(train.y, self.tagged)
         if self.initial:
             model.warm(self.initial)
         if self.stem:

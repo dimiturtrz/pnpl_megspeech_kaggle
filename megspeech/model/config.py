@@ -18,6 +18,7 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.context.intervals import Intervals
 from megspeech.model.context.timing import Clock
 from megspeech.model.words.conv import CONV, ConvConfig
+from megspeech.model.words.heads import WordHead
 from megspeech.model.words.spanned import SPANNED, SpannedConfig
 from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective
@@ -129,6 +130,10 @@ class ContextConfig:
     """Each word embedding, before the transformer and the word head read it, less the mean of its run's embeddings:
     a moving mean per run in training, the run's own mean over all its windows in evaluation (`RunCentring`). The
     run's offset dominates the embeddings, so removing it leaves the heads the word's structure."""
+    hierarchical: bool = False
+    """The context head's words factorised through a part of speech its own tag head reads off the refined position,
+    `log p(w) = log sum_t p(t|x) p(w|t,x)` (`model.hierarchy.Factorised`): train the tag head on every heard word with
+    `optim.tagging` at `optim.tap context`."""
 
     def __post_init__(self) -> None:
         Rule.enforce(self, CONTEXT_RULES)
@@ -187,6 +192,13 @@ CONTEXT_RULES: tuple[Rule[ContextConfig], ...] = (
     Rule(
         lambda c: c.covariance is Covariance.NOISE and not c.whiten,
         lambda _: "a noise covariance is only inverted by whiten",
+    ),
+    Rule(
+        lambda c: c.hierarchical and (c.objective is not Objective.SOFTMAX or c.conv.head is not WordHead.LINEAR),
+        lambda c: (
+            f"the factorised context head emits log-probabilities a softmax trains, and holds the run's one tag head: "
+            f"objective {c.objective}, word head {c.conv.head}"
+        ),
     ),
 )
 FILE = "context.json"

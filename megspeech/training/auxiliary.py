@@ -113,7 +113,8 @@ class Joint(Auxiliary):
     def trained(self, net: SentenceNet, compiled: Callable[[WithAuxiliary], WithAuxiliary]) -> WithAuxiliary:
         taps = tuple(self.tapped(term) for term in self.terms)
         heads = nn.ModuleList(
-            term.readout(net.words.head, tap.width(net)) for term, tap in zip(self.terms, taps, strict=True)
+            term.readout(net.hierarchy.tagging(net.words.head), tap.width(net))
+            for term, tap in zip(self.terms, taps, strict=True)
         )
         heads.to(next(net.parameters()).device)
         return compiled(WithAuxiliary(net, heads, self.tap, taps))

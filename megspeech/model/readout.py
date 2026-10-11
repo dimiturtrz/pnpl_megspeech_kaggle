@@ -6,12 +6,18 @@ from torch import Tensor, nn
 
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import ContextConfig
+from megspeech.model.hierarchy import Hierarchy
 from megspeech.objective.anchored import AnchoredHead
 from megspeech.objective.scorer import DIM
 
 
 class ContextReadout:
     """Builds the context head a config names."""
+
+    @staticmethod
+    def hierarchy(context: ContextConfig) -> Hierarchy:
+        """What turns the context head's logits into its scores: flat, or factorised through the part of speech."""
+        return Hierarchy.of(context)
 
     @staticmethod
     def build(context: ContextConfig, prototypes: Float[Tensor, "v d"] | None) -> nn.Module:

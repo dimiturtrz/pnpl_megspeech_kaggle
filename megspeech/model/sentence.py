@@ -40,6 +40,7 @@ class SentenceNet(Span):
         self.timing = TimingHead.over_vocabulary(active=context.rhythm)
         pyramid = context.conv.pyramid
         self.pyramid = pyramid.readout(self.words, context.width)
+        self.hierarchy = ContextReadout.hierarchy(context)
         self.train()
 
     @override
@@ -119,7 +120,7 @@ class SentenceNet(Span):
         self, refined: Float[Tensor, "g w h"], slots: Float[Tensor, "g w e"]
     ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
         """The context head's logits over the `refined` positions, and the word head's over their `slots`."""
-        return self.head(refined), self.reading.read(self.words.head, slots, refined)
+        return self.hierarchy(self.head(refined), refined), self.reading.read(self.words.head, slots, refined)
 
     def readouts(self) -> tuple[nn.Module, ...]:
         """The modules reading each of `forward`'s outputs, in order: the context head, then the word head."""

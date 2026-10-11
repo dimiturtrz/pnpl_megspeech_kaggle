@@ -11,6 +11,7 @@ from megspeech.model.context.intervals import Intervals
 from megspeech.model.context.timing import Clock
 from megspeech.model.pyramid import PyramidConfig
 from megspeech.model.words.conv import ConvConfig
+from megspeech.model.words.heads import WordHead
 from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective
 
@@ -54,6 +55,11 @@ def test_combination() -> None:
         ContextConfig(whiten=True, encoder=Encoder.TRAINED)
     with pytest.raises(ValueError, match="siglip"):
         ContextConfig(anchor=Source.AUDIO, objective=Objective.SIGLIP)
+    assert ContextConfig(hierarchical=True).hierarchical
+    with pytest.raises(ValueError, match="factorised"):
+        ContextConfig(hierarchical=True, objective=Objective.TOPK)
+    with pytest.raises(ValueError, match="factorised"):
+        ContextConfig(hierarchical=True, conv=ConvConfig(head=WordHead.TAGGED))
     assert ContextConfig(anchor=Source.TEXT).anchor is Source.TEXT
     for bad in (-1, 50):
         with pytest.raises(ValueError, match="anchor_dim"):
