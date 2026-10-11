@@ -14,11 +14,11 @@ from torch import Tensor, nn
 
 from megspeech.data.batching.split import EVAL_SPANS, Split
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.metric.ruler import Coverage, Graded, Ruler
 from megspeech.evaluation.scoring.score import ADJUSTMENTS, MIN_NOVEL, Epoch, Head, Report, Score
+from megspeech.model.words.layers.centring import RunCentring
 from megspeech.model.words.layers.norm import MaskedBatchNorm1d
 
 
@@ -66,7 +66,13 @@ class Evaluator:
         return self.sweep(model, split)
 
     def sweep(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
-        """`read` in whatever mode `model` is in.
+        """`read` in whatever mode `model` is in, a run-centred model's run means gathered by a first pass over
+        `split` (`RunCentring.calibrated`)."""
+        with RunCentring.calibrated(model, lambda: self.swept(model, split)):
+            return self.swept(model, split)
+
+    def swept(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
+        """Both heads' logits for every word of `split`, in one pass.
 
         Every batch reserves room for full spans, so a compiled model sees one shape (and the last batch's).
         """
@@ -76,7 +82,7 @@ class Evaluator:
             for spans in torch.arange(len(split.index), device=self.device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
                 context, word = model(batch.inputs())
-                at = torch.where(batch.index != PAD, batch.index, words)
+                at = batch.words_at(words)
                 out[Head.CONTEXT][at] = context.float()
                 out[Head.WORD][at] = word.float()
         return {head: logits[:words] for head, logits in out.items()}

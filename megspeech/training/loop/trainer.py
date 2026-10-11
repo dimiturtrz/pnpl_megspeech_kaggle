@@ -143,6 +143,7 @@ class Trainer:
         model = SentenceNet(Scaler(sample), context=context, prototypes=self.prototypes, channels=channels)
         model.fuse(Fusion(Branch.many(self.fused, context, channels), context.branch_drop))
         model.whiten.fit(model.scale(SAMPLES[self.config.context.covariance].windows(train, sample)))
+        model.centring.reserve(train.runs())
         if self.initial:
             model.warm(self.initial)
         if self.stem:

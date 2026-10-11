@@ -101,7 +101,7 @@ class Corpus:
             data.rate
         )
         return replace(
-            held,
+            held.numbered(words["run"]),
             source=torch.tensor(data.sources(words["run"]), device=windows.device),
             read=torch.tensor(data.reads(words["run"]), device=windows.device),
             muted=torch.tensor(data.muted(words["run"]), device=windows.device),

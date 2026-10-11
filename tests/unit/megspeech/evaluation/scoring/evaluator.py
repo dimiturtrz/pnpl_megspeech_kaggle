@@ -75,6 +75,16 @@ def test_sweep() -> None:
     assert out[Head.WORD].shape == (12, VOCAB_SIZE)
 
 
+def test_swept() -> None:
+    """One pass reads every word; a model with no active centring is read in that one pass alone."""
+    model = Normed().train()
+    out = Evaluator(CPU).swept(model, split())
+    assert out[Head.CONTEXT].shape == (12, VOCAB_SIZE)
+    once = int(model.norm.num_batches_tracked)
+    Evaluator(CPU).sweep(model, split())
+    assert int(model.norm.num_batches_tracked) == 2 * once
+
+
 def test_read() -> None:
     out = Evaluator(CPU).read(Constant(), split())
     assert out[Head.CONTEXT].shape == (12, VOCAB_SIZE)

@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import torch
 from torch import nn
 
@@ -19,6 +21,18 @@ def test_features() -> None:
     assert h.shape == (2, 3, CONTEXT.width)
     assert slots.shape == (2, 3, model.words.width)
     assert slots[slot == len(x)].eq(0).all()
+
+
+def test_centred() -> None:
+    """Off, the embeddings themselves; on, each run's words centred on that run's mean."""
+    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    spans = SpanInput(x, torch.zeros(2, 3), slot, torch.zeros(len(x), dtype=torch.long), run=torch.tensor([0, 0, 1]))
+    embedded = torch.randn(2, 3, 8, generator=GENERATOR) * spans.mask[..., None]
+    assert SentenceNet(nn.Identity(), CONTEXT).centred(spans, embedded) is embedded
+    on = SentenceNet(nn.Identity(), replace(CONTEXT, run_centred=True)).eval().centred(spans, embedded)
+    assert torch.allclose(on[0, :2].mean(0), torch.zeros(8), atol=1e-5)
+    assert torch.allclose(on[1, 0], torch.zeros(8), atol=1e-5)
 
 
 def test_width() -> None:

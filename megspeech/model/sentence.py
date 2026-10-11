@@ -69,6 +69,7 @@ class SentenceNet(Span):
         added, and the word head's, both corrected by the pyramid readout."""
         prepared = self.prepare(spans.x, spans.subject)
         slots, taps = self.pyramid.positions(self.words, prepared, spans.onset, spans.slot)
+        slots = self.centred(spans, slots)
         refined, slots, context, word = self.finish(self.chunked(spans, slots), slots, spans.onset, spans.mask)
         return refined, slots, *self.pyramid.correct(taps, refined, context, word)
 
@@ -84,6 +85,7 @@ class SentenceNet(Span):
         """`heard`'s outputs and, last, the encoder's per-timestep features at each position: `heard` itself, the
         encoder read once, for a model with no pyramid readout (`RUN_RULES`)."""
         slots, times = self.words.positions_timed(self.prepare(spans.x, spans.subject), spans.slot)
+        slots = self.centred(spans, slots)
         h = self.chunked(spans, slots)
         return *self.finish(h, slots, spans.onset, spans.mask), times
 

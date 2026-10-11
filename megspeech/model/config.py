@@ -125,6 +125,11 @@ class ContextConfig:
     `fused`. A frozen encoder's features fit the training words better than the validation's, and a head that
     sees them always learns to trust them."""
 
+    run_centred: bool = False
+    """Each word embedding, before the transformer and the word head read it, less the mean of its run's embeddings:
+    a moving mean per run in training, the run's own mean over all its windows in evaluation (`RunCentring`). The
+    run's offset dominates the embeddings, so removing it leaves the heads the word's structure."""
+
     def __post_init__(self) -> None:
         Rule.enforce(self, CONTEXT_RULES)
 

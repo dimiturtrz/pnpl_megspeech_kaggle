@@ -13,6 +13,7 @@ from megspeech.model.context.timing import Jitter
 from megspeech.model.encoding import Encoding
 from megspeech.model.fusion import Fusion
 from megspeech.model.input.subjects import Unseen
+from megspeech.model.words.layers.centring import RunCentring
 
 
 class Span(Encoding):
@@ -36,6 +37,7 @@ class Span(Encoding):
         self.intervals = context.intervals
         self.jitter = Jitter(context.onset_jitter)
         self.masking = WordMask(context.width, context.word_mask)
+        self.centring = RunCentring(self.words.width, active=context.run_centred)
 
     def fuse(self, fusion: Fusion) -> Self:
         """This model reading `fusion`'s encoders beside its own: their features join its at the transformer's
@@ -45,8 +47,12 @@ class Span(Encoding):
 
     def features(self, spans: SpanInput) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"]]:
         """The transformer's input at each span position, and the position's word embedding (zeros when empty)."""
-        slots = self.words.positions(self.prepare(spans.x, spans.subject), spans.onset, spans.slot)
+        slots = self.centred(spans, self.words.positions(self.prepare(spans.x, spans.subject), spans.onset, spans.slot))
         return self.chunked(spans, slots), slots
+
+    def centred(self, spans: SpanInput, slots: Float[Tensor, "g w e"]) -> Float[Tensor, "g w e"]:
+        """The word embeddings `slots` of `spans` as the heads read them: centred on their run when `run_centred`."""
+        return self.centring(slots, spans.mask, spans.runs)
 
     def chunked(self, spans: SpanInput, slots: Float[Tensor, "g w e"]) -> Float[Tensor, "g w h"]:
         """The transformer's input at each span position from the word embeddings `slots`."""

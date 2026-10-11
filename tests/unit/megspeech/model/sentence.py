@@ -37,6 +37,27 @@ def test_sentence_net_forward() -> None:
     assert torch.isfinite(context[slot < len(x)]).all()
 
 
+def test_run_centred_off_is_unchanged() -> None:
+    """Off, the centring adds no state, draws no initialisation, and ignores the runs: the same seed builds the same
+    weights, and the logits are those of a model reading no runs."""
+    slot = torch.tensor([[0, 1, 3], [2, 3, 3]])
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    plain = SpanInput(x, torch.zeros(2, 3), slot, torch.zeros(len(x), dtype=torch.long))
+    runs = replace(plain, run=torch.tensor([0, 1, 1]))
+    torch.manual_seed(0)
+    model = SentenceNet(nn.Identity(), CONTEXT).eval()
+    torch.manual_seed(0)
+    centred = SentenceNet(nn.Identity(), replace(CONTEXT, run_centred=True)).eval()
+    assert not any("centring" in key for key in model.state_dict())
+    assert all(torch.equal(value, centred.state_dict()[key]) for key, value in model.state_dict().items())
+    context, word = model.forward(plain)
+    again, word_again = model.forward(runs)
+    assert torch.equal(context, again)
+    assert torch.equal(word, word_again)
+    moved, _ = centred.forward(runs)
+    assert not torch.equal(context, moved)
+
+
 def test_embed() -> None:
     model = SentenceNet(nn.Identity(), CONTEXT).eval()
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)

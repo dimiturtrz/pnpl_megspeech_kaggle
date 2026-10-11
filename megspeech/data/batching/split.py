@@ -43,11 +43,19 @@ class SpanInput:
     slot: Int[Tensor, "g w"]
     subject: Int[Tensor, " r"]
     finish: Float[Tensor, " g"] | None = None
+    run: Int[Tensor, " r"] | None = None
+    """Each row's run, numbered within its split; None reads every row as one run."""
 
     @property
     def mask(self) -> Bool[Tensor, "g w"]:
         """The span positions holding a word."""
         return self.slot < len(self.x)
+
+    @property
+    def runs(self) -> Int[Tensor, "g w"]:
+        """Each span position's run, -1 where the position is empty."""
+        rows = self.subject.new_zeros(len(self.x)) if self.run is None else self.run
+        return torch.nn.functional.pad(rows, (0, 1), value=-1)[self.slot]
 
     def reading(self, x: Float[Tensor, "r c t"]) -> "SpanInput":
         """These spans over the windows `x` instead, row for row."""
@@ -71,10 +79,15 @@ class Batch:
     index: Int[Tensor, "g w"]
     subject: Int[Tensor, " r"]
     finish: Float[Tensor, " g"] | None = None
+    run: Int[Tensor, " r"] | None = None
 
     def inputs(self, x: Float[Tensor, "r c t"] | None = None) -> SpanInput:
         """What a model reads of this batch, over the windows `x` when given (an augmented copy of its own)."""
-        return SpanInput(self.x if x is None else x, self.onset, self.slot, self.subject, self.finish)
+        return SpanInput(self.x if x is None else x, self.onset, self.slot, self.subject, self.finish, self.run)
+
+    def words_at(self, empty: int) -> Int[Tensor, "g w"]:
+        """Each span position's split word, `empty` where the position holds none."""
+        return torch.where(self.index != PAD, self.index, empty)
 
     def target(self, labels: Int[Tensor, " n"]) -> Int[Tensor, "g w"]:
         """Each position's label from the split's `labels`; `IGNORE` where the position is empty."""
@@ -146,6 +159,8 @@ class Split:
     finish: Float[Tensor, " g"] | None = None
     """Each span's last word's end, in seconds from its first onset: its epoch's bound less `TAIL`, as a Kaggle test
     sentence epoch's length less `sentence_extra_end_s` gives it; None where unknown (`ended`)."""
+    run: Int[Tensor, " n"] | None = None
+    """Each word's run (a Kaggle test archive), numbered from 0 within the split; None where unknown."""
 
     @classmethod
     def from_arrays(
@@ -208,13 +223,26 @@ class Split:
         group = np.where(sentence, frame["epoch"], -1 - frame["index"])
         keys = frame.assign(group=group)[["subject", "source", "group"]]
         spans = Spans.by_key(keys, frame["onset_s"].to_numpy())
-        return cls.of(
+        held = cls.of(
             windows,
             (np.zeros(len(frame), dtype=np.int64),) * 2,
             spans,
             np.ones(len(frame)),
             frame["subject"].to_numpy(),
         ).finished(rate)
+        return held.numbered(pd.MultiIndex.from_frame(frame[["subject", "source"]]))
+
+    def numbered(self, runs: "pd.Series[str] | pd.Index[str]") -> "Split":
+        """This split with each word's run named by `runs`, numbered from 0 in order of appearance."""
+        return replace(self, run=torch.tensor(pd.factorize(runs)[0].astype(np.int64), device=self.y.device))
+
+    def runs(self) -> int:
+        """How many runs the split's words come from; 0 where unknown."""
+        return 0 if self.run is None else int(self.run.max()) + 1
+
+    def runs_of(self, words: Int[Tensor, " r"]) -> Int[Tensor, " r"] | None:
+        """The run of each of `words`; None where unknown."""
+        return None if self.run is None else self.run[words]
 
     def sample(self, count: int) -> Float[Tensor, "k c t"]:
         """Up to `count` windows drawn without replacement."""
@@ -262,7 +290,15 @@ class Split:
         slot = torch.where((index != PAD) & (order < rows), order, rows)
         index = torch.where(slot < rows, index, PAD)
         words = index.new_zeros(rows + 1).scatter_(0, slot.flatten(), index.clamp(min=0).flatten())[:rows]
-        return Batch(self.windows(words, jitter), self.onset[spans], slot, index, self.subject[words], self.ends(spans))
+        return Batch(
+            self.windows(words, jitter),
+            self.onset[spans],
+            slot,
+            index,
+            self.subject[words],
+            self.ends(spans),
+            self.runs_of(words),
+        )
 
     def segmented(self, spans: Int[Tensor, " b"]) -> Batch:
         """One row per span: its continuous segment from its first onset, `slot` naming that row at each of the span's
@@ -272,7 +308,9 @@ class Split:
         segments = replace(self.windows, length=self.windows.segment, offset=0, baseline=0)
         rows = torch.arange(len(spans), device=index.device)[:, None].expand_as(index)
         slot = torch.where(index != PAD, rows, len(spans))
-        return Batch(segments(first), self.onset[spans], slot, index, self.subject[first], self.ends(spans))
+        return Batch(
+            segments(first), self.onset[spans], slot, index, self.subject[first], self.ends(spans), self.runs_of(first)
+        )
 
     def ends(self, spans: Int[Tensor, " b"]) -> Float[Tensor, " b"] | None:
         """`finish` of `spans`; None where unknown."""

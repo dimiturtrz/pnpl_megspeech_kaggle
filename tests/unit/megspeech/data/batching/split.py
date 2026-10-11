@@ -231,6 +231,47 @@ def test_ordered_interior_pad() -> None:
     assert sorted(moved.index[1][moved.index[1] != PAD].tolist()) == [3, 4]
 
 
+def numbered() -> Split:
+    return split().numbered(pd.Series(["b", "a"] * 6))
+
+
+def test_numbered() -> None:
+    held = numbered()
+    assert held.run is not None
+    assert held.run.tolist() == [0, 1] * 6
+
+
+def test_split_runs() -> None:
+    assert numbered().runs() == 2
+    assert split().runs() == 0
+
+
+def test_words_at() -> None:
+    batch = split().batch(torch.tensor([1, 0]), rows=6)
+    assert batch.words_at(12)[:, :DENSE].tolist() == [[DENSE, 12, 12, 12], [0, 1, 2, 3]]
+
+
+def test_span_input_runs() -> None:
+    """A span position reads its row's run, -1 where empty; every row is one run where unknown."""
+    known = dataclasses.replace(spans(), run=torch.tensor([4, 5, 6]))
+    assert known.runs.tolist() == [[4, 6, -1]]
+    assert spans().runs.tolist() == [[0, 0, -1]]
+
+
+def test_runs_of() -> None:
+    assert split().runs_of(torch.tensor([0, 1])) is None
+    of = numbered().runs_of(torch.tensor([3, 0]))
+    assert of is not None
+    assert of.tolist() == [1, 0]
+    batch = numbered().batch(torch.tensor([1, 0]), rows=6)
+    assert batch.run is not None
+    assert batch.inputs().run is batch.run
+    assert batch.run[:5].tolist() == [DENSE % 2, 0, 1, 0, 1]
+    whole = dataclasses.replace(segmented(), run=numbered().run).segmented(torch.tensor([1, 0]))
+    assert whole.run is not None
+    assert whole.run.tolist() == [DENSE % 2, 0]
+
+
 def test_inputs() -> None:
     batch = split().batch(torch.tensor([1, 0]), rows=6)
     spans = batch.inputs()
@@ -294,6 +335,8 @@ def test_from_kaggle() -> None:
     assert held.windows is windows
     assert held.index[:, :2].tolist() == [[0, 1], [2, -1]]
     assert held.onset[0, :2].tolist() == pytest.approx([0.0, 0.3])
+    assert held.run is not None
+    assert held.run.tolist() == [0, 0, 1]
     with pytest.raises(ValueError, match="2 Kaggle test windows for 3"):
         Split.from_kaggle(Kaggle(), Windows.stacked(torch.zeros(2, CHANNELS, SAMPLES)))
 
