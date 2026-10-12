@@ -9,6 +9,7 @@ from megspeech.model.config import ContextConfig
 from megspeech.model.encoding import Encoding
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import Unseen
+from megspeech.model.motion import Frozen
 from megspeech.model.words.conv import ConvConfig
 
 CONTEXT = ContextConfig(width=16, heads=2, layers=1, conv=ConvConfig(hidden=8, dilations=(1, 2)))
@@ -58,3 +59,26 @@ def test_adopt_stem_without_subject_layer() -> None:
     assert torch.equal(made.embed(x, zero), stem.embed(x, zero))
     with pytest.raises(KeyError, match="lacks encoder entries"):
         made.adopt({})
+
+
+def test_stage() -> None:
+    made = encoding()
+    assert made.stage() == (made.scale, made.whiten, made.subjects, made.words)
+
+
+def test_train() -> None:
+    made = encoding()
+    made.motion = Frozen()
+    assert made.train() is made
+    assert made.training
+    assert not any(module.training for module in made.stage())
+
+
+def test_move() -> None:
+    made = encoding().train()
+    made.move(Frozen())
+    assert isinstance(made.motion, Frozen)
+    assert not made.words.training
+    assert not any(p.requires_grad for p in made.encoder())
+    made.train()
+    assert not made.words.training

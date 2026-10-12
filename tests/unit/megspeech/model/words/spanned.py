@@ -78,3 +78,8 @@ def test_weights():
         expected = torch.zeros(6)
         expected[list(covered)] = 1 / len(covered)
         assert torch.allclose(weights[0, at], expected)
+
+
+def test_core():
+    encoder = words()
+    assert encoder.core() == (encoder.trunk,)

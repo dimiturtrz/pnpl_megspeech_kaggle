@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 
 from core.paths import DataRoot
+from megspeech.model.motion import Frozen, Moving
 from megspeech.training.transfer import WEIGHTS, TransferConfig
 
 CPU = torch.device("cpu")
@@ -26,3 +27,8 @@ def test_weights(tmp_path: Path) -> None:
 
 def test_weights_of_nothing_never_read_the_root() -> None:
     assert TransferConfig().weights(DataRoot(Path("absent")), CPU) == ({}, {})
+
+
+def test_motion() -> None:
+    assert type(TransferConfig(encoder_lr=0.0).motion()) is Frozen
+    assert type(TransferConfig(encoder_lr=0.1).motion()) is Moving

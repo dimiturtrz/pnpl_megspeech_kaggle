@@ -85,9 +85,13 @@ class WordEncoder(nn.Module, ABC):
         embedded, pooled = self.embed_tapped(x, taps, levels, self.occupied(x, slot))
         return self.placed(embedded, slot), self.placed(pooled, slot)
 
+    def core(self) -> tuple[nn.Module, ...]:
+        """The modules `TransferConfig.encoder_lr` scales: the whole encoder, but for one over a pretrained trunk."""
+        return (self,)
+
     def backbone(self) -> tuple[nn.Parameter, ...]:
-        """The parameters `TransferConfig.encoder_lr` scales: everything, but for an encoder over a pretrained trunk."""
-        return tuple(self.parameters())
+        """The parameters of `core`."""
+        return tuple(p for module in self.core() for p in module.parameters())
 
     def normalise(self, x: Float[Tensor, "b c t"], present: Bool[Tensor, "b 1 t"]) -> Float[Tensor, "b c t"]:
         """`x` standardised when `instance`, else unchanged."""

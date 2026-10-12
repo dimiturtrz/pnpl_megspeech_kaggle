@@ -7,6 +7,7 @@ import torch
 from torch import Tensor
 
 from core.paths import DataRoot
+from megspeech.model.motion import Frozen, Moving
 
 WEIGHTS = "model.pt"
 
@@ -28,6 +29,10 @@ class TransferConfig:
     encoder_lr: float = 1.0
     """The encoder's learning rate as a share of `lr`, its decay alike; 0 freezes it: a `stem` encoder kept while the
     span transformer trains on top of it."""
+
+    def motion(self) -> Moving:
+        """How the encoder moves: held as it is at an `encoder_lr` of 0, else with the rest."""
+        return Frozen() if self.encoder_lr == 0 else Moving()
 
     def weights(self, root: DataRoot, device: torch.device) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
         """The `warm` run's saved weights and the `stem` run's, under `root`'s models on `device`; none for an empty

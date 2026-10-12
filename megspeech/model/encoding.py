@@ -1,5 +1,7 @@
 """The stage-1 modules: everything between a window and its word embedding."""
 
+from typing import Self, override
+
 from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
@@ -7,6 +9,7 @@ from megspeech.model.builder import WordBuilder
 from megspeech.model.config import ContextConfig
 from megspeech.model.input.stem import Stem
 from megspeech.model.input.subjects import Unseen
+from megspeech.model.motion import Moving
 from megspeech.model.words.base import WordEncoder
 
 ENCODER = ("scale", "whiten", "subjects", "words")
@@ -24,6 +27,19 @@ class Encoding(nn.Module):
             scale, channels, whiten=context.whiten, subjects=context.subjects, unseen=unseen
         )
         self.words = WordBuilder.build(context.encoder, context, channels)
+        self.motion = Moving()
+
+    @override
+    def train(self, mode: bool = True) -> Self:
+        """`mode` set throughout, but for whatever of the stage `motion` holds."""
+        super().train(mode)
+        self.motion.hold(self.stage())
+        return self
+
+    def move(self, motion: Moving) -> None:
+        """The stage held by `motion` from now on, through every later mode change."""
+        self.motion = motion
+        self.train(self.training)
 
     def embed(
         self, x: Float[Tensor, "r c t"], subject: Int[Tensor, " r"], valid: Bool[Tensor, " r"] | None = None
@@ -41,8 +57,12 @@ class Encoding(nn.Module):
         """The stage-1 parameters, every one a word's embedding and word-head logits depend on: the subject layer, the
         word CNN and its head, or for an encoder over a pretrained trunk (`WordEncoder.backbone`) the trunk alone, its
         read layers training with the span transformer and context head, the rest."""
-        stem = [p for name in ENCODER if name != "words" for p in getattr(self, name).parameters()]
-        return [*stem, *self.words.backbone()]
+        return [p for module in self.stage() for p in module.parameters()]
+
+    def stage(self) -> tuple[nn.Module, ...]:
+        """The modules `encoder`'s parameters are of."""
+        stem = tuple(getattr(self, name) for name in ENCODER if name != "words")
+        return (*stem, *self.words.core())
 
     def adopt(self, state: dict[str, Tensor]) -> None:
         """The stage-1 entries of another run's `state` loaded in, every other weight left as it is; a subject layer

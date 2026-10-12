@@ -162,6 +162,8 @@ class Trainer:
             model.adopt(self.stem)
         if self.timing:
             model.timing.frozen(self.timing)
+        transfer = self.config.optim.transfer
+        model.move(transfer.motion())
         return self.compiled(model.to(self.evaluator.device))
 
     def compiled[M: nn.Module](self, model: M) -> M:

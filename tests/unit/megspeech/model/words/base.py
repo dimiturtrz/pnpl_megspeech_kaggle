@@ -152,3 +152,8 @@ def test_placed() -> None:
     rows = torch.arange(6.0).reshape(2, 3)
     placed = WordEncoder.placed(rows, torch.tensor([[1, 2], [0, 2]]))
     assert placed.tolist() == [[[3.0, 4.0, 5.0], [0.0, 0.0, 0.0]], [[0.0, 1.0, 2.0], [0.0, 0.0, 0.0]]]
+
+
+def test_core() -> None:
+    encoder = Pooled()
+    assert encoder.core() == (encoder,)

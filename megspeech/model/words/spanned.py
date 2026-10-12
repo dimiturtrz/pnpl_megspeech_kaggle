@@ -59,8 +59,8 @@ class SpanWords(WordEncoder):
         return cls(Trunk.pretrained(root), conv, spanned, channels)
 
     @override
-    def backbone(self) -> tuple[nn.Parameter, ...]:
-        return tuple(self.trunk.parameters())
+    def core(self) -> tuple[nn.Module, ...]:
+        return (self.trunk,)
 
     @override
     def positions(

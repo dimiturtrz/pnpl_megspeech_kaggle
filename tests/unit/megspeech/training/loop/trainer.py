@@ -388,3 +388,22 @@ def test_model_fused(tmp_path: Path) -> None:
 def test_run_config_fused_rates() -> None:
     with pytest.raises(ValueError, match="fused_lr"):
         RunConfig(context=ContextConfig(fused=("a", "b")), optim=OptimConfig(fused_lr=(0.0,)))
+
+
+def test_step_frozen_encoder() -> None:
+    """At an `encoder_lr` of 0 a step leaves the encoder's weights and batch statistics bit-identical, even under the
+    anchor's subject pull and a `train()` call, while the heads train."""
+    made = trainer(RunConfig(optim=OptimConfig(lr=0.01, anchor=0.5, transfer=TransferConfig(encoder_lr=0.0))))
+    net = made.model(split())
+    state = made.state(net, split(), 10)
+    state.model.train()
+    stage = {k: v.clone() for module in net.stage() for k, v in module.state_dict(keep_vars=False).items()}
+    buffers = [b for module in net.stage() for b in module.buffers() if b.is_floating_point()]
+    head = [p.clone() for p in net.head.parameters()]
+    made.step(state, split(), torch.tensor([0, 1]))
+    after = {k: v for module in net.stage() for k, v in module.state_dict().items()}
+    assert buffers
+    assert all(torch.equal(stage[k], after[k]) for k in stage)
+    assert not any(module.training for module in net.stage())
+    assert all(p.grad is None for p in net.encoder())
+    assert any(not torch.equal(a, b) for a, b in zip(head, net.head.parameters(), strict=True))

@@ -70,3 +70,12 @@ def test_step_toward_source() -> None:
     assert torch.equal(layer.weight[DEEP], weight[DEEP])
     assert torch.allclose(layer.weight[1], 0.5 * weight[1] + 0.5 * weight[1:13].mean(dim=0), atol=1e-6)
     assert torch.allclose(layer.weight[13], weight[13], atol=1e-6)
+
+
+def test_step_skips_frozen() -> None:
+    """A subject layer held frozen keeps its matrices under the pull."""
+    layer, _, model = anchored()
+    layer.requires_grad_(requires_grad=False)
+    weight = layer.weight.detach().clone()
+    Anchor(10.0).step(model, 0.05)
+    assert torch.equal(layer.weight, weight)
