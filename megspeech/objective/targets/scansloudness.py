@@ -5,7 +5,7 @@
 A run's stimulus is one wav (each study names it by the run's key), its words' onsets the events' `timechapter`
 (`Heard.onsets`), so the envelope, alignment mask and `<run>.npy` row layout are those of the LibriBrain runs.
 
-uv run python -m megspeech.objective.targets.scansloudness
+uv run python -m megspeech.objective.targets.scansloudness [--window 1.5 --delay 0]
 """
 
 import logging
@@ -37,32 +37,32 @@ class Audiobook:
         book = task.removeprefix(TASK.format(book=""))
         return SCANS.home(root) / STIMULI / f"task-audiobook{book}_run-{part:02d}_stim.wav"
 
-    def targets(self, root: DataRoot) -> Targets:
+    def targets(self, root: DataRoot, cut: tuple[int, int]) -> Targets:
         """The run's words' envelope windows, those in a block whose audio is not the recording dropped."""
         chapter = Chapter.read(self.wav(root))
         onset = Heard(self.run).onsets()
-        return Loudness.of(chapter).windows(onset).masked(Targets.aligned(chapter.contrast(onset)))
+        return Loudness.of(chapter).windows(onset, cut).masked(Targets.aligned(chapter.contrast(onset)))
 
     @classmethod
-    def write(cls, root: DataRoot) -> Path:
-        directory = Loudness.directory(root)
+    def write(cls, root: DataRoot, cut: tuple[int, int]) -> Path:
+        directory = Loudness.directory(root, cut)
         for run in Run.discover(root.processed(cls.STUDY.dataset)):
             path = directory / f"{run.name}.npy"
             if path.exists():
                 continue
-            targets = cls(run).targets(root)
+            targets = cls(run).targets(root, cut)
             targets.save(path)
             LOG.info("%s: %d of %d words", run.name, targets.present.sum(), len(targets.vectors))
         return directory
 
     @staticmethod
     def main() -> None:
-        """Write every converted non-English run's words' envelope windows under processed/speech/envelope; CPU
+        """Write every converted non-English run's words' envelope windows, cut as `--window` and `--delay` read; CPU
         only."""
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-        root = DataRoot.from_config()
+        root, cut = DataRoot.from_config(), Loudness.parsed()
         for kind in (Audiobook, Narrated):
-            LOG.info("wrote %s", kind.write(root))
+            LOG.info("wrote %s", kind.write(root, cut))
 
 
 @dataclass(frozen=True)

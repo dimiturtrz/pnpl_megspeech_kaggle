@@ -140,15 +140,16 @@ def test_acoustic_needs_the_envelope_geometry() -> None:
         RunConfig(
             optim=OptimConfig(auxiliaries=AuxiliaryConfig(acoustic=0.5)), context=ContextConfig(encoder=Encoder.CACHED)
         )
-    with pytest.raises(ValueError, match="cut"):
-        RunConfig(optim=OptimConfig(auxiliaries=AuxiliaryConfig(acoustic=0.5)), data=DataConfig(window=2.0))
+    for window in (1.5, 2.0):
+        wide = RunConfig(optim=OptimConfig(auxiliaries=AuxiliaryConfig(acoustic=0.5)), data=DataConfig(window=window))
+        assert wide.data.cut()[0] == round(window * 50)
     with pytest.raises(ValueError, match="acoustic head"):
         RunConfig(optim=OptimConfig(auxiliaries=AuxiliaryConfig(tap=Tap.TIME)))
 
 
-def test_audio_needs_the_envelope_cut() -> None:
-    with pytest.raises(ValueError, match="cut"):
-        RunConfig(optim=OptimConfig(auxiliaries=AuxiliaryConfig(audio=1.0)), data=DataConfig(window=2.0))
+def test_audio_reads_any_cut() -> None:
+    for window in (1.3, 1.5):
+        assert RunConfig(optim=OptimConfig(auxiliaries=AuxiliaryConfig(audio=1.0)), data=DataConfig(window=window))
 
 
 def test_saved_flat_optim_groups(tmp_path: Path) -> None:

@@ -29,7 +29,7 @@ from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.acoustic import Acoustic
 from megspeech.objective.auxiliary.order import HeadOrder
-from megspeech.objective.targets.loudness import LENGTH, Loudness
+from megspeech.objective.targets.loudness import Loudness
 
 LOG = logging.getLogger(__name__)
 
@@ -72,12 +72,14 @@ class Readout:
     head: Acoustic
 
     @classmethod
-    def load(cls, net: SentenceNet, directory: Path, device: torch.device) -> "Readout":  # devtools-ignore: test-mirror
-        """`net` with the acoustic head among `directory`'s saved heads."""
+    def load(  # devtools-ignore: test-mirror
+        cls, net: SentenceNet, directory: Path, device: torch.device, frames: int
+    ) -> "Readout":
+        """`net` with the acoustic head among `directory`'s saved heads, spanning the run's `frames`."""
         weights = Tree.flat(json.loads((directory / METRICS).read_text())["config"]["optim"])
         prefix = f"heads.{HeadOrder.position(weights, 'acoustic')}."
         saved = torch.load(directory / HEADS, map_location=device, weights_only=True)
-        head = Acoustic(Tap.TIME.width(net)).to(device)
+        head = Acoustic(Tap.TIME.width(net), frames).to(device)
         head.load_state_dict({key.removeprefix(prefix): v for key, v in saved.items() if key.startswith(prefix)})
         return cls(net.eval(), head.eval())
 
@@ -85,7 +87,7 @@ class Readout:
         """The predicted envelope of every word of `split`'s window, in word order."""
         words, rows = len(split.y), EVAL_SPANS * split.index.shape[1]
         device = split.index.device
-        out = torch.zeros(words + 1, LENGTH, device=device)
+        out = torch.zeros(words + 1, self.head.frames, device=device)
         with torch.no_grad():
             for spans in torch.arange(len(split.index), device=device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
@@ -104,12 +106,13 @@ def main() -> None:
     trained_in = root.models() / args.name
     data = DataConfig.shared([trained_in], DataConfig.grouping)
     reader = Reader(root, data, device, geometry=data.geometry(root, device, aligned=False))
-    readout = Readout.load(Checkpoint.load(trained_in / "model.pt").to(device), trained_in, device)
+    cut = data.cut()
+    readout = Readout.load(Checkpoint.load(trained_in / "model.pt").to(device), trained_in, device, cut[0])
     predicted: list[np.ndarray] = []
     truth: list[np.ndarray] = []
     for runs in reader.ruled(Run.discover(root.raw())).values():
         for run, (words, split) in reader.splits(runs).items():
-            path = Loudness.directory(root) / f"{run.name}.npy"
+            path = Loudness.directory(root, cut) / f"{run.name}.npy"
             if not path.exists():
                 continue
             predicted.append(readout(split))

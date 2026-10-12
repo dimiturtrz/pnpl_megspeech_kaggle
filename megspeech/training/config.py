@@ -86,10 +86,6 @@ RUN_RULES: tuple[Rule[RunConfig], ...] = (
         lambda r: f"optim.acoustic/audio read the conv encoder's time features, not encoder {r.context.encoder}",
     ),
     Rule(
-        lambda r: r.optim.auxiliaries.listens and r.data.cut() != DataConfig().cut(),
-        lambda r: f"optim.acoustic/audio's envelopes are cut {DataConfig().cut()}, not {r.data.cut()}",
-    ),
-    Rule(
         lambda r: r.optim.auxiliaries.listens and r.context.conv.pyramid.active,
         lambda _: "optim.acoustic/audio read the encoder's time course beside the heads, which the pyramid corrects",
     ),

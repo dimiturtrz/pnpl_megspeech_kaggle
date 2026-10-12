@@ -1,8 +1,9 @@
 from typing import cast
 
+import pytest
 import torch
 
-from megspeech.objective.auxiliary.acoustic import CHUNKS, MIX, PRIOR, TAPS, Acoustic, AcousticTerm
+from megspeech.objective.auxiliary.acoustic import CHUNK, MIX, PRIOR, TAPS, Acoustic, AcousticTerm
 from megspeech.objective.targets.loudness import LENGTH
 from megspeech.objective.targets.speech import Speech
 from megspeech.objective.term import Reading
@@ -20,9 +21,12 @@ def term() -> AcousticTerm:
 def test_forward() -> None:
     """Every window's envelope at the envelope's frames, whatever the encoder's own time resolution; the lag starts
     on its prior tap, so a constant feature channel reads out as that level."""
-    head = Acoustic(WIDTH)
+    head = Acoustic(WIDTH, LENGTH)
     for steps in (STEPS, LENGTH, 2 * LENGTH):
         assert head.forward(torch.randn(2, 3, WIDTH, steps, generator=GENERATOR)).shape == (2, 3, LENGTH)
+    assert Acoustic(WIDTH, 3 * CHUNK).forward(torch.randn(2, WIDTH, STEPS, generator=GENERATOR)).shape == (2, 3 * CHUNK)
+    with pytest.raises(ValueError, match="no whole number"):
+        Acoustic(WIDTH, CHUNK + 1)
     assert head.lag.weight.shape == (1, MIX, TAPS)
     assert torch.count_nonzero(head.lag.weight).item() == MIX
     assert head.lag.weight[0, :, PRIOR].ne(0).all()
@@ -35,19 +39,23 @@ def test_head() -> None:
 
 def test_unweighted() -> None:
     """Positive over the words with a target, differentiable into the readout and the lag, 0 when none has one; the
-    contrast is over `CHUNKS` chunks a window."""
+    contrast is over the window's `CHUNK`-frame chunks, however many its cut holds."""
     aligned = term()
     head = aligned.head(WIDTH)
     output = head(torch.randn(2, 3, WIDTH, STEPS, generator=GENERATOR))
     value = aligned.unweighted(aligned.read(head, output, TARGET))
     direct = aligned.unweighted(Reading(head, output, torch.tensor([[0, 1, -1], [2, -1, -1]]), torch.ones(2, 3)))
     assert direct.item() > 0
-    assert CHUNKS == 2
     assert value.item() > 0
     value.backward()
     assert cast("Acoustic", head).project.weight.grad is not None
     assert cast("Acoustic", head).lag.weight.grad is not None
     assert aligned.unweighted(aligned.read(head, output, torch.full((2, 3), -1))).item() == 0.0
+    wide = AcousticTerm(1.0, Speech(torch.tensor([0, 1, 2]), torch.randn(3, 3 * CHUNK, generator=GENERATOR)))
+    widened = wide.head(WIDTH)
+    features = torch.randn(1, 3, WIDTH, STEPS, generator=GENERATOR)
+    rows = torch.tensor([[0, 1, -1]])
+    assert wide.unweighted(Reading(widened, widened(features), rows, torch.ones(1, 3))).item() > 0
 
 
 def test_learns_a_matched_envelope() -> None:

@@ -18,22 +18,24 @@ def distinct(n: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
 
 def test_forward() -> None:
-    listening = Listening(WIDTH)
+    listening = Listening(WIDTH, LENGTH)
     assert listening.forward(torch.randn(3, 2, WIDTH, TIMES, generator=GENERATOR)).shape == (3, 2, DIM)
     assert math.isclose(listening.scale.exp().item(), 1 / TEMPERATURE, rel_tol=1e-5)
 
 
 def test_tower() -> None:
-    assert Listening.tower(1)(torch.zeros(4, 1, LENGTH)).shape == (4, DIM)
+    assert Listening.tower(1, LENGTH)(torch.zeros(4, 1, LENGTH)).shape == (4, DIM)
+    assert Listening.tower(1, 75)(torch.zeros(4, 1, 75)).shape == (4, DIM)
+    assert Listening(WIDTH, 75)(torch.zeros(2, WIDTH, 30)).shape == (2, DIM)
 
 
 def test_hear() -> None:
     envelope = torch.randn(5, LENGTH, generator=GENERATOR).half()
-    assert Listening(WIDTH).hear(envelope).shape == (5, DIM)
+    assert Listening(WIDTH, LENGTH).hear(envelope).shape == (5, DIM)
 
 
 def test_loss() -> None:
-    listening = Listening(WIDTH)
+    listening = Listening(WIDTH, LENGTH)
     meg = torch.randn(BATCH, DIM, generator=GENERATOR)
     audio = torch.randn(BATCH, DIM, generator=GENERATOR)
     kinds, spans, rows = distinct(BATCH)
@@ -47,7 +49,7 @@ def test_loss() -> None:
 
 
 def test_loss_trains_the_scale_and_both_towers() -> None:
-    listening = Listening(WIDTH)
+    listening = Listening(WIDTH, LENGTH)
     embedded = torch.randn(BATCH, WIDTH, TIMES, generator=GENERATOR)
     envelope = torch.randn(BATCH, LENGTH, generator=GENERATOR)
     optimiser = torch.optim.Adam(listening.parameters(), lr=1e-2)

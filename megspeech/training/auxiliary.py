@@ -146,14 +146,13 @@ class Auxiliary(ABC):
     ) -> SentenceNet | WithAuxiliary: ...
 
     @staticmethod
-    def of(
-        weights: AuxiliaryConfig, adversary: float, root: DataRoot, device: torch.device, words: pd.DataFrame
-    ) -> "Auxiliary":
+    def of(weights: AuxiliaryConfig, adversary: float, tables: "Tables") -> "Auxiliary":
         """Nothing when every weight is 0, so no table is read; otherwise the terms of the nonzero weights, the timing
-        adversary's among them at its strength `adversary`, the speech term's targets those of the training `words`
-        (`Corpus.positions`). A table several terms read is loaded once and shared, so the device holds one copy."""
+        adversary's among them at its strength `adversary`, their tables read as `tables` says. A table several terms
+        read is loaded once and shared, so the device holds one copy."""
+        root, device, words = tables.root, tables.device, tables.words
         lexicon = cache(lambda: Lexicon.load(Lexicon.path(root)).to(device))
-        loudness = cache(lambda: Speech.gather(Loudness.directory(root), words).to(device))
+        loudness = cache(lambda: Speech.gather(Loudness.directory(root, tables.cut), words).to(device))
         builders: tuple[tuple[float, Callable[[], AuxiliaryTerm]], ...] = (
             (
                 weights.speech,
@@ -191,6 +190,18 @@ class Auxiliary(ABC):
         )
         terms = tuple(replace(build(), vocab_weight=weights.vocab_weight) for weight, build in builders if weight)
         return Joint(terms, weights.tap) if terms else NoAuxiliary()
+
+
+@dataclass(frozen=True)
+class Tables:
+    """Where a run's auxiliary terms read their tables: the data `root`, the `device` they live on, the training
+    `words` (`Corpus.positions`) the speech terms' targets are those of, and the `cut` of the run's windows
+    (`DataConfig.cut`) the envelope terms' targets are cut as."""
+
+    root: DataRoot
+    device: torch.device
+    words: pd.DataFrame
+    cut: tuple[int, int]
 
 
 @dataclass(frozen=True)

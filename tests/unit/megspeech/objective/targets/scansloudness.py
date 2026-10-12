@@ -9,7 +9,7 @@ from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.raw.runs import Run
 from megspeech.data.raw.scans import SCANS, STIMULI
 from megspeech.data.raw.smn4lang import SMN4LANG, STORIES
-from megspeech.objective.targets.loudness import LENGTH, Loudness
+from megspeech.objective.targets.loudness import CUT, LENGTH, Loudness
 from megspeech.objective.targets.scansloudness import Audiobook, Narrated
 from megspeech.objective.targets.speech import SAMPLING
 from tests.unit.megspeech.data.raw.runs import meg
@@ -59,7 +59,7 @@ def test_narrated_wav(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_targets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     data = root(tmp_path, monkeypatch)
-    targets = Audiobook(served(data)).targets(data)
+    targets = Audiobook(served(data)).targets(data, CUT)
     assert targets.vectors.shape == (3, LENGTH)
     assert targets.present[0]
 
@@ -67,12 +67,12 @@ def test_targets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     data = root(tmp_path, monkeypatch)
     served(data)
-    directory = Audiobook.write(data)
-    assert directory == Loudness.directory(data)
+    directory = Audiobook.write(data, CUT)
+    assert directory == Loudness.directory(data, CUT)
     assert [path.stem for path in directory.glob("*.npy")] == [NAME]
-    assert Audiobook.write(data) == directory
+    assert Audiobook.write(data, CUT) == directory
     story(data)
-    assert Narrated.write(data) == directory
+    assert Narrated.write(data, CUT) == directory
     assert sorted(path.stem for path in directory.glob("*.npy")) == [NAME, STORY]
 
 
@@ -80,6 +80,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     data = root(tmp_path, monkeypatch)
     served(data)
     story(data)
+    monkeypatch.setattr("sys.argv", ["scansloudness", "--window", "1.5"])
     Audiobook.main()
     for name in (NAME, STORY):
-        assert np.load(Loudness.directory(data) / f"{name}.npy").shape == (3, LENGTH)
+        assert np.load(Loudness.directory(data, (75, 0)) / f"{name}.npy").shape == (3, 75)

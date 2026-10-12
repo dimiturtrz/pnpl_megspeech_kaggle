@@ -8,9 +8,10 @@ row of `<run>.npy` aligned with the run's word table (`Run.words`), NaN where th
 reads it as it reads the word-level targets. Validation and test runs' audio is never read, and a run whose dataset
 ships no audio has no file, so no term.
 
-uv run python -m megspeech.objective.targets.loudness
+uv run python -m megspeech.objective.targets.loudness [--window 1.5 --delay 0]
 """
 
+import argparse
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,9 +27,10 @@ from megspeech.objective.targets.speech import SILENCE, STRIDE, Chapter, Heard, 
 
 NAME = "envelope"
 """The directory under processed/speech holding the envelope targets."""
-LENGTH, OFFSET = DataConfig().cut()
-"""Frames a word's window spans at 50 Hz and where it starts relative to the word's onset: the default geometry the
-targets are cut for, which `RunConfig` holds an acoustic run to."""
+CUT = DataConfig().cut()
+LENGTH, OFFSET = CUT
+"""Frames a word's window spans at 50 Hz and where it starts relative to the word's onset, in the default geometry,
+whose targets live under `NAME`; a run cut otherwise (`DataConfig.cut`) reads its own directory beside it."""
 LOG = logging.getLogger(__name__)
 
 
@@ -45,42 +47,54 @@ class Loudness:
         log = np.log(energy + SILENCE * energy.mean())
         return cls(((log - log.mean()) / log.std()).astype(np.float32))
 
-    def windows(self, onset: Float[np.ndarray, " n"]) -> Targets:
-        """Each word's `LENGTH` frames from its onset plus `OFFSET`; NaN past either end of the audio."""
-        first = np.floor(np.nan_to_num(onset, nan=-1.0) * RATE).astype(np.int64) + OFFSET
-        inside = np.isfinite(onset) & (first >= 0) & (first + LENGTH <= len(self.levels))
-        frames = np.where(inside, first, 0)[:, None] + np.arange(LENGTH)
+    def windows(self, onset: Float[np.ndarray, " n"], cut: tuple[int, int]) -> Targets:
+        """Each word's `cut` (frames, offset): that many frames from its onset plus the offset; NaN past either end of
+        the audio."""
+        length, offset = cut
+        first = np.floor(np.nan_to_num(onset, nan=-1.0) * RATE).astype(np.int64) + offset
+        inside = np.isfinite(onset) & (first >= 0) & (first + length <= len(self.levels))
+        frames = np.where(inside, first, 0)[:, None] + np.arange(length)
         return Targets(np.where(inside[:, None], self.levels[frames], np.nan).astype(np.float16))
 
     @staticmethod
-    def directory(root: DataRoot) -> Path:
-        return Targets.directory(root, NAME)
+    def directory(root: DataRoot, cut: tuple[int, int]) -> Path:
+        """`NAME` for the default geometry's targets, `NAME-<frames>-<offset>` for any other cut's."""
+        return Targets.directory(root, NAME if cut == CUT else f"{NAME}-{cut[0]}-{cut[1]}")
 
     @staticmethod
-    def targets(entry: Heard) -> Targets:
+    def parsed(argv: list[str] | None = None) -> tuple[int, int]:
+        """The cut of the `--window` and `--delay` seconds in `argv`, each the default geometry's when absent."""
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--window", type=float, default=DataConfig.window)
+        parser.add_argument("--delay", type=float, default=DataConfig.delay)
+        known, _ = parser.parse_known_args(argv)
+        return DataConfig(window=known.window, delay=known.delay).cut()
+
+    @staticmethod
+    def targets(entry: Heard, cut: tuple[int, int]) -> Targets:
         """`entry`'s words' envelope windows, those in a block whose audio is not the recording the events were timed
         on dropped."""
         chapter = Chapter.read(entry.chapters()[0])
         onset = entry.onsets()
-        return Loudness.of(chapter).windows(onset).masked(Targets.aligned(chapter.contrast(onset)))
+        return Loudness.of(chapter).windows(onset, cut).masked(Targets.aligned(chapter.contrast(onset)))
 
     @staticmethod
-    def write(root: DataRoot) -> Path:
-        directory = Loudness.directory(root)
+    def write(root: DataRoot, cut: tuple[int, int]) -> Path:
+        directory = Loudness.directory(root, cut)
         for entry in Heard.trained(Run.discover(root.raw())):
             path = directory / f"{entry.run.name}.npy"
             if path.exists():
                 continue
-            targets = Loudness.targets(entry)
+            targets = Loudness.targets(entry, cut)
             targets.save(path)
             LOG.info("%s: %d of %d words", entry.run.name, targets.present.sum(), len(targets.vectors))
         return directory
 
     @staticmethod
     def main() -> None:
-        """Write every trained run's words' envelope windows under processed/speech/envelope; CPU only."""
+        """Write every trained run's words' envelope windows, cut as `--window` and `--delay` read; CPU only."""
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-        LOG.info("wrote %s", Loudness.write(DataRoot.from_config()))
+        LOG.info("wrote %s", Loudness.write(DataRoot.from_config(), Loudness.parsed()))
 
 
 if __name__ == "__main__":

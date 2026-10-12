@@ -37,7 +37,7 @@ from megspeech.objective.information import InformedTerm
 from megspeech.objective.targets.t5 import Prototypes
 from megspeech.objective.term import ContextTerm, LabelTerm, Term, WordTerm
 from megspeech.objective.topk import TopKMix
-from megspeech.training.auxiliary import Auxiliary, NoAuxiliary
+from megspeech.training.auxiliary import Auxiliary, NoAuxiliary, Tables
 from megspeech.training.config import RunConfig
 from megspeech.training.hook import Scheduled, StepHook
 from megspeech.training.loop.ema import Ema, Unaveraged
@@ -122,7 +122,9 @@ class Trainer:
         device = corpus.train.y.device
         evaluator = Evaluator(device, corpus.seen, config.selection.min_novel)
         optim = config.optim
-        auxiliary = Auxiliary.of(optim.auxiliaries, optim.adversarial.adversary, root, device, corpus.positions)
+        auxiliary = Auxiliary.of(
+            optim.auxiliaries, optim.adversarial.adversary, Tables(root, device, corpus.positions, config.data.cut())
+        )
         regional = Regional.of(config.augment.spatial, root, device)
         timing = TimingExpert.load(root, optim.timing)
         taught = Teacher.of(optim.distillation, root, config.data, corpus.positions)

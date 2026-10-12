@@ -23,7 +23,6 @@ from torch.nn import functional
 
 from megspeech.objective.auxiliary.acoustic import MIX, TAPS
 from megspeech.objective.auxiliary.speech import SpeechTerm
-from megspeech.objective.targets.loudness import LENGTH
 from megspeech.objective.term import AuxiliaryTerm, Reading
 
 DIM = 256
@@ -38,31 +37,32 @@ class Listening(nn.Module):
     frames, filtered over `TAPS` frames and projected), the audio tower (the envelope filtered and projected alike),
     and the learned logit scale of their cosine."""
 
-    def __init__(self, width: int) -> None:
+    def __init__(self, width: int, frames: int) -> None:
         super().__init__()
+        self.frames = frames
         self.mix = nn.Conv1d(width, MIX, 1)
-        self.meg = self.tower(MIX)
-        self.audio = self.tower(1)
+        self.meg = self.tower(MIX, frames)
+        self.audio = self.tower(1, frames)
         self.scale = nn.Parameter(torch.tensor(math.log(1 / TEMPERATURE)))
 
     @staticmethod
-    def tower(channels: int) -> nn.Sequential:
+    def tower(channels: int, frames: int) -> nn.Sequential:
         return nn.Sequential(
             nn.Conv1d(channels, MIX, TAPS, padding=TAPS // 2),
             nn.GELU(),
             nn.Flatten(),
-            nn.Linear(MIX * LENGTH, DIM),
+            nn.Linear(MIX * frames, DIM),
         )
 
     @override
     def forward(self, embedded: Float[Tensor, "*b w t"]) -> Float[Tensor, "*b d"]:
         """The MEG embedding of every window of `embedded`, `[*b width t]`."""
         times = embedded.flatten(0, -3)
-        fitted = functional.interpolate(self.mix(times), size=LENGTH, mode="linear")
+        fitted = functional.interpolate(self.mix(times), size=self.frames, mode="linear")
         return self.meg(fitted).unflatten(0, embedded.shape[:-2])
 
     def hear(self, envelope: Float[Tensor, "n f"]) -> Float[Tensor, "n d"]:
-        """The audio embedding of each `LENGTH`-frame envelope window."""
+        """The audio embedding of each `frames`-frame envelope window."""
         return self.audio(envelope.float()[:, None])
 
     def loss(
@@ -97,7 +97,7 @@ class AudioTerm(SpeechTerm):
 
     @override
     def head(self, width: int) -> nn.Module:
-        return Listening(width).to(self.speech.vectors.device)
+        return Listening(width, self.speech.vectors.shape[-1]).to(self.speech.vectors.device)
 
     @override
     def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
