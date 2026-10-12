@@ -21,11 +21,28 @@ KIT = 1000.0
 SECONDS = 40
 TRIALS = [
     {"kind": "sound", "sound": "a.wav"},
-    {"kind": "word", "word": "the", "sequence_id": 3, "condition": "sentence", "word_index": 0},
+    {
+        "kind": "word",
+        "word": "the",
+        "sequence_id": 3,
+        "condition": "sentence",
+        "word_index": 0,
+        "sound": "stimuli/a.wav",
+        "start": 0.94,
+    },
     {"kind": "phoneme", "word": "the", "phoneme": "dh_B", "sequence_id": 3, "condition": "sentence", "word_index": 0},
     {"kind": "phoneme", "word": "the", "phoneme": "ah_E", "sequence_id": 3, "condition": "sentence", "word_index": 0},
-    {"kind": "word", "word": "cat", "sequence_id": 4, "condition": "word_list", "word_index": 1},
+    {
+        "kind": "word",
+        "word": "cat",
+        "sequence_id": 4,
+        "condition": "word_list",
+        "word_index": 1,
+        "sound": "stimuli/b.wav",
+        "start": 2.5,
+    },
 ]
+SOUNDS = ("stimuli/a.wav", "stimuli/b.wav")
 
 
 def info(names: list[str]) -> mne.Info:
@@ -189,6 +206,21 @@ def test_recording_events(tmp_path: Path) -> None:
     assert np.isnan(events["sentenceidx"].iloc[3])
     assert events["phonemeidx"].tolist()[1:3] == [0, 1]
     assert events["timemeg"].tolist() == [1.0, 1.0, 1.1, 2.0]
+
+
+def test_trials(tmp_path: Path) -> None:
+    trials = recording(tmp_path).trials()
+    assert trials["kind"].tolist() == ["word", "phoneme", "phoneme", "word"]
+    assert trials["onset"].tolist() == [1.0, 1.0, 1.1, 2.0]
+
+
+def test_heard(tmp_path: Path) -> None:
+    heard = recording(tmp_path).heard()
+    assert heard.to_dict("list") == {"word": ["the", "cat"], "sound": list(SOUNDS), "start": [0.94, 2.5]}
+
+
+def test_home(tmp_path: Path) -> None:
+    assert recording(tmp_path).home == tmp_path
 
 
 def test_under(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

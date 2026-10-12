@@ -271,19 +271,22 @@ class Speech:
     @classmethod
     def gather(cls, directory: Path, words: pd.DataFrame, *, centred: bool = False) -> "Speech":
         """The targets of `words` (`run`, `position` in its run's word table), in order, each run's `Targets.centred`
-        when `centred`; a run without a file has none."""
-        if not directory.is_dir():
-            raise FileNotFoundError(directory)
+        when `centred`; a run without a file has none, and the coverage is logged."""
+        first = next(directory.glob("*.npy"), None) if directory.is_dir() else None
+        if first is None:
+            raise FileNotFoundError(f"no targets under {directory}")
         words = words.reset_index(drop=True)
-        width = next((np.load(path, mmap_mode="r").shape[1] for path in directory.glob("*.npy")), 1)
-        vectors = np.full((len(words), width), np.nan, dtype=np.float16)
-        for run, group in words.groupby(Column.RUN, sort=False):
+        vectors = np.full((len(words), np.load(first, mmap_mode="r").shape[1]), np.nan, dtype=np.float16)
+        runs = words.groupby(Column.RUN, sort=False)
+        for run, group in runs:
             path = directory / f"{run}.npy"
             if path.exists():
                 targets = Targets(np.load(path))
                 chosen = targets.centred() if centred else targets
                 vectors[group.index] = chosen.vectors[group[Column.POSITION].to_numpy()]
         present = np.isfinite(vectors).all(axis=1)
+        covered = sum((directory / f"{run}.npy").exists() for run in runs.groups)
+        LOG.info("%s: %d of %d words, %d of %d runs", directory.name, present.sum(), len(words), covered, runs.ngroups)
         rows = np.where(present, np.cumsum(present) - 1, -1)
         return cls(torch.from_numpy(rows), torch.from_numpy(vectors[present])).merged()
 

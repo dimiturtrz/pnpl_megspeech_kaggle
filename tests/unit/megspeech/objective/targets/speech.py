@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -244,15 +245,20 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert (tmp_path / "processed" / "speech" / "hubert-large-ll60k-L12-18" / f"{Run(Path(TRAIN)).name}.npy").exists()
 
 
-def test_gather(tmp_path: Path) -> None:
+def test_gather(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     np.save(tmp_path / "a.npy", np.array([[1, 2], [np.nan, np.nan], [3, 4]], np.float16))
     words = pd.DataFrame({"run": ["a", "a", "b", "a", "a"], "position": [2, 0, 0, 1, 0]})
-    speech = Speech.gather(tmp_path, words)
+    with caplog.at_level(logging.INFO):
+        speech = Speech.gather(tmp_path, words)
     assert speech.rows.tolist() == [0, 1, -1, -1, 1]
     assert speech.vectors.tolist() == [[3, 4], [1, 2], [1, 2]]
+    assert "3 of 5 words, 1 of 2 runs" in caplog.text
     assert Speech.gather(tmp_path, words, centred=True).vectors.tolist() == [[1, 1], [-1, -1], [-1, -1]]
     with pytest.raises(FileNotFoundError):
         Speech.gather(tmp_path / "absent", words)
+    (tmp_path / "empty").mkdir()
+    with pytest.raises(FileNotFoundError):
+        Speech.gather(tmp_path / "empty", words)
 
 
 def test_centred() -> None:

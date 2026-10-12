@@ -156,13 +156,30 @@ class Recording:
     def written(self, target: Neuromag) -> tuple[Float[np.ndarray, "c t"], dict[str, object]]:
         return self.meg(target), target.attrs
 
-    def events(self) -> pd.DataFrame:
-        """The recording's words and phonemes in pnpl's columns: a story sentence's words share its `sentenceidx`, a
-        word list's have none, and a phoneme counts its place in its word."""
+    def trials(self) -> pd.DataFrame:
+        """The recording's word and phoneme trials, each its BIDS `trial_type` fields beside its `onset` and
+        `duration`."""
         table = pd.read_csv(self.sidecar("events.tsv"), sep="\t")
         trials = pd.DataFrame([ast.literal_eval(trial) for trial in table["trial_type"]], index=table.index)
         trials = trials.join(table[["onset", "duration"]])
-        trials = trials[trials["kind"].isin(KEPT)]
+        return trials[trials["kind"].isin(KEPT)]
+
+    def heard(self) -> pd.DataFrame:
+        """The heard words, in the order `events` writes them: each its `word`, the `sound` it was played in (a wav
+        under the dataset's root) and its `start` second there."""
+        trials = self.trials()
+        heard = trials[(trials["kind"] == Kind.WORD) & trials["word"].notna()]
+        return heard[["word", "sound", "start"]].reset_index(drop=True)
+
+    @property
+    def home(self) -> Path:
+        """The dataset's root the recording's `sound` paths are relative to."""
+        return self.con.parents[3]
+
+    def events(self) -> pd.DataFrame:
+        """The recording's words and phonemes in pnpl's columns: a story sentence's words share its `sentenceidx`, a
+        word list's have none, and a phoneme counts its place in its word."""
+        trials = self.trials()
         phoneme = trials["kind"] == Kind.PHONEME
         place = trials[phoneme].groupby(["sequence_id", "word_index"]).cumcount()
         return pd.DataFrame(
