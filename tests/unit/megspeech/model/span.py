@@ -5,6 +5,7 @@ from torch import nn
 
 from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
+from megspeech.model.context.intervals import Intervals
 from megspeech.model.fusion import Fusion
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.sentence import SentenceNet
@@ -53,3 +54,16 @@ def test_chunked() -> None:
     subject = torch.zeros(len(x), dtype=torch.long)
     h, slots = model.features(SpanInput(x, onset, slot, subject))
     assert torch.equal(model.chunked(SpanInput(x, onset, slot, subject), slots), h)
+
+
+def test_chunked_next_drop() -> None:
+    """Evaluating, `next_drop` changes nothing; training, it reaches the timing input."""
+    model = SentenceNet(nn.Identity(), replace(CONTEXT, intervals=Intervals.LOG, next_drop=1.0))
+    whole = SentenceNet(nn.Identity(), replace(CONTEXT, intervals=Intervals.LOG))
+    whole.load_state_dict(model.state_dict())
+    slot = torch.tensor([[0, 1, 2]])
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    spans = SpanInput(x, torch.tensor([[0.0, 0.3, 0.5]]), slot, torch.zeros(len(x), dtype=torch.long))
+    slots = torch.randn(1, 3, model.words.width, generator=GENERATOR)
+    assert torch.equal(model.eval().chunked(spans, slots), whole.eval().chunked(spans, slots))
+    assert not torch.equal(model.train().chunked(spans, slots), whole.train().chunked(spans, slots))

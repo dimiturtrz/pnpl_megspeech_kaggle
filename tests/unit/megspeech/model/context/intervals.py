@@ -2,7 +2,7 @@ import math
 
 import torch
 
-from megspeech.model.context.intervals import ENDING, Intervals, Reader
+from megspeech.model.context.intervals import ENDING, Intervals, NextDrop, Reader
 from megspeech.model.context.timing import FEATURES, KAGGLE_GAP, TimingHead
 
 MASK = torch.tensor([[True, True, True, False]])
@@ -62,3 +62,30 @@ def test_ended() -> None:
     ended = Reader(ONSET, MASK, FINISH).ended()
     assert torch.equal(ended[..., :FEATURES], TimingHead.features(ONSET, MASK))
     assert torch.equal(ended[..., FEATURES:], Reader(ONSET, MASK, FINISH).ending())
+
+
+TWO_MASK = torch.tensor([[True, True, True, False], [True, True, False, False]])
+TWO_ONSET = torch.tensor([[0.0, KAGGLE_GAP, 3 * KAGGLE_GAP, 0.0], [0.0, 2 * KAGGLE_GAP, 0.0, 0.0]])
+TWO_FINISH = torch.tensor([4 * KAGGLE_GAP, 3 * KAGGLE_GAP])
+LAST = torch.tensor([[False, False, True, False], [False, True, False, False]])
+
+
+def test_next_drop_apply() -> None:
+    """0 is the features themselves; 1 shows every followed word as the last of its span cut after it, with that
+    end unknown, and leaves a real last word and the padding as they were, for every member."""
+    for member in Intervals:
+        whole = member.features(TWO_ONSET, TWO_MASK, TWO_FINISH)
+        assert torch.equal(NextDrop().apply(member, TWO_ONSET, TWO_MASK, TWO_FINISH), whole)
+        dropped = NextDrop(1.0).apply(member, TWO_ONSET, TWO_MASK, TWO_FINISH)
+        place = torch.arange(4)
+        for row, word in (TWO_MASK & ~LAST).nonzero().tolist():
+            cut = member.features(TWO_ONSET[row : row + 1], TWO_MASK[row : row + 1] & (place <= word))
+            assert torch.equal(dropped[row, word], cut[0, word])
+        assert torch.equal(dropped[LAST | ~TWO_MASK], whole[LAST | ~TWO_MASK])
+
+
+def test_next_drop_log() -> None:
+    """A dropped word loses its next gap and flag and keeps its previous ones."""
+    dropped = NextDrop(1.0).apply(Intervals.LOG, TWO_ONSET, TWO_MASK)
+    assert dropped[..., :2][TWO_MASK].eq(0).all()
+    assert torch.equal(dropped[..., 2:], Intervals.LOG.features(TWO_ONSET, TWO_MASK)[..., 2:])
