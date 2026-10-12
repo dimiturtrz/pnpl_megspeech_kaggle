@@ -37,28 +37,28 @@ def test_ended_features() -> None:
 def test_ending() -> None:
     """Four gaps to the end from the first word, one from the last (its duration), pace 3 words per 4 gaps; an end at
     or before the last onset is unknown, and padding is zero."""
-    features = Reader.ending(ONSET, MASK, FINISH)
+    features = Reader(ONSET, MASK, FINISH).ending()
     assert features.shape == (1, 4, ENDING)
     assert torch.allclose(features[0, :3, 0], torch.tensor([math.log(4), math.log(3), 0.0]), atol=1e-5)
     assert torch.allclose(features[0, :3, 2], torch.full((3,), math.log(0.75)), atol=1e-5)
     assert features[0, 3].eq(0).all()
-    assert Reader.ending(ONSET, MASK, torch.tensor([3 * KAGGLE_GAP])).eq(0).all()
+    assert Reader(ONSET, MASK, torch.tensor([3 * KAGGLE_GAP])).ending().eq(0).all()
 
 
 def test_none() -> None:
-    assert Reader.none(ONSET, MASK, FINISH).shape == (1, 4, 0)
+    assert Reader(ONSET, MASK, FINISH).none().shape == (1, 4, 0)
 
 
 def test_log() -> None:
-    assert torch.equal(Reader.log(ONSET, MASK, FINISH), Intervals.LOG.features(ONSET, MASK))
+    assert torch.equal(Reader(ONSET, MASK, FINISH).log(), Intervals.LOG.features(ONSET, MASK))
 
 
 def test_rich() -> None:
     """The onsets alone: the finish changes nothing."""
-    assert torch.equal(Reader.rich(ONSET, MASK, FINISH), TimingHead.features(ONSET, MASK))
+    assert torch.equal(Reader(ONSET, MASK, FINISH).rich(), TimingHead.features(ONSET, MASK))
 
 
 def test_ended() -> None:
-    ended = Reader.ended(ONSET, MASK, FINISH)
+    ended = Reader(ONSET, MASK, FINISH).ended()
     assert torch.equal(ended[..., :FEATURES], TimingHead.features(ONSET, MASK))
-    assert torch.equal(ended[..., FEATURES:], Reader.ending(ONSET, MASK, FINISH))
+    assert torch.equal(ended[..., FEATURES:], Reader(ONSET, MASK, FINISH).ending())

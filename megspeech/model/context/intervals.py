@@ -1,5 +1,7 @@
 """What timing beyond the clock each word of a span is told, every piece of it in the Kaggle test's inputs."""
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from enum import StrEnum
 
 import torch
@@ -36,51 +38,44 @@ class Intervals(StrEnum):
         """Each word's features; `finish` is each span's last word's end in seconds from its first onset, unknown
         (all of them) when None and wherever it does not pass the last onset."""
         ends = onset.new_zeros(len(onset)) if finish is None else finish
-        return READERS[self](onset, mask, ends)
+        return READERS[self](Reader(onset, mask, ends))
 
 
 ENDING = 3
 """`Reader.ending` per word: the log time to the span's end, whether it is known, and the span's log pace."""
 
 
+@dataclass(frozen=True)
 class Reader:
-    """Each `Intervals` member's features, one static method apiece, and what a span's end tells its words."""
+    """A span's words' onsets, which of them are real and its last word's end: each `Intervals` member's features,
+    one method apiece, and what that end tells its words."""
 
-    @staticmethod
-    def none(
-        onset: Float[Tensor, "g w"], _mask: Bool[Tensor, "g w"], _finish: Float[Tensor, " g"]
-    ) -> Float[Tensor, "g w k"]:
-        return onset.new_zeros(*onset.shape, 0)
+    onset: Float[Tensor, "g w"]
+    mask: Bool[Tensor, "g w"]
+    finish: Float[Tensor, " g"]
 
-    @staticmethod
-    def log(
-        onset: Float[Tensor, "g w"], mask: Bool[Tensor, "g w"], _finish: Float[Tensor, " g"]
-    ) -> Float[Tensor, "g w k"]:
+    def none(self) -> Float[Tensor, "g w k"]:
+        return self.onset.new_zeros(*self.onset.shape, 0)
+
+    def log(self) -> Float[Tensor, "g w k"]:
         """The log gaps to the next and previous onsets, each beside whether that neighbour exists."""
+        onset, mask = self.onset, self.mask
         pair = mask[:, 1:] & mask[:, :-1]
         gap = torch.where(pair, (onset[:, 1:] - onset[:, :-1]).clamp(min=SHORTEST) / KAGGLE_GAP, 1.0).log()
         pad = nn.functional.pad
         known = pair.to(onset.dtype)
         return torch.stack([pad(gap, (0, 1)), pad(known, (0, 1)), pad(gap, (1, 0)), pad(known, (1, 0))], dim=-1)
 
-    @staticmethod
-    def rich(
-        onset: Float[Tensor, "g w"], mask: Bool[Tensor, "g w"], _finish: Float[Tensor, " g"]
-    ) -> Float[Tensor, "g w k"]:
-        return TimingHead.features(onset, mask)
+    def rich(self) -> Float[Tensor, "g w k"]:
+        return TimingHead.features(self.onset, self.mask)
 
-    @staticmethod
-    def ended(
-        onset: Float[Tensor, "g w"], mask: Bool[Tensor, "g w"], finish: Float[Tensor, " g"]
-    ) -> Float[Tensor, "g w k"]:
-        return torch.cat([TimingHead.features(onset, mask), Reader.ending(onset, mask, finish)], dim=-1)
+    def ended(self) -> Float[Tensor, "g w k"]:
+        return torch.cat([self.rich(), self.ending()], dim=-1)
 
-    @staticmethod
-    def ending(
-        onset: Float[Tensor, "g w"], mask: Bool[Tensor, "g w"], finish: Float[Tensor, " g"]
-    ) -> Float[Tensor, "g w k"]:
+    def ending(self) -> Float[Tensor, "g w k"]:
         """Each word's log time from its onset to the span's end in Kaggle test gaps (the last word's: its duration),
         whether the end is known, and the log words per Kaggle test gap over the whole span; zeros where unknown."""
+        onset, mask, finish = self.onset, self.mask, self.finish
         length = mask.sum(-1)
         last = onset.gather(1, (length - 1).clamp(min=0)[:, None])[:, 0]
         known = (finish > last)[:, None] & mask
@@ -91,7 +86,7 @@ class Reader:
 
 
 WIDTHS = {Intervals.NONE: 0, Intervals.LOG: 4, Intervals.RICH: FEATURES, Intervals.ENDED: FEATURES + ENDING}
-READERS = {
+READERS: dict[Intervals, Callable[[Reader], Float[Tensor, "g w k"]]] = {
     Intervals.NONE: Reader.none,
     Intervals.LOG: Reader.log,
     Intervals.RICH: Reader.rich,
