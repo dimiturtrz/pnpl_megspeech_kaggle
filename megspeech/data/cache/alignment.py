@@ -6,6 +6,7 @@ each run by its own covariance and colouring it by subject 0's moves that geomet
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import override
 
 import numpy as np
 import torch
@@ -131,12 +132,45 @@ class Alignment:
 
 
 @dataclass(frozen=True)
+class Levelling:
+    """A run's rows kept at the levels they were recorded at."""
+
+    def level(self, run: Float[Tensor, "r s"]) -> Float[Tensor, "r s"]:
+        """`run` as it is."""
+        return run
+
+
+@dataclass(frozen=True)
+class RunLevels(Levelling):
+    """Per-run robust levels (megspeech-7gf.147.15): each run's rows moved by that run's own median and interquartile
+    range to median 0 and range 1. The same label-free statistic of the run itself in training, validation, local test
+    and Kaggle test alike, so a session's gain and offset never reach the model, nor does a test run meet a
+    training subject's fitted row. A sample silent on every row is padding, not signal: left out of the statistics
+    and kept at 0; a row flat within the run carries nothing of it and reads 0."""
+
+    @override
+    @torch.no_grad()
+    def level(self, run: Float[Tensor, "r s"]) -> Float[Tensor, "r s"]:
+        """`run` in float32, in its own medians and interquartile ranges."""
+        x = run.float()
+        signal = x.abs().amax(0) > 0
+        median, spread = Alignment.robust(x[:, signal] if signal.any() else x)
+        gain = torch.where(spread > torch.finfo(torch.float32).tiny, spread.reciprocal(), 0.0)
+        return torch.where(signal, (x - median) * gain, 0.0)
+
+
+UNLEVELLED = Levelling()
+RUN_LEVELS = RunLevels()
+
+
+@dataclass(frozen=True)
 class Geometry:
     """The sensor geometry recordings load in: re-coloured by `alignment` when given, then kept as their coordinates
-    in `projection`'s subspace when given; as recorded without either."""
+    in `projection`'s subspace when given, then each run's rows set to their `levels`; as recorded without any."""
 
     alignment: Alignment | None = None
     projection: Projection | None = None
+    levels: Levelling = UNLEVELLED
 
     def rows(self, channels: int) -> int:
         """Rows a recording of `channels` sensors loads as."""
@@ -150,6 +184,10 @@ class Geometry:
     def project(self, run: Float[Tensor, "c s"]) -> Float[Tensor, "r s"]:
         """`run` in `projection`'s subspace (`Projection.project`), or as it is without one."""
         return run if self.projection is None else self.projection.project(run)
+
+    def level(self, run: Float[Tensor, "r s"]) -> Float[Tensor, "r s"]:
+        """One run's loaded rows at its `levels` (`RunLevels`), or as they are."""
+        return self.levels.level(run)
 
 
 AS_RECORDED = Geometry()

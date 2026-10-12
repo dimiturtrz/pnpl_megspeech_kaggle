@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from megspeech.data.cache import run_cache as module
-from megspeech.data.cache.alignment import Geometry, Projection
+from megspeech.data.cache.alignment import RUN_LEVELS, Geometry, Projection
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.run_cache import DIRECTORY, TAIL, WORD_TABLE, DeviceRecording, RunCache, main
 from megspeech.data.constants import DECIMATE, HALF, RATE, SFREQ
@@ -284,6 +284,16 @@ def test_load_projected(tmp_path: Path) -> None:
         run = torch.from_numpy(np.load(cache.path(name)))
         expected = projection.project(run).half()
         assert torch.allclose(loaded.meg[:, begin : begin + SAMPLES].float(), expected.float(), atol=1e-2)
+
+
+def test_load_levelled(tmp_path: Path) -> None:
+    """Each run loads at its own levels: a run's statistics never reach another run's rows."""
+    cache = built(tmp_path)
+    loaded = DeviceRecording.load(cache, "cpu", geometry=Geometry(levels=RUN_LEVELS))
+    assert loaded.meg.dtype == torch.float16
+    for begin, name in zip((0, SAMPLES), NAMES, strict=True):
+        own = RUN_LEVELS.level(torch.from_numpy(np.load(cache.path(name))))
+        assert torch.allclose(loaded.meg[:, begin : begin + SAMPLES].float(), own, atol=1e-2)
 
 
 def test_windows() -> None:

@@ -8163,6 +8163,12 @@
     {
       "kind": "holds",
       "source": "megspeech.data.cache.alignment.Geometry",
+      "target": "megspeech.data.cache.alignment.Levelling",
+      "weight": 1
+    },
+    {
+      "kind": "holds",
+      "source": "megspeech.data.cache.alignment.Geometry",
       "target": "megspeech.data.cache.alignment.Projection",
       "weight": 1
     },
@@ -8180,8 +8186,26 @@
     },
     {
       "kind": "calls",
+      "source": "megspeech.data.cache.alignment.Geometry.level",
+      "target": "megspeech.data.cache.alignment.Levelling.level",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
       "source": "megspeech.data.cache.alignment.Geometry.project",
       "target": "megspeech.data.cache.alignment.Projection.project",
+      "weight": 1
+    },
+    {
+      "kind": "inherits",
+      "source": "megspeech.data.cache.alignment.RunLevels",
+      "target": "megspeech.data.cache.alignment.Levelling",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.cache.alignment.RunLevels.level",
+      "target": "megspeech.data.cache.alignment.Alignment.robust",
       "weight": 1
     },
     {
@@ -8440,6 +8464,12 @@
       "kind": "calls",
       "source": "megspeech.data.cache.run_cache.DeviceRecording.load",
       "target": "megspeech.data.cache.alignment.Geometry.align",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.data.cache.run_cache.DeviceRecording.load",
+      "target": "megspeech.data.cache.alignment.Geometry.level",
       "weight": 1
     },
     {
@@ -33088,8 +33118,24 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.cache.alignment.Levelling",
+      "label": "Levelling",
+      "level": "class",
+      "parent": "megspeech.data.cache.alignment",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.data.cache.alignment.Projection",
       "label": "Projection",
+      "level": "class",
+      "parent": "megspeech.data.cache.alignment",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.cache.alignment.RunLevels",
+      "label": "RunLevels",
       "level": "class",
       "parent": "megspeech.data.cache.alignment",
       "role": "satellite"
@@ -38776,6 +38822,14 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.cache.alignment.Geometry.level",
+      "label": "level",
+      "level": "method",
+      "parent": "megspeech.data.cache.alignment.Geometry",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.data.cache.alignment.Geometry.project",
       "label": "project",
       "level": "method",
@@ -38792,6 +38846,14 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.cache.alignment.Levelling.level",
+      "label": "level",
+      "level": "method",
+      "parent": "megspeech.data.cache.alignment.Levelling",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.data.cache.alignment.Projection.project",
       "label": "project",
       "level": "method",
@@ -38804,6 +38866,14 @@
       "label": "rank",
       "level": "method",
       "parent": "megspeech.data.cache.alignment.Projection",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.cache.alignment.RunLevels.level",
+      "label": "level",
+      "level": "method",
+      "parent": "megspeech.data.cache.alignment.RunLevels",
       "role": null
     },
     {

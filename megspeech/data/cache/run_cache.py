@@ -216,7 +216,7 @@ class DeviceRecording:
         geometry: Geometry = AS_RECORDED,
     ) -> "DeviceRecording":
         """Load the named runs (default: every cached run) into one preallocated tensor, one run at a time, each in
-        `geometry`: re-coloured if it applies, then projected if it projects."""
+        `geometry`: re-coloured if it applies, projected if it projects, then at its own levels if it levels."""
         chosen = tuple(names) if names is not None else tuple(sorted(path.stem for path in cache.cache.glob("*.npy")))
         stored = [np.load(cache.path(name), mmap_mode="r") for name in chosen]
         offsets = np.r_[0, np.cumsum([signal.shape[1] for signal in stored])].astype(np.int64)
@@ -224,7 +224,7 @@ class DeviceRecording:
         for begin, signal, name in zip(offsets, stored, chosen, strict=False):
             run = torch.from_numpy(np.array(signal)).to(device)
             geometry.align(run, name)
-            meg[:, begin : begin + signal.shape[1]].copy_(geometry.project(run))
+            meg[:, begin : begin + signal.shape[1]].copy_(geometry.level(geometry.project(run)))
         words = cache.table(chosen)
         words["start"] = words[Column.RUN].map(dict(zip(chosen, offsets[:-1].tolist(), strict=True)))
         words["at"] = words["start"] + words["sample"]

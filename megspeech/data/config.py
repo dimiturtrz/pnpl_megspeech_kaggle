@@ -15,7 +15,16 @@ from core.paths import DataRoot
 from core.rules import Rule
 from core.tree import Retired, Tree
 from megspeech.data.batching.windows import Windows
-from megspeech.data.cache.alignment import AS_RECORDED, EVERY, UNALIGNED, Alignment, Geometry, Projection
+from megspeech.data.cache.alignment import (
+    AS_RECORDED,
+    EVERY,
+    RUN_LEVELS,
+    UNALIGNED,
+    UNLEVELLED,
+    Alignment,
+    Geometry,
+    Projection,
+)
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
@@ -128,6 +137,10 @@ class DataConfig:
     """Every recording, subject 0's own included, re-coloured to subject 0's mean sensor covariance (`Alignment`) in
     training, validation and Kaggle test alike: one sensor geometry the model learns in and every subject meets it
     in."""
+    levelled: bool = False
+    """Every recording's rows at their own run's robust levels (`RunLevels`: median 0, interquartile range 1, from that
+    run's MEG alone) in training, validation, local test and Kaggle test alike: the per-run, train/test-symmetric
+    counterpart of `context.levels`, whose rows a subject or session it never trained on meets as the identity."""
     subspace: bool = False
     """Every recording kept as its coordinates in subject 0's Maxwell signal subspace (`Projection`, ~75 components
     of 306 sensors): the same signal in a quarter of the device cache, the model reading as many channels."""
@@ -219,12 +232,13 @@ class DataConfig:
 
     def geometry(self, root: DataRoot, device: torch.device | str, *, aligned: bool = False) -> Geometry:
         """The `Geometry` recordings load in: re-coloured to subject 0's `alignment` when `recoloured` (or `aligned`
-        asks for it), kept in its `Projection` when `projected`; the reference left unbuilt when neither reads it."""
-        recolour = aligned or self.recoloured
+        asks for it), kept in its `Projection` when `projected`, each run at its own levels when `levelled`; the
+        reference left unbuilt when neither alignment nor projection reads it."""
+        recolour, levels = aligned or self.recoloured, {False: UNLEVELLED, True: RUN_LEVELS}[self.levelled]
         if not (recolour or self.projected):
-            return AS_RECORDED
+            return replace(AS_RECORDED, levels=levels)
         alignment = self.alignment(root, device)
-        return Geometry(alignment if recolour else None, self.projection(alignment, root))
+        return Geometry(alignment if recolour else None, self.projection(alignment, root), levels)
 
     def projection(self, alignment: Alignment, root: DataRoot) -> Projection | None:
         """The `Projection` recordings are kept in: `regions`' sensors, `subspace`'s components, or none."""
@@ -366,6 +380,10 @@ DATA_RULES: tuple[Rule[DataConfig], ...] = (
     Rule(
         lambda d: d.subspace and bool(d.regions),
         lambda _: "a recording keeps either subspace components or region sensors, not both",
+    ),
+    Rule(
+        lambda d: d.levelled and bool(d.features),
+        lambda d: f"features {d.features} are read in place of MEG, so there are no run levels to set",
     ),
     Rule(
         lambda d: d.segment < 0 or bool(d.segment and d.features),
