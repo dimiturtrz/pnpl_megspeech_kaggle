@@ -20,7 +20,7 @@ import numpy as np
 from jaxtyping import Float
 
 from core.paths import DataRoot
-from megspeech.data.config import DataConfig
+from megspeech.data.config import Cut, DataConfig
 from megspeech.data.raw.runs import Run
 from megspeech.objective.targets.speech import SAMPLING, SILENCE, STRIDE, Chapter, Heard, Targets
 
@@ -49,8 +49,8 @@ class Loudness:
         log = np.log(energy + SILENCE * energy.mean())
         return cls(((log - log.mean()) / log.std()).astype(np.float32))
 
-    def windows(self, onset: Float[np.ndarray, " n"], cut: tuple[int, int]) -> Targets:
-        """Each word's `cut` (frames, offset): that many frames from its onset plus the offset; NaN past either end of
+    def windows(self, onset: Float[np.ndarray, " n"], cut: Cut) -> Targets:
+        """Each word's `cut`: `length` frames from its onset plus `offset`; NaN past either end of
         the audio."""
         length, offset = cut
         first = np.floor(np.nan_to_num(onset, nan=-1.0) * FRAMES).astype(np.int64) + offset
@@ -59,12 +59,12 @@ class Loudness:
         return Targets(np.where(inside[:, None], self.levels[frames], np.nan).astype(np.float16))
 
     @staticmethod
-    def directory(root: DataRoot, cut: tuple[int, int]) -> Path:
+    def directory(root: DataRoot, cut: Cut) -> Path:
         """`NAME` for the default geometry's targets, `NAME-<frames>-<offset>` for any other cut's."""
-        return Targets.directory(root, NAME if cut == CUT else f"{NAME}-{cut[0]}-{cut[1]}")
+        return Targets.directory(root, NAME if cut == CUT else f"{NAME}-{cut.length}-{cut.offset}")
 
     @staticmethod
-    def parsed(argv: list[str] | None = None) -> tuple[int, int]:
+    def parsed(argv: list[str] | None = None) -> Cut:
         """The cut of the `--window` and `--delay` seconds in `argv`, each the default geometry's when absent."""
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument("--window", type=float, default=DataConfig.window)
@@ -73,7 +73,7 @@ class Loudness:
         return DataConfig(window=known.window, delay=known.delay).cut()
 
     @staticmethod
-    def targets(entry: Heard, cut: tuple[int, int]) -> Targets:
+    def targets(entry: Heard, cut: Cut) -> Targets:
         """`entry`'s words' envelope windows, those in a block whose audio is not the recording the events were timed
         on dropped."""
         chapter = Chapter.read(entry.chapters()[0])
@@ -81,7 +81,7 @@ class Loudness:
         return Loudness.of(chapter).windows(onset, cut).masked(Targets.aligned(chapter.contrast(onset)))
 
     @staticmethod
-    def write(root: DataRoot, cut: tuple[int, int]) -> Path:
+    def write(root: DataRoot, cut: Cut) -> Path:
         directory = Loudness.directory(root, cut)
         for entry in Heard.trained(Run.discover(root.raw())):
             path = directory / f"{entry.run.name}.npy"

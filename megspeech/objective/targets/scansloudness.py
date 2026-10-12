@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import ClassVar, override
 
 from core.paths import DataRoot
+from megspeech.data.config import Cut
 from megspeech.data.raw.kymata import Study
 from megspeech.data.raw.runs import Run
 from megspeech.data.raw.scans import SCANS, STIMULI, TASK
@@ -37,14 +38,14 @@ class Audiobook:
         book = task.removeprefix(TASK.format(book=""))
         return SCANS.home(root) / STIMULI / f"task-audiobook{book}_run-{part:02d}_stim.wav"
 
-    def targets(self, root: DataRoot, cut: tuple[int, int]) -> Targets:
+    def targets(self, root: DataRoot, cut: Cut) -> Targets:
         """The run's words' envelope windows, those in a block whose audio is not the recording dropped."""
         chapter = Chapter.read(self.wav(root))
         onset = Heard(self.run).onsets()
         return Loudness.of(chapter).windows(onset, cut).masked(Targets.aligned(chapter.contrast(onset)))
 
     @classmethod
-    def write(cls, root: DataRoot, cut: tuple[int, int]) -> Path:
+    def write(cls, root: DataRoot, cut: Cut) -> Path:
         directory = Loudness.directory(root, cut)
         for run in Run.discover(root.processed(cls.STUDY.dataset)):
             path = directory / f"{run.name}.npy"

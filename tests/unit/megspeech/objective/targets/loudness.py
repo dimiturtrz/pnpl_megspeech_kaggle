@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from core.paths import DataRoot
+from megspeech.data.config import Cut
 from megspeech.data.raw.runs import Run
 from megspeech.objective.targets import loudness as module
 from megspeech.objective.targets.loudness import CUT, LENGTH, NAME, OFFSET, Loudness
@@ -27,7 +28,7 @@ def test_windows() -> None:
     targets = envelope.windows(np.array([0.0, 0.5, 1.02, np.nan, -0.1]), CUT)
     assert targets.present.tolist() == [True, True, False, False, False]
     assert targets.vectors[1].tolist() == (np.arange(LENGTH) + 25 + OFFSET).tolist()
-    wide = envelope.windows(np.array([0.0, 0.5, 0.52]), (75, 0))
+    wide = envelope.windows(np.array([0.0, 0.5, 0.52]), Cut(75, 0))
     assert wide.present.tolist() == [True, True, False]
     assert wide.vectors[0].tolist() == np.arange(75).tolist()
 
@@ -35,7 +36,7 @@ def test_windows() -> None:
 def test_directory(tmp_path: Path) -> None:
     root = cast("DataRoot", Root(tmp_path))
     assert Loudness.directory(root, CUT) == tmp_path / "processed" / "speech" / NAME
-    assert Loudness.directory(root, (75, 0)) == tmp_path / "processed" / "speech" / f"{NAME}-75-0"
+    assert Loudness.directory(root, Cut(75, 0)) == tmp_path / "processed" / "speech" / f"{NAME}-75-0"
 
 
 def test_parsed() -> None:

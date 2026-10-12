@@ -4,7 +4,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -35,6 +35,13 @@ NARRATOR = "Sherlock"
 
 BALANCED_RULER = {"val": Val.BALANCED}
 STRIDED_RULER = "this run trained under a retired ruler (strided share or extra validation runs)"
+
+
+class Cut(NamedTuple):
+    """The frames each word's window spans and its start's offset in frames from the word's onset."""
+
+    length: int
+    offset: int
 
 
 @dataclass(frozen=True)
@@ -183,9 +190,9 @@ class DataConfig:
         """The window in samples at the cache's `rate`."""
         return self.to_samples(self.window)
 
-    def cut(self) -> tuple[int, int]:
-        """The frames each word's window spans and its start's offset from the word's onset, at the cache's `rate`."""
-        return self.samples, self.to_samples(self.delay)
+    def cut(self) -> Cut:
+        """Each word's window's frames and offset at the cache's `rate`."""
+        return Cut(self.samples, self.to_samples(self.delay))
 
     def reading(self, windows: Windows) -> Windows:
         """`windows` cut as this config reads them: `window` from `delay` after each onset, centred on itself."""

@@ -22,6 +22,7 @@ import torch
 from jaxtyping import Float
 
 from core.paths import DataRoot
+from megspeech.data.config import Cut
 from megspeech.data.raw.events import Event, Events
 from megspeech.data.raw.fetch import MASC
 from megspeech.data.raw.masc import Masc, Recording
@@ -80,7 +81,7 @@ class Wavs:
         return self.made[wav]
 
     @staticmethod
-    def envelope(cut: tuple[int, int]) -> "Wavs":
+    def envelope(cut: Cut) -> "Wavs":
         return Wavs(lambda chapter: lambda onset: Loudness.of(chapter).windows(onset, cut))
 
     @staticmethod

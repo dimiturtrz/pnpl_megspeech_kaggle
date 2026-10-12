@@ -8,6 +8,7 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
+from megspeech.data.config import Cut
 from megspeech.data.labels.context_tags import CLASSES, ContextTags
 from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.labels.syntax import PartsOfSpeech
@@ -168,7 +169,7 @@ def test_of_audio(tmp_path: Path) -> None:
     assert cast("AudioTerm", heard.terms[0]).speech.rows.tolist() == [0, -1]
     both = Auxiliary.of(AuxiliaryConfig(acoustic=0.3, audio=0.7), 0.0, Tables(root, CPU, WORDS, CUT)).terms
     assert cast("AcousticTerm", both[0]).speech is cast("AudioTerm", both[1]).speech
-    wide = (75, 0)
+    wide = Cut(75, 0)
     Targets(np.ones((2, 75), np.float16)).save(Loudness.directory(root, wide) / "a.npy")
     widened = Auxiliary.of(AuxiliaryConfig(acoustic=0.3, audio=0.7), 0.0, Tables(root, CPU, WORDS, wide)).terms
     assert [cast("Acoustic | Listening", t.head(4)).frames for t in widened] == [75, 75]

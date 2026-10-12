@@ -13,6 +13,7 @@ from torch import nn
 
 from core.paths import DataRoot
 from core.rules import Rule
+from megspeech.data.config import Cut
 from megspeech.data.labels.context_tags import ContextTags
 from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.labels.syntax import PartsOfSpeech
@@ -201,7 +202,7 @@ class Tables:
     root: DataRoot
     device: torch.device
     words: pd.DataFrame
-    cut: tuple[int, int]
+    cut: Cut
 
 
 @dataclass(frozen=True)

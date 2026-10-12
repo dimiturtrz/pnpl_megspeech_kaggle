@@ -6,6 +6,7 @@ import pytest
 from scipy.io import wavfile
 
 from core.paths import DataRoot
+from megspeech.data.config import Cut
 from megspeech.data.raw.fetch import MASC
 from megspeech.data.raw.masc import Masc, Recording
 from megspeech.data.raw.runs import Run
@@ -93,7 +94,7 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "DEVICE", "cpu")
     monkeypatch.setattr("sys.argv", ["mascspeech", "--window", "1.5"])
     Wavs.main()
-    assert np.load(Loudness.directory(data, (75, 0)) / f"{NAME}.npy").shape == (2, 75)
+    assert np.load(Loudness.directory(data, Cut(75, 0)) / f"{NAME}.npy").shape == (2, 75)
     assert not (Targets.directory(data) / f"{NAME}.npy").exists()
     monkeypatch.setattr("sys.argv", ["mascspeech", "--window", "1.5", "--speech"])
     Wavs.main()

@@ -6,6 +6,7 @@ import pytest
 from scipy.io import wavfile
 
 from core.paths import ENV_OVERRIDE, DataRoot
+from megspeech.data.config import Cut
 from megspeech.data.raw.runs import Run
 from megspeech.data.raw.scans import SCANS, STIMULI
 from megspeech.data.raw.smn4lang import SMN4LANG, STORIES
@@ -83,4 +84,4 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("sys.argv", ["scansloudness", "--window", "1.5"])
     Audiobook.main()
     for name in (NAME, STORY):
-        assert np.load(Loudness.directory(data, (75, 0)) / f"{name}.npy").shape == (3, 75)
+        assert np.load(Loudness.directory(data, Cut(75, 0)) / f"{name}.npy").shape == (3, 75)
