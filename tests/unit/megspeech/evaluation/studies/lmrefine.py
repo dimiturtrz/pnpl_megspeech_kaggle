@@ -1,11 +1,13 @@
+from pathlib import Path
+
 import torch
 
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.evaluation.studies.crowding import Rows, Section
-from megspeech.evaluation.studies.lmrefine import Graded, Study, Trainer
+from megspeech.evaluation.studies.lmrefine import Corpus, Graded, Study, Trainer
 from megspeech.evaluation.studies.refiner import Refiner
 from megspeech.evaluation.studies.refinerows import Hidden
-from megspeech.evaluation.studies.wikispans import OOV
+from megspeech.evaluation.studies.wikispans import OOV, OUT
 from tests.unit.megspeech.evaluation.studies.refinerows import ROWS, real
 
 
@@ -62,3 +64,14 @@ def test_scored() -> None:
     made = graded()
     result = Study({"base": made, "rebased": made}, made).scored(Refiner(), Hidden(), 0)
     assert set(result) == {"val/base", "val/rebased", "local-test/base"}
+
+
+def test_wiki(tmp_path: Path) -> None:
+    torch.save({"spans": torch.ones(2, 3, dtype=torch.long)}, tmp_path / OUT)
+    assert Corpus.wiki(tmp_path, real()).shape == (2, 3)
+
+
+def test_meg(tmp_path: Path) -> None:
+    made = real()
+    spans = Corpus.meg(tmp_path, made)
+    assert torch.equal(spans, made.span_states(torch.arange(made.count())))

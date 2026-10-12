@@ -27,8 +27,8 @@ import copy
 import json
 import logging
 import math
-from collections.abc import Sequence
-from dataclasses import dataclass, field, replace
+from collections.abc import Callable, Sequence
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 import torch
@@ -38,10 +38,10 @@ from torch.nn import functional
 
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import IGNORE
-from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.evaluation.studies.crowding import TEST, VAL, Arm, Rows, Section
 from megspeech.evaluation.studies.crowding import Study as Crossfit
+from megspeech.evaluation.studies.drawer import Drawer
 from megspeech.evaluation.studies.lmrows import ROWS, Posteriors
 from megspeech.evaluation.studies.lmsoft import FUSED
 from megspeech.evaluation.studies.lmsoft import Study as Soft
@@ -49,6 +49,7 @@ from megspeech.evaluation.studies.peer import EPOCHS
 from megspeech.evaluation.studies.peer import Dump as Peer
 from megspeech.evaluation.studies.refiner import Refiner
 from megspeech.evaluation.studies.refinerows import Bank, Batch, Hidden, Oracle, Real, Showing, Simulated
+from megspeech.evaluation.studies.spancoupling import Correlated, Profile
 from megspeech.evaluation.studies.wikispans import OOV, OUT, STUDY
 from megspeech.model.ensemble import Ensemble
 
@@ -65,6 +66,31 @@ GPU_BUDGET = 2.5
 """GPU memory a run may take, GB: the GPU is shared with training lanes."""
 GIB = 2**30
 BASES = ("base", "rebased")
+SAMPLERS: dict[str, Callable[[Real], Drawer]] = {
+    "independent": Bank.spanned,
+    "correlated": Correlated.of,
+    "contextual": Correlated.contextual,
+    "coupled": Correlated.coupled,
+}
+"""How a simulated span's beliefs are drawn from the training folds' rows (`spancoupling`)."""
+SHOWINGS: dict[str, Callable[[], Showing]] = {"hidden": Hidden, "oracle": Oracle}
+
+
+class Corpus:
+    """The label sequences stage 1 simulates beliefs over."""
+
+    @staticmethod
+    def wiki(study: Path, train: Real) -> Int[Tensor, "g w"]:
+        """WikiText-103's spans (`wikispans`)."""
+        return torch.load(study / OUT)["spans"]
+
+    @staticmethod
+    def meg(study: Path, train: Real) -> Int[Tensor, "g w"]:
+        """The training folds' own spans of states: the sampler alone differs from real fine-tuning."""
+        return train.span_states(torch.arange(train.count()))
+
+
+CORPORA: dict[str, Callable[[Path, Real], Int[Tensor, "g w"]]] = {"wiki": Corpus.wiki, "meg": Corpus.meg}
 
 
 @dataclass
@@ -210,7 +236,12 @@ class Study:
         parser.add_argument("--peer", default="peerbase-s0", help="the peer dump whose out-of-fold rows train")
         parser.add_argument("--passes", type=float, default=1.0, help="passes over the external text in stage 1")
         parser.add_argument("--epochs", type=int, default=EPOCHS, help="most fine-tuning epochs, picked on the fold")
-        parser.add_argument("--held", type=int, default=HELD, help="external spans stage 1 stops on")
+        parser.add_argument(
+            "--held", type=int, default=HELD, help="simulated spans stage 1 stops on; 0: the watched fold"
+        )
+        parser.add_argument("--sampler", choices=SAMPLERS, default="independent")
+        parser.add_argument("--corpus", choices=CORPORA, default="wiki")
+        parser.add_argument("--showings", nargs="+", choices=SHOWINGS, default=list(SHOWINGS))
         parser.add_argument("--device", default="cpu")
         parser.add_argument(
             "--gpu-budget", type=float, default=GPU_BUDGET, help="most GPU memory this run may take, GB"
@@ -231,15 +262,22 @@ class Study:
         test, test_aligned = Graded.load(directories, out / ROWS, TEST)
         peer = PeerBase(Peer.path(root, args.peer))
         train, watched = peer.folds()
-        rows = train.index[train.index != PAD]
-        drawn = Simulated(torch.load(study / OUT)["spans"], Bank.of(train.beliefs[rows], train.states[rows]))
-        simulated, held = drawn.held(args.held, torch.Generator().manual_seed(args.seed))
+        drawer = SAMPLERS[args.sampler](train)
+        drawn = Simulated(CORPORA[args.corpus](study, train), drawer)
+        simulated, held = (
+            drawn.held(args.held, torch.Generator().manual_seed(args.seed)) if args.held else (drawn, watched)
+        )
         graders = Study({BASES[0]: val, BASES[1]: peer.rebased(val)}, test)
         steps = math.ceil(args.passes * simulated.count() / BATCH)
         epoch = math.ceil(train.count() / BATCH)
-        stem = f"{STUDY}-h{args.held}-p{args.passes:g}-e{args.epochs}-s{args.seed}"
-        result: dict[str, object] = {"aligned": {VAL: val_aligned, TEST: test_aligned}, "spans": simulated.count()}
-        for showing in (Hidden(), Oracle()):
+        stem = f"{STUDY}-{args.sampler}-{args.corpus}-h{args.held}-p{args.passes:g}-e{args.epochs}-s{args.seed}"
+        profile = {"real": asdict(Profile.of(watched)), args.sampler: asdict(Profile.simulated(watched, drawer, 0))}
+        result: dict[str, object] = {
+            "aligned": {VAL: val_aligned, TEST: test_aligned},
+            "spans": simulated.count(),
+            "profile": profile,
+        }
+        for showing in (SHOWINGS[name]() for name in args.showings):
             trainer = Trainer(showing, watched, args.seed)
             base = watched.loss(Refiner().to(device), showing)
             pretrainer = Trainer(showing, held, args.seed)

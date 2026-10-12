@@ -154,3 +154,10 @@ def test_held() -> None:
     assert held.count() == 1
     assert held.states.tolist() == [5]
     assert held.index[0].tolist()[:2] == [0, PAD]
+
+
+def test_spanned() -> None:
+    made = Bank.spanned(Real(bank().beliefs, torch.arange(VOCAB_SIZE + 1), torch.arange(VOCAB_SIZE + 1)[None, :]))
+    assert made.counts.tolist() == [1] * (VOCAB_SIZE + 1)
+    with pytest.raises(ValueError, match="no out-of-fold row"):
+        Bank.spanned(real())

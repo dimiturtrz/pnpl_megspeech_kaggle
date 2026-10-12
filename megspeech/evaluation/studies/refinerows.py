@@ -12,6 +12,7 @@ from torch.nn import functional
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.spans.spans import MAX_WORDS, PAD
 from megspeech.evaluation.studies.boosted import LOG_FLOOR
+from megspeech.evaluation.studies.drawer import Drawer
 from megspeech.evaluation.studies.refiner import STATES, Refiner
 from megspeech.evaluation.studies.wikispans import OOV
 
@@ -102,6 +103,12 @@ class Bank:
             raise ValueError("a state has no out-of-fold row to draw")
         return cls(beliefs[states.argsort(stable=True)], counts.cumsum(0) - counts, counts)
 
+    @classmethod
+    def spanned(cls, real: "Real") -> "Bank":
+        """The bank of `real`'s rows that lie in its spans."""
+        rows = real.index[real.index != PAD]
+        return cls.of(real.beliefs[rows], real.states[rows])
+
     def draw(self, states: Int[Tensor, "b w"], generator: torch.Generator) -> Float[Tensor, "b w v"]:
         """A uniformly drawn row of each position's state; zeros past a span's end."""
         safe = states.clamp(min=0).long()
@@ -115,7 +122,7 @@ class Simulated:
     """External text's spans of states, each belief drawn from the bank."""
 
     spans: Int[Tensor, "g w"]
-    bank: Bank
+    bank: Drawer
 
     def count(self) -> int:
         return len(self.spans)
