@@ -75,3 +75,8 @@ def test_meg(tmp_path: Path) -> None:
     made = real()
     spans = Corpus.meg(tmp_path, made)
     assert torch.equal(spans, made.span_states(torch.arange(made.count())))
+
+
+def test_parser() -> None:
+    args = Study.parser().parse_args(["m", "--peer", "kf5ac05", "--arms", "meg-only", "--sampler", "shifted"])
+    assert (args.peer, args.arms, args.sampler) == ("kf5ac05", ["meg-only"], "shifted")

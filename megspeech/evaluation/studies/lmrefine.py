@@ -24,6 +24,7 @@ validation, the base the refiner trained under.
 
 import argparse
 import copy
+import functools
 import json
 import logging
 import math
@@ -50,6 +51,7 @@ from megspeech.evaluation.studies.peer import Dump as Peer
 from megspeech.evaluation.studies.refiner import Refiner
 from megspeech.evaluation.studies.refinerows import Bank, Batch, Hidden, Oracle, Real, Showing, Simulated
 from megspeech.evaluation.studies.spancoupling import Correlated, Profile
+from megspeech.evaluation.studies.spanshift import Shifted
 from megspeech.evaluation.studies.wikispans import OOV, OUT, STUDY
 from megspeech.model.ensemble import Ensemble
 
@@ -66,11 +68,14 @@ GPU_BUDGET = 2.5
 """GPU memory a run may take, GB: the GPU is shared with training lanes."""
 GIB = 2**30
 BASES = ("base", "rebased")
+ARMS = ("text-only", "text", "meg-only")
+"""Stage 1 alone, stage 1 then real fine-tuning, real fine-tuning alone."""
 SAMPLERS: dict[str, Callable[[Real], Drawer]] = {
     "independent": Bank.spanned,
     "correlated": Correlated.of,
     "contextual": Correlated.contextual,
     "coupled": Correlated.coupled,
+    "shifted": Shifted.of,
 }
 """How a simulated span's beliefs are drawn from the training folds' rows (`spancoupling`)."""
 SHOWINGS: dict[str, Callable[[], Showing]] = {"hidden": Hidden, "oracle": Oracle}
@@ -230,7 +235,8 @@ class Study:
         return result
 
     @staticmethod
-    def main() -> None:  # devtools-ignore: test-mirror
+    def parser() -> argparse.ArgumentParser:
+        """The study's command line: which peer dump trains, which sampler and arms run."""
         parser = argparse.ArgumentParser(description=__doc__)
         parser.add_argument("name", help="an ensemble under models/ with probs.pt per member and lmrows.pt")
         parser.add_argument("--peer", default="peerbase-s0", help="the peer dump whose out-of-fold rows train")
@@ -242,12 +248,19 @@ class Study:
         parser.add_argument("--sampler", choices=SAMPLERS, default="independent")
         parser.add_argument("--corpus", choices=CORPORA, default="wiki")
         parser.add_argument("--showings", nargs="+", choices=SHOWINGS, default=list(SHOWINGS))
+        parser.add_argument(
+            "--arms", nargs="+", choices=ARMS, default=list(ARMS), help="meg-only: real out-of-fold rows alone"
+        )
         parser.add_argument("--device", default="cpu")
         parser.add_argument(
             "--gpu-budget", type=float, default=GPU_BUDGET, help="most GPU memory this run may take, GB"
         )
         parser.add_argument("--seed", type=int, default=0)
-        args = parser.parse_args()
+        return parser
+
+    @staticmethod
+    def main() -> None:  # devtools-ignore: test-mirror
+        args = Study.parser().parse_args()
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
         torch.manual_seed(args.seed)
         device = torch.device(args.device)
@@ -270,7 +283,9 @@ class Study:
         graders = Study({BASES[0]: val, BASES[1]: peer.rebased(val)}, test)
         steps = math.ceil(args.passes * simulated.count() / BATCH)
         epoch = math.ceil(train.count() / BATCH)
+        arms = "+".join(args.arms)
         stem = f"{STUDY}-{args.sampler}-{args.corpus}-h{args.held}-p{args.passes:g}-e{args.epochs}-s{args.seed}"
+        stem = f"{stem}-{args.peer}-{arms}"
         profile = {"real": asdict(Profile.of(watched)), args.sampler: asdict(Profile.simulated(watched, drawer, 0))}
         result: dict[str, object] = {
             "aligned": {VAL: val_aligned, TEST: test_aligned},
@@ -281,14 +296,23 @@ class Study:
             trainer = Trainer(showing, watched, args.seed)
             base = watched.loss(Refiner().to(device), showing)
             pretrainer = Trainer(showing, held, args.seed)
-            text, text_fit = pretrainer.picked(Refiner().to(device), simulated, steps, max(1, steps // CHECKS))
-            text_fit["real"] = watched.loss(text, showing)
+            stage = functools.cache(
+                lambda pretrainer=pretrainer: pretrainer.picked(
+                    Refiner().to(device), simulated, steps, max(1, steps // CHECKS)
+                )
+            )
             models = {
-                "text-only": (text, text_fit),
-                "text": trainer.picked(text, train, args.epochs * epoch, epoch),
-                "meg-only": trainer.picked(Refiner().to(device), train, args.epochs * epoch, epoch),
+                "text-only": stage,
+                "text": lambda trainer=trainer, stage=stage: trainer.picked(
+                    stage()[0], train, args.epochs * epoch, epoch
+                ),
+                "meg-only": lambda trainer=trainer: trainer.picked(
+                    Refiner().to(device), train, args.epochs * epoch, epoch
+                ),
             }
-            for arm, (model, fit) in models.items():
+            for arm in args.arms:
+                model, fit = models[arm]()
+                fit["real"] = watched.loss(model, showing)
                 key = f"{showing.name}/{arm}"
                 torch.save(model.state_dict(), study / f"{args.name}-{stem}-{showing.name}-{arm}.pt")
                 result[key] = {"fit": fit, "watched-base": base, **graders.scored(model, showing, args.seed)}

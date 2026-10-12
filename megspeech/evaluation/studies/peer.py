@@ -183,12 +183,13 @@ def main() -> None:
     parser.add_argument("--folds", nargs="+", required=True, help="cross-fit fold models, fold k held out by member k")
     parser.add_argument("--base", required=True, help="the full-data base scored on the official validation split")
     parser.add_argument("--redump", action="store_true", help="read the rows from the models again")
+    parser.add_argument("--dump", help="the dump's name under the peer study (default: the base's)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     loaded = Loader.of(Group(root, Scoring(), device), [args.base])
     domains, _ = loaded.domains(loaded.ruled(Run.discover(root.raw())))
-    path = Dump.path(root, args.base)
+    path = Dump.path(root, args.dump or args.base)
     if args.redump or not path.exists():
         Dump.build(root, args.folds, args.base, domains, device).save(path)
     dump = Dump.load(path)
@@ -196,7 +197,7 @@ def main() -> None:
     base = study.official(study.val.base)
     LOG.info("base %s alone, official %.4f (%d words, macro over novel spans)", args.base, base, len(study.val.y))
     results = [{"arm": "base", "official": [base]}, *(study.arm(arm) for arm in ARMS)]
-    (path.parent / f"{args.base}-results.json").write_text(json.dumps(results, indent=1))
+    (path.parent / f"{path.stem}-results.json").write_text(json.dumps(results, indent=1))
 
 
 if __name__ == "__main__":
