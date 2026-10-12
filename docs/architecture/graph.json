@@ -5721,6 +5721,12 @@
     {
       "kind": "import",
       "source": "megspeech.objective.targets.mascspeech",
+      "target": "megspeech.data.config",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.objective.targets.mascspeech",
       "target": "megspeech.data.raw.events",
       "weight": 1
     },
@@ -5758,6 +5764,12 @@
       "kind": "import",
       "source": "megspeech.objective.targets.scansloudness",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.objective.targets.scansloudness",
+      "target": "megspeech.data.config",
       "weight": 1
     },
     {
@@ -6231,6 +6243,12 @@
     {
       "kind": "import",
       "source": "megspeech.training.auxiliary",
+      "target": "megspeech.data.config",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.auxiliary",
       "target": "megspeech.data.labels.context_tags",
       "weight": 1
     },
@@ -6567,6 +6585,12 @@
     {
       "kind": "import",
       "source": "megspeech.training.cli.throughput",
+      "target": "megspeech.data.raw.runs",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.cli.throughput",
       "target": "megspeech.device",
       "weight": 1
     },
@@ -6724,18 +6748,6 @@
       "kind": "import",
       "source": "megspeech.training.config",
       "target": "megspeech.model.config",
-      "weight": 1
-    },
-    {
-      "kind": "import",
-      "source": "megspeech.training.config",
-      "target": "megspeech.model.words.trunk",
-      "weight": 1
-    },
-    {
-      "kind": "import",
-      "source": "megspeech.training.config",
-      "target": "megspeech.objective.targets.loudness",
       "weight": 1
     },
     {
@@ -6946,6 +6958,12 @@
       "kind": "import",
       "source": "megspeech.training.loop.trainer",
       "target": "megspeech.training.regularise.noise",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.loop.trainer",
+      "target": "megspeech.training.regularise.pull",
       "weight": 1
     },
     {
@@ -7306,6 +7324,24 @@
       "kind": "import",
       "source": "megspeech.training.regularise.noise",
       "target": "megspeech.training.regularise.bgmix",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.regularise.pull",
+      "target": "megspeech.model.input.subjects",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.regularise.pull",
+      "target": "megspeech.training.hook",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.regularise.pull",
+      "target": "megspeech.training.regularise.anchor",
       "weight": 1
     },
     {
@@ -7810,6 +7846,12 @@
       "kind": "calls",
       "source": "core.tree.Tree.parse",
       "target": "core.tree.Tree.nest",
+      "weight": 1
+    },
+    {
+      "kind": "inherits",
+      "source": "megspeech.data.batching.split.Batch",
+      "target": "megspeech.data.batching.split.SpanInput",
       "weight": 1
     },
     {
@@ -8601,6 +8643,12 @@
     {
       "kind": "references",
       "source": "megspeech.data.config.DataConfig",
+      "target": "megspeech.data.config.Cut",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.data.config.DataConfig",
       "target": "megspeech.data.config.DataConfig",
       "weight": 1
     },
@@ -8680,6 +8728,12 @@
       "kind": "calls",
       "source": "megspeech.data.config.DataConfig.carved",
       "target": "megspeech.data.config.DataConfig.split",
+      "weight": 1
+    },
+    {
+      "kind": "construct",
+      "source": "megspeech.data.config.DataConfig.cut",
+      "target": "megspeech.data.config.Cut",
       "weight": 1
     },
     {
@@ -23053,6 +23107,12 @@
       "weight": 1
     },
     {
+      "kind": "construct",
+      "source": "megspeech.model.context.intervals.Intervals.features",
+      "target": "megspeech.model.context.intervals.Reader",
+      "weight": 1
+    },
+    {
       "kind": "calls",
       "source": "megspeech.model.context.intervals.Reader.ended",
       "target": "megspeech.model.context.intervals.Reader.ending",
@@ -23061,7 +23121,7 @@
     {
       "kind": "calls",
       "source": "megspeech.model.context.intervals.Reader.ended",
-      "target": "megspeech.model.context.timing.TimingHead.features",
+      "target": "megspeech.model.context.intervals.Reader.rich",
       "weight": 1
     },
     {
@@ -25209,6 +25269,12 @@
     {
       "kind": "references",
       "source": "megspeech.objective.targets.loudness.Loudness",
+      "target": "megspeech.data.config.Cut",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.objective.targets.loudness.Loudness",
       "target": "megspeech.objective.targets.loudness.Loudness",
       "weight": 1
     },
@@ -25401,6 +25467,12 @@
     {
       "kind": "references",
       "source": "megspeech.objective.targets.mascspeech.Wavs",
+      "target": "megspeech.data.config.Cut",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.objective.targets.mascspeech.Wavs",
       "target": "megspeech.objective.targets.mascspeech.Wavs",
       "weight": 1
     },
@@ -25516,6 +25588,12 @@
       "kind": "references",
       "source": "megspeech.objective.targets.scansloudness.Audiobook",
       "target": "core.paths.DataRoot",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.objective.targets.scansloudness.Audiobook",
+      "target": "megspeech.data.config.Cut",
       "weight": 1
     },
     {
@@ -26959,6 +27037,12 @@
       "weight": 1
     },
     {
+      "kind": "holds",
+      "source": "megspeech.training.auxiliary.Tables",
+      "target": "megspeech.data.config.Cut",
+      "weight": 1
+    },
+    {
       "kind": "references",
       "source": "megspeech.training.cli.experts.Assembly",
       "target": "megspeech.data.config.DataConfig",
@@ -28192,6 +28276,12 @@
       "kind": "calls",
       "source": "megspeech.training.loop.trainer.Trainer.state",
       "target": "megspeech.training.regularise.bgmix.BGMix.of",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.training.loop.trainer.Trainer.state",
+      "target": "megspeech.training.regularise.pull.Pull.of",
       "weight": 1
     },
     {
@@ -29497,6 +29587,24 @@
       "weight": 1
     },
     {
+      "kind": "inherits",
+      "source": "megspeech.training.regularise.pull.Pull",
+      "target": "megspeech.training.hook.StepHook",
+      "weight": 1
+    },
+    {
+      "kind": "references",
+      "source": "megspeech.training.regularise.pull.Pull",
+      "target": "megspeech.training.regularise.pull.Pull",
+      "weight": 1
+    },
+    {
+      "kind": "calls",
+      "source": "megspeech.training.regularise.pull.Pull.of",
+      "target": "megspeech.training.regularise.anchor.Anchor.of",
+      "weight": 1
+    },
+    {
       "kind": "references",
       "source": "megspeech.training.regularise.regional.Regional",
       "target": "core.paths.DataRoot",
@@ -30495,7 +30603,7 @@
       "role": null
     },
     {
-      "descendants": 262,
+      "descendants": 263,
       "id": "megspeech",
       "label": "megspeech",
       "level": "module",
@@ -32247,7 +32355,7 @@
       "role": null
     },
     {
-      "descendants": 43,
+      "descendants": 44,
       "id": "megspeech.training",
       "label": "training",
       "level": "module",
@@ -32463,7 +32571,7 @@
       "role": null
     },
     {
-      "descendants": 7,
+      "descendants": 8,
       "id": "megspeech.training.regularise",
       "label": "regularise",
       "level": "module",
@@ -32506,6 +32614,14 @@
       "descendants": 0,
       "id": "megspeech.training.regularise.noise",
       "label": "noise",
+      "level": "module",
+      "parent": "megspeech.training.regularise",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.training.regularise.pull",
+      "label": "pull",
       "level": "module",
       "parent": "megspeech.training.regularise",
       "role": null
@@ -32844,6 +32960,14 @@
       "label": "RunCache",
       "level": "class",
       "parent": "megspeech.data.cache.run_cache",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.config.Cut",
+      "label": "Cut",
+      "level": "class",
+      "parent": "megspeech.data.config",
       "role": "satellite"
     },
     {
@@ -35700,7 +35824,7 @@
       "label": "Reader",
       "level": "class",
       "parent": "megspeech.model.context.intervals",
-      "role": "primary"
+      "role": "satellite"
     },
     {
       "descendants": 0,
@@ -37284,6 +37408,14 @@
       "label": "TotalSample",
       "level": "class",
       "parent": "megspeech.training.regularise.noise",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.training.regularise.pull.Pull",
+      "label": "Pull",
+      "level": "class",
+      "parent": "megspeech.training.regularise.pull",
       "role": "satellite"
     },
     {
@@ -48000,6 +48132,14 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.model.config.ContextConfig.rate",
+      "label": "rate",
+      "level": "method",
+      "parent": "megspeech.model.config.ContextConfig",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.model.config.ContextConfig.save",
       "label": "save",
       "level": "method",
@@ -51600,6 +51740,14 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.training.auxiliary.AuxiliaryConfig.rate",
+      "label": "rate",
+      "level": "method",
+      "parent": "megspeech.training.auxiliary.AuxiliaryConfig",
+      "role": null
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.training.auxiliary.Joint.tapped",
       "label": "tapped",
       "level": "method",
@@ -53172,6 +53320,22 @@
       "label": "windows",
       "level": "method",
       "parent": "megspeech.training.regularise.noise.TotalSample",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.training.regularise.pull.Pull.of",
+      "label": "of",
+      "level": "method",
+      "parent": "megspeech.training.regularise.pull.Pull",
+      "role": null
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.training.regularise.pull.Pull.step",
+      "label": "step",
+      "level": "method",
+      "parent": "megspeech.training.regularise.pull.Pull",
       "role": null
     },
     {
