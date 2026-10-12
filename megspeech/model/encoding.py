@@ -7,7 +7,7 @@ from torch import Tensor, nn
 
 from megspeech.model.builder import WordBuilder
 from megspeech.model.config import ContextConfig
-from megspeech.model.input.stem import Stem
+from megspeech.model.input.stem import Stages, Stem
 from megspeech.model.input.subjects import Unseen
 from megspeech.model.motion import Moving
 from megspeech.model.words.base import WordEncoder
@@ -17,14 +17,14 @@ ENCODER = ("scale", "whiten", "subjects", "words")
 
 
 class Encoding(nn.Module):
-    """A window's path to its word embedding: scaler, whitener, subject layer and word encoder."""
+    """A window's path to its word embedding: subject levels, scaler, whitener, subject layer and word encoder."""
 
     words: WordEncoder
 
     def __init__(self, scale: nn.Module, context: ContextConfig, channels: int, unseen: Unseen) -> None:
         super().__init__()
-        self.scale, self.whiten, self.subjects = Stem.of(
-            scale, channels, whiten=context.whiten, subjects=context.subjects, unseen=unseen
+        self.levels, self.scale, self.whiten, self.subjects = Stem.of(
+            scale, channels, Stages(context.levels, context.whiten, context.subjects), unseen
         )
         self.words = WordBuilder.build(context.encoder, context, channels)
         self.motion = Moving()
@@ -49,8 +49,8 @@ class Encoding(nn.Module):
         return self.words.embed(self.prepare(x, subject), valid)
 
     def prepare(self, x: Float[Tensor, "r c t"], subject: Int[Tensor, " r"]) -> Float[Tensor, "r c t"]:
-        """Each window as the word encoder reads it: scaled, whitened, in its subject's space, normalised."""
-        sensors = self.subjects(self.whiten(self.scale(x)), subject)
+        """Each window as the word encoder reads it: levelled, scaled, whitened, in its subject's space, normalised."""
+        sensors = self.subjects(self.whiten(self.scale(self.levels(x, subject))), subject)
         return self.words.normalise(sensors, x.ne(0).any(dim=1, keepdim=True))
 
     def encoder(self) -> list[nn.Parameter]:

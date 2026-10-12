@@ -18,3 +18,11 @@ def test_forward_flat_channel() -> None:
     assert torch.isfinite(out).all()
     assert torch.equal(out[:, 0], ((x[:, 0] - scaler.median[0]) / scaler.spread[0]).clamp(-CLAMP, CLAMP))
     assert torch.equal(scaler.forward(torch.full((1, 2, 10), 3.0))[:, 1], torch.zeros(1, 10))
+
+
+def test_quartiles() -> None:
+    sample = torch.arange(5.0).reshape(1, 1, 5).expand(2, 2, 5)
+    median, spread = Scaler.quartiles(sample)
+    assert median.shape == spread.shape == (2, 1)
+    assert torch.equal(median, torch.full((2, 1), 2.0))
+    assert torch.equal(spread, torch.full((2, 1), 2.0))

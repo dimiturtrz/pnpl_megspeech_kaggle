@@ -238,7 +238,11 @@ class Split:
 
     def sample(self, count: int) -> Float[Tensor, "k c t"]:
         """Up to `count` windows drawn without replacement."""
-        return self.windows(torch.randperm(len(self.y), device=self.y.device)[:count])
+        return self.windows(self.drawn(count))
+
+    def drawn(self, count: int) -> Int[Tensor, " k"]:
+        """Up to `count` words drawn without replacement."""
+        return torch.randperm(len(self.y), device=self.y.device)[:count]
 
     def labelled(self) -> Int[Tensor, " k"]:
         """Words with a vocabulary label — the ones a score counts."""

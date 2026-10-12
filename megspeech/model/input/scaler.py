@@ -21,13 +21,18 @@ class Scaler(nn.Module):
 
     def __init__(self, train: Float[Tensor, "n c t"]) -> None:
         super().__init__()
-        sample = train[torch.randperm(len(train), device=train.device)[:SCALER_SAMPLE]].float()
-        flat = sample.transpose(0, 1).reshape(sample.shape[1], -1)
+        median, spread = self.quartiles(train[torch.randperm(len(train), device=train.device)[:SCALER_SAMPLE]])
+        self.register_buffer("median", median)
+        self.register_buffer("spread", spread)
+
+    @staticmethod
+    def quartiles(sample: Float[Tensor, "n c t"]) -> tuple[Float[Tensor, "c 1"], Float[Tensor, "c 1"]]:
+        """Each channel's median and interquartile range over up to `QUANTILE_SAMPLE` of `sample`'s points."""
+        flat = sample.float().transpose(0, 1).reshape(sample.shape[1], -1)
         flat = flat[:, :: max(1, flat.shape[1] // QUANTILE_SAMPLE)]
         levels = torch.tensor([0.25, 0.5, 0.75], device=flat.device)
         low, median, high = torch.quantile(flat, levels, dim=1)
-        self.register_buffer("median", median[:, None])
-        self.register_buffer("spread", (high - low)[:, None])
+        return median[:, None], (high - low)[:, None]
 
     @override
     def forward(self, x: Float[Tensor, "b c t"]) -> Float[Tensor, "b c t"]:

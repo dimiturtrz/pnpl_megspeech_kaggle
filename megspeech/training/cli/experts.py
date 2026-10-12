@@ -55,7 +55,7 @@ class Run:
     def plain(self) -> bool:
         """Whether the run read the sensors as recorded, through its CNN alone: what an expert branch reproduces."""
         context, data = self.config.context, self.config.data
-        plain = context.encoder is Encoder.CONV and not (context.subjects or context.whiten)
+        plain = context.encoder is Encoder.CONV and not (context.subjects or context.whiten or context.levels)
         return plain and not (data.projected or data.features)
 
     def weights(self, prefixes: tuple[str, ...], *, kept: bool) -> dict[str, Tensor]:

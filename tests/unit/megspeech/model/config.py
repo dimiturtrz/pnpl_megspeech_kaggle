@@ -106,6 +106,14 @@ def test_noise_covariance_needs_whiten() -> None:
     assert ContextConfig(whiten=True, covariance=Covariance.NOISE).covariance is Covariance.NOISE
 
 
+def test_levels() -> None:
+    assert ContextConfig(levels=True, whiten=True).levels
+    with pytest.raises(ValueError, match="no subject levels"):
+        ContextConfig(levels=True, encoder=Encoder.TRAINED)
+    with pytest.raises(ValueError, match="per-subject levels"):
+        ContextConfig(levels=True, whiten=True, covariance=Covariance.NOISE)
+
+
 def test_branch_drop_is_a_probability() -> None:
     with pytest.raises(ValueError, match="branch_drop"):
         ContextConfig(branch_drop=1.0)
