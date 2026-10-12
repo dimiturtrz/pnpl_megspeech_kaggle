@@ -86,6 +86,8 @@ def test_of(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     assert made.corpus is loaded
     assert read == [shaped]
     assert read[0] is shaped
+    with pytest.raises(ValueError, match="MEG-XL reads"):
+        Export.of(DataConfig(features="x", decimate=2), DataRoot(tmp_path), "name", torch.device("cpu"))
 
 
 @pytest.mark.parametrize("flags", [["--data.subspace"], ["--data.regions", "Left-temporal"]])

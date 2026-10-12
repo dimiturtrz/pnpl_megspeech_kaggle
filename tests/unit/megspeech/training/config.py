@@ -147,6 +147,17 @@ def test_acoustic_needs_the_envelope_geometry() -> None:
         RunConfig(optim=OptimConfig(auxiliaries=AuxiliaryConfig(tap=Tap.TIME)))
 
 
+def test_rates_match_what_reads_them() -> None:
+    """The envelope terms and the spanned trunk read at a fixed rate; a cache decimated otherwise is refused."""
+    for auxiliaries in (AuxiliaryConfig(acoustic=0.5), AuxiliaryConfig(audio=1.0)):
+        with pytest.raises(ValueError, match="envelope"):
+            RunConfig(optim=OptimConfig(auxiliaries=auxiliaries), data=DataConfig(decimate=2))
+    assert RunConfig(optim=OptimConfig(auxiliaries=AuxiliaryConfig(semantic=0.5)), data=DataConfig(decimate=2))
+    spanned = ContextConfig(encoder=Encoder.SPANNED)
+    with pytest.raises(ValueError, match="MEG-XL trunk"):
+        RunConfig(context=spanned, data=DataConfig(segment=9.0, decimate=2))
+
+
 def test_audio_reads_any_cut() -> None:
     for window in (1.3, 1.5):
         assert RunConfig(optim=OptimConfig(auxiliaries=AuxiliaryConfig(audio=1.0)), data=DataConfig(window=window))

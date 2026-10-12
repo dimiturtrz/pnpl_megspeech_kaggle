@@ -15,10 +15,9 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.data.constants import RATE
 from megspeech.model.words.base import WordEncoder
 from megspeech.model.words.conv import ConvConfig
-from megspeech.model.words.trunk import DOWNSAMPLING, LATENT, Trunk
+from megspeech.model.words.trunk import DOWNSAMPLING, LATENT, RATE, Trunk
 
 WORD = RATE // 2
 """Samples after its onset whose tokens make a word's feature: MEG-XL's own word read."""

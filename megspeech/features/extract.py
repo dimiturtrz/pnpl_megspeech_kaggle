@@ -31,14 +31,14 @@ from megspeech.data.batching.split import KAGGLE_FEATURES, TRAIN, Features, Spli
 from megspeech.data.batching.windows import Windows
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import DataConfig
-from megspeech.data.constants import CHANNELS, RATE
+from megspeech.data.constants import CHANNELS
 from megspeech.data.corpus import Corpus
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
 from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.words.megxl import COMPONENTS, MegxlWords
 from megspeech.model.words.spanned import SpanWords
-from megspeech.model.words.trunk import ATTENTION_BATCH, DOWNSAMPLING
+from megspeech.model.words.trunk import ATTENTION_BATCH, DOWNSAMPLING, RATE
 from megspeech.training.config import RunConfig
 
 LOG = logging.getLogger(__name__)
@@ -222,7 +222,10 @@ class Export:
 
     @classmethod
     def of(cls, data: DataConfig, root: DataRoot, name: str, device: torch.device) -> Self:
-        """The splits `data` reads, their MEG rather than any features it names, in `data`'s own geometry."""
+        """The splits `data` reads, their MEG rather than any features it names, in `data`'s own geometry; only a
+        cache at the trunk's `RATE` is one MEG-XL can read."""
+        if data.rate != RATE:
+            raise ValueError(f"MEG-XL reads {RATE} Hz, but data.decimate {data.decimate} caches at {data.rate} Hz")
         meg = replace(data, features="")
         track = Track.DEEP
         corpus = Corpus.load(meg, root, device)

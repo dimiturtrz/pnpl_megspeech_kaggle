@@ -21,9 +21,8 @@ from jaxtyping import Float
 
 from core.paths import DataRoot
 from megspeech.data.config import DataConfig
-from megspeech.data.constants import RATE
 from megspeech.data.raw.runs import Run
-from megspeech.objective.targets.speech import SILENCE, STRIDE, Chapter, Heard, Targets
+from megspeech.objective.targets.speech import SAMPLING, SILENCE, STRIDE, Chapter, Heard, Targets
 
 NAME = "envelope"
 """The directory under processed/speech holding the envelope targets."""
@@ -31,6 +30,9 @@ CUT = DataConfig().cut()
 LENGTH, OFFSET = CUT
 """Frames a word's window spans at 50 Hz and where it starts relative to the word's onset, in the default geometry,
 whose targets live under `NAME`; a run cut otherwise (`DataConfig.cut`) reads its own directory beside it."""
+FRAMES = SAMPLING // STRIDE
+"""Envelope frames per second, one per `STRIDE` audio samples: a run's windows are cut in frames of its MEG cache, so
+only a cache at this rate (`DataConfig.rate`) reads its envelope frame for frame."""
 LOG = logging.getLogger(__name__)
 
 
@@ -51,7 +53,7 @@ class Loudness:
         """Each word's `cut` (frames, offset): that many frames from its onset plus the offset; NaN past either end of
         the audio."""
         length, offset = cut
-        first = np.floor(np.nan_to_num(onset, nan=-1.0) * RATE).astype(np.int64) + offset
+        first = np.floor(np.nan_to_num(onset, nan=-1.0) * FRAMES).astype(np.int64) + offset
         inside = np.isfinite(onset) & (first >= 0) & (first + length <= len(self.levels))
         frames = np.where(inside, first, 0)[:, None] + np.arange(length)
         return Targets(np.where(inside[:, None], self.levels[frames], np.nan).astype(np.float16))

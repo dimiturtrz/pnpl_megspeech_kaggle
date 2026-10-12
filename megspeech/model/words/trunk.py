@@ -31,6 +31,9 @@ MAGNETOMETER = 3024
 
 DOWNSAMPLING = 12
 """Samples per BioCodec token: its encoder strides 3 x 2 x 2."""
+RATE = 50
+"""Samples per second of MEG the trunk reads: MEG-XL was pretrained on segments at 50 Hz, so a cache at any other rate
+(`DataConfig.decimate`) feeds it signals it never saw."""
 
 ROTATIONS = "rope_embedding_layer.rotate"
 """The checkpoint's RoPE tables, sized to its pretraining length; the trunk recomputes them for any length."""
