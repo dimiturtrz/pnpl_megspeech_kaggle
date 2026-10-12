@@ -46,6 +46,7 @@ from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.average import GroupAverage
 from megspeech.training.regularise.bgmix import BGMix, Untouched
 from megspeech.training.regularise.noise import SAMPLES
+from megspeech.training.regularise.pull import Pull
 from megspeech.training.regularise.regional import Regional
 from megspeech.training.regularise.rightcut import RightCut, Whole
 from megspeech.training.sampling.curriculum import Curriculum, Natural, Observation, Schedule
@@ -258,7 +259,7 @@ class Trainer:
             self.terms(train),
             model.readouts(),
             ema,
-            (anchor, schedule, ema, ramp),
+            (anchor, Pull.of(optim.pull, optim.lr, total, model, tuple(net.encoder())), schedule, ema, ramp),
             Sampler(self.config.sampler, train).curriculum(),
             BGMix.of(train, self.config.augment.bgmix, self.config.augment.bgmix_key),
             GroupAverage.of(train, self.config.augment.average, self.config.augment.average_chance),

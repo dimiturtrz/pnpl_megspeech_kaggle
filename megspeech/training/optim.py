@@ -54,6 +54,10 @@ class OptimConfig:
     """Share of each subject matrix's deviation from the Deep subject's that the run's decay leaves by its end, were
     its gradient never to restore it (`megspeech.training.regularise.anchor`); 1 decays the matrices toward 0 like
     every other weight. The Deep matrix is what a zero-shot subject is read through."""
+    pull: float = 1.0
+    """Share of each encoder weight's drift from where the run started (the `stem`'s) that a decoupled pull toward it
+    leaves by the run's end, were its gradient never to restore it (`megspeech.training.regularise.pull`, L2-SP); 1
+    never pulls. The subject matrices are the `anchor`'s."""
     anchor_toward: str = "deep"
     """The matrix `anchor` pulls toward, an `Unseen` value: `deep` the Deep subject's, `mean` the mean of every trained
     subject's matrix, `source` the mean over the subjects of its own recording source, `identity`."""
