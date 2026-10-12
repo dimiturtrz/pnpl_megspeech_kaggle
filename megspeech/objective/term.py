@@ -196,7 +196,11 @@ class AuxiliaryTerm(Term):
 
     @staticmethod
     def averaged(values: Float[Tensor, " n"], keep: Bool[Tensor, " n"], rows: Float[Tensor, " n"]) -> Float[Tensor, ""]:
-        """The mean of `values` over the `keep` rows, each at its weight in `rows`; 0 when none, without a host sync."""
+        """The mean of `values` over the `keep` rows, each at its weight in `rows`, without a host sync; 0 when none.
+
+        A batch can hold no row a term covers (its targets are sparse: words without audio, outside the lexicon or
+        unknown), and then adds no gradient rather than a NaN. A term covering no training word at all is refused
+        where its table is read (`Speech.covering`), so a zero here is never a dead term."""
         share = keep * rows
         return (values * share).sum() / share.sum().clamp(min=torch.finfo(share.dtype).tiny)
 

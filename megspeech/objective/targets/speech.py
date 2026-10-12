@@ -290,6 +290,15 @@ class Speech:
         rows = np.where(present, np.cumsum(present) - 1, -1)
         return cls(torch.from_numpy(rows), torch.from_numpy(vectors[present])).merged()
 
+    @classmethod
+    def covering(cls, directory: Path, words: pd.DataFrame, *, centred: bool = False) -> "Speech":
+        """`gather`, refusing targets that cover none of `words`: a term reading them would train on nothing while
+        logging a loss, as a mis-pathed or mis-cut target directory does."""
+        speech = cls.gather(directory, words, centred=centred)
+        if not bool((speech.rows >= 0).any()):
+            raise ValueError(f"{directory}: none of {len(words)} words has a target; a term would train on nothing")
+        return speech
+
     def merged(self) -> "Speech":
         """Words with an identical target pointing at one row, so the contrast counts them as one kind, not as
         negatives of each other."""

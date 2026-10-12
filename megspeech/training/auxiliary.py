@@ -152,13 +152,13 @@ class Auxiliary(ABC):
         read is loaded once and shared, so the device holds one copy."""
         root, device, words = tables.root, tables.device, tables.words
         lexicon = cache(lambda: Lexicon.load(Lexicon.path(root)).to(device))
-        loudness = cache(lambda: Speech.gather(Loudness.directory(root, tables.cut), words).to(device))
+        loudness = cache(lambda: Speech.covering(Loudness.directory(root, tables.cut), words).to(device))
         builders: tuple[tuple[float, Callable[[], AuxiliaryTerm]], ...] = (
             (
                 weights.speech,
                 lambda: SpeechTerm(
                     weights.speech,
-                    Speech.gather(
+                    Speech.covering(
                         Targets.directory(root, weights.speech_source), words, centred=weights.speech_centred
                     ).to(device),
                     softmax=weights.speech_softmax,

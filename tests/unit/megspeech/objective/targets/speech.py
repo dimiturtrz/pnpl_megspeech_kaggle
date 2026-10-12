@@ -270,6 +270,15 @@ def test_gather(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         Speech.gather(tmp_path / "empty", words)
 
 
+def test_covering(tmp_path: Path) -> None:
+    np.save(tmp_path / "a.npy", np.array([[1, 2], [np.nan, np.nan]], np.float16))
+    covered = Speech.covering(tmp_path, pd.DataFrame({"run": ["a", "a"], "position": [1, 0]}))
+    assert covered.rows.tolist() == [-1, 0]
+    for words in ({"run": ["a"], "position": [1]}, {"run": ["b"], "position": [0]}):
+        with pytest.raises(ValueError, match="train on nothing"):
+            Speech.covering(tmp_path, pd.DataFrame(words))
+
+
 def test_centred() -> None:
     vectors = np.array([[1.0, 2.0], [np.nan, np.nan], [3.0, 6.0]], np.float16)
     centred = Targets(vectors).centred()

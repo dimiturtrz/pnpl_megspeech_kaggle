@@ -147,6 +147,16 @@ def test_of(tmp_path: Path) -> None:
     assert cast("AcousticTerm", loud.terms[0]).speech.rows.tolist() == [0, -1]
 
 
+def test_of_uncovered(tmp_path: Path) -> None:
+    """Targets present for no training word, as a mis-pathed directory leaves, are refused, not trained at 0."""
+    root = cast("DataRoot", Root(tmp_path))
+    Targets(np.ones((2, DIM), np.float16)).save(Targets.directory(root) / "elsewhere.npy")
+    Targets(np.ones((2, LENGTH), np.float16)).save(Loudness.directory(root, CUT) / "elsewhere.npy")
+    for weights in (AuxiliaryConfig(speech=1.0), AuxiliaryConfig(acoustic=1.0), AuxiliaryConfig(audio=1.0)):
+        with pytest.raises(ValueError, match="train on nothing"):
+            Auxiliary.of(weights, 0.0, Tables(root, CPU, WORDS, CUT))
+
+
 def test_of_audio(tmp_path: Path) -> None:
     """The label-free audio contrast reads the same envelopes as the acoustic term."""
     root = cast("DataRoot", Root(tmp_path))
