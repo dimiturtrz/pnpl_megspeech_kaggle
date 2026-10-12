@@ -27,6 +27,9 @@ arm. Beads `megspeech-7gf.105.1` (Deep), `megspeech-7gf.147.17` (Broad).
 |---|---|---|
 | intact | .620 | .607 |
 | MEG-blind (`words.pool` := batch mean) | .586 | .534 |
+| intervals (IOI) := batch mean | .289 | .322 |
+
+- IOI is worth .285 on Broad public vs .331 locally: Kaggle Broad leans somewhat less on timing and more on MEG.
 
 - MEG is worth .073 on Broad public, **twice** its .034 on the Broad local test. The Broad local test (seen
   subjects, stimuli near training) lets timing and context carry more than the Kaggle Broad rows do, so it
