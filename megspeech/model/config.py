@@ -83,6 +83,9 @@ class ContextConfig:
     features, `ended` those and its span's end (`Intervals`)."""
     onset_jitter: float = 0.0
     """Seconds of Gaussian error added to every word onset the timing input reads, in training only (`Jitter`)."""
+    next_drop: float = 0.0
+    """Probability, in training only, that a word with a next neighbour reads its `intervals` as its span's last word,
+    as a quarter of Kaggle test words do (`NextDrop`); 0 drops none."""
     objective: Objective = Objective.SOFTMAX
     anchor: Source = Source.NONE
     """Where the context head's fixed per-word anchors come from (`objective.anchors`): its logits are then a scaled

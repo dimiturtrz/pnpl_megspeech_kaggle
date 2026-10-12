@@ -41,6 +41,32 @@ class Intervals(StrEnum):
         return READERS[self](Reader(onset, mask, ends))
 
 
+@dataclass(frozen=True)
+class NextDrop:
+    """Probability `p` that a word with a next neighbour reads its features as the last word of its span cut short
+    after it, as training noise toward the Kaggle test, where a quarter of words (an epoch's last, an isolated word)
+    have none. The cut span's end is unknown. 0 leaves every word's view whole."""
+
+    p: float = 0.0
+
+    def apply(
+        self,
+        intervals: Intervals,
+        onset: Float[Tensor, "g w"],
+        mask: Bool[Tensor, "g w"],
+        finish: Float[Tensor, " g"] | None = None,
+    ) -> Float[Tensor, "g w k"]:
+        """`intervals`' features of each word, a drawn `p` of the words that have a next one read as cut after it."""
+        whole = intervals.features(onset, mask, finish)
+        if self.p == 0.0:
+            return whole
+        place = torch.arange(onset.shape[1], device=onset.device)
+        followed = mask & (place < mask.sum(-1, keepdim=True) - 1)
+        row, word = (followed & (torch.rand_like(onset) < self.p)).nonzero(as_tuple=True)
+        cut = intervals.features(onset[row], mask[row] & (place <= word[:, None]))
+        return whole.index_put((row, word), cut[torch.arange(len(word), device=onset.device), word])
+
+
 ENDING = 3
 """`Reader.ending` per word: the log time to the span's end, whether it is known, and the span's log pace."""
 

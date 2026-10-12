@@ -8,6 +8,7 @@ from torch import Tensor, nn
 from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
 from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
+from megspeech.model.context.intervals import NextDrop
 from megspeech.model.context.masking import WordMask
 from megspeech.model.context.timing import Jitter
 from megspeech.model.encoding import Encoding
@@ -36,6 +37,7 @@ class Span(Encoding):
         self.onsets = OnsetEncoding(context)
         self.intervals = context.intervals
         self.jitter = Jitter(context.onset_jitter)
+        self.next_drop = NextDrop(context.next_drop)
         self.masking = WordMask(context.width, context.word_mask)
         self.centring = RunCentring(self.words.width, active=context.run_centred)
 
@@ -57,11 +59,11 @@ class Span(Encoding):
     def chunked(self, spans: SpanInput, slots: Float[Tensor, "g w e"]) -> Float[Tensor, "g w h"]:
         """The transformer's input at each span position from the word embeddings `slots`."""
         mask = spans.mask
+        drop = self.next_drop if self.training else NextDrop()
         if self.training:
             spans = spans.timed(self.jitter.apply(spans.onset, mask))
-        timing = self.onsets(
-            self.clock.times(spans.onset, mask), self.intervals.features(spans.onset, mask, spans.finish)
-        )
+        intervals = drop.apply(self.intervals, spans.onset, mask, spans.finish)
+        timing = self.onsets(self.clock.times(spans.onset, mask), intervals)
         own = self.project(slots)
         others = (b.projected(spans) for b in self.fusion.branches)
         return self.masking(self.fusion.mix([own, *others]), mask) + timing
