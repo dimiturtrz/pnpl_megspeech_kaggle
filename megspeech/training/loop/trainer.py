@@ -82,6 +82,15 @@ class TrainState:
         """The model's parameters, listed once: a step clips their gradients without walking the module tree."""
         return tuple(self.model.parameters())
 
+    def drained(self) -> dict[str, object]:
+        """What the epoch's steps tallied, each counter emptied for the next epoch."""
+        return {
+            "grad norms": self.grads.drained(),
+            "bgmix mixed words": self.bgmix.drained(),
+            "averaged words": self.average.drained(),
+            "right cut": self.cut.drained(),
+        }
+
 
 @dataclass
 class Trainer:
@@ -285,6 +294,21 @@ class Trainer:
         """The weights of `model`'s auxiliary heads (`WithAuxiliary.heads`), none for a model without."""
         return {k: v for k, v in model.state_dict().items() if k.startswith("heads.")}
 
+    @staticmethod
+    def cloned(weights: dict[str, Tensor]) -> dict[str, Tensor]:
+        """A copy of `weights` later steps cannot overwrite."""
+        return {k: v.clone() for k, v in weights.items()}
+
+    def epoch(self, state: TrainState, at: Schedule, steps: int) -> Float[Tensor, " k"]:
+        """`steps` optimiser steps over `at`'s draw of `at.train`'s spans, each term's loss averaged over them."""
+        batch = self.config.optim.batch
+        weights = state.curriculum.weights(at)
+        if summary := state.curriculum.summary(at, weights):
+            LOG.info("epoch %d draw weights against base %s", at.epoch, summary)
+        draws = torch.multinomial(weights, steps * batch, replacement=True)
+        draws = self.pairing.drawn(draws, weights, batch)
+        return torch.stack([self.step(state, at.train, spans) for spans in draws.split(batch)]).mean(0)
+
     def fit(
         self, train: Split, validation: dict[str, Split], log_prior: Float[Tensor, " v"]
     ) -> tuple[nn.Module, list[Epoch]]:
@@ -294,31 +318,22 @@ class Trainer:
         per_epoch = math.ceil(len(train.index) / optim.batch)
         state = self.state(net, train, optim.epochs * per_epoch)
         model = state.model
-        curriculum = state.curriculum
-        LOG.info("sampler %s", type(curriculum).__name__)
+        LOG.info("sampler %s", type(state.curriculum).__name__)
         history: list[Epoch] = []
         best_state = net.state_dict()
         self.heads = self.auxiliary_state(model)
         telemetry = Telemetry.of(self.evaluator, self.config.telemetry, train, validation)
         for epoch in range(optim.epochs):
             model.train()
-            at = Schedule(train, epoch, optim.epochs)
-            weights = curriculum.weights(at)
-            if summary := curriculum.summary(at, weights):
-                LOG.info("epoch %d draw weights against base %s", epoch, summary)
-            draws = torch.multinomial(weights, per_epoch * optim.batch, replacement=True)
-            draws = self.pairing.drawn(draws, weights, optim.batch)
-            terms = torch.stack([self.step(state, train, spans) for spans in draws.split(optim.batch)]).mean(0)
+            terms = self.epoch(state, Schedule(train, epoch, optim.epochs), per_epoch)
             value = terms.sum().item()
             LOG.info(
                 "epoch %d loss by term %s",
                 epoch,
                 {type(t).__name__: v for t, v in zip(state.terms, terms.tolist(), strict=True)},
             )
-            LOG.info("epoch %d grad norms %s", epoch, state.grads.drained())
-            LOG.info("epoch %d bgmix mixed words %d", epoch, state.bgmix.drained())
-            LOG.info("epoch %d averaged words %d", epoch, state.average.drained())
-            LOG.info("epoch %d right cut %s", epoch, state.cut.drained())
+            for counter, tally in state.drained().items():
+                LOG.info("epoch %d %s %s", epoch, counter, tally)
             if not math.isfinite(value):
                 raise FloatingPointError(f"non-finite loss at epoch {epoch}")
             with state.ema.applied(model):
@@ -328,8 +343,8 @@ class Trainer:
                 history.append(row)
                 LOG.info("%s", asdict(row))
                 if self.config.selected(history) is row:
-                    best_state = {k: v.clone() for k, v in net.state_dict().items()}
-                    self.heads = {k: v.clone() for k, v in self.auxiliary_state(model).items()}
+                    best_state = self.cloned(net.state_dict())
+                    self.heads = self.cloned(self.auxiliary_state(model))
             if self.config.stalled(history):
                 best = self.config.selected(history)
                 LOG.info("stopped early at epoch %d (best %d)", epoch, best.epoch)

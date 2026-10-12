@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.evaluation.labelweighted import Pool, Shrinkage
+from megspeech.evaluation.labelweighted import Pool, Reads, Shrinkage
 from megspeech.evaluation.scoring.evaluator import Evaluator
 
 MEMBERS = 3
@@ -72,3 +72,29 @@ def test_macro() -> None:
     """A macro is a balanced accuracy in [0, 1]."""
     p = pool()
     assert 0.0 <= p.macro(p.subjects(), p.uniform()).bacc10 <= 1.0
+
+
+def test_add() -> None:
+    reads, words = Reads(), torch.tensor([3, 1, 4])
+    reads.add("a", 2, words, torch.zeros(3, VOCAB_SIZE))
+    reads.add("b", 2, words.clone(), torch.ones(3, VOCAB_SIZE))
+    assert torch.equal(reads.labels[2], words)
+    assert [logp[0, 0].item() for logp in reads.logp[2]] == [0.0, 1.0]
+
+
+def test_add_rejects_other_words() -> None:
+    reads = Reads()
+    reads.add("a", 2, torch.tensor([3, 1, 4]), torch.zeros(3, VOCAB_SIZE))
+    with pytest.raises(ValueError, match="b reads different words for subject 2"):
+        reads.add("b", 2, torch.tensor([3, 1, 5]), torch.zeros(3, VOCAB_SIZE))
+
+
+def test_stacked() -> None:
+    reads = Reads()
+    for name in ("a", "b"):
+        reads.add(name, 1, torch.tensor([0, 1]), torch.zeros(2, VOCAB_SIZE))
+        reads.add(name, 7, torch.tensor([2]), torch.zeros(1, VOCAB_SIZE))
+    assert {subject: tuple(logp.shape) for subject, logp in reads.stacked().items()} == {
+        1: (2, 2, VOCAB_SIZE),
+        7: (2, 1, VOCAB_SIZE),
+    }

@@ -18,7 +18,7 @@ from megspeech.data.raw.events import Event, Events
 from megspeech.data.raw.fetch import APPLESEED, MASC
 from megspeech.data.raw.kymata import KYMATA
 from megspeech.data.raw.scans import SCANS
-from megspeech.data.raw.serialised import Serialised
+from megspeech.data.raw.serialised import NAME, RunName, Serialised
 from megspeech.data.raw.smn4lang import SMN4LANG
 
 DEEP = 0
@@ -76,8 +76,6 @@ test run. Session 11 is pooled; session 12 is held out like subject 0's test run
 SPLITS = {DEEP: HELD_OUT}
 """Each subject's held-out runs; a subject absent here is split by `POOLED`."""
 
-NAME = re.compile(r"sub-(?P<subject>\d+)_ses-(?P<session>\d+)_task-(?P<task>[A-Za-z0-9]+)_run-(?P<run>\d+)_")
-
 
 @dataclass(frozen=True)
 class Run:
@@ -121,7 +119,7 @@ class Run:
     @property
     def name(self) -> str:
         task, session, run = self.key
-        return f"sub-{self.subject}_ses-{session}_task-{task}_run-{run}"
+        return str(RunName(self.subject, session, task, run))
 
     @staticmethod
     def signal(stored: h5py.File) -> Float[np.ndarray, "c t"]:

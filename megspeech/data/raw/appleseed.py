@@ -31,7 +31,7 @@ from megspeech.data.raw.events import Event, Kind
 from megspeech.data.raw.fetch import APPLESEED, NEUROMAG
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.masc import COLUMNS, HIGHPASS, Neuromag
-from megspeech.data.raw.serialised import Corpus
+from megspeech.data.raw.serialised import Corpus, RunName
 from megspeech.data.raw.textgrid import Interval, TextGrid
 
 LOG = logging.getLogger(__name__)
@@ -172,15 +172,12 @@ class Recording:
 
     @cached_property
     def parsed(self) -> dict[str, int]:
-        match = SOURCE.fullmatch(self.fif.name)
-        if match is None:
-            raise ValueError(self.fif.name)
-        return {key: int(value) for key, value in match.groupdict().items()}
+        return Corpus.fields(SOURCE, self.fif.name)
 
     @property
     def name(self) -> str:
         """The run name `Run` parses: subject past `SUBJECT_OFFSET`, one session and run of task `Appleseed`."""
-        return f"sub-{self.parsed['subject'] + SUBJECT_OFFSET}_ses-{SESSION}_task-{TASK}_run-1"
+        return str(RunName(self.parsed["subject"] + SUBJECT_OFFSET, SESSION, TASK, 1))
 
     def sidecar(self, suffix: str) -> Path:
         """The file beside the recording ending `suffix`, named after the task alone (no split)."""

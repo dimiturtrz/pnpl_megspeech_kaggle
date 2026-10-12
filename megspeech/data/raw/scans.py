@@ -38,7 +38,7 @@ from megspeech.data.raw.kymata import Recording as Triux
 from megspeech.data.raw.kymata import Study
 from megspeech.data.raw.kymatasync import Alignment, Clock
 from megspeech.data.raw.masc import COLUMNS, Neuromag
-from megspeech.data.raw.serialised import Corpus
+from megspeech.data.raw.serialised import Corpus, RunName
 from megspeech.data.raw.textgrid import TextGrid
 
 LOG = logging.getLogger(__name__)
@@ -88,10 +88,7 @@ class Recording(Triux):
     @cached_property
     @override
     def parsed(self) -> dict[str, int]:
-        match = SOURCE.fullmatch(self.fif.name)
-        if match is None:
-            raise ValueError(self.fif.name)
-        parsed = {key: int(value) for key, value in match.groupdict().items()}
+        parsed = Corpus.fields(SOURCE, self.fif.name)
         return {**parsed, "subject": parsed["subject"] + SUBJECT_OFFSET}
 
     @property
@@ -99,7 +96,7 @@ class Recording(Triux):
     def name(self) -> str:
         """The run name `Run` parses: subject past `SUBJECT_OFFSET`, one session, task `SCANSab<book>`, the part."""
         parsed = self.parsed
-        return f"sub-{parsed['subject']}_ses-{SESSION}_task-{TASK.format(book=parsed['book'])}_run-{parsed['run']}"
+        return str(RunName(parsed["subject"], SESSION, TASK.format(book=parsed["book"]), parsed["run"]))
 
     @property
     @override
