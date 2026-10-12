@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 from core.paths import DataRoot
-from megspeech.data.cache.alignment import AS_RECORDED, GATE, Alignment, Geometry
+from megspeech.data.cache.alignment import AS_RECORDED, GATE, RUN_LEVELS, UNLEVELLED, Alignment, Geometry, Levelling
 from megspeech.data.raw.fetch import NEUROMAG
 
 GENERATOR = torch.Generator().manual_seed(0)
@@ -162,3 +162,53 @@ def test_align_keeps_dtype() -> None:
     alignment.align(run)
     assert run.dtype == torch.float16
     assert np.isfinite(run.float().numpy()).all()
+
+
+def gained(run: torch.Tensor, gain: torch.Tensor, offset: torch.Tensor) -> torch.Tensor:
+    """`run` at another session's per-row `gain` and `offset`, its padding left silent."""
+    silent = run.abs().amax(0) == 0
+    return torch.where(silent, 0.0, run * gain + offset)
+
+
+def test_levelling_level() -> None:
+    """The identity class: a run passes the base levelling untouched, as the same tensor."""
+    run = mixed(torch.eye(CHANNELS), 3.0)
+    assert UNLEVELLED.level(run) is run
+    assert Levelling().level(run) is run
+
+
+def test_run_levels_level() -> None:
+    """A run at any per-row gain and offset levels to the same rows, at median 0 and interquartile range 1."""
+    run = mixed(torch.eye(CHANNELS) + 0.3 * torch.randn(CHANNELS, CHANNELS, generator=GENERATOR), 3.0)
+    levelled = RUN_LEVELS.level(run)
+    median, spread = Alignment.robust(levelled)
+    assert torch.allclose(median, torch.zeros(CHANNELS, 1), atol=1e-3)
+    assert torch.allclose(spread, torch.ones(CHANNELS, 1), atol=1e-3)
+    gain, offset = torch.tensor([[5.0], [0.2], [1.0], [30.0]]), torch.tensor([[-7.0], [100.0], [0.0], [2.0]])
+    assert torch.allclose(RUN_LEVELS.level(gained(run, gain, offset)), levelled, atol=1e-3)
+
+
+def test_run_levels_padding() -> None:
+    """Silent samples, every row 0, stay 0 and leave the statistics as the signal alone gives them."""
+    run = mixed(torch.eye(CHANNELS), 3.0)
+    padded = torch.cat([run, torch.zeros(CHANNELS, SAMPLES)], dim=1)
+    levelled = RUN_LEVELS.level(padded)
+    assert levelled[:, SAMPLES:].eq(0).all()
+    assert torch.equal(levelled[:, :SAMPLES], RUN_LEVELS.level(run))
+    assert RUN_LEVELS.level(torch.zeros(CHANNELS, 10)).eq(0).all()
+
+
+def test_run_levels_flat_row() -> None:
+    """A row constant within the run carries nothing of it: it reads 0, never a division by its zero range."""
+    run = mixed(torch.eye(CHANNELS), 3.0)
+    run[1] = 4.0
+    levelled = RUN_LEVELS.level(run.half())
+    assert levelled.dtype == torch.float32
+    assert levelled[1].eq(0).all()
+    assert torch.isfinite(levelled).all()
+
+
+def test_geometry_level() -> None:
+    run = mixed(torch.eye(CHANNELS), 3.0)
+    assert AS_RECORDED.level(run) is run
+    assert torch.equal(Geometry(levels=RUN_LEVELS).level(run), RUN_LEVELS.level(run))

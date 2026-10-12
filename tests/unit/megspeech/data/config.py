@@ -11,6 +11,7 @@ import torch
 from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.batching.windows import Windows
+from megspeech.data.cache.alignment import RUN_LEVELS, UNLEVELLED
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.config import METRICS, READING, DataConfig, Refit, Val
 from megspeech.data.constants import RATE
@@ -395,12 +396,29 @@ def cached(tmp_path: Path) -> DataRoot:
         (DataConfig(aligned=True), False, (True, False)),
         (DataConfig(subspace=True), False, (False, True)),
         (DataConfig(subspace=True, aligned=True), False, (True, True)),
+        (DataConfig(levelled=True), False, (False, False)),
+        (DataConfig(levelled=True, aligned=True), False, (True, False)),
     ],
 )
 def test_geometry(tmp_path: Path, data: DataConfig, *, aligned: bool, built: tuple[bool, bool]) -> None:
     geometry = data.geometry(cached(tmp_path), "cpu", aligned=aligned)
     assert (geometry.alignment is not None, geometry.projection is not None) == built
+    assert geometry.levels is (RUN_LEVELS if data.levelled else UNLEVELLED)
     assert geometry.rows(3) == 3
+
+
+def test_levelled_saved(tmp_path: Path) -> None:
+    """A run saved before `levelled` existed reads its MEG unlevelled, as it trained; one saved with it, levelled."""
+    old = DataConfig.saved(record(tmp_path / "old", {"data": {"aligned": False}}))
+    assert not old.levelled
+    assert old.geometry(cached(tmp_path / "root"), "cpu").levels is UNLEVELLED
+    new = DataConfig.saved(record(tmp_path / "new", {"data": {"levelled": True}}))
+    assert new.geometry(cached(tmp_path / "root"), "cpu").levels is RUN_LEVELS
+
+
+def test_levelled_validated() -> None:
+    with pytest.raises(ValueError, match="run levels"):
+        DataConfig(levelled=True, features="x")
 
 
 def test_alignment(tmp_path: Path) -> None:
@@ -461,6 +479,7 @@ def test_shared(tmp_path: Path) -> None:
         ("subspace", True),
         ("delay", 0.2),
         ("regions", ["Left-temporal"]),
+        ("levelled", True),
     ],
 )
 def test_shared_reading(tmp_path: Path, field: str, value: object) -> None:

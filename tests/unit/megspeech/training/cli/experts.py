@@ -64,6 +64,7 @@ def test_plain() -> None:
     assert run.plain()
     assert not stack().plain()
     assert not replace(run, config=replace(run.config, data=DataConfig(features="x"))).plain()
+    assert not replace(run, config=replace(run.config, data=DataConfig(levelled=True))).plain()
 
 
 def test_weights() -> None:
