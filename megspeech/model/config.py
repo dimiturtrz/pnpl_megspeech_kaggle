@@ -138,6 +138,11 @@ class ContextConfig:
     def __post_init__(self) -> None:
         Rule.enforce(self, CONTEXT_RULES)
 
+    @property
+    def rate(self) -> int | None:
+        """The cache rate in Hz the encoder reads; None when it reads any."""
+        return self.spanned.rate if self.encoder is Encoder.SPANNED else None
+
     def save(self, directory: Path) -> Path:
         path = directory / FILE
         path.write_text(json.dumps(asdict(self)))

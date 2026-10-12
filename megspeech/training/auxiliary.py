@@ -31,7 +31,7 @@ from megspeech.objective.auxiliary.speech import SpeechTerm
 from megspeech.objective.auxiliary.syntactic import SyntacticTerm
 from megspeech.objective.auxiliary.tagging import TagTerm
 from megspeech.objective.auxiliary.window import WindowTerm
-from megspeech.objective.targets.loudness import Loudness
+from megspeech.objective.targets.loudness import FRAMES, Loudness
 from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import AuxiliaryTerm
@@ -125,6 +125,11 @@ class AuxiliaryConfig:
     def listens(self) -> bool:
         """Whether a term reads the window's time course against its envelope."""
         return bool(self.acoustic or self.audio)
+
+    @property
+    def rate(self) -> int | None:
+        """The cache rate in Hz the envelope terms cut their targets in; None when no term listens."""
+        return FRAMES if self.listens else None
 
 
 AUXILIARY_RULES: tuple[Rule[AuxiliaryConfig], ...] = (

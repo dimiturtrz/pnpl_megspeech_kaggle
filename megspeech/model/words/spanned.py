@@ -8,7 +8,7 @@ layers' rate (`TransferConfig.encoder_lr`), so the pretrained weights move gentl
 """
 
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, override
 
 import torch
 from jaxtyping import Bool, Float, Int
@@ -25,6 +25,8 @@ WORD = RATE // 2
 
 @dataclass(frozen=True)
 class SpannedConfig:
+    rate: ClassVar[int] = RATE
+    """The cache rate in Hz the MEG-XL trunk reads."""
     components: int = 16
     """Features each channel's token is projected to, then flattened over the channels: 306 x 16 as in the frozen
     spanned read's whitened components, here learned."""

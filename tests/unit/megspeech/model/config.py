@@ -12,6 +12,7 @@ from megspeech.model.context.timing import Clock
 from megspeech.model.pyramid import PyramidConfig
 from megspeech.model.words.conv import ConvConfig
 from megspeech.model.words.heads import WordHead
+from megspeech.model.words.spanned import SpannedConfig
 from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective
 
@@ -117,3 +118,9 @@ def test_pyramid_needs_an_unfused_conv_encoder(tmp_path: Path) -> None:
         ContextConfig(encoder=Encoder.CACHED, conv=tapped.conv)
     with pytest.raises(ValueError, match="fused"):
         ContextConfig(fused=("other",), conv=tapped.conv)
+
+
+def test_rate() -> None:
+    """Only the spanned encoder's MEG-XL trunk fixes the cache rate it reads."""
+    assert ContextConfig(encoder=Encoder.SPANNED).rate == SpannedConfig.rate
+    assert ContextConfig().rate is None

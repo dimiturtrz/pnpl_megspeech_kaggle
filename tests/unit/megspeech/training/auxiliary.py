@@ -31,7 +31,7 @@ from megspeech.objective.auxiliary.syntactic import SyntacticTerm
 from megspeech.objective.auxiliary.tagging import TagTerm
 from megspeech.objective.auxiliary.window import WindowTerm
 from megspeech.objective.scorer import DIM
-from megspeech.objective.targets.loudness import CUT, LENGTH, Loudness
+from megspeech.objective.targets.loudness import CUT, FRAMES, LENGTH, Loudness
 from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.training.auxiliary import Auxiliary, AuxiliaryConfig, Joint, NoAuxiliary, Tables
@@ -218,6 +218,11 @@ def test_listens() -> None:
     assert AuxiliaryConfig(acoustic=0.3).listens
     assert AuxiliaryConfig(audio=1.0).listens
     assert not AuxiliaryConfig(semantic=1.0).listens
+
+
+def test_rate() -> None:
+    assert AuxiliaryConfig(audio=1.0).rate == FRAMES
+    assert AuxiliaryConfig(semantic=1.0).rate is None
 
 
 def test_time_tap_refused() -> None:

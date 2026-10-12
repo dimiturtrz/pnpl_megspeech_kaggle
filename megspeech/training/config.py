@@ -10,8 +10,6 @@ from megspeech.data.config import METRICS, DataConfig, Refit
 from megspeech.evaluation.scoring.score import Epoch, SelectionConfig
 from megspeech.evaluation.scoring.telemetry import TelemetryConfig
 from megspeech.model.config import CONTEXT, ContextConfig, Encoder
-from megspeech.model.words.trunk import RATE as TRUNK_RATE
-from megspeech.objective.targets.loudness import FRAMES
 from megspeech.submission.config import ReportConfig
 from megspeech.training.optim import OptimConfig
 from megspeech.training.regularise.augment import Augment
@@ -92,16 +90,16 @@ RUN_RULES: tuple[Rule[RunConfig], ...] = (
         lambda _: "optim.acoustic/audio read the encoder's time course beside the heads, which the pyramid corrects",
     ),
     Rule(
-        lambda r: r.optim.auxiliaries.listens and r.data.rate != FRAMES,
+        lambda r: r.optim.auxiliaries.rate not in {None, r.data.rate},
         lambda r: (
-            f"optim.acoustic/audio cut the {FRAMES} Hz envelope in the cache's frames, but data.decimate "
-            f"{r.data.decimate} reads at {r.data.rate} Hz"
+            f"optim.acoustic/audio cut the {r.optim.auxiliaries.rate} Hz envelope in the cache's frames, "
+            f"but data.decimate {r.data.decimate} reads at {r.data.rate} Hz"
         ),
     ),
     Rule(
-        lambda r: r.context.encoder is Encoder.SPANNED and r.data.rate != TRUNK_RATE,
+        lambda r: r.context.rate not in {None, r.data.rate},
         lambda r: (
-            f"the spanned encoder's MEG-XL trunk reads {TRUNK_RATE} Hz, but data.decimate {r.data.decimate} "
+            f"the spanned encoder's MEG-XL trunk reads {r.context.rate} Hz, but data.decimate {r.data.decimate} "
             f"reads at {r.data.rate} Hz"
         ),
     ),
