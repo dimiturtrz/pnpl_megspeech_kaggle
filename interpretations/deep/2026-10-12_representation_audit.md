@@ -191,6 +191,70 @@ there are no CIs.
   - What transfers is the timing/position structure added at `mix` and refined after it.
   - This is consistent with run and source being near-saturated at the pool.
 
+## 5. Timing ablation (added 2026-10-12)
+
+**Setup.**
+- Same member, same harness, the same 2133 LT words.
+- The forward is re-run with a forward hook that *replaces* one input. No package code changes.
+  - **Timing zeroed.** `net.onsets` (OnsetEncoding) returns zeros. That removes the span-position sinusoids and the
+    log-interval features at the transformer input. This member has no other positional encoding, and its rhythm
+    timing head is off.
+  - **MEG-blind.** `net.words.pool` returns the mean of the 25,997 captured training pool rows, so every word gets the
+    same embedding and only timing varies.
+- An assertion checks that each hook fired once per batch.
+- Capture ran on the GPU (16.6 GB free, fraction .25); peak RAM was 3.3 GB.
+- Two readouts per arm:
+  - the member's **frozen ctx head**, with T and tau refit on VAL for each arm;
+  - an **L3 probe** refit on the ablated training features (the same 20k rows).
+- Deltas are paired against the intact arm with 95% span-block CIs.
+- **Top-1 MI** is the d6r.1 E1 proxy, computed on LT: plug-in MI of the true × predicted top-1 joint, minus the mean
+  of 50 label permutations.
+
+| arm / readout | bacc10 [CI] | Δ vs intact [CI] | bits [CI] | Δ bits [CI] | top-1 | top-1 MI |
+|---|---|---|---|---|---|---|
+| intact, ctx head | .693 [.668, .744] | | 1.454 [1.363, 1.548] | | .346 | .920 |
+| intact, L3 probe | .662 [.638, .711] | | 1.291 [1.201, 1.379] | | .276 | .944 |
+| timing zeroed, ctx head | .338 [.321, .372] | **−.355 [−.405, −.317]** | −.150 | −1.604 [−1.707, −1.498] | .122 | .166 |
+| timing zeroed, L3 probe | .398 [.362, .436] | **−.263 [−.318, −.234]** | .343 [.300, .384] | −.948 [−1.025, −.868] | .082 | .296 |
+| MEG-blind, ctx head | .590 [.565, .639] | **−.103 [−.140, −.067]** | .907 [.825, .989] | −.547 [−.609, −.487] | .260 | .695 |
+| MEG-blind, L3 probe | .566 [.540, .623] | **−.095 [−.129, −.057]** | .754 [.685, .824] | −.537 [−.593, −.482] | .197 | .706 |
+
+Per domain, ctx head:
+
+| arm | Sherlock1 | TheMoth |
+|---|---|---|
+| intact | .729 | .657 |
+| timing zeroed | .404 | .272 |
+| MEG-blind | .618 | .562 |
+
+**Reading.**
+- **Timing alone, MEG-blind, carries most of the context head.**
+  - It keeps .590 of .693 bacc10: 79% of the gain above chance (.2).
+  - It keeps 62% of the bits (.907 / 1.454).
+  - It keeps **76% of the top-1 MI** (.695 / .920).
+- **This agrees with the E1 estimate** (timing alone ≈ 0.63 of 0.91 top-1 bits, 70%), and is slightly higher. The two
+  are not identical measurements:
+  - E1 used a separately *trained* timing-only model (sent40-ioi) on VAL.
+  - Here the head is frozen with a mean MEG embedding, on LT.
+  - The direction and size match: MEG adds about .2 top-1 bits and .10 bacc10 on top of timing.
+- **Without timing, the transformer adds nothing.**
+  - The refit L3 probe falls to .398 / .343 bits. That is level with the pool probe (.378 / .317; +.020, directional).
+  - With no order or interval signal the transformer sees a bag of neighbours, and neighbour MEG does not help.
+  - The frozen ctx head collapses further (.338, negative bits). Part of that collapse is the zeroed input being
+    off-distribution for a head trained with timing; the refit probe is the fairer number.
+- **The components are roughly additive.** L3 probe bits: timing-zeroed .343 + MEG-blind .754 = 1.10, against 1.29
+  intact. That leaves about .19 bits of synergy: MEG read in context.
+- **The MEG-specific contribution of the whole member is ≈ .10 bacc10 / .55 bits at the head.** Every MEG lever is
+  competing for that slice. Narrator-specific timing statistics are a larger share of what currently scores.
+
+**Harness suspects for this section.**
+- Both ablations are off-distribution for frozen weights. A constant MEG embedding and a zero timing vector were never
+  seen in training.
+  - The probe refit corrects the readout but not the transformer.
+  - A retrained timing-only model (as in E1) is the in-distribution comparison.
+- Zeroing also removes the OnsetEncoding's bias term, not just its timing content. Mean-ablation of that output was
+  not run.
+
 ## What this does NOT show
 - **One member, not the blend.** Blend averaging may change the per-word picture. The member's head (.693) is close to
   the blend (.697).
@@ -199,9 +263,8 @@ there are no CIs.
   them.
   - A nonlinear head, or a head refit on all training rows, is not tested.
   - Train-fit probes also see rows the encoder trained on, which favours them; they still lose.
-- **Timing vs MEG at mix is inferred, not ablated.** The split comes from the nuisance probes, not from zeroing the
-  timing encoding. The ablation would be: rerun the forward with `onsets(...)` zeroed and probe mix/L3 again. That
-  needs a hook that replaces an output; it is cheap and is the next test.
+- **Timing vs MEG** was first inferred from the nuisance probes. Section 5 now ablates it, but with frozen weights;
+  a retrained timing-only or MEG-only member is not tested.
 - **The run-centring test is transductive.** It uses each LT domain's own mean.
   - The owner allows Broad EA-style per-run whitening. Whether Deep may use test-run statistics is **undecided**.
   - Nothing here argues for spending a submission on it anyway: the real-head delta is null-sized.
