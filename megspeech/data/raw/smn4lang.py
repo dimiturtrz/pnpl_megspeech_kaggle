@@ -47,7 +47,7 @@ from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.masc import HIGHPASS, Neuromag
 from megspeech.data.raw.scans import Book
 from megspeech.data.raw.scans import Recording as Played
-from megspeech.data.raw.serialised import Corpus
+from megspeech.data.raw.serialised import Corpus, RunName
 from megspeech.data.raw.textgrid import Interval, TextGrid
 
 LOG = logging.getLogger(__name__)
@@ -136,17 +136,15 @@ class Recording(Played):
     @cached_property
     @override
     def parsed(self) -> dict[str, int]:
-        match = SOURCE.fullmatch(self.fif.name)
-        if match is None:
-            raise ValueError(self.fif.name)
-        return {"subject": int(match["subject"]) + SUBJECT_OFFSET, "run": int(match["run"])}
+        fields = Corpus.fields(SOURCE, self.fif.name)
+        return {**fields, "subject": fields["subject"] + SUBJECT_OFFSET}
 
     @property
     @override
     def name(self) -> str:
         """The run name `Run` parses: subject past `SUBJECT_OFFSET`, one session, task `SMN4Lang`, the story."""
         parsed = self.parsed
-        return f"sub-{parsed['subject']}_ses-{SESSION}_task-{TASK}_run-{parsed['run']}"
+        return str(RunName(parsed["subject"], SESSION, TASK, parsed["run"]))
 
     @property
     @override

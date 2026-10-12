@@ -38,7 +38,7 @@ from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.kymatasync import Alignment, Clock, Envelope
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.masc import COLUMNS, HIGHPASS, ORIGIN, Neuromag
-from megspeech.data.raw.serialised import Corpus
+from megspeech.data.raw.serialised import Corpus, RunName
 from megspeech.data.raw.textgrid import Interval, TextGrid
 
 LOG = logging.getLogger(__name__)
@@ -116,9 +116,7 @@ class Recording:
 
     @cached_property
     def parsed(self) -> dict[str, int]:
-        match = SOURCE.fullmatch(self.fif.name)
-        if match is None:
-            raise ValueError(self.fif.name)
+        match = Corpus.matched(SOURCE, self.fif.name)
         subject = int(match["subject"]) + SUBJECT_OFFSET + (RESCAN_OFFSET if match["rescan"] else 0)
         return {"subject": subject, "run": int(match["run"])}
 
@@ -126,7 +124,7 @@ class Recording:
     def name(self) -> str:
         """The run name `Run` parses: subject past `SUBJECT_OFFSET`, one session, task `Kymata`, the recording's run."""
         parsed = self.parsed
-        return f"sub-{parsed['subject']}_ses-{SESSION}_task-{TASK}_run-{parsed['run']}"
+        return str(RunName(parsed["subject"], SESSION, TASK, parsed["run"]))
 
     def sidecar(self, suffix: str) -> Path:
         """The file beside the recording ending `suffix`."""

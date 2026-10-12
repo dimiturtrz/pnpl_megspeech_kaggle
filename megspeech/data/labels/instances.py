@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 from jaxtyping import Int
 
-from megspeech.data.raw.runs import NAME, Column
+from megspeech.data.raw.runs import Column
+from megspeech.data.raw.serialised import NAME
 
 STORY = re.compile(r"MASC(?P<story>\d+)")
 """The task `megspeech.data.raw.masc.Recording.name` gives a MASC story's run."""

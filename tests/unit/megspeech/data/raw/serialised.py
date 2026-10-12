@@ -1,3 +1,4 @@
+import re
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -8,10 +9,12 @@ import pytest
 from jaxtyping import Float
 
 from megspeech.data.raw.runs import Run
-from megspeech.data.raw.serialised import HALF_MAX, SCALE, Convertible, Corpus, Serialised
+from megspeech.data.raw.serialised import HALF_MAX, SCALE, Convertible, Corpus, RunName, Serialised
+from megspeech.data.raw.serialised import NAME as SPELLING
 
 NAME = "sub-101_ses-0_task-MASC2_run-1"
 ATTRS = {"sample_frequency": 250.0}
+SOURCE = re.compile(r"sub-(?P<subject>\d+)_run-(?P<run>\d+)\.fif")
 
 
 def signal() -> Float[np.ndarray, "c t"]:
@@ -62,6 +65,29 @@ def test_read_legacy(tmp_path: Path) -> None:
         stored["data"] = meg
     with h5py.File(path) as stored:
         assert np.array_equal(Serialised.read(stored), meg)
+
+
+def test_run_name_spelling() -> None:
+    assert str(RunName(101, 0, "MASC2", 1)) == NAME
+
+
+def test_run_name_reads_back() -> None:
+    match = SPELLING.search(f"{RunName(7, 3, 'Kymata', 12)}_meg.h5")
+    assert match is not None
+    assert match.groupdict() == {"subject": "7", "session": "3", "task": "Kymata", "run": "12"}
+
+
+def test_matched() -> None:
+    assert Corpus.matched(SOURCE, "sub-3_run-12.fif")["run"] == "12"
+
+
+def test_matched_rejects_a_stray_file() -> None:
+    with pytest.raises(ValueError, match="sub-3_run-12.fif.bak"):
+        Corpus.matched(SOURCE, "sub-3_run-12.fif.bak")
+
+
+def test_fields() -> None:
+    assert Corpus.fields(SOURCE, "sub-03_run-12.fif") == {"subject": 3, "run": 12}
 
 
 class Fake:

@@ -7,7 +7,7 @@ toward its overall one.
 
 import logging
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import torch
 from jaxtyping import Float, Int
@@ -47,6 +47,26 @@ class Shrinkage:
         return -(weights * weights.clamp_min(torch.finfo(weights.dtype).tiny).log()).sum(0) / math.log(members)
 
 
+@dataclass
+class Reads:
+    """Members' Broad-ruler reads gathered one member at a time: each subject's labels, which every member must share,
+    and every member's log-probabilities for them."""
+
+    labels: dict[int, Int[Tensor, " n"]] = field(default_factory=dict)
+    logp: dict[int, list[Float[Tensor, "n v"]]] = field(default_factory=dict)
+
+    def add(self, name: str, subject: int, labels: Int[Tensor, " n"], logp: Float[Tensor, "n v"]) -> None:
+        """Member `name`'s `logp` for `subject`'s words `labels`; a member reading other words is a `ValueError`."""
+        known = self.labels.setdefault(subject, labels)
+        if not torch.equal(known, labels):
+            raise ValueError(f"{name} reads different words for subject {subject}")
+        self.logp.setdefault(subject, []).append(logp)
+
+    def stacked(self) -> dict[int, Float[Tensor, "m n v"]]:
+        """Each subject's members' log-probabilities, member first."""
+        return {subject: torch.stack(members) for subject, members in self.logp.items()}
+
+
 @dataclass(frozen=True)
 class Pool:
     """Every member's log-probabilities for each subject's unseen-span words, with their labels; `kaggle` holds each
@@ -67,8 +87,7 @@ class Pool:
         """Each name loaded alone as `group` loads it and read on the Broad ruler's runs; every member must read the
         same words."""
         runs = Run.discover(group.root.raw())
-        labels: dict[int, Int[Tensor, " n"]] = {}
-        reads: dict[int, list[Float[Tensor, "n v"]]] = {}
+        reads = Reads()
         test_subject: Int[Tensor, " r"] | None = None
         priors: list[Float[Tensor, " v"]] = []
         tests: list[Float[Tensor, "r v"]] = []
@@ -82,10 +101,7 @@ class Pool:
             for run in loaded.broad(runs):
                 split, context = loaded.run_context(run)
                 novel = split.novel(loaded.evaluator.seen)
-                if run.subject in labels and not torch.equal(labels[run.subject], split.y[novel]):
-                    raise ValueError(f"{name} reads different words for subject {run.subject}")
-                labels[run.subject] = split.y[novel]
-                reads.setdefault(run.subject, []).append(context[novel])
+                reads.add(name, run.subject, split.y[novel], context[novel])
             if track is not None:
                 split, chosen = loaded.kaggle_chosen(track)
                 test_subject = split.subject
@@ -94,8 +110,8 @@ class Pool:
         if evaluator is None:
             raise ValueError("no members")
         return cls(
-            labels,
-            {s: torch.stack(r) for s, r in reads.items()},
+            reads.labels,
+            reads.stacked(),
             torch.stack(priors).mean(0),
             replace(evaluator, seen=seen),
             torch.stack(tests) if tests else None,

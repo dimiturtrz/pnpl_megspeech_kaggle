@@ -265,6 +265,32 @@ def test_parameters() -> None:
     assert type(state.ema) is Unaveraged
 
 
+def test_drained() -> None:
+    """Every epoch counter, named as the epoch's log spells it; a plain state tallied nothing."""
+    made = trainer(RunConfig())
+    state = made.state(made.model(split()), split(), 10)
+    assert state.drained() == {"grad norms": {}, "bgmix mixed words": 0, "averaged words": 0, "right cut": {}}
+
+
+def test_cloned() -> None:
+    weights = {"w": torch.ones(2)}
+    copied = Trainer.cloned(weights)
+    weights["w"].add_(1.0)
+    assert torch.equal(copied["w"], torch.ones(2))
+
+
+def test_epoch() -> None:
+    """One loss per term, averaged over the `steps` it trains, and the model moved."""
+    made = trainer(RunConfig(optim=OptimConfig(batch=4)))
+    train = split()
+    state = made.state(made.model(train), train, 10)
+    before = [p.clone() for p in state.model.parameters()]
+    terms = made.epoch(state, Schedule(train, 0, 1), 2)
+    assert terms.shape == (len(state.terms),)
+    assert torch.isfinite(terms).all()
+    assert any(not torch.equal(a, b) for a, b in zip(before, state.model.parameters(), strict=True))
+
+
 def test_fit() -> None:
     model, history = trainer(RunConfig(augment=Augment(0.5, 0.1), optim=OptimConfig(epochs=1, batch=4, clip=1.0))).fit(
         split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE)

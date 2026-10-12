@@ -6,6 +6,7 @@ float32 file and reads unchanged.
 """
 
 import logging
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +28,8 @@ HALF_MAX = float(np.finfo(np.float16).max)
 SERIALISED = "serialised"
 EVENTS = "events"
 """`Run.events` reads a run's events from `events/` beside the MEG's own directory."""
+NAME = re.compile(r"sub-(?P<subject>\d+)_ses-(?P<session>\d+)_task-(?P<task>[A-Za-z0-9]+)_run-(?P<run>\d+)_")
+"""`RunName`'s spelling, read back: a run name followed by `_`."""
 
 
 @dataclass(frozen=True)
@@ -61,6 +64,19 @@ class Serialised:
         return meg.astype(np.float32) * stored[SCALE][:][:, None]
 
 
+@dataclass(frozen=True)
+class RunName:
+    """The one spelling of a run's name: what `Run` parses back through `NAME` and every `Convertible` is written as."""
+
+    subject: int
+    session: int
+    task: str
+    run: int
+
+    def __str__(self) -> str:
+        return f"sub-{self.subject}_ses-{self.session}_task-{self.task}_run-{self.run}"
+
+
 class Convertible[T](Protocol):
     """One downloaded recording that becomes a run on a `T` sensor layout."""
 
@@ -84,6 +100,19 @@ class Corpus[T]:
 
     source: Path
     target: Path
+
+    @staticmethod
+    def matched(pattern: re.Pattern[str], filename: str) -> re.Match[str]:
+        """`filename` matched whole by its study's `pattern`; a stray file is a `ValueError`."""
+        match = pattern.fullmatch(filename)
+        if match is None:
+            raise ValueError(filename)
+        return match
+
+    @staticmethod
+    def fields(pattern: re.Pattern[str], filename: str) -> dict[str, int]:
+        """The integer fields `pattern` names in `filename`."""
+        return {key: int(value) for key, value in Corpus.matched(pattern, filename).groupdict().items()}
 
     def meg(self, recording: Convertible[T]) -> Path:
         return self.target / SERIALISED / f"{recording.name}_meg.h5"
