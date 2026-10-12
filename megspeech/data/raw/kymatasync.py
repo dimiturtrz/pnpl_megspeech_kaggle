@@ -18,7 +18,7 @@ from scipy.io import wavfile
 from scipy.signal import butter, fftconvolve, resample_poly, sosfiltfilt
 from scipy.stats import theilslopes
 
-from megspeech.data.raw import Event
+from megspeech.data.raw.events import Event
 
 LOG = logging.getLogger(__name__)
 

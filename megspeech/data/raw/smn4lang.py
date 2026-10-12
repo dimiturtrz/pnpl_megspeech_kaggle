@@ -33,14 +33,13 @@ from pathlib import Path
 from typing import override
 
 import mne
-import numpy as np
 import pandas as pd
 from scipy.io import loadmat
 
 from core.paths import DataRoot
 from megspeech.data.constants import SFREQ
-from megspeech.data.raw import Event, Kind
 from megspeech.data.raw.appleseed import Story
+from megspeech.data.raw.events import Event, Kind
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.kymata import Study
 from megspeech.data.raw.kymatasync import Clock
@@ -49,7 +48,7 @@ from megspeech.data.raw.masc import HIGHPASS, Neuromag
 from megspeech.data.raw.scans import Book
 from megspeech.data.raw.scans import Recording as Played
 from megspeech.data.raw.serialised import Corpus
-from megspeech.data.raw.textgrid import TextGrid
+from megspeech.data.raw.textgrid import Interval, TextGrid
 
 LOG = logging.getLogger(__name__)
 
@@ -85,9 +84,9 @@ class Punctuated(Story):
     @override
     def words(self) -> pd.DataFrame:
         """The spoken words, punctuation dropped, each flagged `new` if it starts a sentence."""
-        tier = self.grid.tiers["words"]
-        sentence = tier["text"].isin(FULL_STOPS).cumsum().shift(fill_value=0)
-        spoken = ~tier["text"].map(Punctuated.mark)
+        tier = self.grid.words
+        sentence = tier[Interval.TEXT].isin(FULL_STOPS).cumsum().shift(fill_value=0)
+        spoken = ~tier[Interval.TEXT].map(Punctuated.mark)
         words = tier[spoken].reset_index(drop=True)
         words["sentence"] = pd.factorize(sentence[spoken])[0]
         words["new"] = words["sentence"].diff().ne(0)
@@ -115,13 +114,12 @@ class Narration(Book):
         aligned = loadmat(self.dataset / WORD_TIMES / f"{self.stem.name}_word_time.mat")
         tier = pd.DataFrame(
             {
-                "start": aligned["start"].ravel() - ALIGNMENT_SHIFT,
-                "end": aligned["end"].ravel() - ALIGNMENT_SHIFT,
-                "text": [str(word).strip() for word in aligned["word"].ravel()],
+                Interval.START: aligned["start"].ravel() - ALIGNMENT_SHIFT,
+                Interval.END: aligned["end"].ravel() - ALIGNMENT_SHIFT,
+                Interval.TEXT: [str(word).strip() for word in aligned["word"].ravel()],
             }
         )
-        silent = pd.DataFrame({"start": np.array([], dtype=float), "end": np.array([], dtype=float), "text": ""})
-        events = Punctuated(TextGrid({"words": tier, "phones": silent})).events(0.0)
+        events = Punctuated(TextGrid.aligned(tier, tier.iloc[:0])).events(0.0)
         return events[events[Event.KIND] == Kind.WORD].reset_index(drop=True)
 
     @cached_property

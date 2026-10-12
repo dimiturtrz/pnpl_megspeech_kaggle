@@ -64,7 +64,7 @@ def test_narration_words(tmp_path: Path) -> None:
 
 def test_punctuated_words() -> None:
     tier = pd.DataFrame({"start": [0.0, 0.3, 0.3, 0.4], "end": [0.3, 0.3, 0.3, 0.6], "text": ["好", "！", "“", "走"]})
-    words = Punctuated(TextGrid({"words": tier, "phones": tier.iloc[:0]})).words
+    words = Punctuated(TextGrid.aligned(tier, tier.iloc[:0])).words
     assert words["text"].tolist() == ["好", "走"]
     assert words["sentence"].tolist() == [0, 1]
     assert words["new"].tolist() == [True, True]

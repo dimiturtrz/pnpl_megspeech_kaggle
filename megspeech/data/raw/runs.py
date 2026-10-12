@@ -13,6 +13,8 @@ import pandas as pd
 from jaxtyping import Bool, Float, Int
 
 from core.paths import DataRoot
+from megspeech.data.constants import TAIL
+from megspeech.data.raw.events import Event, Events
 from megspeech.data.raw.fetch import APPLESEED, MASC
 from megspeech.data.raw.kymata import KYMATA
 from megspeech.data.raw.scans import SCANS
@@ -28,16 +30,21 @@ SOURCES = (range(DEEP, DEEP + 1), range(1, 13), range(13, 23), range(23, 33))
 
 
 class Column(StrEnum):
-    """A column of the heard-words table each run's words are read into (`RunCache.words`), keyed by run."""
+    """A column of the heard-words table each run's words are read into (`Run.words`), keyed by run."""
 
     RUN = "run"
     SENTENCE = "sentence"
     ONSET = "onset"
     WORD = "word"
     END = "end"
+    FINISH = "finish"
     POSITION = "position"
     TARGET = "target"
     TOKEN = "token"
+
+
+NO_SENTENCE = -1
+"""The `Column.SENTENCE` of a word heard outside any sentence."""
 
 
 class Partition(StrEnum):
@@ -121,6 +128,24 @@ class Run:
     @property
     def events(self) -> Path:
         return self.meg.parent.parent / "events" / f"{self.name}_events.tsv"
+
+    def words(self) -> pd.DataFrame:
+        """The run's heard words: onset in seconds into the run, the word as spoken, its sentence in the run, and the
+        `end` its window stops at — `TAIL` after its sentence's last word ends, as a Kaggle test sentence epoch does —
+        and the `finish` of its own."""
+        heard = Events(self.events).words(Event.SENTENCE, Event.ONSET, Event.DURATION)
+        sentence = heard[Event.SENTENCE].fillna(NO_SENTENCE).to_numpy(dtype=np.int64)
+        finish = heard[Event.ONSET] + heard[Event.DURATION].fillna(0.0)
+        return pd.DataFrame(
+            {
+                Column.RUN: self.name,
+                Column.ONSET: heard[Event.ONSET].to_numpy(dtype=np.float64),
+                Column.WORD: heard[Event.SEGMENT].to_numpy(),
+                Column.SENTENCE: sentence,
+                Column.END: finish.groupby(sentence).transform("max").to_numpy(dtype=np.float64) + TAIL,
+                Column.FINISH: finish.to_numpy(dtype=np.float64),
+            }
+        )
 
     @property
     def partition(self) -> Partition:

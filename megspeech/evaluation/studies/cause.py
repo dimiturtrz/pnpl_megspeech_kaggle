@@ -29,7 +29,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import PRIMARY, Vocabulary
-from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.events import Event, Kind
 from megspeech.data.raw.runs import Column
 from megspeech.evaluation.scoring.score import Head
 from megspeech.evaluation.studies.perword import Attributes, Position, Scene

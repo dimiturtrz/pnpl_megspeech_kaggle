@@ -4,7 +4,7 @@ word type.
 
 Each trained Sherlock run's chapter (`<book>_<session>_doyle_64kb.wav`) is encoded once; a word's target is the
 mean of the latents over the `WINDOW` after its chapter onset, a row of `<run>.npy` aligned with the run's word
-table (`RunCache.words`), NaN where there is none. Validation and test runs' audio is never read.
+table (`Run.words`), NaN where there is none. Validation and test runs' audio is never read.
 
 uv run python -m megspeech.objective.targets.speech [--teacher hubert-large-ll60k] [--layers 15 18]
 """
@@ -27,8 +27,7 @@ from transformers import Data2VecAudioModel, HubertModel, Wav2Vec2Model
 
 from core.paths import DataRoot
 from megspeech.data.config import DataConfig, Val
-from megspeech.data.constants import MISSING
-from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.events import Event, Events
 from megspeech.data.raw.runs import Column, Partition, Run
 from megspeech.device import Device
 from megspeech.objective.targets.t5 import Encoder
@@ -218,15 +217,8 @@ class Heard:
         return sorted((self.run.meg.parents[2] / "stimuli" / "audio").glob(f"*_{session:02d}_*.wav"))
 
     def onsets(self) -> Float[np.ndarray, " n"]:
-        """Each heard word's (`RunCache.words`) onset in its chapter's audio."""
-        events = pd.read_csv(
-            self.run.events,
-            sep="\t",
-            usecols=[Event.KIND, Event.SEGMENT, Event.CHAPTER],
-            keep_default_na=False,
-            na_values=MISSING,
-        )
-        heard = events[(events[Event.KIND] == Kind.WORD) & events[Event.SEGMENT].notna()]
+        """Each heard word's (`Run.words`) onset in its chapter's audio."""
+        heard = Events(self.run.events).words(Event.CHAPTER)
         return heard[Event.CHAPTER].to_numpy(dtype=np.float64) + LAG
 
     def targets(self, encoder: Encoder, device: torch.device, layers: slice = LAYERS) -> Targets:

@@ -27,7 +27,7 @@ from mne.forward._field_interpolation import _map_meg_or_eeg_channels
 
 from core.paths import DataRoot
 from megspeech.data.constants import SFREQ
-from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.events import Event, Kind
 from megspeech.data.raw.fetch import MASC, NEUROMAG
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.serialised import Corpus

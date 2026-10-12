@@ -45,7 +45,6 @@ FORMAT = "%(asctime)s %(message)s"
 DIRECTORY = "continuous{rate:g}"
 """A cache's directory under `processed/`, named by its rate; the default 50 Hz cache is `continuous50`."""
 WORD_TABLE = "words.tsv"
-NO_SENTENCE = -1
 GB = 1e9
 
 
@@ -125,32 +124,6 @@ class RunCache:
             np.save(handle, signal)
         return path
 
-    @staticmethod
-    def words(run: Run) -> pd.DataFrame:
-        """A run's heard words: onset in seconds into the run, the word as spoken, its sentence in the run, and the
-        `end` its window stops at — `TAIL` after its sentence's last word ends, as a Kaggle test sentence epoch does —
-        and the `finish` of its own."""
-        events = pd.read_csv(
-            run.events,
-            sep="\t",
-            usecols=["kind", "segment", "sentenceidx", "timemeg", "duration"],
-            keep_default_na=False,
-            na_values=MISSING,
-        )
-        heard = events[(events["kind"] == "word") & events["segment"].notna()]
-        sentence = heard["sentenceidx"].fillna(NO_SENTENCE).to_numpy(dtype=np.int64)
-        finish = (heard["timemeg"] + heard["duration"].fillna(0.0)).groupby(sentence).transform("max")
-        return pd.DataFrame(
-            {
-                Column.RUN: run.name,
-                Column.ONSET: heard["timemeg"].to_numpy(dtype=np.float64),
-                Column.WORD: heard["segment"].to_numpy(),
-                Column.SENTENCE: sentence,
-                Column.END: finish.to_numpy(dtype=np.float64) + TAIL,
-                "finish": (heard["timemeg"] + heard["duration"].fillna(0.0)).to_numpy(dtype=np.float64),
-            }
-        )
-
     def build(self, runs: Sequence[Run], workers: int = WORKERS) -> pd.DataFrame:
         """Cache every run in parallel, then write the word table of all of them."""
         self.ready()
@@ -158,7 +131,7 @@ class RunCache:
         with ProcessPoolExecutor(workers, initializer=logged) as pool:
             for path in pool.map(self.cache_run, runs):
                 LOG.info("%s", path.name)
-        return self.publish(pd.concat([self.words(run) for run in runs], ignore_index=True))
+        return self.publish(pd.concat([run.words() for run in runs], ignore_index=True))
 
     def publish(self, table: pd.DataFrame) -> pd.DataFrame:
         """Write the cache's word table."""
@@ -189,7 +162,7 @@ class RunCache:
             table.groupby([Column.RUN, Column.SENTENCE], sort=False).ngroup().to_numpy(), KAGGLE_WORDS
         )
         table["piece"] = piece
-        finish = table["finish"] if "finish" in table else table[Column.END] - TAIL
+        finish = table[Column.FINISH] if Column.FINISH in table else table[Column.END] - TAIL
         table["piece_end"] = finish.groupby(piece).transform("max") + TAIL
         self.bounded(table, "piece_", "piece_end", ["piece"])
         return table

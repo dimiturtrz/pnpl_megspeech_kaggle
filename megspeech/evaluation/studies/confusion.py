@@ -33,7 +33,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.phonemes import EVENTS, WORD
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
-from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.events import Event, Kind
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device

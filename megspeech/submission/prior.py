@@ -15,15 +15,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 from jaxtyping import Float
 from pnpl.competition import PRIMARY_VOCAB, SECONDARY_VOCAB, submit_to_kaggle, write_submission
 
 from core.paths import DataRoot
 from megspeech.data.cache.kaggle import Track
-from megspeech.data.constants import MISSING
 from megspeech.data.labels.vocabulary import Vocabulary
-from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.events import Event, Events
 
 LOG = logging.getLogger(__name__)
 
@@ -41,11 +39,7 @@ class FrequencyPrior:
         """Count the `word` rows of LibriBrain events files, spelled the way the competition vocabulary is."""
         counts: Counter[str] = Counter()
         for path in paths:
-            events = pd.read_csv(
-                path, sep="\t", usecols=[Event.KIND, Event.SEGMENT], keep_default_na=False, na_values=MISSING
-            )
-            words = events.loc[events[Event.KIND] == Kind.WORD, Event.SEGMENT].dropna()
-            counts.update(Vocabulary.spell(word) for word in words)
+            counts.update(Vocabulary.spell(word) for word in Events(path).words()[Event.SEGMENT])
         return cls(counts)
 
     def probabilities(self, vocabulary: list[str]) -> Float[np.ndarray, " v"]:

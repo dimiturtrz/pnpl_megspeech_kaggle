@@ -34,17 +34,16 @@ from spacy.tokens import Doc
 from torch import Tensor
 
 from core.paths import DataRoot
-from megspeech.data.constants import MISSING
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import PRIMARY, Vocabulary
-from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.events import Event, Events
 from megspeech.data.raw.runs import DEEP, Column, Partition, Run
 
 LOG = logging.getLogger(__name__)
 
 BATCH = 128
 """Sentences spaCy tags per GPU batch."""
-SENTENCE_COLUMNS = [Event.KIND, Event.SEGMENT, Event.SENTENCE, Event.WORD, Event.ONSET]
+SENTENCE_COLUMNS = [Event.SENTENCE, Event.WORD, Event.ONSET]
 CLASSES = [*("ADJ", "ADP", "ADV", "AUX", "CCONJ", "DET", "NOUN", "PART", "PRON", "SCONJ", "VERB"), "OTHER"]
 """The tag set a token is classified into; the last class takes every tag the others do not name."""
 OTHER = len(CLASSES) - 1
@@ -87,10 +86,7 @@ class ContextTags:
     @staticmethod
     def words(run: Run) -> pd.DataFrame:
         """One run's sentence words in sentence order: `run`, `onset`, `sentence` and the `word` as spoken."""
-        table = pd.read_csv(run.events, sep="\t", usecols=SENTENCE_COLUMNS, keep_default_na=False, na_values=MISSING)
-        heard = table.loc[(table[Event.KIND] == Kind.WORD) & table[Event.SEGMENT].notna()].dropna(
-            subset=[Event.SENTENCE, Event.WORD]
-        )
+        heard = Events(run.events).words(*SENTENCE_COLUMNS).dropna(subset=[Event.SENTENCE, Event.WORD])
         ordered = heard.sort_values([Event.SENTENCE, Event.WORD])
         return pd.DataFrame(
             {

@@ -29,7 +29,7 @@ class Corpus:
     validation: dict[str, Split]
     seen: frozenset[tuple[int, ...]]
     positions: pd.DataFrame = field(default_factory=pd.DataFrame)
-    """Each train word's `run`, `position` in that run's word table (`RunCache.words`), `onset` and
+    """Each train word's `run`, `position` in that run's word table (`Run.words`), `onset` and
     `sentence`, in train-split order."""
     geometry: Geometry = AS_RECORDED
     """The sensor geometry every split was loaded in, which the Kaggle test must load in too."""

@@ -10,7 +10,7 @@ import torch
 from megspeech.data.cache import run_cache as module
 from megspeech.data.cache.alignment import Geometry, Projection
 from megspeech.data.cache.cleaning import Cleaning
-from megspeech.data.cache.run_cache import DIRECTORY, NO_SENTENCE, TAIL, WORD_TABLE, DeviceRecording, RunCache, main
+from megspeech.data.cache.run_cache import DIRECTORY, TAIL, WORD_TABLE, DeviceRecording, RunCache, main
 from megspeech.data.constants import DECIMATE, HALF, RATE, SFREQ
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.raw.runs import Run
@@ -137,15 +137,6 @@ def test_staged(tmp_path: Path) -> None:
         assert not final.exists()
     assert final.read_text() == "x"
     assert not staging.exists()
-
-
-def test_words(tmp_path: Path) -> None:
-    words = RunCache.words(recording(tmp_path))
-    assert words["word"].tolist() == ["The", "null", "end"]
-    assert words["onset"].tolist() == [0.5, 2.0, 3.0]
-    assert words["sentence"].tolist() == [0, 1, NO_SENTENCE]
-    assert words["end"].tolist() == pytest.approx([0.8 + TAIL, 2.4 + TAIL, 3.0 + TAIL])
-    assert words["finish"].tolist() == pytest.approx([0.8, 2.4, 3.0])
 
 
 def test_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

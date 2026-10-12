@@ -5,8 +5,7 @@ import numpy as np
 import pytest
 
 from core.paths import DataRoot
-from megspeech.data.cache.run_cache import NO_SENTENCE
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import NO_SENTENCE, Run
 from megspeech.objective.targets import sentence as module
 from megspeech.objective.targets.sentence import SUFFIX, Sentences
 from megspeech.objective.targets.speech import Targets

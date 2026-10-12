@@ -5,9 +5,8 @@ from functools import cache
 import numpy as np
 from jaxtyping import Float, Int
 
-from megspeech.data.cache.run_cache import NO_SENTENCE, RunCache
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY, VOCAB_SIZE
-from megspeech.data.raw.runs import Column, Run
+from megspeech.data.raw.runs import NO_SENTENCE, Column, Run
 
 Picked = tuple[list[Run], list[Run]]
 """A source's sessions picked for validation, then for test."""
@@ -35,7 +34,7 @@ class Stratify:
     @staticmethod
     def profile(run: Run, books: tuple[str, ...]) -> Float[np.ndarray, " d"]:
         """`run`'s additive counts (`WORDS`...), its labels' and its words under its book in `books`."""
-        words = RunCache.words(run)
+        words = run.words()
         labels = PRIMARY.labels(words[Column.WORD])
         known = labels[labels != ABSENT]
         sentenced = words[words[Column.SENTENCE] != NO_SENTENCE]

@@ -23,10 +23,9 @@ from spacy.tokens import Doc
 from torch import Tensor
 
 from core.paths import DataRoot
-from megspeech.data.constants import MISSING
 from megspeech.data.labels.phonemes import EVENTS, UNKNOWN, WORD
 from megspeech.data.labels.vocabulary import Vocabulary
-from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.events import Event, Events
 
 LOG = logging.getLogger(__name__)
 
@@ -52,10 +51,7 @@ class PartsOfSpeech:
     @staticmethod
     def sentences(events: Path) -> list[list[str]]:
         """One run's sentences, each its words in order; words outside a sentence left out."""
-        table = pd.read_csv(
-            events, sep="\t", usecols=[Event.KIND, Event.SEGMENT, *WORD], keep_default_na=False, na_values=MISSING
-        )
-        words = table.loc[(table[Event.KIND] == Kind.WORD) & table[Event.SEGMENT].notna()].dropna(subset=WORD)
+        words = Events(events).words(*WORD).dropna(subset=WORD)
         ordered = words.sort_values(WORD)
         return [group[Event.SEGMENT].astype(str).tolist() for _, group in ordered.groupby(Event.SENTENCE, sort=True)]
 

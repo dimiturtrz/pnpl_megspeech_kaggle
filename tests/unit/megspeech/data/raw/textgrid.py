@@ -37,10 +37,29 @@ item []:
 """
 
 
-def test_read(tmp_path: Path) -> None:
+def grid(tmp_path: Path) -> TextGrid:
     path = tmp_path / "1.TextGrid"
     path.write_text(GRID, encoding="utf-8")
-    grid = TextGrid.read(path)
-    assert list(grid.tiers) == ["words", "phones"]
-    assert grid.tiers["words"].to_dict("list") == {"start": [0.0, 0.25], "end": [0.25, 1.0], "text": ["if", ""]}
-    assert grid.tiers["phones"]["text"].tolist() == ["IH1"]
+    return TextGrid.read(path)
+
+
+def test_read(tmp_path: Path) -> None:
+    read = grid(tmp_path)
+    assert list(read.tiers) == ["words", "phones"]
+    assert read.tiers["words"].to_dict("list") == {"start": [0.0, 0.25], "end": [0.25, 1.0], "text": ["if", ""]}
+    assert read.tiers["phones"]["text"].tolist() == ["IH1"]
+
+
+def test_aligned(tmp_path: Path) -> None:
+    read = grid(tmp_path)
+    aligned = TextGrid.aligned(read.phones, read.words)
+    assert list(aligned.tiers) == ["words", "phones"]
+    assert aligned.words is read.phones
+
+
+def test_words(tmp_path: Path) -> None:
+    assert grid(tmp_path).words["text"].tolist() == ["if", ""]
+
+
+def test_phones(tmp_path: Path) -> None:
+    assert grid(tmp_path).phones["text"].tolist() == ["IH1"]

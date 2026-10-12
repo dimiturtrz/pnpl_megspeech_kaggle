@@ -4,7 +4,7 @@ in-context text target of the semantic auxiliary (megspeech-7gf.88), for every w
 A word's target is the middle-layer state of its last token given everything said before it in the run (a sliding
 `WINDOW` of tokens, each kept token read with at least half a window of left context), z-scored per dimension over
 the run,
-a row of `<run>.npy` aligned with the run's word table (`RunCache.words`), NaN where a word has no token. Only trained
+a row of `<run>.npy` aligned with the run's word table (`Run.words`), NaN where a word has no token. Only trained
 runs' transcripts are read; validation and test text never is.
 
 uv run python -m megspeech.objective.targets.context
@@ -22,7 +22,6 @@ from torch import Tensor
 from transformers import AutoTokenizer, GPT2Model
 
 from core.paths import DataRoot
-from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.config import DataConfig, Val
 from megspeech.data.raw.runs import Column, Run
 from megspeech.device import Device
@@ -86,7 +85,7 @@ class Transcript:
 
     @staticmethod
     def of(run: Run) -> "Transcript":
-        return Transcript(tuple(str(word) for word in RunCache.words(run)[Column.WORD]))
+        return Transcript(tuple(str(word) for word in run.words()[Column.WORD]))
 
     @staticmethod
     def write(root: DataRoot, tokenizer: Tokenizer, encoder: Encoder, device: torch.device) -> Path:

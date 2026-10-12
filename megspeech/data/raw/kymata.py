@@ -32,14 +32,14 @@ from mne.preprocessing import find_bad_channels_maxwell, maxwell_filter
 
 from core.paths import DataRoot
 from megspeech.data.constants import SFREQ
-from megspeech.data.raw import Event
 from megspeech.data.raw.appleseed import KIND_ORDER, Story
+from megspeech.data.raw.events import Event
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.kymatasync import Alignment, Clock, Envelope
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.masc import COLUMNS, HIGHPASS, ORIGIN, Neuromag
 from megspeech.data.raw.serialised import Corpus
-from megspeech.data.raw.textgrid import TextGrid
+from megspeech.data.raw.textgrid import Interval, TextGrid
 
 LOG = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ class Clip:
         items = [label for label in text if label]
         end = np.append(start[1:], start[-1])
         blank = [label in SILENCES for label in items]
-        return pd.DataFrame({"start": start, "end": end, "text": np.where(blank, "", items)})
+        return pd.DataFrame({Interval.START: start, Interval.END: end, Interval.TEXT: np.where(blank, "", items)})
 
     @cached_property
     def alignment(self) -> Alignment:
@@ -105,7 +105,7 @@ class Clip:
 
     @cached_property
     def story(self) -> Story:
-        return Story(TextGrid({"words": self.tier("word"), "phones": self.tier("phoneme")}))
+        return Story(TextGrid.aligned(self.tier("word"), self.tier("phoneme")))
 
 
 @dataclass(frozen=True)

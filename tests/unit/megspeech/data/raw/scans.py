@@ -9,8 +9,8 @@ from scipy.io import wavfile
 
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY, SECONDARY
-from megspeech.data.raw import Event
 from megspeech.data.raw import scans as module
+from megspeech.data.raw.events import Event
 from megspeech.data.raw.kymatasync import Alignment, Clock, Envelope
 from megspeech.data.raw.masc import COLUMNS, Neuromag
 from megspeech.data.raw.scans import GERMAN, SCANS, Book, Recording, Scans, main

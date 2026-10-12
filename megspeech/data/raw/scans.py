@@ -31,8 +31,8 @@ from typing import override
 import pandas as pd
 
 from core.paths import DataRoot
-from megspeech.data.raw import Event, Kind
 from megspeech.data.raw.appleseed import KIND_ORDER, Story
+from megspeech.data.raw.events import Event, Kind
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.kymata import Recording as Triux
 from megspeech.data.raw.kymata import Study
@@ -76,8 +76,7 @@ class Book:
     @cached_property
     def words(self) -> pd.DataFrame:
         """The spoken words in pnpl's columns, `timemeg` their start in the wav in seconds."""
-        grid = TextGrid.read(self.stem.with_name(f"{self.stem.name}.TextGrid"))
-        story = Story(TextGrid({"words": grid.tiers["words"], "phones": grid.tiers["phones"]}))
+        story = Story(TextGrid.read(self.stem.with_name(f"{self.stem.name}.TextGrid")))
         events = story.events(0.0)
         return events[events[Event.KIND] == Kind.WORD].reset_index(drop=True)
 

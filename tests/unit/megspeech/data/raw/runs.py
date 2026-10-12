@@ -6,7 +6,8 @@ import pandas as pd
 import pytest
 
 from core.paths import ENV_OVERRIDE, DataRoot
-from megspeech.data.raw.runs import Partition, Run
+from megspeech.data.constants import TAIL
+from megspeech.data.raw.runs import NO_SENTENCE, Partition, Run
 from megspeech.data.raw.serialised import Serialised
 
 NAME = "sub-0_ses-11_task-Sherlock1_run-2"
@@ -44,6 +45,30 @@ def test_name(tmp_path: Path) -> None:
 
 def test_events(tmp_path: Path) -> None:
     assert Run(meg(tmp_path)).events == tmp_path / "Sherlock1" / "derivatives" / "events" / f"{NAME}_events.tsv"
+
+
+def events(run: Run) -> Run:
+    run.events.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        ("word", "The", 0.0, 0.5, 0.3),
+        ("phoneme", "dh_B", 0.0, 0.5, 2.0),
+        ("word", None, 0.0, 1.0, 2.0),
+        ("word", "null", 1.0, 2.0, 0.4),
+        ("word", "end", None, 3.0, None),
+    ]
+    columns = ["kind", "segment", "sentenceidx", "timemeg", "duration"]
+    pd.DataFrame(rows, columns=columns).to_csv(run.events, sep="\t", index=False)
+    return run
+
+
+def test_words(tmp_path: Path) -> None:
+    words = events(Run(meg(tmp_path))).words()
+    assert words["run"].unique().tolist() == [NAME]
+    assert words["word"].tolist() == ["The", "null", "end"]
+    assert words["onset"].tolist() == [0.5, 2.0, 3.0]
+    assert words["sentence"].tolist() == [0, 1, NO_SENTENCE]
+    assert words["end"].tolist() == pytest.approx([0.8 + TAIL, 2.4 + TAIL, 3.0 + TAIL])
+    assert words["finish"].tolist() == pytest.approx([0.8, 2.4, 3.0])
 
 
 def test_partition(tmp_path: Path) -> None:

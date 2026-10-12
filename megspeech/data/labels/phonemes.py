@@ -22,9 +22,8 @@ from pnpl.datasets.constants import ARPABET
 from torch import Tensor
 
 from core.paths import DataRoot
-from megspeech.data.constants import MISSING
 from megspeech.data.labels.vocabulary import Vocabulary
-from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.events import Event, Events, Kind
 
 LOG = logging.getLogger(__name__)
 
@@ -54,14 +53,8 @@ class Pronunciation:
     def spellings(events: Path) -> pd.DataFrame:
         """One run's words beside the phonemes the alignment gives each at positions 0..`POSITIONS`-1, `oov`
         included and missing positions NaN."""
-        table = pd.read_csv(
-            events,
-            sep="	",
-            usecols=[Event.KIND, Event.SEGMENT, *WORD, Event.PHONEME],
-            keep_default_na=False,
-            na_values=MISSING,
-        )
-        words = table.loc[(table[Event.KIND] == Kind.WORD) & table[Event.SEGMENT].notna(), [Event.SEGMENT, *WORD]]
+        table = Events(events).read(*WORD, Event.PHONEME)
+        words = table.loc[Events.heard(table), [Event.SEGMENT, *WORD]]
         sounds = table.loc[(table[Event.KIND] == Kind.PHONEME) & (table[Event.PHONEME] < POSITIONS)].dropna(subset=WORD)
         sounds = sounds.assign(
             phoneme=sounds[Event.SEGMENT].str.split("_").str[0], at=sounds[Event.PHONEME].astype(int)

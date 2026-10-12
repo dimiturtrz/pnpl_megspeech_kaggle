@@ -27,12 +27,12 @@ from jaxtyping import Bool, Float
 
 from core.paths import DataRoot
 from megspeech.data.constants import SFREQ
-from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.events import Event, Kind
 from megspeech.data.raw.fetch import APPLESEED, NEUROMAG
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.masc import COLUMNS, HIGHPASS, Neuromag
 from megspeech.data.raw.serialised import Corpus
-from megspeech.data.raw.textgrid import TextGrid
+from megspeech.data.raw.textgrid import Interval, TextGrid
 
 LOG = logging.getLogger(__name__)
 
@@ -111,9 +111,9 @@ class Story:
     @cached_property
     def words(self) -> pd.DataFrame:
         """The spoken words, each flagged `new` if it starts a sentence: the first, or after `SENTENCE_PAUSE` silent."""
-        tier = self.grid.tiers["words"]
-        words = tier[tier["text"] != ""].reset_index(drop=True)
-        words["new"] = (words["start"] - words["end"].shift(fill_value=-np.inf)) >= SENTENCE_PAUSE
+        tier = self.grid.words
+        words = tier[tier[Interval.TEXT] != ""].reset_index(drop=True)
+        words["new"] = (words[Interval.START] - words[Interval.END].shift(fill_value=-np.inf)) >= SENTENCE_PAUSE
         words["sentence"] = words["new"].cumsum() - 1
         words[Event.WORD] = words.groupby("sentence").cumcount()
         return words
@@ -121,15 +121,15 @@ class Story:
     @cached_property
     def phones(self) -> pd.DataFrame:
         """Each phone inside a word as pnpl spells it: stress dropped, lower-case, tagged B/I/E/S by its place."""
-        tier = self.grid.tiers["phones"]
-        heard = tier[~tier["text"].str.lower().isin(NO_PHONE)].reset_index(drop=True)
-        words = self.words[["start", "end", "sentence", Event.WORD]].add_prefix("word_")
-        inside = pd.merge_asof(heard, words, left_on="start", right_on="word_start")
-        inside = inside[inside["start"] < inside["word_end"]]
+        tier = self.grid.phones
+        heard = tier[~tier[Interval.TEXT].str.lower().isin(NO_PHONE)].reset_index(drop=True)
+        words = self.words[[Interval.START, Interval.END, "sentence", Event.WORD]].add_prefix("word_")
+        inside = pd.merge_asof(heard, words, left_on=Interval.START, right_on="word_start")
+        inside = inside[inside[Interval.START] < inside["word_end"]]
         place = inside.groupby("word_start").cumcount()
-        size = inside.groupby("word_start")["start"].transform("size")
+        size = inside.groupby("word_start")[Interval.START].transform("size")
         tag = np.select([size == 1, place == 0, place == size - 1], ["S", "B", "E"], "I")
-        label = inside["text"].str.replace(STRESS, "", regex=True).str.lower() + "_" + tag
+        label = inside[Interval.TEXT].str.replace(STRESS, "", regex=True).str.lower() + "_" + tag
         return inside.assign(text=label, place=place)
 
     def events(self, onset: float) -> pd.DataFrame:
@@ -140,23 +140,23 @@ class Story:
                 pd.DataFrame(
                     {
                         Event.KIND: Kind.WORD,
-                        Event.SEGMENT: words["text"],
+                        Event.SEGMENT: words[Interval.TEXT],
                         Event.SENTENCE: words["sentence"],
                         Event.WORD: words[Event.WORD],
                         Event.PHONEME: np.nan,
-                        Event.ONSET: words["start"] + onset,
-                        Event.DURATION: words["end"] - words["start"],
+                        Event.ONSET: words[Interval.START] + onset,
+                        Event.DURATION: words[Interval.END] - words[Interval.START],
                     }
                 ),
                 pd.DataFrame(
                     {
                         Event.KIND: Kind.PHONEME,
-                        Event.SEGMENT: phones["text"],
+                        Event.SEGMENT: phones[Interval.TEXT],
                         Event.SENTENCE: phones["word_sentence"],
                         Event.WORD: phones["word_wordidx"],
                         Event.PHONEME: phones["place"],
-                        Event.ONSET: phones["start"] + onset,
-                        Event.DURATION: phones["end"] - phones["start"],
+                        Event.ONSET: phones[Interval.START] + onset,
+                        Event.DURATION: phones[Interval.END] - phones[Interval.START],
                     }
                 ),
             ],

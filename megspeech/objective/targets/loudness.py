@@ -4,7 +4,7 @@ target (Défossez et al. 2023 align MEG to speech continuously, not once per wor
 Each trained Sherlock run's chapter (the audio and onsets `Heard` reads for the word-level speech targets, so the
 alignment and its `Targets.aligned` mask are shared) is reduced to its log energy per 20 ms frame, standardised over
 the chapter. A word's target is the `LENGTH` frames from its onset plus `OFFSET`, the span its MEG window covers, a
-row of `<run>.npy` aligned with the run's word table (`RunCache.words`), NaN where there is none; `Speech.gather`
+row of `<run>.npy` aligned with the run's word table (`Run.words`), NaN where there is none; `Speech.gather`
 reads it as it reads the word-level targets. Validation and test runs' audio is never read, and a run whose dataset
 ships no audio has no file, so no term.
 
