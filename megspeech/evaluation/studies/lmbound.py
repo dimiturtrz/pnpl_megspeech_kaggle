@@ -34,7 +34,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import PRIMARY, Vocabulary
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Placed
 from megspeech.evaluation.reader import Reader
@@ -265,7 +265,7 @@ class Study:
             partition = next(part for part, name in SECTIONS.items() if name == section)
             reader = Reader(root, data, cpu, partition=partition)
             splits = reader.domains(reader.ruled(Run.discover(root.raw())))[0]
-        spelling = Spelling.of(data.run_cache(root).published()["word"])
+        spelling = Spelling.of(data.run_cache(root).published()[Column.WORD])
         return {name: spelling.spans(splits[name], words.ids[words.novel]) for name, words in saved.domains.items()}
 
     @staticmethod

@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 
+from megspeech.data.raw.runs import Column
 from megspeech.data.spans.spans import Spans
 
 SEED = 0
@@ -13,5 +14,5 @@ class Pieces:
     """The random cut: pieces of uniform length on `1..MAX_WORDS`, drawn from a generator seeded by `SEED`."""
 
     def __call__(self, table: pd.DataFrame) -> Spans:
-        group = table.groupby(["run", "sentence"], sort=False).ngroup().to_numpy()
-        return Spans.by_pieces(group, table["onset"].to_numpy(), np.random.default_rng(SEED))
+        group = table.groupby([Column.RUN, Column.SENTENCE], sort=False).ngroup().to_numpy()
+        return Spans.by_pieces(group, table[Column.ONSET].to_numpy(), np.random.default_rng(SEED))

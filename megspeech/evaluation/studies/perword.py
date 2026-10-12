@@ -32,7 +32,8 @@ from megspeech.data.config import METRICS
 from megspeech.data.labels.phonemes import EVENTS, UNKNOWN, Pronunciation
 from megspeech.data.labels.syntax import TAGS, PartsOfSpeech
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
-from megspeech.data.raw.runs import Partition, Run
+from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.runs import Column, Partition, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device, Placed
 from megspeech.evaluation.group import Group
@@ -125,10 +126,10 @@ class Located:
     def spoken(self, name: str, ids: Int[Tensor, " k"]) -> pd.DataFrame:
         """`ids`' rows of the words `name`'s split was cut from, checked word for word against the split."""
         runs = [run.name for run in self.held[name]]
-        words = self.carried[self.carried["run"].isin(runs)].reset_index(drop=True)
-        if not np.array_equal(words["token"].to_numpy(), self.splits[name].token.cpu().numpy()):
+        words = self.carried[self.carried[Column.RUN].isin(runs)].reset_index(drop=True)
+        if not np.array_equal(words[Column.TOKEN].to_numpy(), self.splits[name].token.cpu().numpy()):
             raise ValueError("the carried words and the split disagree")
-        return words.loc[ids.cpu().numpy(), ["run", "onset", "word"]].reset_index(drop=True)
+        return words.loc[ids.cpu().numpy(), [Column.RUN, Column.ONSET, Column.WORD]].reset_index(drop=True)
 
     def agrees(self, name: str, ids: Int[Tensor, " k"], labels: Int[Tensor, " k"]) -> bool:
         """Whether `name`'s split labels `ids`' words as `labels` does."""
@@ -148,11 +149,11 @@ class Attributes:
     @staticmethod
     def durations(events: Sequence[Path]) -> Float[np.ndarray, " v"]:
         spoken = pd.concat(
-            [pd.read_csv(path, sep="	", usecols=["kind", "segment", "duration"]) for path in events],
+            [pd.read_csv(path, sep="	", usecols=[Event.KIND, Event.SEGMENT, Event.DURATION]) for path in events],
             ignore_index=True,
         )
-        words = spoken[spoken["kind"] == "word"]
-        mean = words.groupby(Vocabulary.spelled(words["segment"]))["duration"].mean()
+        words = spoken[spoken[Event.KIND] == Kind.WORD]
+        mean = words.groupby(Vocabulary.spelled(words[Event.SEGMENT]))[Event.DURATION].mean()
         return mean.reindex(list(PRIMARY.words)).to_numpy()
 
     @classmethod

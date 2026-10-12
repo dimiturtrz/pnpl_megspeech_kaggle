@@ -17,7 +17,7 @@ from jaxtyping import Int
 from core.paths import DataRoot
 from megspeech.data.cache.run_cache import NO_SENTENCE, RunCache
 from megspeech.data.config import DataConfig, Val
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 from megspeech.objective.targets.speech import Targets
 
 SUFFIX = "-sent"
@@ -46,7 +46,7 @@ class Sentences:
         for run in DataConfig(val=Val.OFFICIAL).trained(Run.discover(root.raw())):
             path, kept = origin / f"{run.name}.npy", directory / f"{run.name}.npy"
             if path.exists() and not kept.exists():
-                Sentences(RunCache.words(run)["sentence"].to_numpy()).pool(Targets(np.load(path))).save(kept)
+                Sentences(RunCache.words(run)[Column.SENTENCE].to_numpy()).pool(Targets(np.load(path))).save(kept)
                 LOG.info("%s", kept.name)
         return directory
 

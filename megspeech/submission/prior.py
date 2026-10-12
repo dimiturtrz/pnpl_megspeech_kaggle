@@ -23,6 +23,7 @@ from core.paths import DataRoot
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.constants import MISSING
 from megspeech.data.labels.vocabulary import Vocabulary
+from megspeech.data.raw import Event, Kind
 
 LOG = logging.getLogger(__name__)
 
@@ -40,8 +41,10 @@ class FrequencyPrior:
         """Count the `word` rows of LibriBrain events files, spelled the way the competition vocabulary is."""
         counts: Counter[str] = Counter()
         for path in paths:
-            events = pd.read_csv(path, sep="\t", usecols=["kind", "segment"], keep_default_na=False, na_values=MISSING)
-            words = events.loc[events["kind"] == "word", "segment"].dropna()
+            events = pd.read_csv(
+                path, sep="\t", usecols=[Event.KIND, Event.SEGMENT], keep_default_na=False, na_values=MISSING
+            )
+            words = events.loc[events[Event.KIND] == Kind.WORD, Event.SEGMENT].dropna()
             counts.update(Vocabulary.spell(word) for word in words)
         return cls(counts)
 

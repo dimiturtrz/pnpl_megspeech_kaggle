@@ -14,7 +14,7 @@ from torch import Tensor
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.config import DataConfig
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head
 from megspeech.model.ensemble import Ensemble
@@ -64,7 +64,7 @@ class Teacher(ABC):
         )
         if config.teacher_folds == 1:
             return whole
-        held = positions["run"].map(data.fold_of(Run.everywhere(root), config.teacher_folds))
+        held = positions[Column.RUN].map(data.fold_of(Run.everywhere(root), config.teacher_folds))
         return CrossFitted.over(whole, config.teacher_folds, held)
 
 

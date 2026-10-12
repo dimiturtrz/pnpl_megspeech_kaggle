@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from jaxtyping import Int
 
+from megspeech.data.raw.runs import Column
+
 RULER = "Sherlock1"
 """The validation task whose text the pooled runs repeat."""
 
@@ -20,12 +22,12 @@ class Text:
     @classmethod
     def of(cls, table: pd.DataFrame) -> "Text":
         """`table`'s words with their `position` in their sentence of their run."""
-        return cls(table.assign(position=table.groupby(["run", "sentence"]).cumcount()))
+        return cls(table.assign(position=table.groupby([Column.RUN, Column.SENTENCE]).cumcount()))
 
     @property
     def keys(self) -> pd.MultiIndex:
-        spelled = self.words["word"].astype(str).str.lower()
-        return pd.MultiIndex.from_arrays([self.words["sentence"], self.words["position"], spelled])
+        spelled = self.words[Column.WORD].astype(str).str.lower()
+        return pd.MultiIndex.from_arrays([self.words[Column.SENTENCE], self.words[Column.POSITION], spelled])
 
     def matches(self, other: "Text") -> Int[np.ndarray, " n"]:
         """Each word's row in `other` with the same key, -1 where `other` has none."""

@@ -16,6 +16,7 @@ import torch
 from core.paths import DataRoot
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.labels.vocabulary import ABSENT, IGNORE, PRIMARY
+from megspeech.data.raw.runs import Column
 from megspeech.evaluation.studies.expertcheck import Centroids
 from megspeech.objective.targets.speech import Targets
 
@@ -33,8 +34,10 @@ class Oracle:
     def words(self) -> pd.DataFrame:
         """Every word of the runs `source` has targets for: `run`, `position` in its run's table, `target` label."""
         table = self.cache.table(sorted(path.stem for path in self.source.glob("*.npy")))
-        labels = PRIMARY.labels(table["word"])
-        return table.assign(position=table.groupby("run").cumcount(), target=np.where(labels == ABSENT, IGNORE, labels))
+        labels = PRIMARY.labels(table[Column.WORD])
+        return table.assign(
+            position=table.groupby(Column.RUN).cumcount(), target=np.where(labels == ABSENT, IGNORE, labels)
+        )
 
     def write(self, destination: Path) -> Centroids:
         """Write each run's targets under `destination`, NaN where a word is outside the vocabulary."""
@@ -45,11 +48,11 @@ class Oracle:
         spread = means[present] - means[present].mean(0)
         means = torch.zeros_like(means).index_put((present.nonzero().squeeze(-1),), spread / spread.std(0).mean())
         destination.mkdir(parents=True, exist_ok=True)
-        for run, group in words.groupby("run"):
+        for run, group in words.groupby(Column.RUN):
             rows = len(np.load(self.source / f"{run}.npy", mmap_mode="r"))
             vectors = np.full((rows, means.shape[1]), np.nan, dtype=np.float16)
-            known = group[group["target"] != IGNORE]
-            vectors[known["position"].to_numpy()] = means[known["target"].to_numpy()].numpy()
+            known = group[group[Column.TARGET] != IGNORE]
+            vectors[known[Column.POSITION].to_numpy()] = means[known[Column.TARGET].to_numpy()].numpy()
             Targets(vectors).save(destination / f"{run}.npy")
         return centroids
 

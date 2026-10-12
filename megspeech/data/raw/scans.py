@@ -31,7 +31,8 @@ from typing import override
 import pandas as pd
 
 from core.paths import DataRoot
-from megspeech.data.raw.appleseed import KIND_ORDER, WORD, Story
+from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.appleseed import KIND_ORDER, Story
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.kymata import Recording as Triux
 from megspeech.data.raw.kymata import Study
@@ -54,8 +55,7 @@ SOURCE = re.compile(r"sub-(?P<subject>\d+)_task-audiobook(?P<book>[12])_run-(?P<
 STIMULI = Path("stimuli") / "audiobooks"
 GERMAN = "de:"
 """Prefix of every segment: the words are German."""
-TIMECHAPTER = "timechapter"
-COLUMNS_WITH_AUDIO = [*COLUMNS, TIMECHAPTER]
+COLUMNS_WITH_AUDIO = [*COLUMNS, Event.CHAPTER]
 OFFSET_BOUNDS = (-0.2, 0.2)
 """Seconds from the coarse audio match a play's fitted start may lie: that match is biased by up to half the clip's
 drift (~0.14 s), which the fit itself corrects."""
@@ -79,7 +79,7 @@ class Book:
         grid = TextGrid.read(self.stem.with_name(f"{self.stem.name}.TextGrid"))
         story = Story(TextGrid({"words": grid.tiers["words"], "phones": grid.tiers["phones"]}))
         events = story.events(0.0)
-        return events[events["kind"] == WORD].reset_index(drop=True)
+        return events[events[Event.KIND] == Kind.WORD].reset_index(drop=True)
 
 
 @dataclass(frozen=True)
@@ -143,9 +143,9 @@ class Recording(Triux):
         """The words on the clock of `plays`' one play, `timechapter` their start in the wav."""
         (clock,) = plays
         words = self.book.words
-        placed = clock.place(words).assign(segment=self.prefix + words["segment"], timechapter=words["timemeg"])
-        ordered = placed.assign(order=placed["kind"].map(KIND_ORDER))
-        return ordered.sort_values(["timemeg", "order"], kind="stable")[COLUMNS_WITH_AUDIO].reset_index(drop=True)
+        placed = clock.place(words).assign(segment=self.prefix + words[Event.SEGMENT], timechapter=words[Event.ONSET])
+        ordered = placed.assign(order=placed[Event.KIND].map(KIND_ORDER))
+        return ordered.sort_values([Event.ONSET, "order"], kind="stable")[COLUMNS_WITH_AUDIO].reset_index(drop=True)
 
 
 @dataclass(frozen=True)

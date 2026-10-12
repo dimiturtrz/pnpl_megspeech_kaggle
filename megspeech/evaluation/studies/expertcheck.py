@@ -19,7 +19,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.config import DataConfig
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.studies.expert import Expert, Head
@@ -81,7 +81,7 @@ class Centroids:
         """The centroids of the vocabulary words among `words` (`run`, `position`, `target`)."""
         speech = Speech.gather(directory, words)
         present = (speech.rows >= 0).numpy()
-        labels = torch.tensor(words["target"].to_numpy())
+        labels = torch.tensor(words[Column.TARGET].to_numpy())
         vectors = functional.normalize(speech.vectors.float(), dim=-1)
         labels = labels[present]
         known = labels != IGNORE

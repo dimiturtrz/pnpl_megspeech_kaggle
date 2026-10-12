@@ -12,7 +12,7 @@ from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
-from megspeech.data.raw.runs import Partition, Run
+from megspeech.data.raw.runs import Column, Partition, Run
 from megspeech.evaluation.text import RULER, Text
 from megspeech.model.input.subjects import Reading
 
@@ -55,7 +55,7 @@ class Reader:
     def splits(self, runs: list[Run]) -> dict[Run, tuple[pd.DataFrame, Split]]:
         """Each of `runs`, loaded together: its words and its split as the model reads it."""
         source, words = self.load(runs)
-        rows = {run: words[words["run"] == run.name] for run in runs}
+        rows = {run: words[words[Column.RUN] == run.name] for run in runs}
         return {
             run: (part, self.read(run.name, Corpus.split(source, part, self.data, np.ones(len(part)))))
             for run, part in rows.items()
@@ -64,7 +64,7 @@ class Reader:
     def domains(self, held: dict[str, list[Run]]) -> tuple[dict[str, Split], pd.DataFrame]:
         """Subject 0's validation domains as the model reads them, and the ruler domain's words in its split's order."""
         source, words = self.load([run for group in held.values() for run in group])
-        ruler = words[words["run"].isin([run.name for run in held.get(RULER, [])])]
+        ruler = words[words[Column.RUN].isin([run.name for run in held.get(RULER, [])])]
         domains = Corpus.domains(source, words, held, self.data)
         return {name: self.read(name, split) for name, split in domains.items()}, ruler
 

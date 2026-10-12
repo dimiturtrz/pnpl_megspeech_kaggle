@@ -13,7 +13,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import SpanText, Split
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.config import DataConfig
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 from megspeech.data.spans.grouping import Grouping
 
 Text = tuple[frozenset[tuple[int, ...]], Float[Tensor, " v"]]
@@ -29,7 +29,7 @@ class Heard:
         trained = data.trained(runs)
         table = cache.table([r.name for r in trained])
         weights = {r.name: data.weight(r) for r in trained}
-        return data.carried(table.assign(weight=table["run"].map(weights)))
+        return data.carried(table.assign(weight=table[Column.RUN].map(weights)))
 
     @classmethod
     def under(cls, root: DataRoot, data: DataConfig, device: torch.device) -> Text:
@@ -41,13 +41,13 @@ class Heard:
     def prior(heard: pd.DataFrame, data: DataConfig) -> Float[Tensor, " v"]:
         """The label prior of training's draws (`Split.log_prior` of the train split) counted from `heard` without
         any MEG: each word at its run's weight, a recited span's words down-weighted by `data.repeat_power`."""
-        repeats = SpanText(data.grouping.spans(heard).index, heard["token"].to_numpy()).repeats(data.repeat_power)
+        repeats = SpanText(data.grouping.spans(heard).index, heard[Column.TOKEN].to_numpy()).repeats(data.repeat_power)
         weight = torch.tensor(heard["weight"].to_numpy(dtype=np.float64), dtype=torch.float32)
-        return Split.prior(torch.tensor(heard["target"].to_numpy()), weight * torch.from_numpy(repeats).float())
+        return Split.prior(torch.tensor(heard[Column.TARGET].to_numpy()), weight * torch.from_numpy(repeats).float())
 
     @staticmethod
     def sequences(heard: pd.DataFrame, grouping: Grouping) -> frozenset[tuple[int, ...]]:
         """The text of every span of `heard` as its token sequence, spans cut run by run."""
-        runs = heard.groupby("run", sort=False)
-        texts = (SpanText(grouping.spans(run).index, run["token"].to_numpy()).sequences() for _, run in runs)
+        runs = heard.groupby(Column.RUN, sort=False)
+        texts = (SpanText(grouping.spans(run).index, run[Column.TOKEN].to_numpy()).sequences() for _, run in runs)
         return frozenset(chain.from_iterable(texts))

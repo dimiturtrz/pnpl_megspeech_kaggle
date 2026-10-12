@@ -9,6 +9,7 @@ from scipy.io import wavfile
 
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY, SECONDARY
+from megspeech.data.raw import Event
 from megspeech.data.raw import scans as module
 from megspeech.data.raw.kymatasync import Alignment, Clock, Envelope
 from megspeech.data.raw.masc import COLUMNS, Neuromag
@@ -130,7 +131,7 @@ def test_plays(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_events_at(tmp_path: Path) -> None:
     events = dataset(tmp_path).events_at([Clock(10.0, OFFSET, DRIFT)])
-    assert list(events.columns) == [*COLUMNS, module.TIMECHAPTER]
+    assert list(events.columns) == [*COLUMNS, Event.CHAPTER]
     assert set(events["kind"]) == {"word"}
     assert events["segment"].tolist() == [GERMAN + word for word in ("so", "in", "wahr")]
     assert events["timechapter"].tolist() == [0.5, 0.8, 2.5]

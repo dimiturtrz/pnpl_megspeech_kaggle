@@ -32,7 +32,8 @@ from mne.preprocessing import find_bad_channels_maxwell, maxwell_filter
 
 from core.paths import DataRoot
 from megspeech.data.constants import SFREQ
-from megspeech.data.raw.appleseed import Story
+from megspeech.data.raw import Event
+from megspeech.data.raw.appleseed import KIND_ORDER, Story
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.kymatasync import Alignment, Clock, Envelope
 from megspeech.data.raw.mains import Mains
@@ -212,10 +213,12 @@ class Recording:
         story = self.clip.story
         placed = [clock.place(story.events(0.0)) for clock in plays]
         per_play = story.words["sentence"].max() + 1
-        shifted = [play.assign(sentenceidx=play["sentenceidx"] + shift * per_play) for shift, play in enumerate(placed)]
+        shifted = [
+            play.assign(sentenceidx=play[Event.SENTENCE] + shift * per_play) for shift, play in enumerate(placed)
+        ]
         events = pd.concat(shifted)
-        ordered = events.assign(order=events["kind"].map({"word": 0, "phoneme": 1}))
-        return ordered.sort_values(["timemeg", "order"], kind="stable")[COLUMNS].reset_index(drop=True)
+        ordered = events.assign(order=events[Event.KIND].map(KIND_ORDER))
+        return ordered.sort_values([Event.ONSET, "order"], kind="stable")[COLUMNS].reset_index(drop=True)
 
 
 @dataclass(frozen=True)

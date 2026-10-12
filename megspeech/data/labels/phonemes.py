@@ -24,6 +24,7 @@ from torch import Tensor
 from core.paths import DataRoot
 from megspeech.data.constants import MISSING
 from megspeech.data.labels.vocabulary import Vocabulary
+from megspeech.data.raw import Event, Kind
 
 LOG = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ POSITIONS = 4
 """Leading phonemes the table spells each word with: a word has 3.25 on average (Sherlock1 run 1, 1869 words),
 and a 0.5 s window hears ~4 phonemes of ~0.1 s past the onset."""
 
-WORD = ["sentenceidx", "wordidx"]
+WORD = [Event.SENTENCE, Event.WORD]
 EVENTS = "sub-0_*_events.tsv"
 
 
@@ -56,17 +57,19 @@ class Pronunciation:
         table = pd.read_csv(
             events,
             sep="	",
-            usecols=["kind", "segment", *WORD, "phonemeidx"],
+            usecols=[Event.KIND, Event.SEGMENT, *WORD, Event.PHONEME],
             keep_default_na=False,
             na_values=MISSING,
         )
-        words = table.loc[(table["kind"] == "word") & table["segment"].notna(), ["segment", *WORD]]
-        sounds = table.loc[(table["kind"] == "phoneme") & (table["phonemeidx"] < POSITIONS)].dropna(subset=WORD)
-        sounds = sounds.assign(phoneme=sounds["segment"].str.split("_").str[0], at=sounds["phonemeidx"].astype(int))
+        words = table.loc[(table[Event.KIND] == Kind.WORD) & table[Event.SEGMENT].notna(), [Event.SEGMENT, *WORD]]
+        sounds = table.loc[(table[Event.KIND] == Kind.PHONEME) & (table[Event.PHONEME] < POSITIONS)].dropna(subset=WORD)
+        sounds = sounds.assign(
+            phoneme=sounds[Event.SEGMENT].str.split("_").str[0], at=sounds[Event.PHONEME].astype(int)
+        )
         spelled = sounds.drop_duplicates([*WORD, "at"]).pivot(index=WORD, columns="at", values="phoneme")
         spelled = spelled.reindex(columns=range(POSITIONS)).reset_index()
         joined = words.dropna(subset=WORD).merge(spelled, on=WORD)
-        return joined.rename(columns={"segment": "word"})[["word", *range(POSITIONS)]]
+        return joined.rename(columns={Event.SEGMENT: "word"})[["word", *range(POSITIONS)]]
 
     @classmethod
     def build(cls, spellings: pd.DataFrame) -> "Pronunciation":

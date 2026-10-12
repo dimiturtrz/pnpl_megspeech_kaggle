@@ -16,7 +16,7 @@ from megspeech.data.cache.kaggle import KaggleCache, Track
 from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.config import DataConfig
 from megspeech.data.heard import Heard
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 
 LOG = logging.getLogger(__name__)
 
@@ -43,13 +43,13 @@ class Corpus:
         names = list(dict.fromkeys(reading))
         geometry = data.geometry(root, device)
         source = DeviceRecording.load(cache, device, names, geometry=geometry)
-        table = source.words.assign(position=source.words.groupby("run").cumcount())
+        table = source.words.assign(position=source.words.groupby(Column.RUN).cumcount())
         words = data.carried(table)
         weights = {r.name: data.weight(r) for r in trained}
-        chosen = words[words["run"].isin(weights)]
-        weight = chosen["run"].map(weights).to_numpy(dtype=np.float64)
+        chosen = words[words[Column.RUN].isin(weights)]
+        weight = chosen[Column.RUN].map(weights).to_numpy(dtype=np.float64)
         train = cls.split(source, chosen, data, weight).recurring(data.repeat_power)
-        positions = chosen[["run", "position", "onset", "sentence"]].reset_index(drop=True)
+        positions = chosen[[Column.RUN, Column.POSITION, Column.ONSET, Column.SENTENCE]].reset_index(drop=True)
         validation = cls.domains(source, words, held, data)
         features = Features.under(root, data.features)
         train = features.split(TRAIN, train)
@@ -96,15 +96,15 @@ class Corpus:
                 following=source.samples(data.grouping.following(words)),
             )
         )
-        labels = (words["target"].to_numpy(), words["token"].to_numpy())
-        held = Split.of(windows, labels, data.grouping.spans(words), weight, Run.subjects(words["run"])).finished(
+        labels = (words[Column.TARGET].to_numpy(), words[Column.TOKEN].to_numpy())
+        held = Split.of(windows, labels, data.grouping.spans(words), weight, Run.subjects(words[Column.RUN])).finished(
             data.rate
         )
         return replace(
-            held.numbered(words["run"]),
-            source=torch.tensor(data.sources(words["run"]), device=windows.device),
-            read=torch.tensor(data.reads(words["run"]), device=windows.device),
-            muted=torch.tensor(data.muted(words["run"]), device=windows.device),
+            held.numbered(words[Column.RUN]),
+            source=torch.tensor(data.sources(words[Column.RUN]), device=windows.device),
+            read=torch.tensor(data.reads(words[Column.RUN]), device=windows.device),
+            muted=torch.tensor(data.muted(words[Column.RUN]), device=windows.device),
         )
 
     @classmethod
@@ -112,5 +112,5 @@ class Corpus:
         cls, source: DeviceRecording, words: pd.DataFrame, held: dict[str, list[Run]], data: DataConfig
     ) -> dict[str, Split]:
         """Each validation domain's `words` (`DataConfig.held`), one split per domain so each is scored alone."""
-        chosen = {name: words[words["run"].isin([r.name for r in runs])] for name, runs in held.items()}
+        chosen = {name: words[words[Column.RUN].isin([r.name for r in runs])] for name, runs in held.items()}
         return {name: cls.split(source, rows, data, np.ones(len(rows))) for name, rows in chosen.items()}

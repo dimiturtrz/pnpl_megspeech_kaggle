@@ -20,7 +20,7 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.batching.split import EVAL_SPANS, Split
 from megspeech.data.config import METRICS, DataConfig
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
@@ -113,7 +113,7 @@ def main() -> None:
             if not path.exists():
                 continue
             predicted.append(readout(split))
-            truth.append(np.load(path)[words["position"].to_numpy()].astype(np.float32))
+            truth.append(np.load(path)[words[Column.POSITION].to_numpy()].astype(np.float32))
     if not predicted:
         raise FileNotFoundError("no validation run has an envelope file: nothing to score")
     envelopes = Envelopes(np.concatenate(predicted), np.concatenate(truth))

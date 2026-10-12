@@ -27,6 +27,7 @@ from mne.forward._field_interpolation import _map_meg_or_eeg_channels
 
 from core.paths import DataRoot
 from megspeech.data.constants import SFREQ
+from megspeech.data.raw import Event, Kind
 from megspeech.data.raw.fetch import MASC, NEUROMAG
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.serialised import Corpus
@@ -46,10 +47,10 @@ MILLIMETRE = 1e-3
 WORKERS = 4
 """Recordings converted at once: the longest holds ~3.6 GB in float64 while it is filtered."""
 SOURCE = re.compile(r"sub-(?P<subject>\d+)_ses-(?P<session>\d+)_task-(?P<task>\d+)_meg\.con")
-KEPT = ("word", "phoneme")
+KEPT = tuple(Kind)
 SENTENCE = "sentence"
 """The condition of a story's own sentences; `word_list` rows are the story's words shuffled, so no sentence."""
-COLUMNS = ["kind", "segment", "sentenceidx", "wordidx", "phonemeidx", "timemeg", "duration"]
+COLUMNS = [Event.KIND, Event.SEGMENT, Event.SENTENCE, Event.WORD, Event.PHONEME, Event.ONSET, Event.DURATION]
 
 
 @dataclass(frozen=True)
@@ -162,17 +163,17 @@ class Recording:
         trials = pd.DataFrame([ast.literal_eval(trial) for trial in table["trial_type"]], index=table.index)
         trials = trials.join(table[["onset", "duration"]])
         trials = trials[trials["kind"].isin(KEPT)]
-        phoneme = trials["kind"] == "phoneme"
+        phoneme = trials["kind"] == Kind.PHONEME
         place = trials[phoneme].groupby(["sequence_id", "word_index"]).cumcount()
         return pd.DataFrame(
             {
-                "kind": trials["kind"],
-                "segment": trials["word"].where(~phoneme, trials["phoneme"]),
-                "sentenceidx": trials["sequence_id"].where(trials["condition"] == SENTENCE),
-                "wordidx": trials["word_index"],
-                "phonemeidx": place.reindex(trials.index),
-                "timemeg": trials["onset"],
-                "duration": trials["duration"],
+                Event.KIND: trials["kind"],
+                Event.SEGMENT: trials["word"].where(~phoneme, trials["phoneme"]),
+                Event.SENTENCE: trials["sequence_id"].where(trials["condition"] == SENTENCE),
+                Event.WORD: trials["word_index"],
+                Event.PHONEME: place.reindex(trials.index),
+                Event.ONSET: trials["onset"],
+                Event.DURATION: trials["duration"],
             },
             columns=COLUMNS,
         ).reset_index(drop=True)

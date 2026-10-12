@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from jaxtyping import Int
 
-from megspeech.data.raw.runs import NAME
+from megspeech.data.raw.runs import NAME, Column
 
 STORY = re.compile(r"MASC(?P<story>\d+)")
 """The task `megspeech.data.raw.masc.Recording.name` gives a MASC story's run."""
@@ -27,13 +27,13 @@ class Instances:
     @classmethod
     def of(cls, words: pd.DataFrame) -> "Instances":
         """The instances of `words` (`Corpus.positions`): its `run` names and each word's `position` in its run."""
-        names = pd.Series(words["run"].unique(), dtype=object)
+        names = pd.Series(words[Column.RUN].unique(), dtype=object)
         parsed = pd.Series([f"{name}_" for name in names]).str.extract(NAME)
         stories = pd.to_numeric(parsed["task"].str.extract(f"^{STORY.pattern}$")["story"])
-        position = words["position"].to_numpy(np.int64)
+        position = words[Column.POSITION].to_numpy(np.int64)
         stride = int(position.max()) + 1 if len(position) else 0
-        story_of = words["run"].map(pd.Series(stories.to_numpy(), index=names)).to_numpy(np.float64)
-        subject_of = words["run"].map(pd.Series(pd.to_numeric(parsed["subject"]).to_numpy(), index=names))
+        story_of = words[Column.RUN].map(pd.Series(stories.to_numpy(), index=names)).to_numpy(np.float64)
+        subject_of = words[Column.RUN].map(pd.Series(pd.to_numeric(parsed["subject"]).to_numpy(), index=names))
         code = np.where(np.isnan(story_of), NO_INSTANCE, np.nan_to_num(story_of) * stride + position)
         subject = subject_of.fillna(NO_INSTANCE).to_numpy(np.int64, copy=True)
         return cls(code.astype(np.int64), subject)
@@ -43,16 +43,20 @@ class Instances:
         """Each word's sentence code among `words` (`Corpus.positions`), the same for every subject's hearing of a
         MASC sentence (its story and its first word's position) and outside MASC its run's own `sentence`."""
         code = cls.of(words).code
-        position = words["position"].to_numpy(np.int64)
-        opening = words.groupby(["run", "sentence"], sort=False)["position"].transform("min").to_numpy(np.int64)
+        position = words[Column.POSITION].to_numpy(np.int64)
+        opening = (
+            words.groupby([Column.RUN, Column.SENTENCE], sort=False)[Column.POSITION]
+            .transform("min")
+            .to_numpy(np.int64)
+        )
         masc = code != NO_INSTANCE
         keys = pd.DataFrame(
             {
-                "run": np.where(masc, "", words["run"].to_numpy(object)),
-                "at": np.where(masc, code - position + opening, words["sentence"].to_numpy(np.int64)),
+                Column.RUN: np.where(masc, "", words[Column.RUN].to_numpy(object)),
+                "at": np.where(masc, code - position + opening, words[Column.SENTENCE].to_numpy(np.int64)),
             }
         )
-        return keys.groupby(["run", "at"], sort=False).ngroup().to_numpy(np.int64, copy=True)
+        return keys.groupby([Column.RUN, "at"], sort=False).ngroup().to_numpy(np.int64, copy=True)
 
     @property
     def heard(self) -> int:

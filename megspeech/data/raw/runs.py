@@ -27,6 +27,19 @@ SOURCES = (range(DEEP, DEEP + 1), range(1, 13), range(13, 23), range(23, 33))
 `megspeech.evaluation.studies.pooledbalance`, the Broad track's recording sources); any other id is its own source."""
 
 
+class Column(StrEnum):
+    """A column of the heard-words table each run's words are read into (`RunCache.words`), keyed by run."""
+
+    RUN = "run"
+    SENTENCE = "sentence"
+    ONSET = "onset"
+    WORD = "word"
+    END = "end"
+    POSITION = "position"
+    TARGET = "target"
+    TOKEN = "token"
+
+
 class Partition(StrEnum):
     TRAIN = "train"
     VALIDATION = "validation"

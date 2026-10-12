@@ -36,7 +36,7 @@ from megspeech.data.heard import Heard
 from megspeech.data.labels.context_tags import ContextTags
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.data.raw.runs import DEEP, Run
+from megspeech.data.raw.runs import DEEP, Column, Run
 from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.evaluator import Evaluator
@@ -138,7 +138,7 @@ class Domain:
     ) -> "Domain":
         """`logits` and `labels` of `words`' rows, each given its bonus from the validation table row of the same run
         and onset; a word the table dropped for want of a tag has none."""
-        rows = valid.rows(words["run"].to_numpy(), words["onset"].to_numpy(np.float64))
+        rows = valid.rows(words[Column.RUN].to_numpy(), words[Column.ONSET].to_numpy(np.float64))
         found = rows >= 0
         wanted = labels.cpu().numpy()
         if (valid.targets[rows[found]] != wanted[found]).any():
@@ -294,7 +294,7 @@ class Held:
 
     def domain(self, name: str, split: Split, novel: Int[Tensor, " k"], bonus: Float[np.ndarray, "m v"]) -> Domain:
         """Domain `name`'s `novel` words of `split`, each given its row of `bonus`."""
-        rows = self.heard[self.heard["run"].isin([run.name for run in self.runs[name]])].iloc[novel.cpu().numpy()]
+        rows = self.heard[self.heard[Column.RUN].isin([run.name for run in self.runs[name]])].iloc[novel.cpu().numpy()]
         logits = self.evaluator.logits(self.model, split)[Head.CONTEXT][novel]
         return Domain.of(logits, split.y[novel], rows, self.valid, bonus)
 

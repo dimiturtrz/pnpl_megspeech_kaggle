@@ -37,17 +37,18 @@ from core.paths import DataRoot
 from megspeech.data.constants import MISSING
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import PRIMARY, Vocabulary
-from megspeech.data.raw.runs import DEEP, Partition, Run
+from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.runs import DEEP, Column, Partition, Run
 
 LOG = logging.getLogger(__name__)
 
 BATCH = 128
 """Sentences spaCy tags per GPU batch."""
-SENTENCE_COLUMNS = ["kind", "segment", "sentenceidx", "wordidx", "timemeg"]
+SENTENCE_COLUMNS = [Event.KIND, Event.SEGMENT, Event.SENTENCE, Event.WORD, Event.ONSET]
 CLASSES = [*("ADJ", "ADP", "ADV", "AUX", "CCONJ", "DET", "NOUN", "PART", "PRON", "SCONJ", "VERB"), "OTHER"]
 """The tag set a token is classified into; the last class takes every tag the others do not name."""
 OTHER = len(CLASSES) - 1
-TAGGED_COLUMNS = ["run", "onset", "word", "tag"]
+TAGGED_COLUMNS = [Column.RUN, Column.ONSET, Column.WORD, "tag"]
 SUMMARY_TAGS = 3
 """Classes each vocabulary word's summary lists, by share."""
 
@@ -87,16 +88,16 @@ class ContextTags:
     def words(run: Run) -> pd.DataFrame:
         """One run's sentence words in sentence order: `run`, `onset`, `sentence` and the `word` as spoken."""
         table = pd.read_csv(run.events, sep="\t", usecols=SENTENCE_COLUMNS, keep_default_na=False, na_values=MISSING)
-        heard = table.loc[(table["kind"] == "word") & table["segment"].notna()].dropna(
-            subset=["sentenceidx", "wordidx"]
+        heard = table.loc[(table[Event.KIND] == Kind.WORD) & table[Event.SEGMENT].notna()].dropna(
+            subset=[Event.SENTENCE, Event.WORD]
         )
-        ordered = heard.sort_values(["sentenceidx", "wordidx"])
+        ordered = heard.sort_values([Event.SENTENCE, Event.WORD])
         return pd.DataFrame(
             {
-                "run": run.name,
-                "onset": ordered["timemeg"].to_numpy(np.float64),
-                "sentence": ordered["sentenceidx"].to_numpy(np.int64),
-                "word": ordered["segment"].astype(str).to_numpy(),
+                Column.RUN: run.name,
+                Column.ONSET: ordered[Event.ONSET].to_numpy(np.float64),
+                Column.SENTENCE: ordered[Event.SENTENCE].to_numpy(np.int64),
+                Column.WORD: ordered[Event.SEGMENT].astype(str).to_numpy(),
             }
         )
 
@@ -104,8 +105,8 @@ class ContextTags:
     def tagged(words: pd.DataFrame, tagger: Tagger) -> pd.DataFrame:
         """`words` (`ContextTags.words` of any runs) beside the `tag` its sentence gives it, "" where the tagger's
         output does not match the sentence."""
-        groups = [group for _, group in words.groupby(["run", "sentence"], sort=False)]
-        given = tagger.tag([group["word"].tolist() for group in groups])
+        groups = [group for _, group in words.groupby([Column.RUN, Column.SENTENCE], sort=False)]
+        given = tagger.tag([group[Column.WORD].tolist() for group in groups])
         flat = chain.from_iterable(
             tags if len(tags) == len(group) else [""] * len(group) for group, tags in zip(groups, given, strict=True)
         )
@@ -120,9 +121,11 @@ class ContextTags:
     @classmethod
     def build(cls, tagged: pd.DataFrame) -> "ContextTags":
         """The table of `tagged`'s classes, sorted by run and onset."""
-        table = tagged.assign(code=cls.classified(tagged)).sort_values(["run", "onset"])
-        table = table.drop_duplicates(["run", "onset"])
-        return cls(table["run"].to_numpy(str), table["onset"].to_numpy(np.float64), table["code"].to_numpy(np.int64))
+        table = tagged.assign(code=cls.classified(tagged)).sort_values([Column.RUN, Column.ONSET])
+        table = table.drop_duplicates([Column.RUN, Column.ONSET])
+        return cls(
+            table[Column.RUN].to_numpy(str), table[Column.ONSET].to_numpy(np.float64), table["code"].to_numpy(np.int64)
+        )
 
     @classmethod
     def read(cls, runs: Sequence[Run], tagger: Tagger) -> "ContextTags":
@@ -132,7 +135,7 @@ class ContextTags:
     def summary(tagged: pd.DataFrame, vocabulary: Vocabulary, *, top: int = SUMMARY_TAGS) -> pd.DataFrame:
         """Each vocabulary word's token count and its `top` classes by share (`UNKNOWN` included), over `tagged`."""
         named = pd.Series(np.array([*CLASSES, "UNKNOWN"])[ContextTags.classified(tagged)], index=tagged.index)
-        spelled = Vocabulary.spelled(tagged["word"])
+        spelled = Vocabulary.spelled(tagged[Column.WORD])
         rows = []
         for word in vocabulary.words:
             mine = spelled == word
@@ -164,7 +167,9 @@ class ContextTags:
 
     def tensor(self, words: pd.DataFrame, device: torch.device) -> Int[Tensor, " n"]:
         """The class of each of `words`' (`run`, `onset`) rows as a tensor on `device`."""
-        return torch.from_numpy(self.classes(words["run"].to_numpy(), words["onset"].to_numpy(np.float64))).to(device)
+        return torch.from_numpy(
+            self.classes(words[Column.RUN].to_numpy(), words[Column.ONSET].to_numpy(np.float64))
+        ).to(device)
 
     @staticmethod
     def trained(runs: Sequence[Run]) -> list[Run]:

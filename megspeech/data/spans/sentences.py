@@ -2,6 +2,7 @@
 
 import pandas as pd
 
+from megspeech.data.raw.runs import Column
 from megspeech.data.spans.spans import MAX_WORDS, Spans
 
 
@@ -12,5 +13,5 @@ class Sentences:
         self.words = words
 
     def __call__(self, table: pd.DataFrame) -> Spans:
-        group = table.groupby(["run", "sentence"], sort=False).ngroup().to_numpy()
-        return Spans.by_sentence(group, table["onset"].to_numpy(), self.words)
+        group = table.groupby([Column.RUN, Column.SENTENCE], sort=False).ngroup().to_numpy()
+        return Spans.by_sentence(group, table[Column.ONSET].to_numpy(), self.words)

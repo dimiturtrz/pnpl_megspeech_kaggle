@@ -28,7 +28,8 @@ from transformers import Data2VecAudioModel, HubertModel, Wav2Vec2Model
 from core.paths import DataRoot
 from megspeech.data.config import DataConfig, Val
 from megspeech.data.constants import MISSING
-from megspeech.data.raw.runs import Partition, Run
+from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.runs import Column, Partition, Run
 from megspeech.device import Device
 from megspeech.objective.targets.t5 import Encoder
 
@@ -221,12 +222,12 @@ class Heard:
         events = pd.read_csv(
             self.run.events,
             sep="\t",
-            usecols=["kind", "segment", "timechapter"],
+            usecols=[Event.KIND, Event.SEGMENT, Event.CHAPTER],
             keep_default_na=False,
             na_values=MISSING,
         )
-        heard = events[(events["kind"] == "word") & events["segment"].notna()]
-        return heard["timechapter"].to_numpy(dtype=np.float64) + LAG
+        heard = events[(events[Event.KIND] == Kind.WORD) & events[Event.SEGMENT].notna()]
+        return heard[Event.CHAPTER].to_numpy(dtype=np.float64) + LAG
 
     def targets(self, encoder: Encoder, device: torch.device, layers: slice = LAYERS) -> Targets:
         chapter = Chapter.read(self.chapters()[0])
@@ -284,12 +285,12 @@ class Speech:
         words = words.reset_index(drop=True)
         width = next((np.load(path, mmap_mode="r").shape[1] for path in directory.glob("*.npy")), 1)
         vectors = np.full((len(words), width), np.nan, dtype=np.float16)
-        for run, group in words.groupby("run", sort=False):
+        for run, group in words.groupby(Column.RUN, sort=False):
             path = directory / f"{run}.npy"
             if path.exists():
                 targets = Targets(np.load(path))
                 chosen = targets.centred() if centred else targets
-                vectors[group.index] = chosen.vectors[group["position"].to_numpy()]
+                vectors[group.index] = chosen.vectors[group[Column.POSITION].to_numpy()]
         present = np.isfinite(vectors).all(axis=1)
         rows = np.where(present, np.cumsum(present) - 1, -1)
         return cls(torch.from_numpy(rows), torch.from_numpy(vectors[present])).merged()

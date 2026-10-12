@@ -21,7 +21,7 @@ from core.paths import DataRoot
 from megspeech.data.cache.kaggle import ArchiveKind, Epochs, KaggleCache
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY
-from megspeech.data.raw.runs import DEEP, Partition, Run
+from megspeech.data.raw.runs import DEEP, Column, Partition, Run
 from megspeech.evaluation.text import RULER, Text
 
 LOG = logging.getLogger(__name__)
@@ -48,10 +48,10 @@ class Overlap:
     def of(cls, reference: Text, other: Text, subject: int) -> "Overlap":
         at, words = reference.matches(other), reference.words
         found = at >= 0
-        shift = other.words["onset"].to_numpy()[at[found]] - words["onset"].to_numpy()[found]
+        shift = other.words[Column.ONSET].to_numpy()[at[found]] - words[Column.ONSET].to_numpy()[found]
         median = float(np.median(shift)) if found.any() else float("nan")
-        labelled = PRIMARY.labels(words["word"].astype(str)) != ABSENT
-        whole = pd.Series(found).groupby(words["sentence"].to_numpy()).all()
+        labelled = PRIMARY.labels(words[Column.WORD].astype(str)) != ABSENT
+        whole = pd.Series(found).groupby(words[Column.SENTENCE].to_numpy()).all()
         return cls(
             subject,
             int(found.sum()),
@@ -114,7 +114,7 @@ class Survey:
         )
         pooled = Run.pooled(runs)
         table = RunCache.under(self.root.processed()).published()
-        texts = {run.name: Text.of(table[table["run"] == run.name]) for run in [reference, *pooled]}
+        texts = {run.name: Text.of(table[table[Column.RUN] == run.name]) for run in [reference, *pooled]}
         return [Overlap.of(texts[reference.name], texts[run.name], run.subject) for run in pooled]
 
     def kaggle(self) -> list[SentenceMatch]:

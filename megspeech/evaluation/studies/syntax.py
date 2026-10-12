@@ -28,7 +28,7 @@ from megspeech.data.config import DataConfig
 from megspeech.data.labels.context_tags import CLASSES, ContextTags
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.data.raw.runs import DEEP, Run
+from megspeech.data.raw.runs import DEEP, Column, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
@@ -62,8 +62,10 @@ class Timing:
     @staticmethod
     def gaps(words: pd.DataFrame) -> pd.Series:
         """Seconds from each word's onset to the next in its sentence, NaN for the last, in `words`' order."""
-        ordered = words.reset_index(drop=True).sort_values(["run", "sentence", "onset"])
-        following = ordered.groupby(["run", "sentence"], sort=False)["onset"].shift(-1) - ordered["onset"]
+        ordered = words.reset_index(drop=True).sort_values([Column.RUN, Column.SENTENCE, Column.ONSET])
+        following = (
+            ordered.groupby([Column.RUN, Column.SENTENCE], sort=False)[Column.ONSET].shift(-1) - ordered[Column.ONSET]
+        )
         return following.sort_index()
 
     @classmethod
@@ -74,11 +76,11 @@ class Timing:
     def features(self, words: pd.DataFrame) -> Float[np.ndarray, "n f"]:
         """Seconds to the next onset (`final` for the last word), from the previous onset (0 for its first), the
         word's position, its sentence's length and the position as a share of it, in `words`' order."""
-        ordered = words.reset_index(drop=True).sort_values(["run", "sentence", "onset"])
-        grouped = ordered.groupby(["run", "sentence"], sort=False)
-        preceding = (ordered["onset"] - grouped["onset"].shift(1)).fillna(0.0)
+        ordered = words.reset_index(drop=True).sort_values([Column.RUN, Column.SENTENCE, Column.ONSET])
+        grouped = ordered.groupby([Column.RUN, Column.SENTENCE], sort=False)
+        preceding = (ordered[Column.ONSET] - grouped[Column.ONSET].shift(1)).fillna(0.0)
         position = grouped.cumcount()
-        length = grouped["onset"].transform("size")
+        length = grouped[Column.ONSET].transform("size")
         table = pd.DataFrame(
             {
                 "following": self.gaps(words).fillna(self.final).reindex(ordered.index),
@@ -227,11 +229,11 @@ class Table:
         for name, runs in held.items():
             for run, (words, split) in reader.splits(runs).items():
                 read = embedded(split)
-                onsets = words["onset"].to_numpy(np.float64)
-                tags = contexts.classes(words["run"].to_numpy(), onsets)
-                in_50 = (words["target"] >= 0).to_numpy()
-                sentences = (run.name + "/" + words["sentence"].astype(str)).to_numpy()
-                targets = words["target"].to_numpy(np.int64)
+                onsets = words[Column.ONSET].to_numpy(np.float64)
+                tags = contexts.classes(words[Column.RUN].to_numpy(), onsets)
+                in_50 = (words[Column.TARGET] >= 0).to_numpy()
+                sentences = (run.name + "/" + words[Column.SENTENCE].astype(str)).to_numpy()
+                targets = words[Column.TARGET].to_numpy(np.int64)
                 features = timing.features(words)
                 pieces.append(
                     (

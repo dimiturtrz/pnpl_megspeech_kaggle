@@ -21,6 +21,7 @@ from transformers import AutoTokenizer, T5EncoderModel
 from core.paths import DataRoot
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.labels.vocabulary import PRIMARY
+from megspeech.data.raw.runs import Column
 from megspeech.data.spans.grouping import Grouping
 
 MODEL = "google-t5/t5-large"
@@ -97,10 +98,10 @@ class Lexicon:
     @classmethod
     def encode(cls, words: pd.DataFrame, tokenizer: Tokenizer, encoder: Encoder, layer: int) -> "Lexicon":
         """The distinct `token`s of `words` (`Grouping.carried` rows), each lower-cased word as `Prototypes.encode`."""
-        distinct = words.drop_duplicates("token").sort_values("token")
-        text = tuple(distinct["word"].astype(str).str.lower())
+        distinct = words.drop_duplicates(Column.TOKEN).sort_values(Column.TOKEN)
+        text = tuple(distinct[Column.WORD].astype(str).str.lower())
         vectors = Prototypes.encode(text, tokenizer, encoder, layer).vectors
-        return cls(torch.from_numpy(distinct["token"].to_numpy(np.int64, copy=True)), vectors)
+        return cls(torch.from_numpy(distinct[Column.TOKEN].to_numpy(np.int64, copy=True)), vectors)
 
     @staticmethod
     def path(root: DataRoot) -> Path:

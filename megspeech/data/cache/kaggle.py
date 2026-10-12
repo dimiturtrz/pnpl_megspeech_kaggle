@@ -33,7 +33,7 @@ from megspeech.data.cache.cleaning import UNCHANGED, Cleaner, Cleaning
 from megspeech.data.cache.run_cache import DeviceRecording, RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
 from megspeech.data.labels.vocabulary import SECONDARY
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 from megspeech.device import Device
 
 LOG = logging.getLogger(__name__)
@@ -121,7 +121,9 @@ class Archive:
             raise ValueError(f"{self.name}: a word's window runs past its epoch")
         at = (start[epoch] + begin) / rate
         end = (start + kept)[epoch] / rate
-        return pd.DataFrame({"run": self.name, "onset": at, "word": "", "sentence": epoch, "end": end})
+        return pd.DataFrame(
+            {Column.RUN: self.name, Column.ONSET: at, Column.WORD: "", Column.SENTENCE: epoch, Column.END: end}
+        )
 
 
 class Track(StrEnum):

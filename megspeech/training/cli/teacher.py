@@ -19,6 +19,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
+from megspeech.data.raw.runs import Column
 from megspeech.device import Device
 from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.training.config import RunConfig
@@ -64,8 +65,8 @@ class Probe:
         rows = (speech.rows >= 0).nonzero().squeeze(1).cpu().numpy()
         chosen = np.sort(np.random.default_rng(seed).permutation(rows)[:SAMPLE])
         device = features.device
-        order = {run: rank for rank, run in enumerate(sorted(positions["run"].unique()))}
-        held = torch.from_numpy(positions["run"].map(order).to_numpy()[chosen] % HELD_EVERY == 0).to(device)
+        order = {run: rank for rank, run in enumerate(sorted(positions[Column.RUN].unique()))}
+        held = torch.from_numpy(positions[Column.RUN].map(order).to_numpy()[chosen] % HELD_EVERY == 0).to(device)
         picked = torch.from_numpy(chosen)
         x = features[picked.to(device)].float()
         y = speech.vectors[speech.rows[picked]].to(device).float()

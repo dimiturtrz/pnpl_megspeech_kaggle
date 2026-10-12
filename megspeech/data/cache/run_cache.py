@@ -35,7 +35,7 @@ from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.cache.cleaning import Cleaner, Cleaning
 from megspeech.data.constants import DECIMATE, HALF, MISSING, PICO, RATE, SFREQ, TAIL, WORKERS
 from megspeech.data.labels.vocabulary import ABSENT, IGNORE, PRIMARY, Vocabulary
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 from megspeech.data.spans.grouping import KAGGLE_WORDS, Grouping
 from megspeech.data.spans.spans import Spans
 
@@ -142,11 +142,11 @@ class RunCache:
         finish = (heard["timemeg"] + heard["duration"].fillna(0.0)).groupby(sentence).transform("max")
         return pd.DataFrame(
             {
-                "run": run.name,
-                "onset": heard["timemeg"].to_numpy(dtype=np.float64),
-                "word": heard["segment"].to_numpy(),
-                "sentence": sentence,
-                "end": finish.to_numpy(dtype=np.float64) + TAIL,
+                Column.RUN: run.name,
+                Column.ONSET: heard["timemeg"].to_numpy(dtype=np.float64),
+                Column.WORD: heard["segment"].to_numpy(),
+                Column.SENTENCE: sentence,
+                Column.END: finish.to_numpy(dtype=np.float64) + TAIL,
                 "finish": (heard["timemeg"] + heard["duration"].fillna(0.0)).to_numpy(dtype=np.float64),
             }
         )
@@ -178,16 +178,18 @@ class RunCache:
         ending `TAIL` after the piece's last word ends."""
         samples = {name: np.load(self.path(name), mmap_mode="r").shape[1] for name in names}
         table = self.published()
-        table = table[table["run"].isin(samples)]
-        order = table["run"].map({name: position for position, name in enumerate(names)}).to_numpy()
+        table = table[table[Column.RUN].isin(samples)]
+        order = table[Column.RUN].map({name: position for position, name in enumerate(names)}).to_numpy()
         table = table.iloc[np.argsort(order, kind="stable")].reset_index(drop=True)
-        table["sample"] = np.round(table["onset"] * self.rate).astype(np.int64)
-        table["opening"] = table.groupby(["run", "sentence"])["sample"].transform("min")
-        table["samples"] = table["run"].map(samples).astype(np.int64)
-        self.bounded(table, "", "end", ["run", "sentence"])
-        piece, _ = Spans.piece_codes(table.groupby(["run", "sentence"], sort=False).ngroup().to_numpy(), KAGGLE_WORDS)
+        table["sample"] = np.round(table[Column.ONSET] * self.rate).astype(np.int64)
+        table["opening"] = table.groupby([Column.RUN, Column.SENTENCE])["sample"].transform("min")
+        table["samples"] = table[Column.RUN].map(samples).astype(np.int64)
+        self.bounded(table, "", Column.END, [Column.RUN, Column.SENTENCE])
+        piece, _ = Spans.piece_codes(
+            table.groupby([Column.RUN, Column.SENTENCE], sort=False).ngroup().to_numpy(), KAGGLE_WORDS
+        )
         table["piece"] = piece
-        finish = table["finish"] if "finish" in table else table["end"] - TAIL
+        finish = table["finish"] if "finish" in table else table[Column.END] - TAIL
         table["piece_end"] = finish.groupby(piece).transform("max") + TAIL
         self.bounded(table, "piece_", "piece_end", ["piece"])
         return table
@@ -205,9 +207,9 @@ class RunCache:
     def carried(table: pd.DataFrame, grouping: Grouping, rate: float = RATE) -> pd.DataFrame:
         """The words of `table` (sampled at `rate`) that `grouping` carries and whose 1 s window fits in their run, with
         their `target` and `token` (the lower-cased word, hashed)."""
-        labels = PRIMARY.labels(table["word"])
+        labels = PRIMARY.labels(table[Column.WORD])
         target = np.where(labels == ABSENT, IGNORE, labels)
-        return table.assign(target=target, token=Vocabulary.token(table["word"]))[
+        return table.assign(target=target, token=Vocabulary.token(table[Column.WORD]))[
             grouping.keep(target) & RunCache.inside(table, round(rate))
         ]
 
@@ -251,7 +253,7 @@ class DeviceRecording:
             geometry.align(run, name)
             meg[:, begin : begin + signal.shape[1]].copy_(geometry.project(run))
         words = cache.table(chosen)
-        words["start"] = words["run"].map(dict(zip(chosen, offsets[:-1].tolist(), strict=True)))
+        words["start"] = words[Column.RUN].map(dict(zip(chosen, offsets[:-1].tolist(), strict=True)))
         words["at"] = words["start"] + words["sample"]
         return cls(meg, offsets, chosen, words)
 

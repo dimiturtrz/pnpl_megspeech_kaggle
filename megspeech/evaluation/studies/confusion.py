@@ -33,6 +33,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.phonemes import EVENTS, WORD
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
+from megspeech.data.raw import Event, Kind
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
@@ -119,11 +120,13 @@ class Spellings:
         """Each word's most common phoneme count in the events' forced alignment (NaN if it never occurs)."""
         pieces = []
         for path in events:
-            table = pd.read_csv(path, sep="\t", usecols=["kind", "segment", *WORD], dtype={"segment": str})
-            sounds = table[(table["kind"] == "phoneme") & ~table["segment"].str.startswith(NON_WORD_PHONEMES)]
+            table = pd.read_csv(path, sep="\t", usecols=[Event.KIND, Event.SEGMENT, *WORD], dtype={Event.SEGMENT: str})
+            sounds = table[
+                (table[Event.KIND] == Kind.PHONEME) & ~table[Event.SEGMENT].str.startswith(NON_WORD_PHONEMES)
+            ]
             counts = sounds.groupby(WORD).size().rename("count").reset_index()
-            named = table.loc[table["kind"] == "word", ["segment", *WORD]].merge(counts, on=WORD)
-            pieces.append(named.assign(word=Vocabulary.spelled(named["segment"]))[["word", "count"]])
+            named = table.loc[table[Event.KIND] == Kind.WORD, [Event.SEGMENT, *WORD]].merge(counts, on=WORD)
+            pieces.append(named.assign(word=Vocabulary.spelled(named[Event.SEGMENT]))[["word", "count"]])
         merged = pd.concat(pieces, ignore_index=True)
         common = merged.groupby("word")["count"].agg(lambda counted: counted.mode().iloc[0])
         return np.array([float(common.get(word, np.nan)) for word in self.words])

@@ -7,7 +7,7 @@ from jaxtyping import Float, Int
 
 from megspeech.data.cache.run_cache import NO_SENTENCE, RunCache
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY, VOCAB_SIZE
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 
 Picked = tuple[list[Run], list[Run]]
 """A source's sessions picked for validation, then for test."""
@@ -36,13 +36,19 @@ class Stratify:
     def profile(run: Run, books: tuple[str, ...]) -> Float[np.ndarray, " d"]:
         """`run`'s additive counts (`WORDS`...), its labels' and its words under its book in `books`."""
         words = RunCache.words(run)
-        labels = PRIMARY.labels(words["word"])
+        labels = PRIMARY.labels(words[Column.WORD])
         known = labels[labels != ABSENT]
-        sentenced = words[words["sentence"] != NO_SENTENCE]
-        intervals = sentenced.groupby("sentence")["onset"].diff().dropna().to_numpy()
+        sentenced = words[words[Column.SENTENCE] != NO_SENTENCE]
+        intervals = sentenced.groupby(Column.SENTENCE)[Column.ONSET].diff().dropna().to_numpy()
         intervals = intervals[intervals > 0]
         book = np.eye(len(books))[books.index(run.key[0])] * len(words)
-        counts = [len(words), sentenced["sentence"].nunique(), len(sentenced), np.log(intervals).sum(), len(intervals)]
+        counts = [
+            len(words),
+            sentenced[Column.SENTENCE].nunique(),
+            len(sentenced),
+            np.log(intervals).sum(),
+            len(intervals),
+        ]
         return np.concatenate([counts, [len(known)], np.bincount(known, minlength=VOCAB_SIZE), book])
 
     @staticmethod

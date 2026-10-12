@@ -16,7 +16,7 @@ from core.paths import DataRoot
 from megspeech.data.config import DataConfig
 from megspeech.data.labels.context_tags import ContextTags
 from megspeech.data.labels.phonemes import UNKNOWN
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.studies.syntax import Embedded, Probed
@@ -57,9 +57,9 @@ def main() -> None:
     domain: list[np.ndarray] = []
     for name, runs in reader.ruled(Run.discover(root.raw())).items():
         for words, split in reader.splits(runs).values():
-            tags.append(contexts.classes(words["run"].to_numpy(), words["onset"].to_numpy(np.float64)))
+            tags.append(contexts.classes(words[Column.RUN].to_numpy(), words[Column.ONSET].to_numpy(np.float64)))
             predicted.append(embedded.tagged(split))
-            vocabulary.append((words["target"] >= 0).to_numpy())
+            vocabulary.append((words[Column.TARGET] >= 0).to_numpy())
             domain.append(np.full(len(words), name))
     headed = Headed(*map(np.concatenate, (tags, predicted, vocabulary, domain)))
     scored, hit = headed.scored()

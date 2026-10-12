@@ -23,7 +23,7 @@ from torch.nn import functional
 
 from core.paths import DataRoot
 from megspeech.data.config import DataConfig
-from megspeech.data.raw.runs import DEEP, Partition, Run
+from megspeech.data.raw.runs import DEEP, Column, Partition, Run
 from megspeech.device import Device
 from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.studies.expertcheck import Probe
@@ -190,7 +190,7 @@ class Lexical:
 
     def gather(self, words: pd.DataFrame) -> tuple[Bool[np.ndarray, " n"], Float[Tensor, "m d"]]:
         """The words (`token`) the lexicon holds, and their vectors."""
-        rows = self.lexicon.rows(torch.from_numpy(words["token"].to_numpy(np.int64, copy=True)))
+        rows = self.lexicon.rows(torch.from_numpy(words[Column.TOKEN].to_numpy(np.int64, copy=True)))
         present = (rows >= 0).numpy()
         vectors = self.lexicon.vectors
         return present, vectors.float()[rows[torch.from_numpy(present)]]
@@ -240,7 +240,7 @@ class Words:
         vectors: list[Tensor] = []
         for start in range(0, len(runs), CHUNK):
             for part, split in reader.splits(runs[start : start + CHUNK]).values():
-                tables.append(part[["run", "position", "target", "token"]])
+                tables.append(part[[Column.RUN, Column.POSITION, Column.TARGET, Column.TOKEN]])
                 vectors.append(torch.from_numpy(embedded(split)[Tap.WORD]))
         return cls(pd.concat(tables, ignore_index=True), torch.cat(vectors)).sample(limit)
 
@@ -257,8 +257,8 @@ class Words:
 
     def by_runs(self) -> tuple["Words", "Words"]:
         """The words of all but every `HELD_EVERY`-th run, and those of the rest (runs in name order)."""
-        names = sorted(self.table["run"].unique())
-        held = self.table["run"].isin(names[::HELD_EVERY]).to_numpy()
+        names = sorted(self.table[Column.RUN].unique())
+        held = self.table[Column.RUN].isin(names[::HELD_EVERY]).to_numpy()
         keep, drop = torch.from_numpy(~held), torch.from_numpy(held)
         return (
             Words(self.table[~held].reset_index(drop=True), self.vectors[keep]),
@@ -267,7 +267,7 @@ class Words:
 
     def labels(self, present: Bool[np.ndarray, " n"]) -> Int[Tensor, " m"]:
         """The 50-way target of each `present` word, IGNORE where it is outside the 50."""
-        return torch.from_numpy(self.table["target"].to_numpy(np.int64)[present])
+        return torch.from_numpy(self.table[Column.TARGET].to_numpy(np.int64)[present])
 
 
 @dataclass(frozen=True)

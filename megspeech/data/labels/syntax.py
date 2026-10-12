@@ -26,6 +26,7 @@ from core.paths import DataRoot
 from megspeech.data.constants import MISSING
 from megspeech.data.labels.phonemes import EVENTS, UNKNOWN, WORD
 from megspeech.data.labels.vocabulary import Vocabulary
+from megspeech.data.raw import Event, Kind
 
 LOG = logging.getLogger(__name__)
 
@@ -52,11 +53,11 @@ class PartsOfSpeech:
     def sentences(events: Path) -> list[list[str]]:
         """One run's sentences, each its words in order; words outside a sentence left out."""
         table = pd.read_csv(
-            events, sep="\t", usecols=["kind", "segment", *WORD], keep_default_na=False, na_values=MISSING
+            events, sep="\t", usecols=[Event.KIND, Event.SEGMENT, *WORD], keep_default_na=False, na_values=MISSING
         )
-        words = table.loc[(table["kind"] == "word") & table["segment"].notna()].dropna(subset=WORD)
+        words = table.loc[(table[Event.KIND] == Kind.WORD) & table[Event.SEGMENT].notna()].dropna(subset=WORD)
         ordered = words.sort_values(WORD)
-        return [group["segment"].astype(str).tolist() for _, group in ordered.groupby("sentenceidx", sort=True)]
+        return [group[Event.SEGMENT].astype(str).tolist() for _, group in ordered.groupby(Event.SENTENCE, sort=True)]
 
     @staticmethod
     def tagged(sentences: Sequence[list[str]], tagger: Language) -> pd.DataFrame:

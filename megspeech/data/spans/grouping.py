@@ -9,6 +9,7 @@ import pandas as pd
 from jaxtyping import Bool, Int
 
 from megspeech.data.labels.vocabulary import IGNORE
+from megspeech.data.raw.runs import Column
 from megspeech.data.spans.pieces import Pieces
 from megspeech.data.spans.sentences import Sentences
 from megspeech.data.spans.spans import Spans
@@ -73,7 +74,7 @@ class Grouping(StrEnum):
 
 
 RULES = {
-    Grouping.GAP: Rule("samples", lambda words: Spans.by_gap(words["onset"].to_numpy()), unlabelled=False),
+    Grouping.GAP: Rule("samples", lambda words: Spans.by_gap(words[Column.ONSET].to_numpy()), unlabelled=False),
     Grouping.SENTENCE: Rule("stop", Sentences(), unlabelled=True),
     Grouping.KAGGLE: Rule("piece_stop", Sentences(KAGGLE_WORDS), unlabelled=True, prefix="piece_"),
     Grouping.SPEC: Rule("stop", Pieces(), unlabelled=True),

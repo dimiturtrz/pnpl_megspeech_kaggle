@@ -22,7 +22,7 @@ from jaxtyping import Bool, Float, Int
 
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.data.raw.runs import DEEP
+from megspeech.data.raw.runs import DEEP, Column
 from megspeech.device import Device
 from megspeech.evaluation.group import Group
 from megspeech.evaluation.loading import Loader
@@ -45,7 +45,7 @@ class Frequency:
 
     @classmethod
     def of(cls, words: pd.DataFrame) -> "Frequency":
-        labels = words["target"].to_numpy()
+        labels = words[Column.TARGET].to_numpy()
         return cls(np.bincount(labels[(labels >= 0) & (labels < VOCAB_SIZE)], minlength=VOCAB_SIZE))
 
     @property

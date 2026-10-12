@@ -18,6 +18,8 @@ from scipy.io import wavfile
 from scipy.signal import butter, fftconvolve, resample_poly, sosfiltfilt
 from scipy.stats import theilslopes
 
+from megspeech.data.raw import Event
+
 LOG = logging.getLogger(__name__)
 
 RATE = 1000
@@ -51,7 +53,7 @@ class Clock:
     def place(self, events: pd.DataFrame) -> pd.DataFrame:
         """`events` from clip time into recording time: `timemeg` mapped, `duration` stretched."""
         scale = 1 + self.drift
-        return events.assign(timemeg=self.start + scale * events["timemeg"], duration=scale * events["duration"])
+        return events.assign(timemeg=self.start + scale * events[Event.ONSET], duration=scale * events[Event.DURATION])
 
     @classmethod
     def fallen(cls, nominal: float, reason: str) -> "Clock":

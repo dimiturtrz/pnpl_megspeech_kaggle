@@ -25,7 +25,7 @@ from sklearn.preprocessing import StandardScaler
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
-from megspeech.data.raw.runs import DEEP, Run
+from megspeech.data.raw.runs import DEEP, Column, Run
 from megspeech.device import Device
 from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel
@@ -44,7 +44,7 @@ ALPHA = 100.0
 """Ridge penalty on standardised features: ~1e5 words against 256 dimensions, so it only steadies the fit."""
 PERMUTATIONS = 3
 """Shuffles of the validation windows the timing-only hits are averaged over."""
-SENTENCE = ["run", "sentence"]
+SENTENCE = [Column.RUN, Column.SENTENCE]
 
 
 @dataclass(frozen=True)
@@ -60,8 +60,8 @@ class Readings:
     @staticmethod
     def targets(words: pd.DataFrame) -> tuple[Float[np.ndarray, " n"], Float[np.ndarray, " n"]]:
         """`words`' log gap to the next onset of the sentence, NaN for its last word, and each word's index in it."""
-        onset = words["onset"].astype(np.float64)
-        grouped = words.groupby(SENTENCE)["onset"]
+        onset = words[Column.ONSET].astype(np.float64)
+        grouped = words.groupby(SENTENCE)[Column.ONSET]
         gap = grouped.shift(-1).astype(np.float64) - onset
         position = grouped.rank(method="first").to_numpy(np.float64) - 1
         return np.log(gap.clip(lower=np.finfo(np.float64).eps).to_numpy()), position
@@ -72,7 +72,7 @@ class Readings:
         pieces = []
         for words, split in reader.splits(runs).values():
             duration, position = cls.targets(words)
-            pieces.append((embedded(split), words["run"].to_numpy(), duration, position))
+            pieces.append((embedded(split), words[Column.RUN].to_numpy(), duration, position))
         read, names, duration, position = zip(*pieces, strict=True)
         embeddings = {tap: np.concatenate([r[tap] for r in read]) for tap in Tap.pooled()}
         return cls(embeddings, np.concatenate(names), np.concatenate(duration), np.concatenate(position))

@@ -81,6 +81,12 @@
     {
       "kind": "import",
       "source": "megspeech.data.cache.kaggle",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.cache.kaggle",
       "target": "megspeech.data.batching.windows",
       "weight": 1
     },
@@ -135,6 +141,12 @@
     {
       "kind": "import",
       "source": "megspeech.data.cache.run_cache",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.cache.run_cache",
       "target": "megspeech.data.batching.windows",
       "weight": 1
     },
@@ -160,6 +172,12 @@
       "kind": "import",
       "source": "megspeech.data.cache.run_cache",
       "target": "megspeech.data.labels.vocabulary",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.cache.run_cache",
+      "target": "megspeech.data.raw",
       "weight": 1
     },
     {
@@ -255,6 +273,12 @@
     {
       "kind": "import",
       "source": "megspeech.data.corpus",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.corpus",
       "target": "megspeech.data.batching.split",
       "weight": 1
     },
@@ -309,6 +333,12 @@
     {
       "kind": "import",
       "source": "megspeech.data.heard",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.heard",
       "target": "megspeech.data.batching.split",
       "weight": 1
     },
@@ -345,6 +375,12 @@
     {
       "kind": "import",
       "source": "megspeech.data.labels.context_tags",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.labels.context_tags",
       "target": "megspeech.data.constants",
       "weight": 1
     },
@@ -363,7 +399,19 @@
     {
       "kind": "import",
       "source": "megspeech.data.labels.context_tags",
+      "target": "megspeech.data.raw",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.labels.context_tags",
       "target": "megspeech.data.raw.runs",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.labels.instances",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -392,6 +440,12 @@
     },
     {
       "kind": "import",
+      "source": "megspeech.data.labels.phonemes",
+      "target": "megspeech.data.raw",
+      "weight": 1
+    },
+    {
+      "kind": "import",
       "source": "megspeech.data.labels.syntax",
       "target": "core.paths",
       "weight": 1
@@ -416,6 +470,12 @@
     },
     {
       "kind": "import",
+      "source": "megspeech.data.labels.syntax",
+      "target": "megspeech.data.raw",
+      "weight": 1
+    },
+    {
+      "kind": "import",
       "source": "megspeech.data.raw.appleseed",
       "target": "core.paths",
       "weight": 1
@@ -424,6 +484,12 @@
       "kind": "import",
       "source": "megspeech.data.raw.appleseed",
       "target": "megspeech.data.constants",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.raw.appleseed",
+      "target": "megspeech.data.raw",
       "weight": 1
     },
     {
@@ -477,6 +543,12 @@
     {
       "kind": "import",
       "source": "megspeech.data.raw.kymata",
+      "target": "megspeech.data.raw",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.raw.kymata",
       "target": "megspeech.data.raw.appleseed",
       "weight": 1
     },
@@ -518,6 +590,12 @@
     },
     {
       "kind": "import",
+      "source": "megspeech.data.raw.kymatasync",
+      "target": "megspeech.data.raw",
+      "weight": 1
+    },
+    {
+      "kind": "import",
       "source": "megspeech.data.raw.mains",
       "target": "megspeech.data.constants",
       "weight": 1
@@ -532,6 +610,12 @@
       "kind": "import",
       "source": "megspeech.data.raw.masc",
       "target": "megspeech.data.constants",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.raw.masc",
+      "target": "megspeech.data.raw",
       "weight": 1
     },
     {
@@ -597,6 +681,12 @@
     {
       "kind": "import",
       "source": "megspeech.data.raw.scans",
+      "target": "megspeech.data.raw",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.raw.scans",
       "target": "megspeech.data.raw.appleseed",
       "weight": 1
     },
@@ -646,6 +736,12 @@
       "kind": "import",
       "source": "megspeech.data.raw.smn4lang",
       "target": "megspeech.data.constants",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.raw.smn4lang",
+      "target": "megspeech.data.raw",
       "weight": 1
     },
     {
@@ -717,6 +813,12 @@
     {
       "kind": "import",
       "source": "megspeech.data.spans.grouping",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.spans.grouping",
       "target": "megspeech.data.labels.vocabulary",
       "weight": 1
     },
@@ -741,13 +843,31 @@
     {
       "kind": "import",
       "source": "megspeech.data.spans.pieces",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.spans.pieces",
       "target": "megspeech.data.spans.spans",
       "weight": 1
     },
     {
       "kind": "import",
       "source": "megspeech.data.spans.sentences",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.spans.sentences",
       "target": "megspeech.data.spans.spans",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.data.stratify",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -1023,6 +1143,12 @@
     {
       "kind": "import",
       "source": "megspeech.evaluation.memorisation",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.memorisation",
       "target": "megspeech.data.batching.split",
       "weight": 1
     },
@@ -1072,6 +1198,12 @@
       "kind": "import",
       "source": "megspeech.evaluation.reader",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.reader",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -1527,6 +1659,12 @@
     {
       "kind": "import",
       "source": "megspeech.evaluation.studies.acoustic",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.acoustic",
       "target": "megspeech.data.batching.split",
       "weight": 1
     },
@@ -1600,6 +1738,12 @@
       "kind": "import",
       "source": "megspeech.evaluation.studies.alignment",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.alignment",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -1755,7 +1899,25 @@
     {
       "kind": "import",
       "source": "megspeech.evaluation.studies.cause",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.cause",
       "target": "megspeech.data.labels.vocabulary",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.cause",
+      "target": "megspeech.data.raw",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.cause",
+      "target": "megspeech.evaluation.scoring.score",
       "weight": 1
     },
     {
@@ -1792,6 +1954,12 @@
       "kind": "import",
       "source": "megspeech.evaluation.studies.confusion",
       "target": "megspeech.data.labels.vocabulary",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.confusion",
+      "target": "megspeech.data.raw",
       "weight": 1
     },
     {
@@ -1971,6 +2139,12 @@
     {
       "kind": "import",
       "source": "megspeech.evaluation.studies.envelope",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.envelope",
       "target": "megspeech.data.batching.split",
       "weight": 1
     },
@@ -2128,6 +2302,12 @@
       "kind": "import",
       "source": "megspeech.evaluation.studies.expertcheck",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.expertcheck",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -2320,6 +2500,12 @@
       "kind": "import",
       "source": "megspeech.evaluation.studies.hierarchy",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.hierarchy",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -2536,6 +2722,12 @@
       "kind": "import",
       "source": "megspeech.evaluation.studies.lmbound",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.lmbound",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -2943,6 +3135,12 @@
     {
       "kind": "import",
       "source": "megspeech.evaluation.studies.oracle",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.oracle",
       "target": "megspeech.data.cache.run_cache",
       "weight": 1
     },
@@ -3034,6 +3232,12 @@
       "kind": "import",
       "source": "megspeech.evaluation.studies.overlap",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.overlap",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -3165,6 +3369,12 @@
     {
       "kind": "import",
       "source": "megspeech.evaluation.studies.perword",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.perword",
       "target": "megspeech.data.batching.split",
       "weight": 1
     },
@@ -3190,6 +3400,12 @@
       "kind": "import",
       "source": "megspeech.evaluation.studies.perword",
       "target": "megspeech.data.labels.vocabulary",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.perword",
+      "target": "megspeech.data.raw",
       "weight": 1
     },
     {
@@ -3507,6 +3723,12 @@
     {
       "kind": "import",
       "source": "megspeech.evaluation.studies.rsablend",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.rsablend",
       "target": "megspeech.data.labels.vocabulary",
       "weight": 1
     },
@@ -3687,6 +3909,12 @@
     {
       "kind": "import",
       "source": "megspeech.evaluation.studies.syntax",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.syntax",
       "target": "megspeech.data.batching.split",
       "weight": 1
     },
@@ -3778,6 +4006,12 @@
       "kind": "import",
       "source": "megspeech.evaluation.studies.tagacc",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.tagacc",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -3916,6 +4150,12 @@
       "kind": "import",
       "source": "megspeech.evaluation.studies.timing",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.studies.timing",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -4150,6 +4390,12 @@
       "kind": "import",
       "source": "megspeech.evaluation.studies.wikispans",
       "target": "megspeech.data.spans.spans",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.evaluation.text",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -5169,6 +5415,12 @@
     {
       "kind": "import",
       "source": "megspeech.objective.anchors",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.objective.anchors",
       "target": "megspeech.data.labels.vocabulary",
       "weight": 1
     },
@@ -5206,6 +5458,12 @@
       "kind": "import",
       "source": "megspeech.objective.auxiliary.acoustic",
       "target": "megspeech.objective.term",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.objective.auxiliary.adversarial",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -5487,6 +5745,12 @@
     {
       "kind": "import",
       "source": "megspeech.objective.targets.context",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.objective.targets.context",
       "target": "megspeech.data.cache.run_cache",
       "weight": 1
     },
@@ -5601,6 +5865,12 @@
     {
       "kind": "import",
       "source": "megspeech.objective.targets.sentence",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.objective.targets.sentence",
       "target": "megspeech.data.cache.run_cache",
       "weight": 1
     },
@@ -5631,6 +5901,12 @@
     {
       "kind": "import",
       "source": "megspeech.objective.targets.speech",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.objective.targets.speech",
       "target": "megspeech.data.config",
       "weight": 1
     },
@@ -5638,6 +5914,12 @@
       "kind": "import",
       "source": "megspeech.objective.targets.speech",
       "target": "megspeech.data.constants",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.objective.targets.speech",
+      "target": "megspeech.data.raw",
       "weight": 1
     },
     {
@@ -5662,6 +5944,12 @@
       "kind": "import",
       "source": "megspeech.objective.targets.t5",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.objective.targets.t5",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -5896,6 +6184,12 @@
       "kind": "import",
       "source": "megspeech.submission.prior",
       "target": "megspeech.data.labels.vocabulary",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.submission.prior",
+      "target": "megspeech.data.raw",
       "weight": 1
     },
     {
@@ -6298,6 +6592,12 @@
       "kind": "import",
       "source": "megspeech.training.cli.teacher",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.cli.teacher",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -6933,6 +7233,12 @@
     {
       "kind": "import",
       "source": "megspeech.training.pretrain.progress",
+      "target": "megspeech.data",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.pretrain.progress",
       "target": "megspeech.data.batching.split",
       "weight": 1
     },
@@ -7222,6 +7528,12 @@
       "kind": "import",
       "source": "megspeech.training.teacher",
       "target": "core.paths",
+      "weight": 1
+    },
+    {
+      "kind": "import",
+      "source": "megspeech.training.teacher",
+      "target": "megspeech.data",
       "weight": 1
     },
     {
@@ -31980,6 +32292,22 @@
     },
     {
       "descendants": 0,
+      "id": "megspeech.data.raw.Event",
+      "label": "Event",
+      "level": "class",
+      "parent": "megspeech.data.raw",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.raw.Kind",
+      "label": "Kind",
+      "level": "class",
+      "parent": "megspeech.data.raw",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
       "id": "megspeech.data.raw.appleseed.Appleseed",
       "label": "Appleseed",
       "level": "class",
@@ -32160,6 +32488,14 @@
       "label": "Recording",
       "level": "class",
       "parent": "megspeech.data.raw.masc",
+      "role": "satellite"
+    },
+    {
+      "descendants": 0,
+      "id": "megspeech.data.raw.runs.Column",
+      "label": "Column",
+      "level": "class",
+      "parent": "megspeech.data.raw.runs",
       "role": "satellite"
     },
     {

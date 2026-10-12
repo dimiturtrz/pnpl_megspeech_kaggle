@@ -19,7 +19,7 @@ from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.data.raw.runs import DEEP, Run
+from megspeech.data.raw.runs import DEEP, Column, Run
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.model.sentence import SentenceNet
 from megspeech.training.pretrain.windows import Sessions
@@ -88,7 +88,7 @@ class Progress:
     @staticmethod
     def cut(source: DeviceRecording, data: DataConfig) -> Split:
         """Every word of `source` that `data.grouping` carries, as a split."""
-        table = source.words.assign(position=source.words.groupby("run").cumcount())
+        table = source.words.assign(position=source.words.groupby(Column.RUN).cumcount())
         words = data.carried(table)
         return Corpus.split(source, words, data, np.ones(len(words)))
 

@@ -29,6 +29,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import PRIMARY, Vocabulary
+from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.runs import Column
+from megspeech.evaluation.scoring.score import Head
 from megspeech.evaluation.studies.perword import Attributes, Position, Scene
 from megspeech.evaluation.studies.scored import Scored
 
@@ -146,24 +149,26 @@ class Aligned:
         table = pd.read_csv(
             path,
             sep="\t",
-            usecols=["kind", "segment", "sentenceidx", "wordidx", "timemeg", "duration"],
-            dtype={"segment": str},
+            usecols=[Event.KIND, Event.SEGMENT, Event.SENTENCE, Event.WORD, Event.ONSET, Event.DURATION],
+            dtype={Event.SEGMENT: str},
         )
-        phones = table[table["kind"] == "phoneme"]
+        phones = table[table[Event.KIND] == Kind.PHONEME]
         sounds = (
-            phones.assign(phone=phones["segment"].str.split("_").str[0])
-            .groupby(["sentenceidx", "wordidx"], sort=False)["phone"]
+            phones.assign(phone=phones[Event.SEGMENT].str.split("_").str[0])
+            .groupby([Event.SENTENCE, Event.WORD], sort=False)["phone"]
             .agg(tuple)
         )
-        words = table[table["kind"] == "word"].join(sounds, on=["sentenceidx", "wordidx"]).reset_index(drop=True)
+        words = (
+            table[table[Event.KIND] == Kind.WORD].join(sounds, on=[Event.SENTENCE, Event.WORD]).reset_index(drop=True)
+        )
         spoken = words["phone"].map(lambda sound: sound if isinstance(sound, tuple) else ())
         first = spoken.map(lambda sound: sound[0] if sound else "")
         return cls(
             pd.DataFrame(
                 {
-                    "word": words["segment"],
-                    "onset": words["timemeg"],
-                    "duration": words["duration"],
+                    "word": words[Event.SEGMENT],
+                    "onset": words[Event.ONSET],
+                    "duration": words[Event.DURATION],
                     "phones": spoken,
                     "next_vowel": first.shift(-1).isin(VOWELS),
                 }
@@ -206,7 +211,7 @@ class Described:
         found = pd.concat(
             [
                 aligned[str(run)].at(rows["onset"].to_numpy(), rows["word"]).set_index(rows.index)
-                for run, rows in spoken.groupby("run")
+                for run, rows in spoken.groupby(Column.RUN)
             ]
         ).sort_index()
         scored = scene.occurrences.scored
@@ -233,7 +238,7 @@ class Described:
                 "last": (position == Position.LAST).astype(float),
             }
         )
-        for head, result in (("context", scored), ("word", scene.word)):
+        for head, result in ((Head.CONTEXT, scored), (Head.WORD, scene.word)):
             table[f"top10-{head}"] = result.hits().astype(float)
             table[f"top1-{head}"] = (result.top1() == result.labels).astype(float)
             table[f"margin-{head}"] = cls.margin(result)
@@ -345,7 +350,7 @@ class Study:
         record: dict[str, object] = {"n": len(table)}
         fits: dict[str, object] = {}
         specs = {"pooled": Regression(POOLED, fixed=False), "word-fixed": Regression(WITHIN, fixed=True)}
-        for head in ("context", "word"):
+        for head in Head:
             for outcome in OUTCOMES:
                 for name, spec in specs.items():
                     frame = spec.fit(table, f"{outcome}-{head}", self.draws, seed=0)
@@ -353,7 +358,7 @@ class Study:
                     fits[f"{head}/{outcome}/{name}"] = json.loads(frame.to_json(orient="index"))
         articles = self.described.subset(ARTICLES)
         spec = Regression(ARTICLE, fixed=True)
-        for head in ("context", "word"):
+        for head in Head:
             frame = spec.fit(articles.table, f"top1-{head}", self.draws, seed=0)
             LOG.info("the/a top-1, %s head\n%s", head, frame.round(3).to_string())
             fits[f"{head}/the-a-top1"] = json.loads(frame.to_json(orient="index"))
@@ -378,7 +383,7 @@ class Study:
             raise ValueError("the scene carries no spoken words")
         surprisal = Surprisal.load(root, args.lm)
         aligned = {
-            run: Aligned.read(cls._events(root, run)).surprised(surprisal) for run in scene.spoken["run"].unique()
+            run: Aligned.read(cls._events(root, run)).surprised(surprisal) for run in scene.spoken[Column.RUN].unique()
         }
         described = Described.of(scene, aligned, Stress.load(), Attributes.of(root))
         Study(described, root.models() / args.name / OUT, args.draws).run()

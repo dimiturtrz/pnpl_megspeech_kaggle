@@ -40,7 +40,7 @@ from megspeech.data.config import DataConfig, Val
 from megspeech.data.constants import PICO, SFREQ, WORKERS
 from megspeech.data.heard import Heard
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 from megspeech.data.raw.serialised import Serialised
 from megspeech.data.spans.grouping import Grouping
 from megspeech.device import Device
@@ -183,8 +183,8 @@ class Extractor:
 
     def extract(self, table: pd.DataFrame, envelopes: tuple[Envelope, ...]) -> Float[np.ndarray, "n b k bins"]:
         """Every row of `table` (`run`, `onset` seconds) as binned envelopes of each band, in row order."""
-        rows = {str(name): np.asarray(at) for name, at in table.groupby("run", sort=False).indices.items()}
-        onsets = np.round(table["onset"].to_numpy() * SFREQ).astype(np.int64)
+        rows = {str(name): np.asarray(at) for name, at in table.groupby(Column.RUN, sort=False).indices.items()}
+        onsets = np.round(table[Column.ONSET].to_numpy() * SFREQ).astype(np.int64)
         with ProcessPoolExecutor(self.workers) as pool:
             parts = pool.map(
                 Source.features,
@@ -209,8 +209,8 @@ class Cohort:
     def novel(words: pd.DataFrame, grouping: Grouping, seen: frozenset[tuple[int, ...]]) -> pd.DataFrame:
         """The labelled words of multi-word spans of `words` whose text training never heard."""
         spans = grouping.spans(words)
-        picked = words.iloc[SpanText(spans.index, words["token"].to_numpy()).novel(seen)]
-        return picked[picked["target"] != IGNORE]
+        picked = words.iloc[SpanText(spans.index, words[Column.TOKEN].to_numpy()).novel(seen)]
+        return picked[picked[Column.TARGET] != IGNORE]
 
     @classmethod
     def of(
@@ -223,7 +223,7 @@ class Cohort:
         """`trained` and `held` (a domain's words) cut to the words scored; a domain under `MIN_NOVEL` is dropped."""
         novel = {name: cls.novel(words, grouping, seen) for name, words in held.items()}
         return cls(
-            trained[trained["target"] != IGNORE].reset_index(drop=True),
+            trained[trained[Column.TARGET] != IGNORE].reset_index(drop=True),
             {name: rows.reset_index(drop=True) for name, rows in novel.items() if len(rows) >= MIN_NOVEL},
         )
 
@@ -284,8 +284,8 @@ class Study:
         """The training rows, then each domain's, reading the bands at indices `bands` flattened side by side."""
         table = cohort.table()
         flat = torch.from_numpy(features[:, bands].reshape(len(table), -1))
-        labels = torch.from_numpy(table["target"].to_numpy().astype(np.int64))
-        runs = torch.from_numpy(pd.factorize(table["run"])[0].astype(np.int64))
+        labels = torch.from_numpy(table[Column.TARGET].to_numpy().astype(np.int64))
+        runs = torch.from_numpy(pd.factorize(table[Column.RUN])[0].astype(np.int64))
         every = Dataset(flat, labels, runs)
         train = every.take(torch.from_numpy((table["part"] == "train").to_numpy()))
         domains = {name: every.take(torch.from_numpy((table["part"] == name).to_numpy())) for name in cohort.domains}
@@ -328,7 +328,7 @@ class Study:
         bands = tuple(Band.parse(spec) for spec in args.bands)
         table = cohort.table()
         extractor = Extractor(bands, {run.name: run for run in runs}, args.workers)
-        names = list(dict.fromkeys(cohort.train["run"]))
+        names = list(dict.fromkeys(cohort.train[Column.RUN]))
         picked = [names[at] for at in np.linspace(0, len(names) - 1, COVARIANCE_RUNS).astype(int)]
         envelopes = extractor.projections(picked, args.components)
         LOG.info("whiteners fit on %d runs, %.0f s", len(picked), time.monotonic() - started)

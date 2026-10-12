@@ -19,7 +19,7 @@ from jaxtyping import Bool, Float, Int
 
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE, Vocabulary
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.metric.ruler import Ruler
@@ -92,10 +92,10 @@ class Heard:
         table: pd.DataFrame,
     ) -> tuple[pd.DataFrame, list[tuple[int, ...]], Int[np.ndarray, " n"], Int[np.ndarray, " n"]]:
         """`table`'s sentences: their (run, sentence) keys, token sequences, and each word's token and sentence code."""
-        grouped = table.groupby(["run", "sentence"], sort=False)
-        group, tokens = grouped.ngroup().to_numpy(), Vocabulary.token(table["word"])
+        grouped = table.groupby([Column.RUN, Column.SENTENCE], sort=False)
+        group, tokens = grouped.ngroup().to_numpy(), Vocabulary.token(table[Column.WORD])
         cuts = np.flatnonzero(np.diff(group)) + 1
-        keys = grouped.size().reset_index()[["run", "sentence"]]
+        keys = grouped.size().reset_index()[[Column.RUN, Column.SENTENCE]]
         return keys, [tuple(text.tolist()) for text in np.split(tokens, cuts)], tokens, group
 
     @classmethod
@@ -110,7 +110,12 @@ class Heard:
         `GRAM`-word windows it holds."""
         keys, texts, _, _ = self.texts(spoken)
         keys = keys.assign(seen=[text in self.sentences for text in texts])
-        seen = words[["run", "sentence"]].reset_index(drop=True).merge(keys, how="left")["seen"].to_numpy(dtype=bool)
+        seen = (
+            words[[Column.RUN, Column.SENTENCE]]
+            .reset_index(drop=True)
+            .merge(keys, how="left")["seen"]
+            .to_numpy(dtype=bool)
+        )
         index = split.index.cpu().numpy()
         valid = index != PAD
         span = np.broadcast_to(np.arange(len(index))[:, None], index.shape)[valid]
@@ -196,7 +201,7 @@ class Memorisation:
         splits, _ = held.domains(ruled)
         frames = []
         for name, split in splits.items():
-            rows = table[table["run"].isin([run.name for run in ruled[name]])]
+            rows = table[table[Column.RUN].isin([run.name for run in ruled[name]])]
             context = held.evaluator.head(held.evaluator.logits(held.model, split))
             adjusted = held.calibration(tau).adjusted(context)
             hits = Ruler().hits(adjusted, split.y.clamp(min=0)).cpu().numpy()

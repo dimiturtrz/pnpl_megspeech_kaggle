@@ -27,6 +27,7 @@ from jaxtyping import Bool, Float
 
 from core.paths import DataRoot
 from megspeech.data.constants import SFREQ
+from megspeech.data.raw import Event, Kind
 from megspeech.data.raw.fetch import APPLESEED, NEUROMAG
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.masc import COLUMNS, HIGHPASS, Neuromag
@@ -53,8 +54,7 @@ sentences, with a trough between them, and this is the trough's middle."""
 NO_PHONE = {"", "sil", "sp"}
 STRESS = re.compile(r"\d+$")
 """The stress digit a CMU phone ends in."""
-WORD, PHONEME = "word", "phoneme"
-KIND_ORDER = {WORD: 0, PHONEME: 1}
+KIND_ORDER = {Kind.WORD: 0, Kind.PHONEME: 1}
 
 
 @dataclass(frozen=True)
@@ -115,7 +115,7 @@ class Story:
         words = tier[tier["text"] != ""].reset_index(drop=True)
         words["new"] = (words["start"] - words["end"].shift(fill_value=-np.inf)) >= SENTENCE_PAUSE
         words["sentence"] = words["new"].cumsum() - 1
-        words["wordidx"] = words.groupby("sentence").cumcount()
+        words[Event.WORD] = words.groupby("sentence").cumcount()
         return words
 
     @cached_property
@@ -123,7 +123,7 @@ class Story:
         """Each phone inside a word as pnpl spells it: stress dropped, lower-case, tagged B/I/E/S by its place."""
         tier = self.grid.tiers["phones"]
         heard = tier[~tier["text"].str.lower().isin(NO_PHONE)].reset_index(drop=True)
-        words = self.words[["start", "end", "sentence", "wordidx"]].add_prefix("word_")
+        words = self.words[["start", "end", "sentence", Event.WORD]].add_prefix("word_")
         inside = pd.merge_asof(heard, words, left_on="start", right_on="word_start")
         inside = inside[inside["start"] < inside["word_end"]]
         place = inside.groupby("word_start").cumcount()
@@ -139,24 +139,24 @@ class Story:
             [
                 pd.DataFrame(
                     {
-                        "kind": WORD,
-                        "segment": words["text"],
-                        "sentenceidx": words["sentence"],
-                        "wordidx": words["wordidx"],
-                        "phonemeidx": np.nan,
-                        "timemeg": words["start"] + onset,
-                        "duration": words["end"] - words["start"],
+                        Event.KIND: Kind.WORD,
+                        Event.SEGMENT: words["text"],
+                        Event.SENTENCE: words["sentence"],
+                        Event.WORD: words[Event.WORD],
+                        Event.PHONEME: np.nan,
+                        Event.ONSET: words["start"] + onset,
+                        Event.DURATION: words["end"] - words["start"],
                     }
                 ),
                 pd.DataFrame(
                     {
-                        "kind": PHONEME,
-                        "segment": phones["text"],
-                        "sentenceidx": phones["word_sentence"],
-                        "wordidx": phones["word_wordidx"],
-                        "phonemeidx": phones["place"],
-                        "timemeg": phones["start"] + onset,
-                        "duration": phones["end"] - phones["start"],
+                        Event.KIND: Kind.PHONEME,
+                        Event.SEGMENT: phones["text"],
+                        Event.SENTENCE: phones["word_sentence"],
+                        Event.WORD: phones["word_wordidx"],
+                        Event.PHONEME: phones["place"],
+                        Event.ONSET: phones["start"] + onset,
+                        Event.DURATION: phones["end"] - phones["start"],
                     }
                 ),
             ],
@@ -233,14 +233,16 @@ class Recording:
             Story(TextGrid.read(self.stimuli / f"{stimulus}.TextGrid")).events(onset)
             for stimulus, onset in zip(trials["stimulus"], trials["onset"].astype(float), strict=True)
         ]
-        before = np.cumsum([0, *(story["sentenceidx"].max() + 1 for story in stories[:-1])])
+        before = np.cumsum([0, *(story[Event.SENTENCE].max() + 1 for story in stories[:-1])])
         events = pd.concat(
             [
-                story.assign(sentenceidx=story["sentenceidx"] + shift)
+                story.assign(sentenceidx=story[Event.SENTENCE] + shift)
                 for story, shift in zip(stories, before, strict=True)
             ]
         )
-        ordered = events.assign(order=events["kind"].map(KIND_ORDER)).sort_values(["timemeg", "order"], kind="stable")
+        ordered = events.assign(order=events[Event.KIND].map(KIND_ORDER)).sort_values(
+            [Event.ONSET, "order"], kind="stable"
+        )
         return ordered[COLUMNS].reset_index(drop=True)
 
 

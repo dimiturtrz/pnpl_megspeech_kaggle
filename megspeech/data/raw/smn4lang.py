@@ -39,7 +39,8 @@ from scipy.io import loadmat
 
 from core.paths import DataRoot
 from megspeech.data.constants import SFREQ
-from megspeech.data.raw.appleseed import WORD, Story
+from megspeech.data.raw import Event, Kind
+from megspeech.data.raw.appleseed import Story
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.kymata import Study
 from megspeech.data.raw.kymatasync import Clock
@@ -90,7 +91,7 @@ class Punctuated(Story):
         words = tier[spoken].reset_index(drop=True)
         words["sentence"] = pd.factorize(sentence[spoken])[0]
         words["new"] = words["sentence"].diff().ne(0)
-        words["wordidx"] = words.groupby("sentence").cumcount()
+        words[Event.WORD] = words.groupby("sentence").cumcount()
         return words
 
     @staticmethod
@@ -121,7 +122,7 @@ class Narration(Book):
         )
         silent = pd.DataFrame({"start": np.array([], dtype=float), "end": np.array([], dtype=float), "text": ""})
         events = Punctuated(TextGrid({"words": tier, "phones": silent})).events(0.0)
-        return events[events["kind"] == WORD].reset_index(drop=True)
+        return events[events[Event.KIND] == Kind.WORD].reset_index(drop=True)
 
     @cached_property
     def duration(self) -> float:

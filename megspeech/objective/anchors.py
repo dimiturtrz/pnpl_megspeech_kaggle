@@ -16,6 +16,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.data.raw.runs import Column
 from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.objective.targets.t5 import Prototypes
 
@@ -72,7 +73,7 @@ class Anchors:
     @staticmethod
     def key(words: pd.DataFrame, labels: Int[Tensor, " n"]) -> str:
         """A digest of the training rows, so a cache built on other rows is never read."""
-        rows = pd.util.hash_pandas_object(words[["run", "position"]], index=False).to_numpy()
+        rows = pd.util.hash_pandas_object(words[[Column.RUN, Column.POSITION]], index=False).to_numpy()
         digest = hashlib.sha1(rows.tobytes() + labels.cpu().numpy().tobytes(), usedforsecurity=False)
         return digest.hexdigest()[:KEY_LENGTH]
 

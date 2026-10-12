@@ -13,6 +13,7 @@ from torch import Tensor, nn
 
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE
+from megspeech.data.raw.runs import Column
 from megspeech.objective.auxiliary.reversal import Reversal
 from megspeech.objective.term import AuxiliaryTerm, Reading
 
@@ -20,7 +21,7 @@ HIDDEN = 128
 """Width of the adversary's hidden layer."""
 TARGETS = 2
 """What it regresses: log duration, sentence position."""
-SENTENCE = ["run", "sentence"]
+SENTENCE = [Column.RUN, Column.SENTENCE]
 
 
 class Adversary(nn.Sequential):
@@ -43,9 +44,9 @@ class TimingTerm(AuxiliaryTerm):
     def of(weight: float, words: pd.DataFrame, device: torch.device) -> "TimingTerm":
         """The term over training `words`: log gap to the next word of the sentence (unknown for its last) and the
         word's place in the sentence, each standardised over the words it is known for."""
-        start = words["onset"].to_numpy(np.float64)
-        following = words.groupby(SENTENCE)["onset"].shift(-1).to_numpy(np.float64)
-        position = words.groupby(SENTENCE)["onset"].rank(method="first").to_numpy(np.float64) - 1
+        start = words[Column.ONSET].to_numpy(np.float64)
+        following = words.groupby(SENTENCE)[Column.ONSET].shift(-1).to_numpy(np.float64)
+        position = words.groupby(SENTENCE)[Column.ONSET].rank(method="first").to_numpy(np.float64) - 1
         duration = np.log(np.maximum(following - start, np.finfo(np.float64).eps))
         raw = np.stack([duration, position], axis=1)
         known = np.stack([~np.isnan(following), np.ones(len(words), bool)], axis=1)

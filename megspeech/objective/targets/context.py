@@ -24,7 +24,7 @@ from transformers import AutoTokenizer, GPT2Model
 from core.paths import DataRoot
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.config import DataConfig, Val
-from megspeech.data.raw.runs import Run
+from megspeech.data.raw.runs import Column, Run
 from megspeech.device import Device
 from megspeech.objective.targets.speech import Targets
 from megspeech.objective.targets.t5 import Encoder
@@ -86,7 +86,7 @@ class Transcript:
 
     @staticmethod
     def of(run: Run) -> "Transcript":
-        return Transcript(tuple(str(word) for word in RunCache.words(run)["word"]))
+        return Transcript(tuple(str(word) for word in RunCache.words(run)[Column.WORD]))
 
     @staticmethod
     def write(root: DataRoot, tokenizer: Tokenizer, encoder: Encoder, device: torch.device) -> Path:
