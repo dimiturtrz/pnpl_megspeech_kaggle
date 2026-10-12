@@ -103,6 +103,9 @@ def heard_run(root: Path, name: str = TRAIN, *, audio: bool = True) -> Run:
             "kind": ["word", "phoneme", "word", "word"],
             "segment": ["a", "a", "", "b"],
             "timechapter": [0.94, 0.95, 2.0, 3.8],
+            "timemeg": [10.94, 10.95, 12.0, 13.8],
+            "sentenceidx": [0, 0, 0, 0],
+            "duration": [0.2, 0.01, 0.2, 0.2],
         }
     )
     events.to_csv(run.events, sep="\t", index=False)
@@ -188,6 +191,12 @@ def test_chapters(tmp_path: Path) -> None:
 
 def test_onsets(tmp_path: Path) -> None:
     assert Heard(heard_run(tmp_path)).onsets() == pytest.approx([0.94 + LAG, 3.8 + LAG])
+
+
+def test_onsets_align_with_run_words(tmp_path: Path) -> None:
+    """Row i of a run's targets is word i of `Run.words`, the positional index `Speech.gather` reads them by."""
+    run = heard_run(tmp_path)
+    assert Heard(run).onsets() + 10 - LAG == pytest.approx(run.words()["onset"].to_numpy())
 
 
 def test_targets(tmp_path: Path) -> None:

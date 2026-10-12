@@ -339,6 +339,33 @@ def test_fit_patience(monkeypatch: pytest.MonkeyPatch, patience: int, trained: i
     assert config.selected(history).epoch == (1 if trained < 5 else 4)
 
 
+def test_fit_restores_the_selected_epoch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The returned weights are the selected epoch's as validated, not an alias of the live ones the later epochs
+    went on to train."""
+    scripted(monkeypatch, [0.2, 0.9, 0.3])
+    scored = Evaluator.report
+    seen: list[dict[str, torch.Tensor]] = []
+
+    def report(
+        evaluator: Evaluator,
+        model: nn.Module,
+        domains: dict[str, Split],
+        log_prior: torch.Tensor,
+        epoch: int,
+        loss: float,
+    ) -> Epoch:
+        seen.append({k: v.clone() for k, v in model.state_dict().items()})
+        return scored(evaluator, model, domains, log_prior, epoch, loss)
+
+    monkeypatch.setattr(Evaluator, "report", report)
+    net, _ = trainer(RunConfig(optim=OptimConfig(epochs=3, batch=4))).fit(
+        split(), {"a": split(seed=1)}, torch.zeros(VOCAB_SIZE)
+    )
+    kept = net.state_dict()
+    assert all(torch.equal(kept[k], v) for k, v in seen[1].items())
+    assert not all(torch.equal(kept[k], v) for k, v in seen[2].items())
+
+
 def test_auxiliary_state() -> None:
     model = nn.ModuleDict({"heads": nn.ModuleList([nn.Linear(2, 2)]), "words": nn.Linear(2, 2)})
     assert set(Trainer.auxiliary_state(model)) == {"heads.0.weight", "heads.0.bias"}
