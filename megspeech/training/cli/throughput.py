@@ -18,6 +18,7 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
+from megspeech.data.raw.runs import SHERLOCK
 from megspeech.device import Device
 from megspeech.training.config import RunConfig
 from megspeech.training.loop.trainer import Trainer
@@ -109,7 +110,7 @@ def main() -> None:
     parser.add_argument("--steps", type=int, default=STEPS)
     parser.add_argument("--full-spans", type=int, default=FULL_SPANS)
     parser.add_argument("--host", action="store_true", help="rank ops by host time")
-    tree = Tree(RunConfig, RunConfig(data=DataConfig(tasks=("Sherlock1",))))
+    tree = Tree(RunConfig, RunConfig(data=DataConfig(tasks=(SHERLOCK,))))
     tree.arguments(parser)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")

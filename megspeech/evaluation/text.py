@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 from jaxtyping import Int
 
-from megspeech.data.raw.runs import Column
+from megspeech.data.raw.runs import SHERLOCK, Column
 
-RULER = "Sherlock1"
+RULER = SHERLOCK
 """The validation task whose text the pooled runs repeat."""
 
 

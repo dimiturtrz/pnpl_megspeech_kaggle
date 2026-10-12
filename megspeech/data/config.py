@@ -19,14 +19,14 @@ from megspeech.data.cache.alignment import AS_RECORDED, EVERY, UNALIGNED, Alignm
 from megspeech.data.cache.cleaning import Cleaning
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.constants import DECIMATE, SFREQ
-from megspeech.data.raw.runs import DEEP, Partition, Run
+from megspeech.data.raw.runs import DEEP, SHERLOCK, Partition, Run
 from megspeech.data.sources import READ, Picked, Refit, Sources, Val
 from megspeech.data.spans.grouping import Grouping
 
 METRICS = "metrics.json"
 """The record a finished run leaves in its directory, its config under `config`."""
 
-ADAPTED = "Sherlock1"
+ADAPTED = SHERLOCK
 """The task whose sessions 11 and 12 subjects 1-32 each hear once."""
 
 NARRATOR = "Sherlock"

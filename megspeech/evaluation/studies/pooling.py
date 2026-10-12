@@ -38,7 +38,7 @@ LOG = logging.getLogger(__name__)
 CHANCE = TOP / VOCAB_SIZE
 """Balanced top-10 of a predictor that ignores the MEG."""
 
-RELIABILITY_RUN = ("Sherlock1", 12, 1)
+RELIABILITY_RUN = (RULER, 12, 1)
 """A pooled subject's run of subject 0's test text, the one its reliability is read on."""
 
 WEIGHTS = (1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, math.inf)

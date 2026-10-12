@@ -43,6 +43,9 @@ class Column(StrEnum):
     TOKEN = "token"
 
 
+SHERLOCK = "Sherlock1"
+"""The task subject 0's Sherlock validation and test runs and every pooled subject's runs come from."""
+
 NO_SENTENCE = -1
 """The `Column.SENTENCE` of a word heard outside any sentence."""
 
@@ -57,8 +60,8 @@ class Partition(StrEnum):
 
 
 HELD_OUT = {
-    ("Sherlock1", 11, 2): Partition.VALIDATION,
-    ("Sherlock1", 12, 2): Partition.TEST,
+    (SHERLOCK, 11, 2): Partition.VALIDATION,
+    (SHERLOCK, 12, 2): Partition.TEST,
     ("MOCHATIMIT", 2, 1): Partition.VALIDATION,
     ("MOCHATIMIT", 3, 1): Partition.TEST,
     ("TheMoth", 29, 1): Partition.VALIDATION,
@@ -66,7 +69,7 @@ HELD_OUT = {
 }
 """`pnpl` 0.2.0 `libribrain100/manifest.py`; every other subject-0 run trains."""
 
-POOLED = {("Sherlock1", 11, 1): Partition.POOL, ("Sherlock1", 12, 1): Partition.TEST}
+POOLED = {(SHERLOCK, 11, 1): Partition.POOL, (SHERLOCK, 12, 1): Partition.TEST}
 """Subjects 1-32 hear Sherlock1 sessions 11 and 12 once each: 11 is the text of subject 0's validation run, 12 of its
 test run. Session 11 is pooled; session 12 is held out like subject 0's test run, its text never trained."""
 
