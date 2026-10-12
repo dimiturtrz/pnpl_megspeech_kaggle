@@ -103,6 +103,9 @@ class ContextConfig:
     subjects: int = 0
     final_norm: bool = False
     """A LayerNorm after the pre-norm transformer's last layer, before the context head (plain transformer only)."""
+    levels: bool = False
+    """Each training subject's sensors moved onto the pooled median and interquartile range before the scaler, fit
+    on its own training windows; a zero-shot subject reads the pooled scaler alone (`input.levels`)."""
     whiten: bool = False
     """Decorrelate the scaled sensors by their training covariance before the subject layer (`input.whitener`)."""
     covariance: Covariance = Covariance.TOTAL
@@ -172,6 +175,14 @@ CONTEXT_RULES: tuple[Rule[ContextConfig], ...] = (
             f"encoder {c.encoder} reads saved features, not sensors, so a per-subject sensor matrix "
             f"(subjects={c.subjects}) has nothing to mix"
         ),
+    ),
+    Rule(
+        lambda c: c.levels and c.encoder.cached,
+        lambda c: f"encoder {c.encoder} reads saved features, not sensors, so there are no subject levels to set",
+    ),
+    Rule(
+        lambda c: c.levels and c.whiten and c.covariance is Covariance.NOISE,
+        lambda c: "noise whitening fits on residuals of no known subject, so it cannot follow per-subject levels",
     ),
     Rule(
         lambda c: c.whiten and c.encoder.cached,

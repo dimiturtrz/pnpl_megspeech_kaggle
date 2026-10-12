@@ -1,3 +1,4 @@
+import dataclasses
 import math
 from pathlib import Path
 from typing import cast
@@ -21,6 +22,7 @@ from megspeech.evaluation.scoring.score import Epoch, Score
 from megspeech.evaluation.scoring.telemetry import TelemetryConfig
 from megspeech.model.config import ContextConfig
 from megspeech.model.context.timing import TimingHead
+from megspeech.model.input.scaler import Scaler
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
@@ -94,6 +96,38 @@ def test_model() -> None:
     assert isinstance(model, SentenceNet)
     assert next(model.parameters()).device == CPU
     assert "_orig_mod" not in next(iter(model.state_dict()))
+
+
+def test_model_levels() -> None:
+    """`context.levels` lands: the subjects of the training split get fitted rows, saved with the model."""
+    plain = trainer(RunConfig(optim=OptimConfig(compiled=False))).model(split())
+    assert not any(key.startswith("levels.") for key in plain.state_dict())
+    config = RunConfig(context=ContextConfig(levels=True), optim=OptimConfig(compiled=False))
+    heard = split()
+    model = trainer(config).model(dataclasses.replace(heard, subject=torch.arange(len(heard.y)) % 2))
+    assert {"levels.gain", "levels.offset"} <= set(model.state_dict())
+    assert not torch.equal(model.levels.gain[0], torch.ones_like(model.levels.gain[0]))
+
+
+def test_model_stem_levels(tmp_path: Path) -> None:
+    """Levels refit against the adopted stem's scaler, so each subject leaves it at unit interquartile range."""
+    root = DataRoot(tmp_path)
+    (root.models() / "pre").mkdir(parents=True)
+    torch.save(
+        trainer(RunConfig(optim=OptimConfig(compiled=False))).model(split(seed=3)).state_dict(),
+        root.models() / "pre" / "model.pt",
+    )
+    config = RunConfig(
+        context=ContextConfig(levels=True), optim=OptimConfig(compiled=False, transfer=TransferConfig(stem="pre"))
+    )
+    heard = split()
+    heard = dataclasses.replace(heard, subject=torch.arange(len(heard.y)) % 2)
+    model = Trainer.of(Corpus(split(), {"a": split(seed=1)}, frozenset()), config, root).model(heard)
+    own = heard.subject == 1
+    _, spread = Scaler.quartiles(
+        model.scale(model.levels(heard.windows(torch.nonzero(own).flatten()), heard.subject[own]))
+    )
+    assert torch.allclose(spread, torch.ones_like(spread), atol=1e-4)
 
 
 def test_model_warm(tmp_path: Path) -> None:

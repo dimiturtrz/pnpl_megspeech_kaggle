@@ -148,19 +148,25 @@ class Trainer:
         )
 
     def model(self, train: Split) -> SentenceNet:
-        """A fresh model, or the warm start's weights when there is one."""
-        sample = train.sample(SCALER_SAMPLE)
+        """A fresh model, or the warm start's weights when there is one; per-subject levels, statistics of this run's
+        own training split, are refit against an adopted stem's scaler."""
+        drawn = train.drawn(SCALER_SAMPLE)
+        sample = train.windows(drawn)
         context = self.config.context
         channels = sample.shape[1]
-        model = SentenceNet(Scaler(sample), context=context, prototypes=self.prototypes, channels=channels)
+        scaler = Scaler(sample)
+        model = SentenceNet(scaler, context=context, prototypes=self.prototypes, channels=channels)
         model.fuse(Fusion(Branch.many(self.fused, context, channels), context.branch_drop))
-        model.whiten.fit(model.scale(SAMPLES[self.config.context.covariance].windows(train, sample)))
+        model.levels.fit(train.windows, train.subject, scaler)
+        levelled = model.levels(SAMPLES[context.covariance].windows(train, sample), train.subject[drawn])
+        model.whiten.fit(model.scale(levelled))
         model.centring.reserve(train.runs())
         model.hierarchy.admit(train.y, self.tagged)
         if self.initial:
             model.warm(self.initial)
         if self.stem:
             model.adopt(self.stem)
+            model.levels.fit(train.windows, train.subject, scaler)
         if self.timing:
             model.timing.frozen(self.timing)
         transfer = self.config.optim.transfer

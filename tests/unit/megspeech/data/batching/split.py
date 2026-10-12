@@ -95,6 +95,12 @@ def test_sample() -> None:
     assert split().sample(100).shape == (12, CHANNELS, SAMPLES)
 
 
+def test_drawn() -> None:
+    drawn = split().drawn(5)
+    assert len(drawn) == len(set(drawn.tolist())) == 5
+    assert split().drawn(100).sort().values.tolist() == list(range(12))
+
+
 def test_labelled() -> None:
     held = dataclasses.replace(split(), y=torch.tensor([0, IGNORE, 2]))
     assert held.labelled().tolist() == [0, 2]

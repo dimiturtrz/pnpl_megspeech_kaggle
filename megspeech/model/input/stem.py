@@ -1,21 +1,35 @@
-"""The input stages a window passes before the word encoder: scaler, whitener, subject layer."""
+"""The input stages a window passes before the word encoder: subject levels, scaler, whitener, subject layer."""
+
+from dataclasses import dataclass
 
 import torch
 from torch import nn
 
+from megspeech.model.input.levels import Levels
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer, Unseen
 from megspeech.model.input.whitener import Whitener
 
 
+@dataclass(frozen=True)
+class Stages:
+    """Which optional input stages are on: per-subject `levels`, `whiten`ing, and a layer for `subjects` subjects
+    (none at 0)."""
+
+    levels: bool = False
+    whiten: bool = False
+    subjects: int = 0
+
+
 class Stem:
     @staticmethod
     def of(
-        scale: nn.Module, channels: int, *, whiten: bool, subjects: int, unseen: Unseen
-    ) -> tuple[nn.Module, Whitener, nn.Module]:
-        """`scale`, a whitener over `channels` (inactive unless `whiten`) and a layer for `subjects` subjects reading
-        a subject it has no matrix for as `unseen`."""
-        return scale, Whitener(channels, active=whiten), SubjectLayer.of(subjects, channels, unseen)
+        scale: nn.Module, channels: int, stages: Stages, unseen: Unseen
+    ) -> tuple[Levels, nn.Module, Whitener, nn.Module]:
+        """Per-subject levels over `channels`, `scale`, a whitener and a subject layer reading a subject it has no
+        matrix for as `unseen`, each optional stage as `stages` sets it."""
+        built = Levels(channels, active=stages.levels), scale, Whitener(channels, active=stages.whiten)
+        return *built, SubjectLayer.of(stages.subjects, channels, unseen)
 
     @staticmethod
     def placeholder(channels: int) -> Scaler:
