@@ -25,7 +25,7 @@ def pair(labels: list[int], subjects: list[int] | None = None) -> tuple[Split, B
         split = dataclasses.replace(split, subject=torch.tensor(subjects))
     x = split.windows(torch.arange(n))
     index = torch.arange(n)[None]
-    return split, Batch(x, torch.zeros(1, n), index, index, split.subject), x
+    return split, Batch(x, torch.zeros(1, n), index, split.subject, index=index), x
 
 
 def averager(split: Split, k: int) -> GroupAverage:
@@ -92,7 +92,7 @@ def test_apply_leaves_the_split_untouched() -> None:
 def test_apply_ignores_padding_and_unlabelled_rows() -> None:
     split, batch, x = pair([4, 4, IGNORE])
     padded = torch.cat([x, torch.zeros(1, CHANNELS, SAMPLES)])
-    batch = Batch(padded, batch.onset, torch.tensor([[0, 1, 2]]), batch.index, batch.subject)
+    batch = Batch(padded, batch.onset, torch.tensor([[0, 1, 2]]), batch.subject, index=batch.index)
     out = averager(split, 3).apply(padded, batch, split)
     assert torch.equal(out[2:], padded[2:])
 

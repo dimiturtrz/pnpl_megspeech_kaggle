@@ -82,7 +82,7 @@ class RightCut(Whole):
 
     @override
     def apply(self, batch: Batch, train: Split) -> Batch:
-        valid = batch.slot < len(batch.x)
+        valid = batch.mask
         length = valid.sum(dim=1)
         spans, width = valid.shape
         end = 1 + (torch.rand(spans, device=valid.device) * (length - 2).clamp(min=0)).long()
@@ -109,7 +109,7 @@ class RightCut(Whole):
 
     def count(self, batch: Batch, cut: Bool[Tensor, " g"], train: Split) -> None:
         """Adds `batch`'s spans cut and drawn, and its labelled words ending their span and in all, to the tally."""
-        valid = batch.slot < len(batch.x)
+        valid = batch.mask
         labelled = batch.target(train.y) != IGNORE
         last = torch.arange(valid.shape[1], device=valid.device) == (valid.sum(dim=1) - 1)[:, None]
         counts = torch.stack([cut.sum(), valid.any(dim=1).sum(), (labelled & last).sum(), labelled.sum()])

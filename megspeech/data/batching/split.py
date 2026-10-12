@@ -5,7 +5,7 @@ each split's are saved in its own words' order.
 """
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
@@ -67,19 +67,11 @@ class SpanInput:
 
 
 @dataclass(frozen=True)
-class Batch:
-    """Spans packed into a fixed number of word rows, so every training step has the same shapes.
+class Batch(SpanInput):
+    """Spans packed into a fixed number of word rows, so every training step has the same shapes: what a model reads
+    of them, and `index`, each span position's split word (`PAD` where the position is empty)."""
 
-    `slot` is each span position's row of `x`, `len(x)` where the position is empty; `index` its split word.
-    """
-
-    x: Float[Tensor, "r c t"]
-    onset: Float[Tensor, "g w"]
-    slot: Int[Tensor, "g w"]
-    index: Int[Tensor, "g w"]
-    subject: Int[Tensor, " r"]
-    finish: Float[Tensor, " g"] | None = None
-    run: Int[Tensor, " r"] | None = None
+    index: Int[Tensor, "g w"] = field(kw_only=True)
 
     def inputs(self, x: Float[Tensor, "r c t"] | None = None) -> SpanInput:
         """What a model reads of this batch, over the windows `x` when given (an augmented copy of its own)."""
@@ -91,7 +83,7 @@ class Batch:
 
     def target(self, labels: Int[Tensor, " n"]) -> Int[Tensor, "g w"]:
         """Each position's label from the split's `labels`; `IGNORE` where the position is empty."""
-        return torch.where(self.slot < len(self.x), labels[self.index.clamp(min=0)], IGNORE)
+        return torch.where(self.mask, labels[self.index.clamp(min=0)], IGNORE)
 
 
 RECITED = 3
@@ -294,10 +286,10 @@ class Split:
             self.windows(words, jitter),
             self.onset[spans],
             slot,
-            index,
             self.subject[words],
             self.ends(spans),
             self.runs_of(words),
+            index=index,
         )
 
     def segmented(self, spans: Int[Tensor, " b"]) -> Batch:
@@ -309,7 +301,13 @@ class Split:
         rows = torch.arange(len(spans), device=index.device)[:, None].expand_as(index)
         slot = torch.where(index != PAD, rows, len(spans))
         return Batch(
-            segments(first), self.onset[spans], slot, index, self.subject[first], self.ends(spans), self.runs_of(first)
+            segments(first),
+            self.onset[spans],
+            slot,
+            self.subject[first],
+            self.ends(spans),
+            self.runs_of(first),
+            index=index,
         )
 
     def ends(self, spans: Int[Tensor, " b"]) -> Float[Tensor, " b"] | None:

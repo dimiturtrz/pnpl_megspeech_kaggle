@@ -25,7 +25,7 @@ def pair(labels: list[int]) -> tuple[Split, Batch, torch.Tensor]:
     x = torch.randn(n, CHANNELS, SAMPLES)
     split = Split.from_arrays(x.numpy(), np.array(labels), Spans.by_gap(np.arange(n) * 10.0), CPU)
     index = torch.arange(n)[None]
-    batch = Batch(x, torch.zeros(1, n), index, index, torch.zeros(n, dtype=torch.long))
+    batch = Batch(x, torch.zeros(1, n), index, torch.zeros(n, dtype=torch.long), index=index)
     return split, batch, x
 
 

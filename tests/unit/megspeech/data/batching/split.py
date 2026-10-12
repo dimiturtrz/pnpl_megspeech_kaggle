@@ -343,7 +343,7 @@ def test_from_kaggle() -> None:
 
 def test_target() -> None:
     slot = torch.tensor([[0, 1, 2]])
-    batch = Batch(torch.zeros(2, 1, 1), torch.zeros(1, 3), slot, torch.tensor([[4, 3, PAD]]), torch.zeros(2))
+    batch = Batch(torch.zeros(2, 1, 1), torch.zeros(1, 3), slot, torch.zeros(2), index=torch.tensor([[4, 3, PAD]]))
     assert batch.target(torch.tensor([0, 1, 2, 7, 8])).tolist() == [[8, 7, IGNORE]]
 
 
