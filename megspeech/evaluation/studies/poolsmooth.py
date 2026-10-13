@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import cast
 
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 from core.paths import DataRoot
@@ -49,6 +49,10 @@ BASE_SCORES = {Partition.VALIDATION: 0.6386, Partition.TEST: 0.7088}
 """The macro of the base this study was specified for, to reproduce before anything else."""
 TOLERANCE = 0.002
 RULER = Ruler()
+ORACLE_KS = (1, 3, 5, 10, 0)
+"""Same-label neighbours mixed in; 0 is every one the pool holds."""
+MATCH_K = 5
+PURITIES = (0.2, 0.4, 0.6)
 
 
 class Aggregation(StrEnum):
@@ -170,6 +174,38 @@ class Pool:
                     out[Setting(space, k, temperature, aggregation, lam)] = self.bacc(mixed, calibration, ruler) - base
         return out
 
+    def posterior(self) -> "Pool":
+        """The same pool with each row embedded as the model's own probability vector."""
+        return replace(self, emb=self.base.exp())
+
+    def same(self) -> Bool[Tensor, "d p p"]:
+        """Whether row `q` is another row of row `p`'s pool with its true label."""
+        equal = self.y[:, :, None] == self.y[:, None, :]
+        return equal & ~torch.eye(self.y.shape[1], dtype=torch.bool)
+
+    @staticmethod
+    def subset(mask: Bool[Tensor, "d p p"], count: int, generator: torch.Generator) -> Bool[Tensor, "d p p"]:
+        """Up to `count` random true entries of each row of `mask`; every true entry when `count` is 0."""
+        if not count:
+            return mask
+        scores = torch.rand(mask.shape, generator=generator).masked_fill(~mask, -torch.inf)
+        top = scores.topk(min(count, mask.shape[-1]), dim=-1)
+        return torch.zeros_like(mask).scatter(-1, top.indices, top.values > -torch.inf)
+
+    def chosen(
+        self, chosen: Bool[Tensor, "d p p"], calibration: Calibration, ruler: Ruler = RULER
+    ) -> dict[tuple[Aggregation, float], Float[Tensor, " d"]]:
+        """Gains of mixing each row with its `chosen` neighbours equally weighted; a row with none stays as it was."""
+        present = chosen.any(dim=-1, keepdim=True)
+        weights = chosen.float() / chosen.sum(dim=-1, keepdim=True).clamp(min=1)
+        log_readout, prob_readout = weights @ self.base, weights @ self.base.exp()
+        base = self.bacc(self.base, calibration, ruler)
+        out = {}
+        for aggregation, lam in itertools.product(Aggregation, LAMBDAS):
+            mixed = torch.where(present, aggregation.combine(self.base, log_readout, prob_readout, lam), self.base)
+            out[aggregation, lam] = self.bacc(mixed, calibration, ruler) - base
+        return out
+
 
 @dataclass(frozen=True)
 class Gains:
@@ -192,6 +228,27 @@ class Gains:
 
 
 @dataclass(frozen=True)
+class Ceiling:
+    """Macro gains per pool of mixes under a controlled neighbour source, by source setting and (mix, lam)."""
+
+    gains: dict[int, dict[tuple[Aggregation, float], Float[Tensor, " d"]]]
+
+    @staticmethod
+    def macro(
+        domains: list[dict[tuple[Aggregation, float], Float[Tensor, " d"]]],
+    ) -> dict[tuple[Aggregation, float], Float[Tensor, " d"]]:
+        return {m: torch.stack([d[m] for d in domains]).mean(dim=0) for m in domains[0]}
+
+    def best(self) -> dict[int, tuple[tuple[Aggregation, float], float, float]]:
+        """Per source setting, its best (mix, lam) by mean gain with that gain's mean and SD over pools."""
+        out = {}
+        for source, mixes in self.gains.items():
+            mix = max(mixes, key=lambda m: float(mixes[m].mean()))
+            out[source] = (mix, float(mixes[mix].mean()), float(mixes[mix].std()) if len(mixes[mix]) > 1 else 0.0)
+        return out
+
+
+@dataclass(frozen=True)
 class Smoothing:
     """The dump's domains scored on pools of one draw."""
 
@@ -200,15 +257,51 @@ class Smoothing:
     def calibration(self) -> Calibration:
         return Calibration(self.dump.log_prior, self.dump.tau)
 
-    def gains(self, partition: Partition, draw: Draw) -> Gains:
-        calibration = self.calibration()
-        return Gains({n: Pool.drawn(r, draw).settings(calibration) for n, r in self.dump.partitions[partition].items()})
+    def pools(self, partition: Partition, draw: Draw, *, posterior: bool = False) -> dict[str, Pool]:
+        pools = {n: Pool.drawn(r, draw) for n, r in self.dump.partitions[partition].items()}
+        return {n: p.posterior() if posterior else p for n, p in pools.items()}
 
-    def purity(self, partition: Partition, draw: Draw) -> dict[str, dict[Space, dict[int, float]]]:
+    def gains(self, partition: Partition, draw: Draw, *, posterior: bool = False) -> Gains:
+        calibration = self.calibration()
+        return Gains({n: p.settings(calibration) for n, p in self.pools(partition, draw, posterior=posterior).items()})
+
+    def available(self, partition: Partition, draw: Draw) -> dict[str, float]:
+        """Mean number of same-label other rows in a row's pool, per domain."""
+        return {n: float(p.same().sum(dim=-1).float().mean()) for n, p in self.pools(partition, draw).items()}
+
+    def ceiling(self, partition: Partition, draw: Draw, counts: tuple[int, ...] = ORACLE_KS) -> Ceiling:
+        """Gains of mixing in `count` random same-label rows (0: all of them), the macro over domains."""
+        calibration, generator = self.calibration(), torch.Generator().manual_seed(draw.seed)
+        per_domain = [
+            {c: p.chosen(Pool.subset(p.same(), c, generator), calibration) for c in counts}
+            for p in self.pools(partition, draw).values()
+        ]
+        return Ceiling({c: Ceiling.macro([d[c] for d in per_domain]) for c in counts})
+
+    def matched(self, partition: Partition, draw: Draw, purities: tuple[float, ...] = PURITIES) -> Ceiling:
+        """Gains with `MATCH_K` neighbours of whom a `purity` share are random same-label rows, the rest random
+        other-label rows, keyed by the number of same-label ones."""
+        calibration, generator = self.calibration(), torch.Generator().manual_seed(draw.seed)
+        wanted = {round(p * MATCH_K) for p in purities}
+        per_domain = []
+        for pool in self.pools(partition, draw).values():
+            same, different = pool.same(), ~pool.same() & ~torch.eye(pool.y.shape[1], dtype=torch.bool)
+            per_domain.append(
+                {
+                    n: pool.chosen(
+                        Pool.subset(same, n, generator) | Pool.subset(different, MATCH_K - n, generator), calibration
+                    )
+                    for n in wanted
+                }
+            )
+        return Ceiling({n: Ceiling.macro([d[n] for d in per_domain]) for n in wanted})
+
+    def purity(
+        self, partition: Partition, draw: Draw, *, posterior: bool = False
+    ) -> dict[str, dict[Space, dict[int, float]]]:
         """Neighbour purity per domain, space and `k`."""
         out: dict[str, dict[Space, dict[int, float]]] = {}
-        for name, rows in self.dump.partitions[partition].items():
-            pool = Pool.drawn(rows, draw)
+        for name, pool in self.pools(partition, draw, posterior=posterior).items():
             out[name] = {s: {k: pool.near(s, max(KS)).purity(pool.y, k) for k in KS} for s in Space}
         return out
 
@@ -291,6 +384,27 @@ def main() -> None:
         record[f"purity-{partition}"] = study.purity(partition, pooled)
         record[f"chance-{partition}"] = study.chance(partition)
         LOG.info("purity %s %s chance %s", partition, record[f"purity-{partition}"], record[f"chance-{partition}"])
+    record["available"] = {p: study.available(p, pooled) for p in SCORED}
+    record["oracle-label"] = {p: study.ceiling(p, pooled).best() for p in SCORED}
+    record["purity-matched"] = {p: study.matched(p, pooled).best() for p in SCORED}
+    LOG.info("available %s", record["available"])
+    LOG.info("oracle-label ceiling (best mix by test, k 0=all) %s", record["oracle-label"])
+    LOG.info("purity-matched (key = same-label of %d) %s", MATCH_K, record["purity-matched"])
+    val_post, test_post = (
+        study.gains(Partition.VALIDATION, pooled, posterior=True),
+        study.gains(Partition.TEST, pooled, posterior=True),
+    )
+    chosen_post = val_post.best()
+    record["posterior-chosen"] = str(chosen_post)
+    record["posterior-val-at-chosen"] = val_post.at(chosen_post)
+    record["posterior-test-at-chosen"] = test_post.at(chosen_post)
+    record["posterior-test-macro-at-chosen"] = float(test_post.macro()[chosen_post].mean())
+    record["posterior-oracle"] = str(test_post.best())
+    record["posterior-test-at-oracle"] = test_post.at(test_post.best())
+    for partition in SCORED:
+        record[f"posterior-purity-{partition}"] = study.purity(partition, pooled, posterior=True)
+    LOG.info("posterior chosen %s test %s", chosen_post, record["posterior-test-at-chosen"])
+    LOG.info("posterior purity %s", {p: record[f"posterior-purity-{p}"] for p in SCORED})
     path.with_suffix(".json").write_text(json.dumps(record, indent=1, default=str))
 
 

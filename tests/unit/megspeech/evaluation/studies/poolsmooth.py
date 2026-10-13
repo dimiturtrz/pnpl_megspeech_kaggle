@@ -18,6 +18,7 @@ from megspeech.evaluation.studies.poolsmooth import (
     TEMPERATURES,
     TOLERANCE,
     Aggregation,
+    Ceiling,
     Collector,
     Draw,
     Gains,
@@ -135,12 +136,12 @@ def gains() -> Gains:
     )
 
 
-def test_macro() -> None:
+def test_gains_macro() -> None:
     macro = gains().macro()
     assert macro[Setting(Space.RAW, 5, 0.1, Aggregation.LOG, 0.5)].tolist() == pytest.approx([0.1, 0.2])
 
 
-def test_best() -> None:
+def test_gains_best() -> None:
     assert gains().best().k == 5
 
 
@@ -175,6 +176,71 @@ def test_smoothing_purity() -> None:
 
 def test_chance() -> None:
     assert smoothing().chance(Partition.TEST)["Sherlock1"] == pytest.approx(1 / PAIRS)
+
+
+def test_posterior() -> None:
+    pool = duplicated()
+    assert torch.allclose(pool.posterior().emb, pool.base.exp())
+    assert torch.equal(pool.posterior().y, pool.y)
+
+
+def test_same() -> None:
+    same = duplicated().same()
+    assert same.shape == (1, 2 * PAIRS, 2 * PAIRS)
+    assert same.sum(-1).eq(1).all()
+    assert same[0, 0, 1] and not same[0, 0, 0]
+
+
+def test_subset() -> None:
+    mask = ~torch.eye(4, dtype=torch.bool)[None]
+    chosen = Pool.subset(mask, 2, torch.Generator().manual_seed(0))
+    assert chosen.sum(-1).eq(2).all()
+    assert not (chosen & ~mask).any()
+    assert torch.equal(Pool.subset(mask, 0, torch.Generator().manual_seed(0)), mask)
+    assert Pool.subset(mask, 9, torch.Generator().manual_seed(0)).sum(-1).eq(3).all()
+
+
+def test_chosen() -> None:
+    pool = duplicated()
+    gain = pool.chosen(pool.same(), calibration(), RULER)
+    assert gain[Aggregation.LOG, 1.0].item() == pytest.approx(0.5)
+    none = pool.chosen(torch.zeros_like(pool.same()), calibration(), RULER)
+    assert all(g.item() == 0.0 for g in none.values())
+
+
+def test_pools() -> None:
+    pools = smoothing().pools(Partition.TEST, Draw(size=0), posterior=True)
+    assert torch.allclose(pools["Sherlock1"].emb, pools["Sherlock1"].base.exp())
+
+
+def test_available() -> None:
+    assert smoothing().available(Partition.TEST, Draw(size=0))["Sherlock1"] == pytest.approx(1.0)
+
+
+def test_ceiling() -> None:
+    ceiling = smoothing().ceiling(Partition.TEST, Draw(size=0), (1, 0))
+    assert set(ceiling.gains) == {1, 0}
+    assert set(ceiling.gains[1]) == {(a, lam) for a in Aggregation for lam in LAMBDAS}
+
+
+def test_matched() -> None:
+    matched = smoothing().matched(Partition.TEST, Draw(size=0), (0.4, 0.6))
+    assert set(matched.gains) == {2, 3}
+
+
+def test_ceiling_macro() -> None:
+    mix = (Aggregation.LOG, 1.0)
+    macro = Ceiling.macro([{mix: torch.tensor([0.0, 0.2])}, {mix: torch.tensor([0.2, 0.2])}])
+    assert macro[mix].tolist() == pytest.approx([0.1, 0.2])
+
+
+def test_ceiling_best() -> None:
+    a, b = (Aggregation.LOG, 0.5), (Aggregation.PROB, 0.5)
+    best = Ceiling({3: {a: torch.tensor([0.1, 0.3]), b: torch.tensor([0.0, 0.0])}, 5: {a: torch.tensor([0.2])}}).best()
+    assert best[3][0] == a
+    assert best[3][1] == pytest.approx(0.2)
+    assert best[3][2] == pytest.approx(0.1414, abs=1e-3)
+    assert best[5][2] == 0.0
 
 
 def test_path(tmp_path: Path) -> None:
