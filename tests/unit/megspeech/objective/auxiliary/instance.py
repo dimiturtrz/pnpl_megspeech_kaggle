@@ -8,7 +8,8 @@ import torch
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.spans.spans import Spans
-from megspeech.objective.auxiliary.instance import Apart, InstanceTerm, Similarity, Together
+from megspeech.objective.auxiliary.instance import Apart, InstanceTerm, Together
+from megspeech.objective.auxiliary.similarity import Similarity
 from megspeech.objective.term import Reading
 
 CPU = torch.device("cpu")
@@ -59,6 +60,10 @@ def test_instance_term_of() -> None:
     assert made.subject.tolist() == [101, 101, 102, 102, 101, 0]
     with pytest.raises(ValueError, match="no training word"):
         InstanceTerm.of(1.0, WORDS.iloc[5:], CPU)
+
+
+def test_positives() -> None:
+    assert term().positives().subject.tolist() == [101, 101, 102, 102, 101, 0]
 
 
 def test_head() -> None:
