@@ -100,6 +100,20 @@ def test_near_purity() -> None:
     assert near.purity(y, 1) == pytest.approx(0.75)
 
 
+def test_hits() -> None:
+    y = torch.tensor([[0, 0, 1, 1]])
+    near = Near(torch.zeros(1, 4, 1), torch.tensor([[[1], [0], [0], [2]]]))
+    assert near.hits(y, 1).tolist() == [[1.0, 1.0, 0.0, 1.0]]
+
+
+def test_near_by_label() -> None:
+    y = torch.tensor([[0, 0, 1, 1]])
+    near = Near(torch.zeros(1, 4, 1), torch.tensor([[[1], [0], [0], [2]]]))
+    purity = near.by_label(y, 1)
+    assert purity[:2].tolist() == [1.0, 0.5]
+    assert purity[2:].isnan().all()
+
+
 def test_drawn() -> None:
     rows = Rows(torch.zeros(10, VOCAB_SIZE), torch.arange(10), (torch.ones(10, HIDDEN),))
     pool = Pool.drawn(rows, Draw(size=4, count=2))
@@ -191,6 +205,11 @@ def test_smoothing_purity() -> None:
     assert purity["Sherlock1"][Space.RAW][KS[0]] <= 1.0
 
 
+def test_smoothing_by_label() -> None:
+    purity = smoothing().by_label(Partition.TEST, Draw(size=0))
+    assert len(purity["Sherlock1"][Space.RAW]) == VOCAB_SIZE
+
+
 def test_chance() -> None:
     assert smoothing().chance(Partition.TEST)["Sherlock1"] == pytest.approx(1 / PAIRS)
 
@@ -273,3 +292,12 @@ def test_reproduces() -> None:
     with pytest.raises(ValueError, match="expected"):
         Collector.reproduces(dump, {p: own[p] + 10 * TOLERANCE for p in SCORED})
     assert set(BASE_SCORES) == set(SCORED)
+
+
+def test_pick() -> None:
+    span = torch.tensor([0, 0, 1, 1, 2, 2])
+    rows = Draw(size=4, grouped=True).pick(6, span, 3)
+    assert rows.shape == (4,)
+    assert torch.equal(rows, Draw(size=4, grouped=True).pick(6, span, 3))
+    assert len(set(span[rows].tolist())) == 2
+    assert len(set(Draw(size=4).pick(6, None, 3).tolist())) == 4

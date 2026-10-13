@@ -46,6 +46,31 @@ the low purity they measured, not from a bad mix.
   are dominated by sentence context and timing, not word identity. Retrieval was never part of the training
   objective.
 
+## Purity is a frequent-word number (13:52 addendum)
+
+Row-mean purity weights rows, and pools follow corpus frequencies (chance .065, not 1/50). BAcc weights labels.
+`Smoothing.by_label` splits the base's k=5 purity by training-frequency quartile of the label:
+
+| quartile (rare → frequent) | rows / label / pool | max k=5 purity (pool cap) | VAL purity | LT purity |
+|---|---|---|---|---|
+| Q1 | 2.3–2.7 | .26–.33 | .02–.03 | .04–.06 |
+| Q2 | 8.1–8.6 | .71–.84 | .05–.06 | .05 |
+| Q3 | 11.4–12.4 | .99–1 | .05 | .06 |
+| Q4 | 45–52 | 1 | .18–.19 | .16–.17 |
+
+- The quoted .20–.26 is carried by Q4.
+- On the macro axis the metric scores, the embedding is near chance for three quarters of the vocabulary.
+- **The headroom is Q2–Q3:** pools hold enough same-word rows there, and the embedding does not find them.
+- Q1 is capped by the pool itself, however good the embedding.
+
+### Consequence for 7gf.86
+
+- The base config draws 64 sentences, about 330 labelled words per batch. The rarest 12 labels get a SupCon
+  positive in only 56% of batches (simulated), and they make up 2.3% of the anchors that have one.
+- `--sampler.balance 1` lifts that to 88% and 7.3%. It was a null for CE (megspeech-3sk), but its job here is
+  different: it feeds positives to the anchors that need them.
+- The prereg gate is therefore macro: Q2–Q3 purity, not the row mean.
+
 ## Verdict and scope
 
 Dead for this use: retrieval from a CE-trained embedding or posterior, under any graph trick tried. **Not ruled

@@ -118,10 +118,21 @@ class Near:
     def weights(self, k: int, temperature: float) -> Float[Tensor, "d p k"]:
         return (self.sims[..., :k] / temperature).softmax(dim=-1)
 
+    def hits(self, y: Int[Tensor, "d p"], k: int) -> Float[Tensor, "d p"]:
+        """Each row's fraction of its first `k` neighbours that share its label."""
+        labels = y.gather(1, self.at[..., :k].flatten(1)).view(self.at[..., :k].shape)
+        return (labels == y[..., None]).float().mean(dim=-1)
+
     def purity(self, y: Int[Tensor, "d p"], k: int) -> float:
         """Mean fraction of the first `k` neighbours that share their row's label."""
-        labels = y.gather(1, self.at[..., :k].flatten(1)).view(self.at[..., :k].shape)
-        return float((labels == y[..., None]).float().mean())
+        return float(self.hits(y, k).mean())
+
+    def by_label(self, y: Int[Tensor, "d p"], k: int) -> Float[Tensor, " v"]:
+        """Purity per 50-way label, NaN for a label no pool row holds: a contrastive embedding trained on the corpus'
+        frequencies can be pure on the frequent words alone, which the row mean of near-balanced pools hides."""
+        counts = torch.bincount(y.flatten(), minlength=VOCAB_SIZE).float()
+        sums = torch.zeros(VOCAB_SIZE).index_add_(0, y.flatten(), self.hits(y, k).flatten())
+        return torch.where(counts > 0, sums / counts.clamp(min=1), torch.nan)
 
 
 @dataclass(frozen=True)
@@ -311,6 +322,13 @@ class Smoothing:
             out[name] = {s: {k: pool.near(s, max(KS)).purity(pool.y, k) for k in KS} for s in Space}
         return out
 
+    def by_label(self, partition: Partition, draw: Draw) -> dict[str, dict[Space, list[float]]]:
+        """Purity at `MATCH_K` per domain, space and 50-way label (`Near.by_label`)."""
+        return {
+            name: {s: pool.near(s, max(KS)).by_label(pool.y, MATCH_K).tolist() for s in Space}
+            for name, pool in self.pools(partition, draw).items()
+        }
+
     def chance(self, partition: Partition) -> dict[str, float]:
         shares = {
             n: torch.bincount(r.y, minlength=VOCAB_SIZE).float() / len(r.y)
@@ -394,6 +412,7 @@ def main() -> None:
     for partition in SCORED:
         record[f"purity-{partition}"] = study.purity(partition, pooled)
         record[f"chance-{partition}"] = study.chance(partition)
+        record[f"purity-by-label-{partition}"] = study.by_label(partition, pooled)
         LOG.info("purity %s %s chance %s", partition, record[f"purity-{partition}"], record[f"chance-{partition}"])
     record["available"] = {p: study.available(p, pooled) for p in SCORED}
     record["oracle-label"] = {p: study.ceiling(p, pooled).best() for p in SCORED}
