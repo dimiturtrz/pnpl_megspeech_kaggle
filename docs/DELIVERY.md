@@ -31,6 +31,15 @@ uv run python -m megspeech.submission <members...> --out <dir> [--track broad] [
 This writes `<dir>/submission.csv` (or `broad_submission.csv`) and `metrics.json`. Since 7gf.29.1.1, `metrics.json`
 records the members together with the scoring flags.
 
+## Organiser data
+
+- **Format:** the test rows are read by `pnpl.competition.holdout.LibriBrainCompetitionHoldout`, the organisers'
+  own loader. New data in that layout runs unchanged. Any other layout needs an adapter to it.
+- **Training data is required too.** The command re-selects its temperature on the labelled local ruler, so the
+  training data has to be present (`python -m megspeech.data.raw.fetch`, public). The ruler does not depend on the
+  test rows, so new test data gets the same temperature.
+- **Runtime on CPU:** about 10 min for a 4-member Deep blend. Broad's 29 members take over an hour.
+
 ## Disclose
 
 - **Broad:** the Sinkhorn balancing is transductive. It runs per subject over the test rows' output probabilities.
