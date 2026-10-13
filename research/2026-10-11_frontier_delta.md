@@ -17,7 +17,7 @@ leaders .775 / .732)?
 - Already closed and not re-recommended:
   - HDND pyramid, smooth top-k, conformer, MEG-XL frozen/LoRA, trial-averaging aug, band-stop/specaug.
   - wav2vec2 / GPT-2 / semantic aux, BERT MLM fusion.
-  - TTA and cross-subject test pooling (both forbidden).
+  - TTA and cross-subject test pooling (our own restriction, owner 2026-10-08; rules.md:35 leaves test-time adaptation "Not addressed").
 
 **Clock.** The libribrain.com participate page says: "Submissions open 15 July 2026 and close **15 October 2026
 (AoE)**". That leaves about 4 days. Any lever that costs more than about a day of wall-clock is priced out of this
