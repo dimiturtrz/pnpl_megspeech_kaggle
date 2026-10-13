@@ -1,6 +1,7 @@
+import json
 import logging
 import sys
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,7 @@ from megspeech.evaluation.scoring.probabilities import PROBS, SECTIONS, Probabil
 from megspeech.submission import __main__ as cli
 from megspeech.submission import report as module
 from megspeech.submission.config import ReportConfig
-from megspeech.submission.report import HITS, SUBMISSIONS, Report, Submission
+from megspeech.submission.report import HITS, SCORING, SUBMISSIONS, Report, Submission
 from tests.unit.megspeech.evaluation.loaded import CPU, loaded, runs
 
 RUN = "run"
@@ -46,7 +47,9 @@ def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         written = Submission(track).write(replace(loaded(tmp_path), names=(RUN,)), runs(tmp_path), out)
         assert written == out / SUBMISSIONS[track]
         assert (out / HITS[track]).is_file()
-        assert (out / "metrics.json").is_file()
+        assert json.loads((out / "metrics.json").read_text())["config"]["scoring"] == json.loads(
+            json.dumps(asdict(SCORING))
+        )
 
 
 def test_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:

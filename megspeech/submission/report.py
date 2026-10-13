@@ -39,9 +39,11 @@ SCORING = Scoring(fallback=Fallback(Unseen.DEEP))
 
 @dataclass(frozen=True)
 class Submission:
-    """`track`'s submission for a loaded model, at the adjustment the track's ruler selects."""
+    """`track`'s submission for a loaded model, at the adjustment the track's ruler selects; `scoring` is recorded
+    beside its members so the blend can be rebuilt from the record alone."""
 
     track: Track
+    scoring: Scoring = SCORING
 
     def write(self, loaded: ExportedModel, runs: list[Run], out: Path) -> Path:
         """The ruler's hits, the record and the Kaggle test rows under `out`; the submission's path."""
@@ -49,7 +51,11 @@ class Submission:
         selected = ruler.select()
         out.mkdir(parents=True, exist_ok=True)
         ruler.graded(selected.tau).save(out / HITS[self.track])
-        record = {"members": list(loaded.names), "config": {"data": asdict(loaded.data)}, "best": asdict(selected)}
+        record = {
+            "members": list(loaded.names),
+            "config": {"data": asdict(loaded.data), "scoring": asdict(self.scoring)},
+            "best": asdict(selected),
+        }
         (out / METRICS).write_text(json.dumps(record, indent=1))
         return KaggleWriter(self.track).write(loaded, selected.tau, out / SUBMISSIONS[self.track])
 
@@ -74,7 +80,9 @@ class Report:
             LocalTest(self.loaded(SCORING), runs).report(self.name, saved)
         for track in self.config.tracks:
             scoring = replace(SCORING, aligned=self.config.aligned and track is Track.BROAD)
-            written = Submission(track).write(self.loaded(scoring), runs, self.root.models() / f"{self.name}-{track}")
+            written = Submission(track, scoring).write(
+                self.loaded(scoring), runs, self.root.models() / f"{self.name}-{track}"
+            )
             LOG.info("wrote %s", written)
 
     def loaded(self, scoring: Scoring) -> ExportedModel:

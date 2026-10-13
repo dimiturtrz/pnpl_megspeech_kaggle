@@ -64,7 +64,7 @@ def main() -> None:
         if args.memorisation:
             Memorisation(replace(loaded, partition=Partition.TEST)).report(runs, test.tau(), label)
         return None
-    LOG.info("wrote %s", Submission(args.track).write(loaded, runs, root.models() / args.out))
+    LOG.info("wrote %s", Submission(args.track, group.scoring).write(loaded, runs, root.models() / args.out))
 
 
 if __name__ == "__main__":
