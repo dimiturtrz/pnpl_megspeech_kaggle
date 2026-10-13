@@ -1,6 +1,6 @@
 # PNPL Competition 2026 — rules
 
-Sources: the Kaggle Rules tabs of `pnpl-competition-2026-deep` and `-broad`, pasted by the owner on 2026-10-07
+Sources: the Kaggle Rules tabs (raw paste: [`rules_tab.txt`](rules_tab.txt)) of `pnpl-competition-2026-deep` and `-broad`, pasted by the owner on 2026-10-07
 (the Kaggle CLI cannot fetch them; the two tabs are word-for-word identical), and libribrain.com/editions/2026/rules/ + /faq/ (fetched 2026-10-05). Quotes are verbatim.
 
 ## Competition-specific rules (Kaggle Rules tab)

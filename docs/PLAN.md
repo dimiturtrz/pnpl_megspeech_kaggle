@@ -112,7 +112,7 @@ context is available at test time.
 ## Structure
 
 - `megspeech/` — the pipeline (data → model → eval → submission). `core/` — task-agnostic kernel.
-- `comp/` — submission glue + competition facts (not `kaggle/`: shadows the installed package).
+- `docs/competition/` — competition facts, verbatim (`rules_tab.txt` = the raw Kaggle Rules tab). `docs/DELIVERY.md` — what to hand over.
 - `tests/` — unit / integration / e2e.
 
 ## Approach
