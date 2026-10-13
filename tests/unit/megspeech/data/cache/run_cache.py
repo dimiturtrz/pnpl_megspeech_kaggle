@@ -1,3 +1,4 @@
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -117,6 +118,13 @@ def test_write(tmp_path: Path) -> None:
     assert np.load(path).shape == (2, 3)
     assert cache.write("r", lambda: pytest.fail("a cached run is produced again")) == path
     assert not list(cache.cache.glob("*.partial"))
+    source = tmp_path / "source.npz"
+    source.touch()
+    os.utime(source, (path.stat().st_mtime - 1,) * 2)
+    assert cache.write("r", lambda: pytest.fail("a source older than its cache is produced again"), source) == path
+    os.utime(source, (path.stat().st_mtime + 1,) * 2)
+    cache.write("r", lambda: np.zeros((4, 5), dtype=np.float16), source)
+    assert np.load(path).shape == (4, 5)
 
 
 def test_cache_run(tmp_path: Path) -> None:

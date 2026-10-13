@@ -180,7 +180,9 @@ class KaggleCache:
         archives = self.archives()
         clean = self.cache.cleaner(self.layout)
         for archive in archives:
-            LOG.info("%s", self.cache.write(archive.name, partial(archive.signal, self.cache, clean)).name)
+            LOG.info(
+                "%s", self.cache.write(archive.name, partial(archive.signal, self.cache, clean), archive.path).name
+            )
         return self.cache.publish(pd.concat([archive.words(self.cache) for archive in archives], ignore_index=True))
 
     def windows(

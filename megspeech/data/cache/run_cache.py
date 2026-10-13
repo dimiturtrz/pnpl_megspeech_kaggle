@@ -99,10 +99,11 @@ class RunCache:
         """Samples `decimated` keeps of `samples`: `resample_poly` rounds `samples / decimate` up."""
         return -(-samples // self.decimate)
 
-    def write(self, name: str, produce: Callable[[], Float[np.ndarray, "c s"]]) -> Path:
-        """Cache the signal `produce` makes as run `name`; a run already cached is skipped, never produced."""
+    def write(self, name: str, produce: Callable[[], Float[np.ndarray, "c s"]], source: Path | None = None) -> Path:
+        """Cache the signal `produce` makes as run `name`; a run already cached is skipped, never produced, unless its
+        `source` was modified after it was cached (a replaced archive under the same name)."""
         path = self.path(name)
-        if not path.exists():
+        if not path.exists() or (source is not None and source.stat().st_mtime > path.stat().st_mtime):
             self.save(path, produce())
         return path
 
