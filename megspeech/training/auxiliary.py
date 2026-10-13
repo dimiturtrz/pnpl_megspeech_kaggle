@@ -22,6 +22,7 @@ from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.acoustic import AcousticTerm
 from megspeech.objective.auxiliary.adversarial import TimingTerm
 from megspeech.objective.auxiliary.audio import AudioTerm
+from megspeech.objective.auxiliary.contrast import SameWordTerm
 from megspeech.objective.auxiliary.instance import InstanceTerm
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
@@ -111,6 +112,12 @@ class AuxiliaryConfig:
     instance_apart: bool = False
     """Leave every other word of a word's own sentence, whoever heard it, out of the instance term's negatives
     (`megspeech.objective.auxiliary.instance.Apart`): their windows overlap its sound (megspeech-ct5)."""
+    contrast: float = 0.0
+    """Weight of the same-word contrastive term (`megspeech.objective.auxiliary.contrast`): supervised contrastive
+    loss (Khosla et al. 2020) over the `tap` representation of every word in the 50, its positives the batch's other
+    words of the same label from a different sentence, its negatives the other labels; pulls same-word embeddings
+    together so a kNN readout finds them. Reads what `tap` names, `context` being what the kNN readout embeds; 0
+    creates no head (megspeech-7gf.86)."""
     tap: Tap = Tap.WORD
     """What every auxiliary head reads: the encoder's word embedding, or the span transformer's output at the word
     (d'Ascoli et al. train that output of every heard word toward t5; the context head alone sees only the 50's)."""
@@ -190,6 +197,7 @@ class Auxiliary(ABC):
             (weights.prev_word, lambda: PreviousWordTerm(weight=weights.prev_word)),
             (adversary, lambda: TimingTerm.of(1.0, words, device)),
             (weights.instance, lambda: InstanceTerm.of(weights.instance, words, device, apart=weights.instance_apart)),
+            (weights.contrast, lambda: SameWordTerm.of(weights.contrast, words, device)),
             (weights.window, lambda: WindowTerm(weights.window, lexicon())),
             (weights.acoustic, lambda: AcousticTerm(weights.acoustic, loudness())),
             (weights.audio, lambda: AudioTerm(weights.audio, loudness())),

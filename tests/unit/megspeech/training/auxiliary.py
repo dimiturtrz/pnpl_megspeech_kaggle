@@ -21,6 +21,7 @@ from megspeech.model.words.heads import WordHead
 from megspeech.objective.auxiliary.acoustic import Acoustic, AcousticTerm
 from megspeech.objective.auxiliary.adversarial import TimingTerm
 from megspeech.objective.auxiliary.audio import AudioTerm, Listening
+from megspeech.objective.auxiliary.contrast import SameWordTerm
 from megspeech.objective.auxiliary.instance import Apart, InstanceTerm, Together
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
@@ -188,6 +189,15 @@ def test_of_instance(tmp_path: Path) -> None:
     assert type(cast("InstanceTerm", paired.terms[0]).neighbours) is Together
     apart = Auxiliary.of(AuxiliaryConfig(instance=0.25, instance_apart=True), 0.0, Tables(root, CPU, masc, CUT))
     assert isinstance(cast("InstanceTerm", apart.terms[0]).neighbours, Apart)
+
+
+def test_of_contrast(tmp_path: Path) -> None:
+    """The same-word term reads the run's tap, unlike the instance term's local one."""
+    root = cast("DataRoot", Root(tmp_path))
+    words = pd.DataFrame({"run": ["a", "a"], "position": [0, 1], "sentence": [0, 1]})
+    context = Auxiliary.of(AuxiliaryConfig(contrast=0.4, tap=Tap.CONTEXT), 0.0, Tables(root, CPU, words, CUT))
+    assert [(type(t), t.weight) for t in context.terms] == [(SameWordTerm, 0.4)]
+    assert cast("Joint", context).tapped(context.terms[0]) is Tap.CONTEXT
 
 
 def test_joint_trained_tagged() -> None:

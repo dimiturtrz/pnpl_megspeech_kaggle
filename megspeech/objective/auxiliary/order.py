@@ -16,6 +16,8 @@ class HeadOrder:
         "next_word",
         "prev_word",
         "adversary",
+        "instance",
+        "contrast",
         "window",
         "acoustic",
     )
