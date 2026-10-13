@@ -9,8 +9,8 @@ import pyarrow.parquet as pq
 import pytest
 
 from core.paths import DataRoot
-from megspeech.data.raw import librispeech as module
-from megspeech.data.raw.librispeech import (
+from megspeech.data.labels import librispeech as module
+from megspeech.data.labels.librispeech import (
     Calibration,
     Chapters,
     Corpus,

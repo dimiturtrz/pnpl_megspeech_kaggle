@@ -17,6 +17,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import Split
+from megspeech.data.config import METRICS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
@@ -26,10 +27,8 @@ from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.score import Head
-from megspeech.model.context.timing_only import TimingOnly
+from megspeech.model.context.timing_only import FILE, TimingOnly
 from megspeech.model.input.subjects import Fallback, Unseen
-from megspeech.training.config import METRICS
-from megspeech.training.timing_expert import TimingExpert
 
 LOG = logging.getLogger(__name__)
 
@@ -47,7 +46,7 @@ class Expert:
     def load(cls, root: DataRoot, name: str, device: torch.device) -> "Expert":  # devtools-ignore: test-mirror
         layers = json.loads((root.models() / name / METRICS).read_text())["expert"].get("layers", 0)
         model = TimingOnly(VOCAB_SIZE, layers)
-        model.timing.load_state_dict(TimingExpert.load(root, name))
+        model.timing.load_state_dict(torch.load(root.models() / name / FILE, weights_only=True))
         return cls(model.to(device).eval())
 
     def words(self, split: Split) -> Float[Tensor, "n v"]:

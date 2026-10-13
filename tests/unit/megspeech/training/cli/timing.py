@@ -13,11 +13,11 @@ from megspeech.data.batching.split import Split
 from megspeech.data.constants import CHANNELS
 from megspeech.data.corpus import Corpus
 from megspeech.data.spans.spans import Spans
+from megspeech.model.context.timing_only import FILE
 from megspeech.training.cli import timing as module
 from megspeech.training.cli.timing import main
 from megspeech.training.config import METRICS, RunConfig
 from megspeech.training.loop import trainer as trainer_module
-from megspeech.training.timing_expert import FILE
 
 CPU = torch.device("cpu")
 ROWS = 16

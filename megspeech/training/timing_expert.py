@@ -15,11 +15,9 @@ from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Epoch
-from megspeech.model.context.timing_only import TimingOnly
+from megspeech.model.context.timing_only import FILE, TimingOnly
 
 LOG = logging.getLogger(__name__)
-
-FILE = "timing.pt"
 
 
 @dataclass(frozen=True)

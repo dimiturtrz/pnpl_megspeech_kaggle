@@ -1,7 +1,7 @@
 """LibriSpeech word onsets cut into sentence spans: a pretraining corpus for the timing-only model.
 
-    uv run --no-sync python -m megspeech.data.raw.librispeech --fetch   # alignments + metadata, into raw/
-    uv run --no-sync python -m megspeech.data.raw.librispeech           # build processed/librispeech_spans
+    uv run --no-sync python -m megspeech.data.labels.librispeech --fetch   # alignments + metadata, into raw/
+    uv run --no-sync python -m megspeech.data.labels.librispeech           # build processed/librispeech_spans
 
 Sources, each CC BY 4.0 (licence read on the primary page):
 

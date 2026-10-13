@@ -7,6 +7,9 @@ from megspeech.data.batching.split import SpanInput
 from megspeech.model.context.timing import TimingHead
 from megspeech.model.context.timing_sequence import TimingSequence
 
+FILE = "timing.pt"
+"""The saved timing head's weights, under its run's directory."""
+
 
 class TimingOnly(nn.Module):
     """A timing expert with no MEG: a `TimingHead` read as the context and the word head alike, so a trainer and an

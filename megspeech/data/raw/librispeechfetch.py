@@ -1,6 +1,6 @@
 """Downloads the LibriSpeech alignment shards and metadata archives into the raw directory.
 
-Sources and licences are listed in `megspeech.data.raw.librispeech`.
+Sources and licences are listed in `megspeech.data.labels.librispeech`.
 """
 
 import logging
