@@ -7,6 +7,7 @@ import pytest
 import torch
 from torch import Tensor
 
+from core.paths import DataRoot
 from megspeech.data.cache.run_cache import DIRECTORY, RATE, WORD_TABLE
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import PRIMARY
@@ -43,14 +44,6 @@ class Loader:
         return self.made
 
 
-class Root:
-    def __init__(self, path: Path) -> None:
-        self.base = path
-
-    def processed(self) -> Path:
-        return self.base
-
-
 def lexicon() -> Lexicon:
     return Lexicon(torch.tensor([-5, 3, 9]), torch.arange(3 * DIM).float().view(3, DIM))
 
@@ -78,12 +71,12 @@ def test_lexicon_encode() -> None:
 
 
 def test_prototypes_path(tmp_path: Path) -> None:
-    assert Prototypes.path(Root(tmp_path)).parent == tmp_path / "prototypes"  # type: ignore[arg-type]
+    assert Prototypes.path(DataRoot(tmp_path)).parent == DataRoot(tmp_path).processed() / "prototypes"
 
 
 def test_lexicon_path(tmp_path: Path) -> None:
-    assert Lexicon.path(Root(tmp_path)).parent == tmp_path / "prototypes"  # type: ignore[arg-type]
-    assert Lexicon.path(Root(tmp_path)) != Prototypes.path(Root(tmp_path))  # type: ignore[arg-type]
+    assert Lexicon.path(DataRoot(tmp_path)).parent == DataRoot(tmp_path).processed() / "prototypes"
+    assert Lexicon.path(DataRoot(tmp_path)) != Prototypes.path(DataRoot(tmp_path))
 
 
 def test_prototypes_save(tmp_path: Path) -> None:
@@ -115,14 +108,14 @@ def test_rows() -> None:
 
 
 def test_prototypes_write(tmp_path: Path) -> None:
-    written = Prototypes.write(Root(tmp_path), Tokenizer(), Encoder())  # type: ignore[arg-type]
+    written = Prototypes.write(DataRoot(tmp_path), Tokenizer(), Encoder())
     assert Prototypes.load(written).vectors.shape == (len(PRIMARY), DIM)
 
 
 def test_lexicon_write(tmp_path: Path) -> None:
-    cache(tmp_path)
-    root = Root(tmp_path)
-    written = Lexicon.load(Lexicon.write(root, Tokenizer(), Encoder()))  # type: ignore[arg-type]
+    cache(DataRoot(tmp_path).processed())
+    root = DataRoot(tmp_path)
+    written = Lexicon.load(Lexicon.write(root, Tokenizer(), Encoder()))
     the, cat = pd.util.hash_array(np.array(["the", "cat"], dtype=object)).view(np.int64).tolist()
     assert written.keys.tolist() == sorted([the, cat])
     assert written.vectors.shape == (2, DIM)
@@ -131,11 +124,11 @@ def test_lexicon_write(tmp_path: Path) -> None:
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "AutoTokenizer", Loader(Tokenizer()))
     monkeypatch.setattr(module, "T5EncoderModel", Loader(Encoder()))
-    monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: Root(tmp_path)))
+    monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))
     monkeypatch.setattr("sys.argv", ["prototypes"])
     Prototypes.main()
-    assert Prototypes.load(Prototypes.path(Root(tmp_path))).vectors.shape == (len(PRIMARY), DIM)  # type: ignore[arg-type]
-    cache(tmp_path)
+    assert Prototypes.load(Prototypes.path(DataRoot(tmp_path))).vectors.shape == (len(PRIMARY), DIM)
+    cache(DataRoot(tmp_path).processed())
     monkeypatch.setattr("sys.argv", ["prototypes", "--lexicon"])
     Prototypes.main()
-    assert Lexicon.load(Lexicon.path(Root(tmp_path))).keys.shape == (2,)  # type: ignore[arg-type]
+    assert Lexicon.load(Lexicon.path(DataRoot(tmp_path))).keys.shape == (2,)
