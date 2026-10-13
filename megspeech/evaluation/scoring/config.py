@@ -9,7 +9,7 @@ from torch import nn
 from megspeech.data.config import DataConfig
 from megspeech.data.raw.runs import Partition
 from megspeech.data.spans.grouping import Grouping
-from megspeech.evaluation.metric.balance import Sinkhorn
+from megspeech.evaluation.metric.balance import PoolSmoothing, Sinkhorn
 from megspeech.model.ensemble import Ensemble
 from megspeech.model.input.lowpass import LowPass
 from megspeech.model.input.subjects import AS_TRAINED, Fallback, Reading, SubjectLayer
@@ -24,6 +24,7 @@ class Scoring:
     fallback: Fallback = AS_TRAINED
     reading: Reading = Reading.OWN
     balance: Sinkhorn = Sinkhorn()
+    smooth: PoolSmoothing = PoolSmoothing()
     shifts: tuple[int, ...] = (0,)
     aligned: bool = False
     """Re-colour every other subject's recording to subject 0's sensor covariance (`Alignment`) before the model

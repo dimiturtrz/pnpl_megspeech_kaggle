@@ -21,7 +21,7 @@ picks is in megspeech-7gf.29.1. The rebuild audit is megspeech-7gf.29.1.1.
 | Deep | d-ac05xfam | `ema-cd25-xsp10sem05-ac05x-s{k}-ft-s{k}`, k = 1..4 | none | bit-exact |
 | Deep | d-old4 | `ema-cd25-xsp10sem05-s{k}-ft-s{k}`, k = 2..5 | none | bit-exact |
 | Broad | b-xc5k25ps | 29, listed in `xc5k25ps/metrics.json` | `--track broad --aligned --fallback.unseen mean --fallback.keep 0.25 --balance.steps 30 --balance.toward 0.25 --balance.per_subject` | bit-exact |
-| Broad | b-xc8k25ps | 32, listed in `xc8k25ps/metrics.json` | same | bit-exact |
+| Broad | b-xc5k25b0ps | same 29 as b-xc5k25ps | `--track broad --aligned --fallback.unseen mean --fallback.keep 0.25` | rebuilt 10-13 |
 
 ## Command
 
@@ -43,5 +43,5 @@ records the members together with the scoring flags.
 
 ## Disclose
 
-- **Broad:** the Sinkhorn balancing is transductive. It runs per subject over the test rows' output probabilities.
+- **Broad #1:** the Sinkhorn balancing is transductive (#2 has none). It runs per subject over the test rows' output probabilities.
 - No cross-track mapping is used (`competition/announcements.md`).

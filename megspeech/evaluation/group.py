@@ -41,6 +41,7 @@ class Group:
             sequences,
             SelectionConfig.shared(directories).min_novel,
             balance=scoring.balance,
+            smooth=scoring.smooth,
             shifts=scoring.shifts,
             adapted=scoring.adapted,
             word_share=scoring.word_share,

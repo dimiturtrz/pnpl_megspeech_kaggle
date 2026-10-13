@@ -1,6 +1,6 @@
 import torch
 
-from megspeech.evaluation.metric.balance import Sinkhorn
+from megspeech.evaluation.metric.balance import PoolSmoothing, Sinkhorn
 
 PRIOR = torch.log(torch.tensor([0.5, 0.25, 0.15, 0.1]))
 SCORES = torch.arange(24, dtype=torch.float32).reshape(6, 4).sin() * 2.0
@@ -83,3 +83,37 @@ def test_shift() -> None:
     mass = column_mass(shifted)
     assert torch.allclose(mass, mass.mean().expand_as(mass), atol=1e-4)
     assert torch.equal(Sinkhorn().shift(SCORES, PRIOR), SCORES)
+
+
+LOGITS = torch.arange(40, dtype=torch.float32).reshape(8, 5).sin() * 3.0
+
+
+def test_call_zero_k_is_none() -> None:
+    assert torch.equal(PoolSmoothing()(LOGITS), LOGITS)
+
+
+def test_call_keeps_groups_apart() -> None:
+    groups = torch.tensor([0, 0, 0, 0, 1, 1, 1, 1])
+    smoothing = PoolSmoothing(k=2)
+    out = smoothing(LOGITS, groups)
+    assert torch.allclose(out[:4], smoothing.mixed(LOGITS[:4]))
+    assert torch.allclose(out[4:], smoothing.mixed(LOGITS[4:]))
+
+
+def test_mixed() -> None:
+    twin = torch.tensor([[4.0, 0.0, 0.0], [3.0, 0.0, 0.5], [0.0, 0.0, 4.0]])
+    out = PoolSmoothing(k=1, lam=0.5).mixed(twin).exp()
+    assert torch.allclose(out.sum(-1), torch.ones(3), atol=1e-5)
+    assert out[1, 0] > twin[1].softmax(-1)[0]
+
+
+def test_mixed_lone_row_is_normalised() -> None:
+    out = PoolSmoothing(k=5).mixed(LOGITS[:1])
+    assert torch.allclose(out, LOGITS[:1].log_softmax(-1))
+
+
+def test_readout() -> None:
+    p = torch.eye(3)
+    unit = torch.nn.functional.normalize(p - p.mean(0), dim=-1)
+    out = PoolSmoothing(k=1).readout(unit, p, 0, 1)
+    assert torch.all(out.diagonal() == 0)

@@ -8,7 +8,7 @@ Levers close 2026-10-14 23:00 Sofia; 10-15/16 is final selection only (7gf.29.1)
 | track | best public | submission | 10-07 best | leader (10-11) |
 |---|---|---|---|---|
 | Deep | **.69133** | d-old4 (xsp10sem05-ft, 4 seeds) | .6638 | .77474 |
-| Broad | **.62587** | b-xc5k25ps (xc5w6all6 29 members + mean fallback keep .25 + per-subject Sinkhorn .25) | .5879 | .73235 |
+| Broad | **.63097** | b-xc5k25b0ps (xc5w6all6 29 members + mean fallback keep .25, no Sinkhorn) | .5879 | .73235 |
 
 Broad met its goal. Deep did not: no public gain since d-old4 (10-10). Recipe families score .685–.691
 (d-ac05xfam .691, m11 .689, d-old9 .685), so that is this recipe's public ceiling, and seeds or family size move it
@@ -18,7 +18,9 @@ only within draw noise.
 
 - **Broad +.038:**
   - Zero-shot rows read through a MEAN subject fallback with keep .25 instead of IDENTITY: +.020 single-model ruler.
-  - Transductive Sinkhorn balancing on output probabilities, per subject: +.011.
+  - Transductive Sinkhorn balancing on output probabilities, per subject: +.011 ruler, but NOT on public: toward
+    0/.1/.25/.5 = .631/.627/.626/.585 public vs .639/.652/.659/.652 ruler. The ruler's class marginals differ from
+    the organisers' test, so the gain is ruler-specific; .5 is a cliff on public.
   - Bigger family (xc5w6all6).
 - **Deep +.028:** the xsp/sem/acoustic auxiliaries and family blending, all before 10-10.
 
@@ -78,7 +80,8 @@ checkpoints (`docs/competition/rules.md:27-30`). The public board is therefore n
   Its local test is +.033 higher (.7289 vs .6955), well beyond the local test's ~.01 SE, and it runs on current code.
   #2 d-old4 is the hedge for the top public score. Both rebuild bit-exact from their recorded members on current code
   (7gf.29.1.1); only retraining d-old4 would need the 10-07 code. Re-open #1 if 7gf.86 lands.
-- **Broad:** #1 b-xc5k25ps (.62587). #2 b-xc8k25ps (.62557), the same recipe with 3 more seeds. The top six are all
-  within .002, so they tie. None uses the cross-track mapping. The per-subject Sinkhorn is transductive; disclose it
-  with the checkpoints.
+- **Broad:** hedge across the balancing axis, where ruler and public disagree. #1 b-xc5k25ps (ruler .6591, public
+  .62587): local ruler is the unseen-stimuli proxy. #2 b-xc5k25b0ps (public .63097, ruler .6390): no transduction, and
+  the public's class marginals are the organisers' style. A public gap of .005 is inside paired noise; the ruler's
+  +.02 is not. None uses the cross-track mapping. Disclose the Sinkhorn with #1's checkpoints.
 - The rationale is in 7gf.29.1. The pick itself is the owner's action in the Kaggle web UI.

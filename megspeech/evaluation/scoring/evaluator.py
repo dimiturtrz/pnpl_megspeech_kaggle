@@ -15,7 +15,7 @@ from torch import Tensor, nn
 from megspeech.data.batching.split import EVAL_SPANS, Split
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.device import Device
-from megspeech.evaluation.metric.balance import Sinkhorn
+from megspeech.evaluation.metric.balance import PoolSmoothing, Sinkhorn
 from megspeech.evaluation.metric.ruler import Coverage, Graded, Ruler
 from megspeech.evaluation.scoring.score import ADJUSTMENTS, MIN_NOVEL, Epoch, Head, Report, Score
 from megspeech.model.words.layers.centring import RunCentring
@@ -24,17 +24,18 @@ from megspeech.model.words.layers.norm import MaskedBatchNorm1d
 
 @dataclass(frozen=True)
 class Calibration:
-    """How log-probabilities are read: the training `log_prior` subtracted `tau` times (logit adjustment), then
-    `balance` over the scored set. One calibration reads many sets (val and local test, each domain), so the sets
-    scored are not part of it."""
+    """How log-probabilities are read: rows `smooth`ed toward their neighbours', the training `log_prior` subtracted
+    `tau` times (logit adjustment), then `balance` over the scored set. One calibration reads many sets (val and local
+    test, each domain), so the sets scored are not part of it."""
 
     log_prior: Float[Tensor, " v"]
     tau: float
     balance: Sinkhorn = Sinkhorn()
+    smooth: PoolSmoothing = PoolSmoothing()
 
     def adjusted(self, logits: Float[Tensor, "n v"], groups: Int[Tensor, " n"] | None = None) -> Float[Tensor, "n v"]:
         """`logits` logit-adjusted by `tau`, then balanced over the set (per `groups` when `balance` asks)."""
-        return self.balance(logits - self.tau * self.log_prior, self.log_prior, groups)
+        return self.balance(self.smooth(logits, groups) - self.tau * self.log_prior, self.log_prior, groups)
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class Evaluator:
     min_novel: int = MIN_NOVEL
     ruler: Ruler = Ruler()
     balance: Sinkhorn = Sinkhorn()
+    smooth: PoolSmoothing = PoolSmoothing()
     shifts: tuple[int, ...] = (0,)
     """Samples every window is read moved by; the reads' log-probabilities are averaged (test-time augmentation)."""
     adapted: bool = False
@@ -113,7 +115,7 @@ class Evaluator:
 
     def calibration(self, log_prior: Float[Tensor, " v"], tau: float) -> Calibration:
         """`log_prior` adjusted by `tau`, balanced as this evaluator balances."""
-        return Calibration(log_prior, tau, self.balance)
+        return Calibration(log_prior, tau, self.balance, self.smooth)
 
     def unseen(self, context: Float[Tensor, "n v"], split: Split, log_prior: Float[Tensor, " v"]) -> Score:
         """The context head on `split`'s unseen-span words."""
