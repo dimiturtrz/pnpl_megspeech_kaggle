@@ -1,3 +1,4 @@
+import argparse
 import dataclasses
 import math
 from pathlib import Path
@@ -10,6 +11,7 @@ import torch
 from torch import nn
 
 from core.paths import DataRoot
+from core.tree import Tree
 from megspeech.data.batching.split import DENSE, Split
 from megspeech.data.constants import CHANNELS
 from megspeech.data.corpus import Corpus
@@ -41,6 +43,7 @@ from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.regularise.pull import Pull
 from megspeech.training.regularise.rightcut import RightCut, Whole
+from megspeech.training.regularise.stretch import Stretch
 from megspeech.training.sampling.curriculum import Annealed, Natural, Robust, Schedule
 from megspeech.training.sampling.pairing import Pairing, Unpaired
 from megspeech.training.sampling.sampler import SamplerConfig
@@ -254,6 +257,33 @@ def test_step() -> None:
     assert value.shape == (len(made.terms(split())),)
     assert not value.requires_grad
     assert any(not torch.equal(a, b) for a, b in zip(before, model.parameters(), strict=True))
+
+
+def test_stretch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--augment.stretch 0.1` on the command line reaches the stretch every training step resamples its batch with."""
+    tree = Tree(RunConfig)
+    parser = argparse.ArgumentParser()
+    tree.arguments(parser)
+    config = tree.parse(parser.parse_args(["--augment.stretch", "0.1"]))
+    made = trainer(config)
+    assert made.stretch == Stretch(0.1, -config.data.cut().offset)
+    assert trainer(RunConfig()).stretch == Stretch()
+    seen: list[torch.Tensor] = []
+    resampled = Stretch.resampled
+    monkeypatch.setattr(
+        Stretch, "resampled", lambda stretch, x, factor: seen.append(factor) or resampled(stretch, x, factor)
+    )
+    model = made.model(split())
+    optimizer = torch.optim.AdamW(model.parameters())
+    schedule = Scheduled(torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0))
+    ema = Ema.of(model, 0.0)
+    state = TrainState(
+        model, optimizer, schedule, made.rows(split()), made.terms(split()), model.readouts(), ema, (schedule, ema)
+    )
+    made.step(state, split(), torch.tensor([0, 1]))
+    assert len(seen) == 1
+    assert seen[0].shape == (state.rows, 1)
+    assert ((seen[0] >= 0.9) & (seen[0] <= 1.1)).all()
 
 
 def test_parameters() -> None:

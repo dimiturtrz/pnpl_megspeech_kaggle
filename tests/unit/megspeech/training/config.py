@@ -74,6 +74,8 @@ def test_segment_pairs_with_spanned_encoder() -> None:
         RunConfig(data=DataConfig(segment=9.0))
     with pytest.raises(ValueError, match="word windows"):
         RunConfig(context=spanned, data=DataConfig(segment=9.0), augment=Augment(jitter=2))
+    with pytest.raises(ValueError, match="stretch"):
+        RunConfig(context=spanned, data=DataConfig(segment=9.0), augment=Augment(stretch=0.1))
     with pytest.raises(ValueError, match="right cut"):
         RunConfig(context=spanned, data=DataConfig(segment=9.0), augment=Augment(right_cut=0.18))
 

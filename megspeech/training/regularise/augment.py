@@ -21,6 +21,9 @@ class Augment:
     jitter: int = 0
     """Samples each training window's start moves, uniform in [-jitter, jitter]: forced-alignment onsets err by
     tens of milliseconds, one or two samples at 50 Hz."""
+    stretch: float = 0.0
+    """Largest relative change of each training window's time scale around its word's onset, which stays put: a factor
+    per window, uniform in [1 - stretch, 1 + stretch] (`megspeech.training.regularise.stretch`); 0 stretches none."""
     mask: int = 0
     """Samples of one span per window, at a uniform start, zeroed on every sensor."""
     band: int = 0
@@ -52,6 +55,8 @@ class Augment:
     def __post_init__(self) -> None:
         if not 0.0 <= self.chance <= 1.0:
             raise ValueError(f"chance must lie in [0, 1], got {self.chance}")
+        if not 0.0 <= self.stretch < 1.0:
+            raise ValueError(f"stretch must lie in [0, 1), got {self.stretch}")
         if not 0.0 <= self.right_cut < 1.0:
             raise ValueError(f"right_cut must lie in [0, 1), got {self.right_cut}")
         if self.average < 1 or not 0.0 <= self.average_chance <= 1.0:

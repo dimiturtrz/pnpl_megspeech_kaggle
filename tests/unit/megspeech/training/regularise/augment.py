@@ -15,6 +15,7 @@ def test_call() -> None:
     assert torch.all(scaled > 0)
     assert 0.1 < scaled.log().std() < 0.3
     assert Augment(jitter=2).jitter == 2
+    assert torch.equal(Augment(stretch=0.1)(x), x)
 
 
 def test_call_mask_zeroes_one_span_per_window_on_every_sensor() -> None:
@@ -71,6 +72,8 @@ def test_post_init_rejects_chance_outside_unit_interval() -> None:
     for bad in (-0.1, 1.0):
         with pytest.raises(ValueError, match="right_cut"):
             Augment(right_cut=bad)
+        with pytest.raises(ValueError, match="stretch"):
+            Augment(stretch=bad)
 
 
 def test_masked() -> None:

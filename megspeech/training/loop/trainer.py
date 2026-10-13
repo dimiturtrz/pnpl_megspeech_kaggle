@@ -49,6 +49,7 @@ from megspeech.training.regularise.noise import SAMPLES
 from megspeech.training.regularise.pull import Pull
 from megspeech.training.regularise.regional import Regional
 from megspeech.training.regularise.rightcut import RightCut, Whole
+from megspeech.training.regularise.stretch import Stretch
 from megspeech.training.sampling.curriculum import Curriculum, Natural, Observation, Schedule
 from megspeech.training.sampling.pairing import Pairing, Unpaired
 from megspeech.training.sampling.sampler import Sampler
@@ -113,6 +114,11 @@ class Trainer:
     """What writes cross-subject pairs into each batch's draws (`SamplerConfig.pairs`)."""
     tagged: Callable[[], Int[Tensor, " n"]] = Hierarchy.untagged
     """The training words' in-context tags, read only by a factorised context head (`ContextConfig.hierarchical`)."""
+
+    @cached_property
+    def stretch(self) -> Stretch:
+        """The time stretch of `config.augment`, around the onset of windows cut as `config.data` reads them."""
+        return Stretch.of(self.config.augment.stretch, self.config.data)
 
     @staticmethod
     def corpus(config: RunConfig, root: DataRoot, device: torch.device) -> Corpus:
@@ -237,7 +243,7 @@ class Trainer:
         batch = state.cut.apply(train.batch(spans, state.rows, self.config.augment.jitter), train)
         with torch.autocast(Device.CUDA, dtype=torch.bfloat16):
             mixed = state.bgmix.apply(state.average.apply(batch.x, batch, train), batch, train)
-            outputs = state.model(batch.inputs(self.regional(self.config.augment(mixed))))
+            outputs = state.model(batch.inputs(self.regional(self.config.augment(self.stretch(mixed)))))
             parts = zip(state.terms, state.readouts, outputs, strict=True)
             target = batch.target(train.y)
             inside = target != IGNORE
