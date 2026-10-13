@@ -20,7 +20,8 @@ picks is in megspeech-7gf.29.1. The rebuild audit is megspeech-7gf.29.1.1.
 |---|---|---|---|---|
 | Deep | d-ac05xfam | `ema-cd25-xsp10sem05-ac05x-s{k}-ft-s{k}`, k = 1..4 | none | bit-exact |
 | Deep | d-old4 | `ema-cd25-xsp10sem05-s{k}-ft-s{k}`, k = 2..5 | none | bit-exact |
-| Broad | b-xc5k25ps | 29, listed in `xc5k25ps/metrics.json` | `--fallback.unseen mean --fallback.keep 0.25 --balance.per_subject --balance.toward 0.25 --balance.steps ?` | pending |
+| Broad | b-xc5k25ps | 29, listed in `xc5k25ps/metrics.json` | `--track broad --aligned --fallback.unseen mean --fallback.keep 0.25 --balance.steps 30 --balance.toward 0.25 --balance.per_subject` | running |
+| Broad | b-xc8k25ps | 32, listed in `xc8k25ps/metrics.json` | same | running |
 
 ## Command
 
