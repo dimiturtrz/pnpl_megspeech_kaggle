@@ -54,8 +54,11 @@ only within draw noise.
    - Prereg: purity ≥ .30 and pool-smoothed local test ≥ +.015.
    - If it passes, using test-row smoothing on Kaggle is **the owner's call** (it falls under our own
      no-test-fitting rule, not theirs).
-2. **No-next-gap rows (25.8% of Kaggle Deep).** The structural local↔Kaggle difference. It needs a local instrument
-   that keeps the span end known (Kaggle tails are ≥1.0 s) before any more span-cut training.
+2. **No-next-gap rows (25.8% of Kaggle Deep).** Deferred: KAGGLE grouping is already the instrument (7gf.105.1.3).
+   - Its tail matches Kaggle: q.1/.5/.9 = 1.10/1.30/1.58 s vs 1.18/1.36/1.58 s.
+   - Rows without a next gap: 13.6% locally vs 18% of Kaggle's sentence rows.
+   - What is left is the 9.6% of rows that are isolated words, all private. They are already routed to the word
+     head (7gf.58). Even +.08 bacc on them is only +.008, below the 1.5% bar.
 3. **Encoder levers re-priced ×1.5** for public. Only worth it with a mechanism; knobs are exhausted.
 
 The GPU is lent to rsna_knee (since 10-13 08:43 Sofia), so all megspeech work is CPU until it comes back. Item 1 is

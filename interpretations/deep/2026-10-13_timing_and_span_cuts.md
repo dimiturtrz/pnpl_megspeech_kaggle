@@ -61,3 +61,6 @@ points. No grouping tracks public magnitude. Default for span or timing changes:
 - **Still open:** the 25.8% no-next-gap rows remain the one place where local test and Kaggle differ structurally.
   Kaggle's last word always has ≥1.0 s of post-onset MEG (median 1.36 s). Any lever for those rows needs a local
   instrument that reproduces that shape, and the thin proxy does not (it hides the span end, which Kaggle gives).
+  **Update 13:36:** KAGGLE grouping reproduces it. Over all subject-0 runs, its tail quantiles .1/.5/.9 are
+  1.10/1.30/1.58 s and 13.6% of its rows have no next gap. The gap that remains is the isolated rows (9.6%,
+  private only), which are already word-head-routed (7gf.58). See 7gf.105.1.3.
