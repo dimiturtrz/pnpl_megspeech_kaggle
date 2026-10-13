@@ -49,7 +49,7 @@ only within draw noise.
 
 ## Remaining levers, ranked by plausible size
 
-1. **Same-word SupCon embedding (7gf.86): failed its gate (10-13 16:46).**
+1. **Same-word SupCon embedding (7gf.86): failed its gate (10-13 16:46); weight 1.0 also failed (d6r.9, purity +.004, plain LT −.019).**
    - SupCon .3 in the ft stage, tap context: macro k=5 purity +.015 (to ~.09; the gate needed Q2–Q3 ≥ .15).
    - Pool-smoothed local test −.006; plain local test −.002. With `--sampler.balance 1` plain local test was −.066.
    - Not ruled out: SupCon from the stem stage, or a much larger weight. The purity curve prices neither above the
