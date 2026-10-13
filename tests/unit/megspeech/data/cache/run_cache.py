@@ -171,7 +171,8 @@ def test_published(tmp_path: Path) -> None:
     cache.ready()
     cache.publish(pd.DataFrame({"run": ["a", "b"], "word": ["null", "None"]}))
     assert cache.published()["word"].tolist() == ["null", "None"]
-    cache.published()["word"] = "changed"
+    copy = cache.published()
+    copy["word"] = "changed"
     assert cache.published()["word"].tolist() == ["null", "None"]
     cache.publish(pd.DataFrame({"run": ["c"], "word": ["new"]}))
     stamp = (cache.cache / WORD_TABLE).stat().st_mtime_ns + 1
