@@ -171,6 +171,12 @@ def test_published(tmp_path: Path) -> None:
     cache.ready()
     cache.publish(pd.DataFrame({"run": ["a", "b"], "word": ["null", "None"]}))
     assert cache.published()["word"].tolist() == ["null", "None"]
+    cache.published()["word"] = "changed"
+    assert cache.published()["word"].tolist() == ["null", "None"]
+    cache.publish(pd.DataFrame({"run": ["c"], "word": ["new"]}))
+    stamp = (cache.cache / WORD_TABLE).stat().st_mtime_ns + 1
+    os.utime(cache.cache / WORD_TABLE, ns=(stamp, stamp))
+    assert cache.published()["word"].tolist() == ["new"]
 
 
 def test_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -272,6 +278,19 @@ def test_load(tmp_path: Path) -> None:
     only = DeviceRecording.load(cache, "cpu", ["b"])
     assert only.names == ("b",)
     assert only.words["at"].tolist() == [25, 100, 150]
+    assert DeviceRecording.load(cache, "cpu", ["b"]) is only
+    again = DeviceRecording.load(cache, "cpu")
+    assert again is not loaded
+    assert torch.equal(again.meg, loaded.meg)
+
+
+def test_read(tmp_path: Path) -> None:
+    """Every call reads afresh."""
+    cache = built(tmp_path)
+    first, second = (DeviceRecording.read(cache, "cpu", ("b",)) for _ in range(2))
+    assert first is not second
+    assert torch.equal(first.meg, second.meg)
+    assert first.words.equals(second.words)
 
 
 def subspace() -> Projection:

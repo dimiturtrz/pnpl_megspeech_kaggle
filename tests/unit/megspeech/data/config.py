@@ -401,10 +401,23 @@ def cached(tmp_path: Path) -> DataRoot:
     ],
 )
 def test_geometry(tmp_path: Path, data: DataConfig, *, aligned: bool, built: tuple[bool, bool]) -> None:
-    geometry = data.geometry(cached(tmp_path), "cpu", aligned=aligned)
+    root = cached(tmp_path)
+    geometry = data.geometry(root, "cpu", aligned=aligned)
     assert (geometry.alignment is not None, geometry.projection is not None) == built
     assert geometry.levels is (RUN_LEVELS if data.levelled else UNLEVELLED)
     assert geometry.rows(3) == 3
+    assert data.geometry(root, "cpu", aligned=aligned) is geometry
+
+
+def test_built(tmp_path: Path) -> None:
+    """Each call builds a fresh reference: what `geometry` keeps is the first."""
+    root, data = cached(tmp_path), DataConfig(aligned=True)
+    built = data.built(root, "cpu", aligned=False)
+    kept = data.geometry(root, "cpu")
+    assert built is not kept
+    assert built.alignment is not None
+    assert kept.alignment is not None
+    assert torch.equal(built.alignment.root, kept.alignment.root)
 
 
 def test_levelled_saved(tmp_path: Path) -> None:

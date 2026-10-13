@@ -66,6 +66,7 @@ class DataConfig:
         "lead": Retired(0.0, "reading ahead of each onset (lead) is retired, killed by megspeech-7gf.38"),
         "baseline": Retired(0.0, "a pre-response centring stretch (baseline) is retired by megspeech-7gf.157.5"),
     }
+    geometries: ClassVar[dict[tuple[object, ...], Geometry]] = {}
     LEGACY: ClassVar[dict[str, object]] = {"val": Val.OFFICIAL}
 
     tasks: tuple[str, ...] = ()
@@ -234,6 +235,14 @@ class DataConfig:
         """The `Geometry` recordings load in: re-coloured to subject 0's `alignment` when `recoloured` (or `aligned`
         asks for it), kept in its `Projection` when `projected`, each run at its own levels when `levelled`; the
         reference left unbuilt when neither alignment nor projection reads it."""
+        key = (self, root.raw(), str(device), aligned)
+        if key not in self.geometries:
+            self.geometries[key] = self.built(root, device, aligned=aligned)
+        return self.geometries[key]
+
+    def built(self, root: DataRoot, device: torch.device | str, *, aligned: bool) -> Geometry:
+        """`geometry` computed afresh; `geometry` keeps it per process, so a blend's members share one reference and
+        the Kaggle windows loaded in it."""
         recolour, levels = aligned or self.recoloured, {False: UNLEVELLED, True: RUN_LEVELS}[self.levelled]
         if not (recolour or self.projected):
             return replace(AS_RECORDED, levels=levels)

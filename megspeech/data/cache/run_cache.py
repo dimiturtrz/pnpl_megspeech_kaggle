@@ -20,6 +20,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from typing import ClassVar
 
 import h5py
 import numpy as np
@@ -140,9 +141,18 @@ class RunCache:
             table.to_csv(staging, sep="\t", index=False)
         return table
 
+    parsed: ClassVar[dict[Path, tuple[int, pd.DataFrame]]] = {}
+
     def published(self) -> pd.DataFrame:
-        """The cache's word table as `publish` wrote it."""
-        return pd.read_csv(self.cache / WORD_TABLE, sep="\t", keep_default_na=False, na_values=MISSING)
+        """The cache's word table as `publish` wrote it, parsed once per process and file version: an ensemble reads
+        it for every member and run."""
+        path = self.cache / WORD_TABLE
+        stamp = path.stat().st_mtime_ns
+        held = self.parsed.get(path)
+        if held is None or held[0] != stamp:
+            held = (stamp, pd.read_csv(path, sep="\t", keep_default_na=False, na_values=MISSING))
+            self.parsed[path] = held
+        return held[1].copy()
 
     def table(self, names: Sequence[str]) -> pd.DataFrame:
         """The named runs' words, run by run in `names` order, with each word's onset `sample` in its run, the
@@ -206,6 +216,7 @@ class DeviceRecording:
     offsets: Int[np.ndarray, " r1"]
     names: tuple[str, ...]
     words: pd.DataFrame
+    held: ClassVar[dict[tuple[object, ...], "DeviceRecording"]] = {}
 
     @classmethod
     def load(
@@ -216,9 +227,21 @@ class DeviceRecording:
         *,
         geometry: Geometry = AS_RECORDED,
     ) -> "DeviceRecording":
-        """Load the named runs (default: every cached run) into one preallocated tensor, one run at a time, each in
-        `geometry`: re-coloured if it applies, projected if it projects, then at its own levels if it levels."""
+        """`read`, kept for the next call that asks for the same runs: a blend's members read each run in turn, and the
+        last recording alone is held so memory stays one recording's."""
         chosen = tuple(names) if names is not None else tuple(sorted(path.stem for path in cache.cache.glob("*.npy")))
+        key = (cache, str(device), chosen, geometry)
+        if key not in cls.held:
+            cls.held.clear()
+            cls.held[key] = cls.read(cache, device, chosen, geometry=geometry)
+        return cls.held[key]
+
+    @classmethod
+    def read(
+        cls, cache: RunCache, device: torch.device | str, chosen: tuple[str, ...], *, geometry: Geometry = AS_RECORDED
+    ) -> "DeviceRecording":
+        """Load the `chosen` runs into one preallocated tensor, one run at a time, each in `geometry`: re-coloured if it
+        applies, projected if it projects, then at its own levels if it levels."""
         stored = [np.load(cache.path(name), mmap_mode="r") for name in chosen]
         offsets = np.r_[0, np.cumsum([signal.shape[1] for signal in stored])].astype(np.int64)
         meg = torch.empty((geometry.rows(stored[0].shape[0]), int(offsets[-1])), dtype=torch.float16, device=device)
