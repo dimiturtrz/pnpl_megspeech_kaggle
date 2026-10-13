@@ -76,10 +76,13 @@ The final ranking uses organiser data with stimuli "entirely different from anyt
 checkpoints (`docs/competition/rules.md:27-30`). The public board is therefore not the final test. The local test
 (unseen stimuli) is the closer proxy, and the checkpoint we hand over must run on current code.
 
-- **Deep:** #1 d-ac05xfam. Its public (.69083) ties d-old4 (.69133), a gap of .0005 inside the .015–.02 draw SD.
-  Its local test is +.033 higher (.7289 vs .6955), well beyond the local test's ~.01 SE, and it runs on current code.
-  #2 d-old4 is the hedge for the top public score. Both rebuild bit-exact from their recorded members on current code
-  (7gf.29.1.1); only retraining d-old4 would need the 10-07 code. Re-open #1 if 7gf.86 lands.
+- **Deep:** #1 d-ac05xfam8, the same recipe at 8 seeds (megspeech-rsk). Its VAL / local test .6497 / .7192 against
+  the 4-seed family's .6459 / .7289 is a tie inside the local test's ~.01 SE; it met its prereg (VAL ≥ .6359, local
+  test ≥ .7189). Eight seeds were bought for variance: on new stimuli the final score depends less on which seeds were
+  drawn, and the mean is unchanged. Its public is pending (10-14 slot). The 4-seed family's public (.69083) ties d-old4
+  (.69133), a gap of .0005 inside the .015–.02 draw SD, and its local test is +.033 higher (.7289 vs .6955), well beyond
+  the local test's SE. #2 d-old4 is the hedge for the top public score. All members rebuild from their recorded
+  configs on current code (7gf.29.1.1); only retraining d-old4 would need the 10-07 code.
 - **Broad:** hedge across the balancing axis, where ruler and public disagree. #1 b-xc5k25b05ps (Sinkhorn toward .05:
   ruler .6471, public .62914): public falls monotonically with dose and cliffs at .5, so the organisers' marginals
   sit away from the ruler's; .05 keeps the public within .002 of none and takes +.008 ruler (prereg met, 10-13).
