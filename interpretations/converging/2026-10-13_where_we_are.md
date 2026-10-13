@@ -35,6 +35,12 @@ only within draw noise.
 | timing expert fusion (incl. LibriSpeech pretrain) | LT −.0095 at VAL weight | r9m.1 → [timing](../deep/2026-10-13_timing_and_span_cuts.md) |
 | nd / ended / noint fusion | parked: ac05x 4-seed LT fail; publics unreadable | 7gf.105.1.x |
 | LM span fusion, kd, refiner | ~0 realistic | lvj, 7gf.130, 7gf.145.1 |
+| cross-kind / bigger Deep blends | public .655–.691; d-acd2v = d-ac05xfam to the 5th digit with 58% of top-10s moved | ugp |
+
+Cross-kind blends on top of ac05x s1-4 (VAL / local test / public): +d2v 5 .6514 / .7286 / .69083, +whisper 3 .6444 /
+.7311 / —, all kinds (22) .6478 / .7183 / .68316, +old4 .6488 / .7026 / —, +SupCon 3 .6486 / .7014 / —, 6 seeds
+.6467 / .7221 / .68416. All are within noise of the 4-seed family (.6459 / .7289 / .69083), so family composition is
+exhausted as a lever.
 
 ## Instruments established (reuse, don't rebuild)
 
