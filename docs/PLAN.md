@@ -21,12 +21,13 @@ Kaggle test split into public + final partitions. Site: libribrain.com/editions/
 
 BAcc@10 (balanced top-10 accuracy over the 50 words, chance 20%); tiebreak BAcc@1; OVMI also reported.
 Kaggle lists the metric as `Balanced-Acccuracy` (sic); `pnpl`'s `write_submission` docstring says "argmax",
-which contradicts the FAQ's BAcc@10. Which one the live scorer computes is unverified, so we report both.
+which contradicts the FAQ's BAcc@10. The live scorer computes BAcc@10: public scores of .6–.7 are far above
+any reachable 50-way top-1.
 
 | track | reference | paper BAcc@10 (own test split) | Kaggle test BAcc@10 (3rd-party rerun) | LB top (2026-10-01) | ours |
 |---|---|---|---|---|---|
-| Deep | d'Ascoli 2025 | 73.23% (BAcc@1 25.60%) | 46.7% | 76.5% (63 teams) | — |
-| Broad | MEG-XL | 42.96% | 30.8% | 72.9% (28 teams) | — |
+| Deep | d'Ascoli 2025 | 73.23% (BAcc@1 25.60%) | 46.7% | 76.5% (63 teams) | 69.13% public (2026-10-13) |
+| Broad | MEG-XL | 42.96% | 30.8% | 72.9% (28 teams) | 62.59% public (2026-10-13) |
 
 The paper numbers are NOT the Kaggle test ruler. The Kaggle test rerun is from gereonelvers/2026-pnpl-competition-baselines,
 which has no license. It found both baselines need sentence context: d'Ascoli's CNN branch alone scores below
@@ -137,10 +138,10 @@ SOTA gather → replicate → build past it.
 3. **Broad**: Deep backbone + per-subject alignment (Euclidean/Riemannian) or subject layer; report the
    minutes-vs-accuracy curve.
 
+Current state, kills and ranked levers: [where we are](../interpretations/converging/2026-10-13_where_we_are.md).
+
 ## Open questions
 
-- GPU split with `rsna_knee_kaggle` (deadline 2026-10-22).
+- GPU lent to `rsna_knee_kaggle` since 2026-10-13 08:43 Sofia; megspeech is CPU-only until the owner returns it.
 - Exact Broad derivative footprint in `LibriBrain2` (measure before pulling).
-- Does the live scorer compute top-10 or argmax, does it score word rows, and how does it match `it’s`?
-  The first submission (the example CSV, then a trivial prior) answers the format half.
 - MEG-XL (MIT, 2 × ~284 MB checkpoints; wants a 40–80 GiB GPU): does it fine-tune within the 5090's 32 GB?

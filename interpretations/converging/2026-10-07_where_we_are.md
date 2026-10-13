@@ -1,4 +1,5 @@
 # Where we really are (audit, 2026-10-07)
+> Superseded by [2026-10-13](2026-10-13_where_we_are.md).
 
 Sources: `.beads/issues.jsonl` (189 closed issues), 496 commits, every `interpretations/` doc, and the per-epoch
 telemetry of the current recipe. Three read-only axis audits (supervision, input, sentence/eval) were cross-checked
