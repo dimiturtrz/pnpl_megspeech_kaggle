@@ -73,6 +73,9 @@ Row-mean purity weights rows, and pools follow corpus frequencies (chance .065, 
 - **The tap stays `context`.** The encoder's word embedding, read before the span transformer, is worse in every
   quartile. Its macro purity is .03 against .08 at the context head's input, so span context adds same-word
   information rather than diluting it.
+- **A post-hoc linear metric does not help.** I fit shrinkage LDA on 60k cross-fitted training rows (the d6r.6
+  stores). Local-test macro purity stays at .084 and only Q4 moves (+.01). Same-word structure below Q4 cannot be
+  recovered linearly from the frozen space, so any purity gain has to come from the encoder changing (SupCon).
 
 ## Verdict and scope
 
