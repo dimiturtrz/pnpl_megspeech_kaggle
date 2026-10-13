@@ -89,4 +89,4 @@ checkpoints (`docs/competition/rules.md:27-30`). The public board is therefore n
   #2 b-xc5k25b0ps (public .63097, ruler .6390): no transduction. The two differ on 37% of rows. b-xc5k25ps
   (toward .25, ruler .6591, public .62587) is dropped: its +.012 ruler is below the bar and sits nearer the cliff.
   None uses the cross-track mapping. Disclose the Sinkhorn with #1's checkpoints.
-- The rationale is in 7gf.29.1. The pick itself is the owner's action in the Kaggle web UI.
+- The rationale is in 7gf.29.1. The pick itself is the owner's action in the Kaggle web UI, and it is required: unticked, Kaggle scores the best-public submission (host, topic 748465; `docs/competition/announcements.md`).

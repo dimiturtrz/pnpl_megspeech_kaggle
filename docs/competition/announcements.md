@@ -44,3 +44,20 @@ Finally, we want to thank you all for continuing to advance the frontiers of bra
 Happy decoding,
 
 The PNPL organising team
+
+## Final-submission selection (Deep discussion topic 748465, host reply 2026-10-12)
+
+A competitor quoted "you may choose 10 submissons which count towards the final ranking" and asked whether they
+average or the best counts. Host (Gereon Elvers), verbatim:
+
+> For scoring, we're using the Kaggle default: We'll evaluate your best submission on the public score by default,
+> unless you manually select a different one on the "Submissions" tab.
+>
+> Could you point me to where you you've read the "you may choose 10 submissons which count towards the final
+> ranking" wording? It might've been left in somewhere by accident.
+
+Consequence for us: with no manual selection, Deep would be scored on d-old4 (best public .69133), not d-ac05xfam8.
+The picks in `../DELIVERY.md` must be ticked by hand on each track's Submissions tab.
+
+Checked 2026-10-13: Deep forum 11867573 has 2 topics, Broad forum 11867592 has only topic 741919 (above). No other
+organiser post on data use.
