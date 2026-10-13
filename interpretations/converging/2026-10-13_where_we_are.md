@@ -66,6 +66,14 @@ the first GPU job when it does.
 
 ## Final selection (10-15/16)
 
-- Deep: the top family by public (d-old4 / d-ac05xfam), unless 7gf.86 lands.
-- Broad: b-xc5k25ps.
-- Pick mechanics live in 7gf.29.1.
+The final ranking uses organiser data with stimuli "entirely different from anything released", plus runnable
+checkpoints (`docs/competition/rules.md:27-30`). The public board is therefore not the final test. The local test
+(unseen stimuli) is the closer proxy, and the checkpoint we hand over must run on current code.
+
+- **Deep:** #1 d-ac05xfam. Its public (.69083) ties d-old4 (.69133), a gap of .0005 inside the .015–.02 draw SD.
+  Its local test is +.033 higher (.7289 vs .6955), well beyond the local test's ~.01 SE, and it runs on current code.
+  #2 d-old4 is the hedge for the top public score. Re-open #1 if 7gf.86 lands.
+- **Broad:** #1 b-xc5k25ps (.62587). #2 b-xc8k25ps (.62557), the same recipe with 3 more seeds. The top six are all
+  within .002, so they tie. None uses the cross-track mapping. The per-subject Sinkhorn is transductive; disclose it
+  with the checkpoints.
+- The rationale is in 7gf.29.1. The pick itself is the owner's action in the Kaggle web UI.
