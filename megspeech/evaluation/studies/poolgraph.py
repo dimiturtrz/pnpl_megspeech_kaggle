@@ -72,9 +72,9 @@ class Views:
     """A pool as the base sees it, and the same rows as each cross-fit fold model sees them."""
 
     pool: Pool
-    folds: tuple[Pool, ...] = ()
-    span: Int[Tensor, "d p"] | None = None
-    place: Int[Tensor, "d p"] | None = None
+    folds: tuple[Pool, ...]
+    span: Int[Tensor, "d p"]
+    place: Int[Tensor, "d p"]
 
     @staticmethod
     def cosine(emb: Float[Tensor, "d p h"]) -> Float[Tensor, "d p p"]:
@@ -95,7 +95,7 @@ class Views:
         return self.cosine(self.pool.emb)
 
     def posterior(self) -> Float[Tensor, "d p p"]:
-        return self.cosine(self.pool.base.exp())
+        return self.cosine(torch.exp(self.pool.base))
 
     def two_views(self) -> Float[Tensor, "d p p"]:
         return self.zscored(self.embedding()) + self.zscored(self.posterior())
@@ -145,7 +145,7 @@ class Graph:
         weights = (sims / temperature).masked_fill(~keep, -torch.inf).softmax(dim=-1).nan_to_num(nan=0.0)
         return cls(keep, weights)
 
-    def purity(self, y: Tensor) -> tuple[float, float]:
+    def purity(self, y: Int[Tensor, "d p"]) -> tuple[float, float]:
         """The share of kept edges joining rows of one label, and the share of rows with an edge."""
         same = y[:, :, None] == y[:, None, :]
         return float((self.keep & same).sum() / self.keep.sum().clamp(min=1)), float(self.keep.any(-1).float().mean())

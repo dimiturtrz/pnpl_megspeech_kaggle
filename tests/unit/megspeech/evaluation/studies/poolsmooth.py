@@ -156,7 +156,7 @@ def test_settings() -> None:
     assert gains[Setting(Space.RAW, KS[0], TEMPERATURES[0], Aggregation.PROB, 1.0)].item() == pytest.approx(0.0)
 
 
-def gains() -> Gains:
+def gains() -> Gains[Setting]:
     a = Setting(Space.RAW, 5, 0.1, Aggregation.LOG, 0.5)
     b = Setting(Space.RAW, 10, 0.1, Aggregation.LOG, 0.5)
     return Gains(

@@ -278,7 +278,7 @@ class Smoothing:
         pools = {n: Pool.drawn(r, draw) for n, r in self.dump.partitions[partition].items()}
         return {n: p.posterior() if posterior else p for n, p in pools.items()}
 
-    def gains(self, partition: Partition, draw: Draw, *, posterior: bool = False) -> Gains:
+    def gains(self, partition: Partition, draw: Draw, *, posterior: bool = False) -> Gains[Setting]:
         calibration = self.calibration()
         return Gains({n: p.settings(calibration) for n, p in self.pools(partition, draw, posterior=posterior).items()})
 
