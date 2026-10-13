@@ -1,0 +1,191 @@
+from pathlib import Path
+
+import numpy as np
+import pytest
+import torch
+from torch.nn import functional
+
+from core.paths import DataRoot
+from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.data.raw.runs import Partition
+from megspeech.evaluation.metric.ruler import Ruler
+from megspeech.evaluation.scoring.evaluator import Calibration
+from megspeech.evaluation.studies.knnreadout import SCORED, Dump, Mixing, Rows, Space, Study
+from megspeech.evaluation.studies.poolsmooth import (
+    BASE_SCORES,
+    KS,
+    LAMBDAS,
+    TEMPERATURES,
+    TOLERANCE,
+    Aggregation,
+    Collector,
+    Draw,
+    Gains,
+    Near,
+    Pool,
+    Setting,
+    Smoothing,
+)
+
+UNIFORM = -np.log(VOCAB_SIZE)
+PAIRS = 8
+HIDDEN = 4
+RULER = Ruler(k=1)
+
+
+def calibration() -> Calibration:
+    return Calibration(torch.full((VOCAB_SIZE,), UNIFORM), 0.0)
+
+
+def duplicated() -> Pool:
+    """Twin rows share a label and an embedding; the first twin is right, the second prefers a wrong word."""
+    labels = torch.arange(PAIRS).repeat_interleave(2)
+    emb = functional.one_hot(labels, PAIRS).float()
+    base = torch.full((len(labels), VOCAB_SIZE), UNIFORM)
+    base[torch.arange(len(labels)), (labels + 1) % VOCAB_SIZE] = 1.0
+    base[torch.arange(len(labels)), labels] = torch.tensor([4.0, 0.5]).repeat(PAIRS)
+    return Pool(base.log_softmax(-1)[None], emb[None], labels[None])
+
+
+def test_combine() -> None:
+    base = torch.tensor([[-1.0, -2.0]])
+    log_readout, prob_readout = torch.tensor([[-3.0, -4.0]]), torch.tensor([[0.2, 0.8]])
+    assert torch.equal(Aggregation.LOG.combine(base, log_readout, prob_readout, 0.0), base)
+    assert torch.allclose(Aggregation.LOG.combine(base, log_readout, prob_readout, 0.5), base + 0.5 * log_readout)
+    assert torch.allclose(Aggregation.PROB.combine(base, log_readout, prob_readout, 1.0), prob_readout.log(), atol=1e-5)
+    assert torch.allclose(
+        Aggregation.PROB.combine(base, log_readout, prob_readout, 0.3), Mixing.LINEAR.mix(base, prob_readout, 0.3)
+    )
+
+
+def test_indices() -> None:
+    drawn = Draw(size=5, count=3).indices(20)
+    assert drawn.shape == (3, 5)
+    assert all(len(set(row.tolist())) == 5 for row in drawn)
+    assert torch.equal(drawn, Draw(size=5, count=3).indices(20))
+    assert not torch.equal(drawn[0], drawn[1])
+    assert Draw(size=0).indices(7).shape == (1, 7)
+    assert Draw(size=50, count=3).indices(7).shape == (3, 7)
+
+
+def test_weights() -> None:
+    near = Near(torch.tensor([[[0.9, 0.1, 0.1]]]), torch.tensor([[[1, 2, 3]]]))
+    weights = near.weights(2, 0.1)
+    assert weights.shape == (1, 1, 2)
+    assert weights.sum().item() == pytest.approx(1.0)
+    assert weights[0, 0, 0] > weights[0, 0, 1]
+
+
+def test_near_purity() -> None:
+    y = torch.tensor([[0, 0, 1, 1]])
+    near = Near(torch.zeros(1, 4, 1), torch.tensor([[[1], [0], [0], [2]]]))
+    assert near.purity(y, 1) == pytest.approx(0.75)
+
+
+def test_drawn() -> None:
+    rows = Rows(torch.zeros(10, VOCAB_SIZE), torch.arange(10), (torch.ones(10, HIDDEN),))
+    pool = Pool.drawn(rows, Draw(size=4, count=2))
+    assert pool.base.shape == (2, 4, VOCAB_SIZE)
+    assert pool.emb.shape == (2, 4, HIDDEN)
+    assert torch.allclose(pool.base.exp().sum(-1), torch.ones(2, 4))
+    assert pool.y.shape == (2, 4)
+
+
+def test_near() -> None:
+    pool = duplicated()
+    near = pool.near(Space.RAW, 3)
+    assert near.at.shape == (1, 2 * PAIRS, 3)
+    assert not (near.at == torch.arange(2 * PAIRS)[None, :, None]).any()
+    assert near.at[0, 0, 0] == 1
+    assert near.purity(pool.y, 1) == pytest.approx(1.0)
+
+
+def test_readouts() -> None:
+    pool = duplicated()
+    near = pool.near(Space.RAW, 1)
+    log_readout, prob_readout = pool.readouts(near, 1, TEMPERATURES[0])
+    assert torch.allclose(log_readout[0, 0], pool.base[0, 1])
+    assert torch.allclose(prob_readout[0, 0], pool.base[0, 1].exp())
+
+
+def test_bacc() -> None:
+    pool = duplicated()
+    perfect = functional.one_hot(pool.y, VOCAB_SIZE).float()
+    assert pool.bacc(perfect, calibration(), RULER).item() == pytest.approx(1.0)
+    assert pool.bacc(pool.base, calibration(), RULER).item() == pytest.approx(0.5)
+
+
+def test_settings() -> None:
+    pool = duplicated()
+    gains = pool.settings(calibration(), RULER, KS[:1])
+    assert len(gains) == len(Space) * len(TEMPERATURES) * len(Aggregation) * len(LAMBDAS)
+    full = Setting(Space.RAW, KS[0], TEMPERATURES[0], Aggregation.LOG, 1.0)
+    assert gains[full].item() == pytest.approx(0.5)
+    assert gains[Setting(Space.RAW, KS[0], TEMPERATURES[0], Aggregation.PROB, 1.0)].item() == pytest.approx(0.0)
+
+
+def gains() -> Gains:
+    a = Setting(Space.RAW, 5, 0.1, Aggregation.LOG, 0.5)
+    b = Setting(Space.RAW, 10, 0.1, Aggregation.LOG, 0.5)
+    return Gains(
+        {
+            "x": {a: torch.tensor([0.1, 0.3]), b: torch.tensor([0.0, 0.0])},
+            "y": {a: torch.tensor([0.1, 0.1]), b: torch.tensor([0.0, 0.1])},
+        }
+    )
+
+
+def test_macro() -> None:
+    macro = gains().macro()
+    assert macro[Setting(Space.RAW, 5, 0.1, Aggregation.LOG, 0.5)].tolist() == pytest.approx([0.1, 0.2])
+
+
+def test_best() -> None:
+    assert gains().best().k == 5
+
+
+def test_at() -> None:
+    at = gains().at(Setting(Space.RAW, 5, 0.1, Aggregation.LOG, 0.5))
+    assert at["x"][0] == pytest.approx(0.2)
+    assert at["x"][1] == pytest.approx(0.1414, abs=1e-3)
+    assert at["macro"][0] == pytest.approx(0.15)
+
+
+def smoothing() -> Smoothing:
+    pool = duplicated()
+    rows = Rows(pool.base[0], pool.y[0], (pool.emb[0],))
+    partitions = {p: {"Sherlock1": rows} for p in SCORED}
+    return Smoothing(Dump((), partitions, torch.full((VOCAB_SIZE,), UNIFORM), 0.0))
+
+
+def test_calibration() -> None:
+    assert smoothing().calibration().tau == 0.0
+
+
+def test_gains() -> None:
+    drawn = smoothing().gains(Partition.TEST, Draw(size=0))
+    assert set(drawn.domains) == {"Sherlock1"}
+    assert drawn.best() in drawn.macro()
+
+
+def test_smoothing_purity() -> None:
+    purity = smoothing().purity(Partition.TEST, Draw(size=0))
+    assert purity["Sherlock1"][Space.RAW][KS[0]] <= 1.0
+
+
+def test_chance() -> None:
+    assert smoothing().chance(Partition.TEST)["Sherlock1"] == pytest.approx(1 / PAIRS)
+
+
+def test_path(tmp_path: Path) -> None:
+    assert Collector.path(DataRoot(tmp_path), "base").name == "base.pt"
+
+
+def test_reproduces() -> None:
+    dump = smoothing().dump
+    study = Study(dump)
+    own = {p: study.ruler.point(study.base(p)) for p in SCORED}
+    assert Collector.reproduces(dump, own) == own
+    with pytest.raises(ValueError, match="expected"):
+        Collector.reproduces(dump, {p: own[p] + 10 * TOLERANCE for p in SCORED})
+    assert set(BASE_SCORES) == set(SCORED)
