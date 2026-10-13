@@ -31,6 +31,7 @@ only within draw noise.
 | cross-fit kNN readout | LT −.062 sentence / −.036 kaggle, VAL leaked | d6r.6 |
 | time-stretch aug .1 | LT −.031 / −.019 | d6r.7 |
 | pool smoothing | best +.008 < .015; purity .20–.24 | d6r.8 → [pool smoothing](../deep/2026-10-13_pool_smoothing.md) |
+| ft-stage SupCon for pool smoothing | macro purity +.015, pool LT −.006 | 7gf.86 |
 | timing expert fusion (incl. LibriSpeech pretrain) | LT −.0095 at VAL weight | r9m.1 → [timing](../deep/2026-10-13_timing_and_span_cuts.md) |
 | nd / ended / noint fusion | parked: ac05x 4-seed LT fail; publics unreadable | 7gf.105.1.x |
 | LM span fusion, kd, refiner | ~0 realistic | lvj, 7gf.130, 7gf.145.1 |
@@ -48,12 +49,11 @@ only within draw noise.
 
 ## Remaining levers, ranked by plausible size
 
-1. **Same-word SupCon embedding (7gf.86).**
-   - The only lever with a measured, large ceiling behind it (the pool curve).
-   - Run-ready: an ft-stage arm, one knob vs the base; commands are in the bead.
-   - Prereg: purity ≥ .30 and pool-smoothed local test ≥ +.015.
-   - If it passes, using test-row smoothing on Kaggle is **the owner's call** (it falls under our own
-     no-test-fitting rule, not theirs).
+1. **Same-word SupCon embedding (7gf.86): failed its gate (10-13 16:46).**
+   - SupCon .3 in the ft stage, tap context: macro k=5 purity +.015 (to ~.09; the gate needed Q2–Q3 ≥ .15).
+   - Pool-smoothed local test −.006; plain local test −.002. With `--sampler.balance 1` plain local test was −.066.
+   - Not ruled out: SupCon from the stem stage, or a much larger weight. The purity curve prices neither above the
+     bar before the cutoff, and smoothing on Kaggle would be the owner's call anyway.
 2. **No-next-gap rows (25.8% of Kaggle Deep).** Deferred: KAGGLE grouping is already the instrument (7gf.105.1.3).
    - Its tail matches Kaggle: q.1/.5/.9 = 1.10/1.30/1.58 s vs 1.18/1.36/1.58 s.
    - Rows without a next gap: 13.6% locally vs 18% of Kaggle's sentence rows.
@@ -61,8 +61,6 @@ only within draw noise.
      head (7gf.58). Even +.08 bacc on them is only +.008, below the 1.5% bar.
 3. **Encoder levers re-priced ×1.5** for public. Only worth it with a mechanism; knobs are exhausted.
 
-The GPU is lent to rsna_knee (since 10-13 08:43 Sofia), so all megspeech work is CPU until it comes back. Item 1 is
-the first GPU job when it does.
 
 ## Final selection (10-15/16)
 

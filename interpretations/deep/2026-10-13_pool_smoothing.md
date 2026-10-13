@@ -83,3 +83,10 @@ Dead for this use: retrieval from a CE-trained embedding or posterior, under any
 out:** an embedding trained for retrieval. Same-word SupCon is 7gf.86, now run-ready (`--optim.contrast` with
 `--optim.tap context`, ft stage). If it reaches purity ≥ .30, the curve prices it at about +.016–.03 local test,
 and the encoder levers' public multiplier (~1.5×, [input ablation](../converging/2026-10-12_input_ablation_public.md)) applies on top.
+
+## 7gf.86 result (10-13 16:46)
+
+Ft-stage SupCon (weight .3, tap context, 40 ep from the ac05x s1 stem) fired: row-mean purity rose by .04–.06, but
+mostly on frequent words. Macro purity reached ~.09 against the base's ~.08, so Q2–Q3 stays far below .15.
+Pool-smoothed local test came out −.006 and plain local test −.002. Adding `--sampler.balance 1` cost −.066 plain
+(TheMoth .566). Scope: this stage and weight. A stem-stage SupCon is untested.
