@@ -6,7 +6,7 @@ uv run python -m megspeech.training.cli.timing --origin sent40-ioi-ema9998-s0 --
 import argparse
 import json
 import logging
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from core.paths import DataRoot
 from core.tree import Tree
@@ -24,14 +24,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--origin", required=True, help="a run whose recorded data config the expert reads")
     parser.add_argument("--name", required=True)
+    parser.add_argument("--device", type=Device, default=Device.CUDA)
+    parser.add_argument("--share", type=float, default=1.0, help="data.train_share: the timing learning curve")
     tree = Tree(TimingExpert)
     tree.arguments(parser)
     args = parser.parse_args()
     expert = tree.parse(args)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
-    config = RunConfig.saved(root.models() / args.origin)
-    corpus = Trainer.corpus(config, root, Device.CUDA.as_torch())
+    saved = RunConfig.saved(root.models() / args.origin)
+    config = replace(saved, data=replace(saved.data, train_share=args.share))
+    corpus = Trainer.corpus(config, root, args.device.as_torch())
     evaluator = Evaluator(corpus.train.y.device, corpus.seen, config.selection.min_novel)
     model, history = expert.fit(corpus.train, corpus.validation, evaluator, corpus.train.log_prior())
     out = root.models() / args.name

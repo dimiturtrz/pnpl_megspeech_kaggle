@@ -38,7 +38,10 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (root.models() / "origin" / METRICS).write_text(json.dumps({"config": asdict(RunConfig())}))
     monkeypatch.setattr(trainer_module.Corpus, "load", classmethod(lambda *_: corpus()))
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: root))
-    monkeypatch.setattr(sys, "argv", ["timing", "--origin", "origin", "--name", "t", "--epochs", "1", "--batch", "4"])
+    argv = ["timing", "--origin", "origin", "--name", "t", "--epochs", "1", "--batch", "4"]
+    monkeypatch.setattr(sys, "argv", [*argv, "--device", "cpu", "--share", "0.5"])
     main()
     assert (root.models() / "t" / FILE).is_file()
-    assert json.loads((root.models() / "t" / METRICS).read_text())["expert"]["epochs"] == 1
+    summary = json.loads((root.models() / "t" / METRICS).read_text())
+    assert summary["expert"]["epochs"] == 1
+    assert summary["config"]["data"]["train_share"] == 0.5

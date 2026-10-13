@@ -32,6 +32,8 @@ class TimingExpert:
     weight_decay: float = 0.05
     label_smoothing: float = 0.1
     seed: int = 0
+    layers: int = 0
+    """Transformer layers of a span-wide `TimingSequence`; 0 trains the local `TimingHead`."""
 
     @staticmethod
     def load(root: DataRoot, name: str) -> dict[str, Tensor]:
@@ -57,7 +59,7 @@ class TimingExpert:
     ) -> tuple[TimingOnly, list[Epoch]]:
         """The model at its best epoch on `validation`, and every epoch's report."""
         torch.manual_seed(self.seed)
-        model = TimingOnly(VOCAB_SIZE).to(train.y.device)
+        model = TimingOnly(VOCAB_SIZE, self.layers).to(train.y.device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         per_epoch = math.ceil(len(train.index) / self.batch)
         schedule = torch.optim.lr_scheduler.OneCycleLR(optimizer, self.lr, total_steps=self.epochs * per_epoch)

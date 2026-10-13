@@ -14,3 +14,11 @@ def test_forward() -> None:
     )
     assert context.shape == (1, 4, 5)
     assert context is word
+
+
+def test_forward_sequence() -> None:
+    """With layers the span-wide expert answers in the same shape."""
+    context, _ = TimingOnly(5, layers=1).forward(
+        SpanInput(torch.zeros(1, 1, 1), ONSET, torch.tensor([[0, 1, 2, -1]]), torch.zeros(1, dtype=torch.long))
+    )
+    assert context.shape == (1, 4, 5)
