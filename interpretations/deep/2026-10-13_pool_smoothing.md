@@ -70,6 +70,9 @@ Row-mean purity weights rows, and pools follow corpus frequencies (chance .065, 
 - `--sampler.balance 1` lifts that to 88% and 7.3%. It was a null for CE (megspeech-3sk), but its job here is
   different: it feeds positives to the anchors that need them.
 - The prereg gate is therefore macro: Q2–Q3 purity, not the row mean.
+- **The tap stays `context`.** The encoder's word embedding, read before the span transformer, is worse in every
+  quartile. Its macro purity is .03 against .08 at the context head's input, so span context adds same-word
+  information rather than diluting it.
 
 ## Verdict and scope
 
