@@ -14,6 +14,7 @@ from megspeech.device import Device
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.training.config import METRICS, RunConfig
 from megspeech.training.loop.trainer import Trainer
+from megspeech.training.timing_corpus import TimingCorpus
 from megspeech.training.timing_expert import TimingExpert
 
 LOG = logging.getLogger(__name__)
@@ -36,7 +37,10 @@ def main() -> None:
     config = replace(saved, data=replace(saved.data, train_share=args.share))
     corpus = Trainer.corpus(config, root, args.device.as_torch())
     evaluator = Evaluator(corpus.train.y.device, corpus.seen, config.selection.min_novel)
-    model, history = expert.fit(corpus.train, corpus.validation, evaluator, corpus.train.log_prior())
+    pretrain = TimingCorpus.read(root, expert.pretrain) if expert.pretrain else None
+    if pretrain is not None:
+        LOG.info("pretrain corpus %s: %s", expert.pretrain, pretrain.describe())
+    model, history = expert.fit(corpus.train, corpus.validation, evaluator, corpus.train.log_prior(), pretrain)
     out = root.models() / args.name
     TimingExpert.save(model.timing, out)
     best = max(history, key=lambda row: row.macro.bacc10)

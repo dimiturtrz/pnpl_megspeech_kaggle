@@ -1,16 +1,19 @@
+import math
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 
 from core.paths import DataRoot
 from megspeech.data.batching.split import DENSE, Split
 from megspeech.data.constants import CHANNELS
-from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.data.spans.spans import Spans
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.model.context.timing import TimingHead
 from megspeech.model.context.timing_only import TimingOnly
+from megspeech.training.timing_corpus import TimingCorpus
 from megspeech.training.timing_expert import FILE, TimingExpert
 
 CPU = torch.device("cpu")
@@ -54,3 +57,47 @@ def test_fit() -> None:
     model, history = expert.fit(train, {"a": split(seed=1)}, Evaluator(CPU, min_novel=1), train.log_prior())
     assert [row.epoch for row in history] == [0, 1]
     assert isinstance(model, TimingOnly)
+
+
+def corpus() -> TimingCorpus:
+    rows = [(g, PRIMARY.words[w % 3], 0.2 * w) for g in range(6) for w in range(5)]
+    return TimingCorpus.from_frame(pd.DataFrame(rows, columns=["span", "word", "onset"]))
+
+
+def test_optimiser() -> None:
+    train = split()
+    expert = TimingExpert(batch=2)
+    optimizer, schedule = expert.optimiser(TimingOnly(VOCAB_SIZE), train, 2)
+    start = optimizer.param_groups[0]["lr"]
+    assert 0 < start < expert.lr
+    for _ in range(2 * len(train.index.split(2)) // 2):
+        optimizer.step()
+        schedule.step()
+    assert optimizer.param_groups[0]["lr"] > start
+
+
+def test_run_epoch() -> None:
+    """One pass is finite and moves the weights."""
+    train = split()
+    expert = TimingExpert(batch=2)
+    model = TimingOnly(VOCAB_SIZE, layers=1)
+    before = [p.clone() for p in model.parameters()]
+    optimizer, schedule = expert.optimiser(model, train, 1)
+    assert math.isfinite(expert.run_epoch(model, train, optimizer, schedule))
+    assert any(not torch.equal(a, b) for a, b in zip(before, model.parameters(), strict=True))
+
+
+def test_pretrained() -> None:
+    """One loss per pretraining epoch."""
+    expert = TimingExpert(batch=2, layers=1, pretrain_epochs=2)
+    losses = expert.pretrained(TimingOnly(VOCAB_SIZE, layers=1), corpus())
+    assert len(losses) == 2
+    assert all(math.isfinite(v) for v in losses)
+
+
+def test_fit_pretrained() -> None:
+    """Fine-tuning after pretraining still reports every fine-tune epoch."""
+    train = split()
+    expert = TimingExpert(epochs=1, batch=2, layers=1, pretrain="x", pretrain_epochs=1)
+    _, history = expert.fit(train, {"a": split(seed=1)}, Evaluator(CPU, min_novel=1), train.log_prior(), corpus())
+    assert [row.epoch for row in history] == [0]
