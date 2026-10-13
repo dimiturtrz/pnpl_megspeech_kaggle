@@ -72,7 +72,8 @@ checkpoints (`docs/competition/rules.md:27-30`). The public board is therefore n
 
 - **Deep:** #1 d-ac05xfam. Its public (.69083) ties d-old4 (.69133), a gap of .0005 inside the .015–.02 draw SD.
   Its local test is +.033 higher (.7289 vs .6955), well beyond the local test's ~.01 SE, and it runs on current code.
-  #2 d-old4 is the hedge for the top public score. Re-open #1 if 7gf.86 lands.
+  #2 d-old4 is the hedge for the top public score. Both rebuild bit-exact from their recorded members on current code
+  (7gf.29.1.1); only retraining d-old4 would need the 10-07 code. Re-open #1 if 7gf.86 lands.
 - **Broad:** #1 b-xc5k25ps (.62587). #2 b-xc8k25ps (.62557), the same recipe with 3 more seeds. The top six are all
   within .002, so they tie. None uses the cross-track mapping. The per-subject Sinkhorn is transductive; disclose it
   with the checkpoints.
