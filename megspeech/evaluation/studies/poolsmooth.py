@@ -12,6 +12,7 @@ import argparse
 import itertools
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import Path
@@ -89,18 +90,22 @@ class Draw:
     size: int = POOL
     count: int = DRAWS
     seed: int = SEED
+    grouped: bool = False
+    """Draw whole spans (sentences) rather than single rows, as a Kaggle pool of complete sentences holds them."""
 
-    def indices(self, n: int) -> Int[Tensor, "d p"]:
+    def indices(self, n: int, span: Int[Tensor, " n"] | None = None) -> Int[Tensor, "d p"]:
         if not self.size:
             return torch.arange(n)[None]
         if n <= self.size:
             return torch.arange(n).repeat(self.count, 1)
-        return torch.stack(
-            [
-                torch.randperm(n, generator=torch.Generator().manual_seed(self.seed + i))[: self.size]
-                for i in range(self.count)
-            ]
-        )
+        return torch.stack([self.pick(n, span, self.seed + i) for i in range(self.count)])
+
+    def pick(self, n: int, span: Int[Tensor, " n"] | None, seed: int) -> Int[Tensor, " p"]:
+        generator = torch.Generator().manual_seed(seed)
+        if not self.grouped or span is None:
+            return torch.randperm(n, generator=generator)[: self.size]
+        rank = torch.randperm(int(span.max()) + 1, generator=generator)[span]
+        return (rank * n + torch.arange(n)).argsort()[: self.size]
 
 
 @dataclass(frozen=True)
@@ -128,8 +133,8 @@ class Pool:
     y: Int[Tensor, "d p"]
 
     @classmethod
-    def drawn(cls, rows: Rows, draw: Draw) -> "Pool":
-        at = draw.indices(len(rows.y))
+    def drawn(cls, rows: Rows, draw: Draw, span: Int[Tensor, " n"] | None = None) -> "Pool":
+        at = draw.indices(len(rows.y), span)
         return cls(rows.base.log_softmax(-1)[at], rows.folds[0][at], rows.y[at])
 
     def near(self, space: Space, depth: int) -> Near:
@@ -208,20 +213,21 @@ class Pool:
 
 
 @dataclass(frozen=True)
-class Gains:
-    """Per-domain gains of every setting on every pool of a partition, and the macro over domains."""
+class Gains[K]:
+    """Per-domain gains of every setting `K` on every pool of a partition, and the macro over domains."""
 
-    domains: dict[str, dict[Setting, Float[Tensor, " d"]]]
+    domains: dict[str, dict[K, Float[Tensor, " d"]]]
 
-    def macro(self) -> dict[Setting, Float[Tensor, " d"]]:
+    def macro(self) -> dict[K, Float[Tensor, " d"]]:
         first = next(iter(self.domains.values()))
         return {s: torch.stack([g[s] for g in self.domains.values()]).mean(dim=0) for s in first}
 
-    def best(self) -> Setting:
-        macro = self.macro()
+    def best(self, keep: Callable[[K], bool] | None = None) -> K:
+        """The setting of best mean macro gain among those `keep` admits (all by default)."""
+        macro = {s: g for s, g in self.macro().items() if keep is None or keep(s)}
         return max(macro, key=lambda s: float(macro[s].mean()))
 
-    def at(self, setting: Setting) -> dict[str, tuple[float, float]]:
+    def at(self, setting: K) -> dict[str, tuple[float, float]]:
         """Each domain's and the macro's gain mean and SD over pools at `setting`."""
         rows = {n: g[setting] for n, g in self.domains.items()} | {"macro": self.macro()[setting]}
         return {n: (float(v.mean()), float(v.std()) if len(v) > 1 else 0.0) for n, v in rows.items()}
@@ -322,12 +328,15 @@ class Collector:
     device: torch.device
 
     @staticmethod
-    def path(root: DataRoot, base: str) -> Path:
-        return root.models() / SCRATCH / f"{base}.pt"
+    def path(root: DataRoot, base: str, reader: str = "") -> Path:
+        return root.models() / SCRATCH / (f"{base}--{reader}.pt" if reader else f"{base}.pt")
 
-    def build(self, base: str) -> Dump:  # devtools-ignore: test-mirror
-        loaded = Loader.of(Group(self.root, self.scoring, self.device), [base])
-        net = cast("SentenceNet", cast("Ensemble", loaded.model).members[0])
+    def build(self, base: str, reader: str = "") -> Dump:  # devtools-ignore: test-mirror
+        """The base's rows; with a `reader` model, that model's scores and embeddings of the base's very rows."""
+        group = Group(self.root, self.scoring, self.device)
+        loaded = Loader.of(group, [base])
+        reading = Loader.of(group, [reader]) if reader else loaded
+        net = cast("SentenceNet", cast("Ensemble", reading.model).members[0])
         runs = Run.discover(self.root.raw())
         tau = loaded.report(runs).tau
         partitions = {}
@@ -335,8 +344,10 @@ class Collector:
             held = replace(loaded, partition=partition)
             domains, _ = held.domains(held.ruled(runs))
             counted = held.evaluator.eligible(domains)
-            contexts = {n: (s, held.context(s)) for n, s in counted.items()}
-            Builder.check(held, runs, tau, contexts)
+            viewing = replace(reading, partition=partition)
+            contexts = {n: (s, viewing.context(s)) for n, s in counted.items()}
+            if not reader:
+                Builder.check(held, runs, tau, contexts)
             partitions[partition] = {n: Builder.rows(s, c, held, [Embedder(net)]) for n, (s, c) in contexts.items()}
         return Dump((), partitions, loaded.log_prior.cpu(), tau)
 

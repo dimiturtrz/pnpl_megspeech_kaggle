@@ -69,6 +69,23 @@ def test_indices() -> None:
     assert Draw(size=50, count=3).indices(7).shape == (3, 7)
 
 
+def test_indices_grouped() -> None:
+    span = torch.arange(20) // 4
+    drawn = Draw(size=8, count=3, grouped=True).indices(20, span)
+    assert drawn.shape == (3, 8)
+    assert all(len(set(span[row].tolist())) == 2 for row in drawn)
+    assert torch.equal(drawn, Draw(size=8, count=3, grouped=True).indices(20, span))
+    assert not torch.equal(drawn[0], drawn[1])
+    assert Draw(size=8, count=1, grouped=True).indices(20).shape == (1, 8)
+
+
+def test_drawn_grouped() -> None:
+    rows = Rows(torch.zeros(20, VOCAB_SIZE), torch.arange(20), (torch.ones(20, HIDDEN),))
+    span = torch.arange(20) // 4
+    pool = Pool.drawn(rows, Draw(size=8, count=2, grouped=True), span)
+    assert all(len(set(span[row].tolist())) == 2 for row in pool.y)
+
+
 def test_weights() -> None:
     near = Near(torch.tensor([[[0.9, 0.1, 0.1]]]), torch.tensor([[[1, 2, 3]]]))
     weights = near.weights(2, 0.1)
@@ -245,6 +262,7 @@ def test_ceiling_best() -> None:
 
 def test_path(tmp_path: Path) -> None:
     assert Collector.path(DataRoot(tmp_path), "base").name == "base.pt"
+    assert Collector.path(DataRoot(tmp_path), "base", "fold").name == "base--fold.pt"
 
 
 def test_reproduces() -> None:
