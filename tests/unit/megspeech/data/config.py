@@ -615,6 +615,16 @@ def test_trains_on_adapt(tmp_path: Path) -> None:
     assert [eleven.trains_on(r) for r in (other, pooled, outsider)] == [False, True, False]
     assert [DataConfig(subjects=(0,), adapt=12).trains_on(r) for r in (other, pooled)] == [False, False]
     assert [DataConfig(subjects=(0, 3)).trains_on(r) for r in (other, pooled)] == [False, False]
+    refit = DataConfig(subjects=(0, 3), adapt=12, refit=Refit.ALL)
+    assert [refit.trains_on(r) for r in (other, pooled, outsider)] == [True, True, False]
+
+
+def test_adapted() -> None:
+    """`adapt` alone trains its session; a refit of everything adds the ruler's; no `adapt` trains neither."""
+    assert DataConfig(adapt=12).adapted == (12,)
+    assert DataConfig(adapt=11, refit=Refit.VAL).adapted == (11,)
+    assert DataConfig(adapt=12, refit=Refit.ALL).adapted == (11, 12)
+    assert DataConfig(refit=Refit.ALL).adapted == ()
 
 
 def test_trained_adapt_discovered(tmp_path: Path) -> None:
@@ -644,6 +654,8 @@ def test_muted() -> None:
     assert DataConfig(subjects=(0, 3), adapt=12).muted(names).tolist() == [True, False, False, False]
     assert DataConfig(subjects=(0, 3), adapt=12, adapt_context=True).muted(names).tolist() == [False] * 4
     assert DataConfig().muted(names).tolist() == [False] * 4
+    refit = DataConfig(subjects=(0, 3), adapt=12, refit=Refit.ALL)
+    assert refit.muted(names).tolist() == [True, True, False, False]
 
 
 def test_muted_context_subjects() -> None:

@@ -36,6 +36,8 @@ METRICS = "metrics.json"
 """The record a finished run leaves in its directory, its config under `config`."""
 
 ADAPTED = SHERLOCK
+ADAPT_SESSIONS = (11, 12)
+"""The Sherlock1 sessions subjects 1-32 have labelled: one adapts, the other is the local Broad ruler."""
 """The task whose sessions 11 and 12 subjects 1-32 each hear once."""
 
 NARRATOR = "Sherlock"
@@ -275,22 +277,29 @@ class DataConfig:
         both = (Partition.VALIDATION, Partition.TEST)
         return {Refit.NONE: (), Refit.VAL: self.val.carving.held, Refit.ALL: both}[self.refit]
 
+    @property
+    def adapted(self) -> tuple[int, ...]:
+        """Subjects 1-32's Sherlock1 sessions that train: `adapt`, and under `Refit.ALL` the session the Broad ruler
+        scores too; none without `adapt`."""
+        return tuple(s for s in ADAPT_SESSIONS if self.adapt and (s == self.adapt or self.refit is Refit.ALL))
+
     def trains_on(self, run: Run) -> bool:
         """Whether `run` trains: a run of a subject in `subjects` that `admits`, of one of `tasks` when they are set."""
         return run.subject in self.subjects and self.admits(run) and (not self.tasks or run.key[0] in self.tasks)
 
     def admits(self, run: Run) -> bool:
         """Whether `run`'s partition trains for its subject: `TRAIN`, else subject 0's `refitted` partitions and every
-        other subject's `adapt` session; never another subject's other runs."""
+        other subject's `adapted` sessions; never another subject's other runs."""
         if run.subject == DEEP:
             return run.partition in (Partition.TRAIN, *self.refitted)
-        return run.partition is Partition.TRAIN or run.key == (ADAPTED, self.adapt, 1)
+        return run.partition is Partition.TRAIN or run.key in {(ADAPTED, session, 1) for session in self.adapted}
 
     def muted(self, names: "pd.Series[str]") -> Bool[np.ndarray, " n"]:
-        """Whether each run `name`'s words keep the context head's label from training: the `adapt` runs of subjects
+        """Whether each run `name`'s words keep the context head's label from training: the `adapted` runs of subjects
         1-32, unless `adapt_context`, and every run of a subject outside `context_subjects` when it is set."""
         subjects = Run.subjects(names)
-        adapted = Run.matching(names, (ADAPTED, self.adapt, 1)) & (subjects != DEEP)
+        sessions = [Run.matching(names, (ADAPTED, session, 1)) for session in self.adapted]
+        adapted = np.logical_or.reduce(sessions, initial=False) & (subjects != DEEP)
         outside = ~np.isin(subjects, self.context_subjects) if self.context_subjects else np.zeros(len(names), bool)
         return (adapted & (not self.adapt_context)) | outside
 
