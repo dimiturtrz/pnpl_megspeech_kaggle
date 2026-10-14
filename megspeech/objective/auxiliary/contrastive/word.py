@@ -1,5 +1,6 @@
 """The same-word contrastive term (megspeech-7gf.86): supervised contrastive loss
-(`megspeech.objective.auxiliary.supcon`) over the embeddings the term's tap names, in which a word's positives are
+(`megspeech.objective.auxiliary.contrastive.supcon`) over the embeddings the term's tap names,
+in which a word's positives are
 every other labelled word of the batch with its 50-way label from a different sentence, and its negatives every
 labelled word of another label. It pulls what the closed-vocabulary cross-entropy already pulls toward one class
 weight into neighbourhoods a kNN readout finds (`megspeech.evaluation.studies.knnreadout`), invariant to the context
@@ -25,7 +26,7 @@ from torch import Tensor
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.instances import Instances
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
-from megspeech.objective.auxiliary.supcon import Positives, SupConTerm
+from megspeech.objective.auxiliary.contrastive.supcon import Positives, SupConTerm
 
 
 @dataclass(frozen=True)

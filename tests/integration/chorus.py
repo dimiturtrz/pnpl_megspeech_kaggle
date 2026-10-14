@@ -4,7 +4,7 @@ import torch
 
 from megspeech.data.batching.split import Split
 from megspeech.data.spans.spans import Spans
-from megspeech.objective.auxiliary.instance import InstanceTerm
+from megspeech.objective.auxiliary.contrastive.instance import InstanceTerm
 from megspeech.training.sampling.pairing import Pairing
 from megspeech.training.sampling.sampler import SamplerConfig
 

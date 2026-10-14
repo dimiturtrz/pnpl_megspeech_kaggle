@@ -21,8 +21,8 @@ from megspeech.model.words.heads import WordHead
 from megspeech.objective.auxiliary.acoustic import Acoustic, AcousticTerm
 from megspeech.objective.auxiliary.adversarial import TimingTerm
 from megspeech.objective.auxiliary.audio import AudioTerm, Listening
-from megspeech.objective.auxiliary.contrast import SameWordTerm
-from megspeech.objective.auxiliary.instance import Apart, InstanceTerm, Together
+from megspeech.objective.auxiliary.contrastive.instance import Apart, InstanceTerm, Together
+from megspeech.objective.auxiliary.contrastive.word import SameWordTerm
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm

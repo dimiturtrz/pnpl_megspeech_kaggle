@@ -22,8 +22,8 @@ from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.acoustic import AcousticTerm
 from megspeech.objective.auxiliary.adversarial import TimingTerm
 from megspeech.objective.auxiliary.audio import AudioTerm
-from megspeech.objective.auxiliary.contrast import SameWordTerm
-from megspeech.objective.auxiliary.instance import InstanceTerm
+from megspeech.objective.auxiliary.contrastive.instance import InstanceTerm
+from megspeech.objective.auxiliary.contrastive.word import SameWordTerm
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
@@ -106,14 +106,16 @@ class AuxiliaryConfig:
     prev_word: float = 0.0
     """Weight of the previous-word auxiliary, the next-word one's mirror; 0 creates no head."""
     instance: float = 0.0
-    """Weight of the cross-subject instance term (`megspeech.objective.auxiliary.instance`): InfoNCE over each word's
+    """Weight of the cross-subject instance term
+    (`megspeech.objective.auxiliary.contrastive.instance`): InfoNCE over each word's
     local encoder embedding, its positives the same MASC token heard by another subject, its negatives every other
     word of the batch; `SamplerConfig.pairs` co-batches such pairs. 0 creates no head (megspeech-7gf.147.2)."""
     instance_apart: bool = False
     """Leave every other word of a word's own sentence, whoever heard it, out of the instance term's negatives
-    (`megspeech.objective.auxiliary.instance.Apart`): their windows overlap its sound (megspeech-ct5)."""
+    (`megspeech.objective.auxiliary.contrastive.instance.Apart`): their windows overlap its sound (megspeech-ct5)."""
     contrast: float = 0.0
-    """Weight of the same-word contrastive term (`megspeech.objective.auxiliary.contrast`): supervised contrastive
+    """Weight of the same-word contrastive term
+    (`megspeech.objective.auxiliary.contrastive.word`): supervised contrastive
     loss (Khosla et al. 2020) over the `tap` representation of every word in the 50, its positives the batch's other
     words of the same label from a different sentence, its negatives the other labels; pulls same-word embeddings
     together so a kNN readout finds them. Reads what `tap` names, `context` being what the kNN readout embeds; 0

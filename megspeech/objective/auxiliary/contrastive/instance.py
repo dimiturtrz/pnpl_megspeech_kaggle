@@ -3,7 +3,8 @@ subject layer, in which a word's positives are the same MASC token instance (`me
 by another subject, and its negatives every other word of the batch. What two brains share hearing one token is the
 word; what differs is the subject, so pulling them together trains the encoder toward what a zero-shot subject shares.
 
-Supervised-contrastive form (`megspeech.objective.auxiliary.supcon`). The same subject's other hearing of the token
+Supervised-contrastive form
+(`megspeech.objective.auxiliary.contrastive.supcon`). The same subject's other hearing of the token
 (its other session) is neither positive nor negative: it is what a subject-specific code also matches.
 
 Under `Apart` (`--optim.instance_apart`, megspeech-ct5) a word's other-word neighbours in its own sentence, whoever
@@ -23,7 +24,7 @@ from torch import Tensor
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.instances import NO_INSTANCE, Instances
 from megspeech.data.labels.vocabulary import IGNORE
-from megspeech.objective.auxiliary.supcon import Positives, SupConTerm
+from megspeech.objective.auxiliary.contrastive.supcon import Positives, SupConTerm
 
 
 @dataclass(frozen=True)
