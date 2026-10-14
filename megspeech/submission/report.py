@@ -73,7 +73,7 @@ class Recorded:
     def read(cls, out: Path) -> "Recorded":
         record = json.loads((out / METRICS).read_text())
         track = next(track for track, name in SUBMISSIONS.items() if (out / name).is_file())
-        scoring = Tree(Scoring, SCORING).load(record["config"]["scoring"], saved=True)
+        scoring = Tree(Scoring, SCORING).load(record["config"].get("scoring", {}), saved=True)
         return cls(tuple(record["members"]), scoring, track)
 
 

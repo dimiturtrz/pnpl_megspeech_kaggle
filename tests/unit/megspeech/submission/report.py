@@ -124,3 +124,7 @@ def test_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     out = tmp_path / "blend"
     Submission(Track.BROAD, scoring).write(replace(loaded(tmp_path), names=(RUN, "other")), runs(tmp_path), out)
     assert Recorded.read(out) == Recorded((RUN, "other"), scoring, Track.BROAD)
+    record = json.loads((out / "metrics.json").read_text())
+    del record["config"]["scoring"]
+    (out / "metrics.json").write_text(json.dumps(record))
+    assert Recorded.read(out).scoring == SCORING
