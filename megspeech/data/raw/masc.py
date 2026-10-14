@@ -26,7 +26,7 @@ from jaxtyping import Bool, Float
 from mne.forward._field_interpolation import _map_meg_or_eeg_channels
 
 from core.paths import DataRoot
-from megspeech.data.constants import SFREQ
+from megspeech.data.constants import QUIET, SFREQ
 from megspeech.data.raw.events import Event, Kind
 from megspeech.data.raw.fetch import MASC, NEUROMAG
 from megspeech.data.raw.mains import Mains
@@ -61,10 +61,10 @@ class Neuromag:
 
     @classmethod
     def of(cls, path: Path) -> "Neuromag":
-        info = mne.io.read_info(path, verbose="error")
+        info = mne.io.read_info(path, verbose=QUIET)
         meg = mne.pick_types(info, meg=True)
         ordered = sorted(meg, key=lambda pick: info["ch_names"][pick])
-        return cls(mne.pick_info(info, ordered, verbose="error"))
+        return cls(mne.pick_info(info, ordered, verbose=QUIET))
 
     @property
     def names(self) -> list[str]:
@@ -138,12 +138,12 @@ class Recording:
             elp=self.points(self.sidecar("acq-ELP_headshape.pos", session=True)),
             hsp=self.points(self.sidecar("acq-HSP_headshape.pos", session=True)),
             preload=True,
-            verbose="error",
+            verbose=QUIET,
         )
         raw.pick("meg", exclude="bads")
         Mains.of(self.sidecar("meg.json"), MAINS).notch(raw)
-        raw.filter(HIGHPASS, None, verbose="error")
-        return raw.resample(SFREQ, verbose="error")
+        raw.filter(HIGHPASS, None, verbose=QUIET)
+        return raw.resample(SFREQ, verbose=QUIET)
 
     def meg(self, target: Neuromag) -> Float[np.ndarray, "c t"]:
         """The recording's field at `target`'s channels, in tesla (per metre for gradiometers), float32."""

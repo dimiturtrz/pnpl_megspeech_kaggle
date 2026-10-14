@@ -37,7 +37,7 @@ import pandas as pd
 from scipy.io import loadmat
 
 from core.paths import DataRoot
-from megspeech.data.constants import SFREQ
+from megspeech.data.constants import QUIET, SFREQ
 from megspeech.data.raw.appleseed import Story
 from megspeech.data.raw.events import Event, Kind
 from megspeech.data.raw.fetch import NEUROMAG
@@ -164,11 +164,11 @@ class Recording(Played):
     @override
     def cleaned(self) -> mne.io.BaseRaw:
         """The recording's MEG channels as the site's MaxFilter left them (tSSS), mains notched, high-passed, 250 Hz."""
-        raw = mne.io.read_raw_fif(self.fif, preload=True, verbose="error")
+        raw = mne.io.read_raw_fif(self.fif, preload=True, verbose=QUIET)
         raw.pick("meg")
         self.mains.notch(raw)
-        raw.filter(HIGHPASS, None, verbose="error")
-        return raw.resample(SFREQ, verbose="error")
+        raw.filter(HIGHPASS, None, verbose=QUIET)
+        return raw.resample(SFREQ, verbose=QUIET)
 
     def marks(self) -> dict[str, float]:
         """The story's start and end triggers, in seconds from the saved file's first sample."""

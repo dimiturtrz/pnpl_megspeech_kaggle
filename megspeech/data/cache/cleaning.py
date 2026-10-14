@@ -17,7 +17,7 @@ import mne
 import numpy as np
 from jaxtyping import Float
 
-from megspeech.data.constants import SFREQ
+from megspeech.data.constants import QUIET, SFREQ
 
 LOG = logging.getLogger(__name__)
 
@@ -92,22 +92,22 @@ class Ica:
 
     def _fitted(self, raw: mne.io.RawArray) -> mne.preprocessing.ICA:
         """The ICA of `raw`'s high-passed copy, its outlying stretches dropped."""
-        highpassed = mne.filter.filter_data(raw.get_data(), SFREQ, HIGHPASS, None, copy=False, verbose="error")
+        highpassed = mne.filter.filter_data(raw.get_data(), SFREQ, HIGHPASS, None, copy=False, verbose=QUIET)
         ica = mne.preprocessing.ICA(
             n_components=VARIANCE,
             method="infomax",
             fit_params={"extended": True},
             max_iter="auto",
             random_state=0,
-            verbose="error",
+            verbose=QUIET,
         )
         reject = self.rejection(highpassed)
         return ica.fit(
-            mne.io.RawArray(highpassed, raw.info, verbose="error"),
+            mne.io.RawArray(highpassed, raw.info, verbose=QUIET),
             decim=DECIM,
             reject=reject,
             tstep=SPAN,
-            verbose="error",
+            verbose=QUIET,
         )
 
     @staticmethod
@@ -117,13 +117,13 @@ class Ica:
 
     def __call__(self, meg: Float[np.ndarray, "c t"]) -> Float[np.ndarray, "c t"]:
         """`meg` without the components that track the synthetic ECG or the frontal magnetometers."""
-        info = mne.create_info(list(self.names), SFREQ, list(self.types), verbose="error")
-        raw = mne.io.RawArray(meg.astype(np.float64), info, verbose="error")
+        info = mne.create_info(list(self.names), SFREQ, list(self.types), verbose=QUIET)
+        raw = mne.io.RawArray(meg.astype(np.float64), info, verbose=QUIET)
         ica = self._fitted(raw)
-        cardiac, _ = ica.find_bads_ecg(raw, method="correlation", threshold=ECG_Z, verbose="error")
-        ocular, _ = ica.find_bads_eog(raw, ch_name=list(FRONTAL), verbose="error")
+        cardiac, _ = ica.find_bads_ecg(raw, method="correlation", threshold=ECG_Z, verbose=QUIET)
+        ocular, _ = ica.find_bads_eog(raw, ch_name=list(FRONTAL), verbose=QUIET)
         ica.exclude = sorted(set(cardiac) | set(ocular))
-        cleaned = ica.apply(raw, verbose="error").get_data().astype(meg.dtype)
+        cleaned = ica.apply(raw, verbose=QUIET).get_data().astype(meg.dtype)
         del raw
         removed = float(np.median(Ica._energy(meg - cleaned) / Ica._energy(meg)))
         LOG.info(

@@ -20,6 +20,7 @@ from jaxtyping import Float, Int
 from torch import Tensor, nn
 
 from core.paths import DataRoot
+from megspeech.data.constants import QUIET
 from megspeech.data.raw.fetch import MEGXL, NEUROMAG
 from megspeech.device import Device
 
@@ -71,7 +72,7 @@ class Geometry:
     @classmethod
     def neuromag(cls, path: Path) -> "Geometry":
         """From the channel records of a Neuromag-306 recording at `path`."""
-        info = importlib.import_module("mne.io").read_info(path, verbose="error")
+        info = importlib.import_module("mne.io").read_info(path, verbose=QUIET)
         return cls.of(info["chs"])
 
 

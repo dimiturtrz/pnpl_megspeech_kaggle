@@ -31,7 +31,7 @@ from jaxtyping import Float
 from mne.preprocessing import find_bad_channels_maxwell, maxwell_filter
 
 from core.paths import DataRoot
-from megspeech.data.constants import SFREQ
+from megspeech.data.constants import QUIET, SFREQ
 from megspeech.data.raw.appleseed import KIND_ORDER, Story
 from megspeech.data.raw.events import Event
 from megspeech.data.raw.fetch import NEUROMAG
@@ -147,9 +147,9 @@ class Recording:
 
     def head_positions(self, raw: mne.io.BaseRaw) -> Float[np.ndarray, "n 10"]:
         """The head's pose over the recording, fitted from its head-position indicator coils."""
-        amplitudes = mne.chpi.compute_chpi_amplitudes(raw, t_step_min=POSE_STEP, verbose="error")
-        locations = mne.chpi.compute_chpi_locs(raw.info, amplitudes, verbose="error")
-        return mne.chpi.compute_head_pos(raw.info, locations, verbose="error")
+        amplitudes = mne.chpi.compute_chpi_amplitudes(raw, t_step_min=POSE_STEP, verbose=QUIET)
+        locations = mne.chpi.compute_chpi_locs(raw.info, amplitudes, verbose=QUIET)
+        return mne.chpi.compute_head_pos(raw.info, locations, verbose=QUIET)
 
     @property
     def mains(self) -> Mains:
@@ -157,16 +157,16 @@ class Recording:
 
     def cleaned(self) -> mne.io.BaseRaw:
         """The recording's MEG channels: SSS with head-position correction, mains notched, high-passed, 250 Hz."""
-        raw = mne.io.read_raw_fif(self.fif, preload=True, verbose="error")
+        raw = mne.io.read_raw_fif(self.fif, preload=True, verbose=QUIET)
         shared = self.shared
         positions = self.head_positions(raw)
-        found = find_bad_channels_maxwell(raw, verbose="error", **shared)
+        found = find_bad_channels_maxwell(raw, verbose=QUIET, **shared)
         raw.info["bads"] = sorted({*raw.info["bads"], *found[0], *found[1]})
-        raw = maxwell_filter(raw, head_pos=positions, destination=ORIGIN, verbose="error", **shared)
+        raw = maxwell_filter(raw, head_pos=positions, destination=ORIGIN, verbose=QUIET, **shared)
         raw.pick("meg")
         self.mains.notch(raw)
-        raw.filter(HIGHPASS, None, verbose="error")
-        return raw.resample(SFREQ, verbose="error")
+        raw.filter(HIGHPASS, None, verbose=QUIET)
+        return raw.resample(SFREQ, verbose=QUIET)
 
     def written(self, target: Neuromag) -> tuple[Float[np.ndarray, "c t"], dict[str, object]]:
         """The recording's field at `target`'s channels in tesla, float32, with its cleaning's record as attributes."""
@@ -186,12 +186,12 @@ class Recording:
         """The seconds into the saved MEG of each play's start trigger: the events' onsets count from the
         acquisition's start, the file's first sample comes `first_time` after it."""
         table = pd.read_csv(self.sidecar("events.tsv"), sep="	")
-        first = mne.io.read_raw_fif(self.fif, preload=False, verbose="error").first_time
+        first = mne.io.read_raw_fif(self.fif, preload=False, verbose=QUIET).first_time
         return (table.loc[table["trial_type"] == STIMULUS_TRIGGER, "onset"].astype(float) - first).tolist()
 
     def audio(self) -> Envelope:
         """The envelope of the stimulus audio the recording carries."""
-        raw = mne.io.read_raw_fif(self.fif, preload=False, verbose="error")
+        raw = mne.io.read_raw_fif(self.fif, preload=False, verbose=QUIET)
         return Envelope.of(raw.get_data(picks=[self.audio_channel])[0], raw.info["sfreq"])
 
     def plays(self) -> list[Clock]:

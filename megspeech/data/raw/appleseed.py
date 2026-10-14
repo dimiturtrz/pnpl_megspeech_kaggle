@@ -26,7 +26,7 @@ import pandas as pd
 from jaxtyping import Bool, Float
 
 from core.paths import DataRoot
-from megspeech.data.constants import SFREQ
+from megspeech.data.constants import QUIET, SFREQ
 from megspeech.data.raw.events import Event, Kind
 from megspeech.data.raw.fetch import APPLESEED, NEUROMAG
 from megspeech.data.raw.mains import Mains
@@ -192,11 +192,11 @@ class Recording:
 
     def cleaned(self) -> Cleaned:
         """The recording's good MEG channels: mains notched, high-passed, 250 Hz, reference noise regressed out."""
-        raw = mne.io.read_raw_fif(self.fif, preload=False, verbose="error")
+        raw = mne.io.read_raw_fif(self.fif, preload=False, verbose=QUIET)
         raw.pick(["meg", "ref_meg"]).load_data()
         Mains.of(self.sidecar("meg.json")).notch(raw)
-        raw.filter(HIGHPASS, None, verbose="error")
-        raw.resample(SFREQ, verbose="error")
+        raw.filter(HIGHPASS, None, verbose=QUIET)
+        raw.resample(SFREQ, verbose=QUIET)
         reference = Reference(raw.get_data(picks="ref_meg"))
         names = [raw.ch_names[pick] for pick in mne.pick_types(raw.info, meg=True, exclude=[])]
         flagged = Bads.find(raw.get_data(picks="meg")).flagged

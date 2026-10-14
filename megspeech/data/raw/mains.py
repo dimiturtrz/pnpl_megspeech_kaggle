@@ -8,7 +8,7 @@ from pathlib import Path
 import mne
 import numpy as np
 
-from megspeech.data.constants import SFREQ
+from megspeech.data.constants import QUIET, SFREQ
 
 BAND_EDGE = SFREQ / 2
 """LibriBrain's low-pass: the Nyquist of its 250 Hz, above which no harmonic is kept."""
@@ -38,4 +38,4 @@ class Mains:
 
     def notch(self, raw: mne.io.BaseRaw) -> mne.io.BaseRaw:
         """`raw` with `harmonics` notched out, in place."""
-        return raw.notch_filter(np.array(self.harmonics), verbose="error")
+        return raw.notch_filter(np.array(self.harmonics), verbose=QUIET)

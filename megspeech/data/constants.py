@@ -22,6 +22,9 @@ TAIL = 1.0
 word's end: the epochs' tails after their last onset are never under 1.022 s, though one in nine training sentences
 ends on a vocabulary word whose tail from its onset would be exactly 1 s."""
 
+QUIET = "error"
+"""MNE log level for every library call: info-level chatter (filter design, projectors) is noise at corpus scale."""
+
 PICO = 1e12
 """Tesla → picotesla, so a float16 cache keeps the ~1e-13 T magnetometer signal out of subnormals."""
 
