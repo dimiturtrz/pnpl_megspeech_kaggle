@@ -104,6 +104,9 @@ class ContextConfig:
     """Depthwise kernel, in words, of a convolution module after each transformer layer (`span.SpanConformer`); 0
     keeps the plain transformer. Kaggle test sentences run 1-9 words, so 3 mixes each word with its neighbours."""
     subjects: int = 0
+    subject_drop: float = 0.0
+    """Chance, in training, a window is read through the mean of the subject layer's matrices, as a zero-shot
+    subject and every subject shrunk toward that mean at scoring are (`input.subjects.SubjectLayer.dropped`)."""
     final_norm: bool = False
     """A LayerNorm after the pre-norm transformer's last layer, before the context head (plain transformer only)."""
     levels: bool = False

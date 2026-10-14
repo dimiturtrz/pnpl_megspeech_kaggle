@@ -19,6 +19,8 @@ class Stages:
     levels: bool = False
     whiten: bool = False
     subjects: int = 0
+    drop: float = 0.0
+    """Chance, in training, a row is read through the subject layer's mean matrix (`SubjectLayer.dropped`)."""
 
 
 class Stem:
@@ -29,7 +31,7 @@ class Stem:
         """Per-subject levels over `channels`, `scale`, a whitener and a subject layer reading a subject it has no
         matrix for as `unseen`, each optional stage as `stages` sets it."""
         built = Levels(channels, active=stages.levels), scale, Whitener(channels, active=stages.whiten)
-        return *built, SubjectLayer.of(stages.subjects, channels, unseen)
+        return *built, SubjectLayer.of(stages.subjects, channels, unseen, stages.drop)
 
     @staticmethod
     def placeholder(channels: int) -> Scaler:

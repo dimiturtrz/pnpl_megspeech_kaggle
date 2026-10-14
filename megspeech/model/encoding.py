@@ -24,7 +24,7 @@ class Encoding(nn.Module):
     def __init__(self, scale: nn.Module, context: ContextConfig, channels: int, unseen: Unseen) -> None:
         super().__init__()
         self.levels, self.scale, self.whiten, self.subjects = Stem.of(
-            scale, channels, Stages(context.levels, context.whiten, context.subjects), unseen
+            scale, channels, Stages(context.levels, context.whiten, context.subjects, context.subject_drop), unseen
         )
         self.words = WordBuilder.build(context.encoder, context, channels)
         self.motion = Moving()

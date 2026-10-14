@@ -79,3 +79,17 @@ def test_targets() -> None:
     assert torch.equal(Unseen.DEEP.targets(weight), weight[DEEP].expand_as(weight))
     assert torch.equal(Unseen.SOURCE.targets(weight)[DEEP], weight[DEEP])
     assert torch.allclose(Unseen.SOURCE.targets(weight)[1], weight[1:].mean(dim=0), atol=1e-6)
+
+
+def test_dropped() -> None:
+    """Training reads every row through the mean at chance 1 and none at 0; evaluation never drops."""
+    layer = SubjectLayer(3, 4, drop=1.0)
+    subject = torch.tensor([0, 2, 1])
+    assert layer.dropped(subject, 4).tolist() == [4, 4, 4]
+    with torch.no_grad():
+        layer.weight.mul_(torch.tensor([1.0, 2.0, 3.0])[:, None, None])
+    x = torch.randn(3, 4, 6, generator=GENERATOR)
+    assert torch.allclose(layer.forward(x, subject), 2 * x)
+    layer.eval()
+    assert torch.equal(layer.dropped(subject, 4), subject)
+    assert torch.equal(SubjectLayer(3, 4).dropped(subject, 4), subject)

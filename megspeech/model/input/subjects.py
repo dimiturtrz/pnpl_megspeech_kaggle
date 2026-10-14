@@ -97,15 +97,16 @@ class SubjectLayer(Shared):
     `unseen`'s.
     """
 
-    def __init__(self, subjects: int, channels: int, unseen: Unseen = Unseen.IDENTITY) -> None:
+    def __init__(self, subjects: int, channels: int, unseen: Unseen = Unseen.IDENTITY, drop: float = 0.0) -> None:
         super().__init__()
         self.weight = nn.Parameter(torch.eye(channels).expand(subjects, channels, channels).clone())
         self.unseen = unseen
+        self.drop = drop
 
     @classmethod
-    def of(cls, subjects: int, channels: int, unseen: Unseen = Unseen.IDENTITY) -> nn.Module:
+    def of(cls, subjects: int, channels: int, unseen: Unseen = Unseen.IDENTITY, drop: float = 0.0) -> nn.Module:
         """A layer for `subjects` subjects; none (`Shared`) at 0, which keeps single-subject checkpoints' keys."""
-        return cls(subjects, channels, unseen) if subjects else Shared()
+        return cls(subjects, channels, unseen, drop) if subjects else Shared()
 
     def shrink(self, keep: float, toward: Unseen) -> None:
         """Pull every subject's matrix toward `toward`'s, keeping `keep` of its own deviation from it."""
@@ -115,5 +116,12 @@ class SubjectLayer(Shared):
     @override
     def forward(self, x: Float[Tensor, "r c t"], subject: Int[Tensor, " r"]) -> Float[Tensor, "r c t"]:
         known = len(self.weight)
-        table = torch.cat([self.weight, self.unseen.matrix(self.weight)[None]])
-        return torch.bmm(table[subject.clamp(max=known)], x)
+        table = torch.cat([self.weight, self.unseen.matrix(self.weight)[None], Unseen.MEAN.matrix(self.weight)[None]])
+        return torch.bmm(table[self.dropped(subject.clamp(max=known), known + 1)], x)
+
+    def dropped(self, subject: Int[Tensor, " r"], mean: int) -> Int[Tensor, " r"]:
+        """In training, each row read through the mean matrix at chance `drop`: the zero-shot fallback, and the
+        shrunk matrices every subject is scored through, trained rather than only ever extrapolated to."""
+        chance = self.drop * self.training
+        drawn = torch.rand(subject.shape, device=subject.device) < chance
+        return torch.where(drawn, torch.full_like(subject, mean), subject)
