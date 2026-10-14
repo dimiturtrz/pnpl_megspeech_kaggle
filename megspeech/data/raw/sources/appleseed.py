@@ -7,7 +7,7 @@ the data allow: bad channels, spatial cleaning (the three reference magnetometer
 cancellation), mains notch, 0.1 Hz high-pass, 250 Hz. The filters are linear and per channel, so detecting the bad
 channels after them rather than before them flags the same channels in the band that is kept.
 
-    uv run python -m megspeech.data.raw.appleseed   # every downloaded recording, into processed/appleseed
+    uv run python -m megspeech.data.raw.sources.appleseed   # every downloaded recording, into processed/appleseed
 """
 
 import argparse
@@ -30,8 +30,8 @@ from megspeech.data.constants import QUIET, SFREQ
 from megspeech.data.raw.events import Event, Kind
 from megspeech.data.raw.fetch import APPLESEED, NEUROMAG
 from megspeech.data.raw.mains import Mains
-from megspeech.data.raw.masc import COLUMNS, HIGHPASS, Neuromag
 from megspeech.data.raw.serialised import Corpus, RunName
+from megspeech.data.raw.sources.masc import COLUMNS, HIGHPASS, Neuromag
 from megspeech.data.raw.textgrid import Interval, TextGrid
 
 LOG = logging.getLogger(__name__)

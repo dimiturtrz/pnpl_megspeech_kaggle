@@ -11,10 +11,10 @@ from scipy.io import savemat, wavfile
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.constants import SFREQ
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY
-from megspeech.data.raw import smn4lang as module
-from megspeech.data.raw.kymatasync import Clock
-from megspeech.data.raw.masc import HIGHPASS, Neuromag
-from megspeech.data.raw.smn4lang import MANDARIN, SMN4LANG, Narration, Punctuated, Recording, Smn4Lang, main
+from megspeech.data.raw.sources import smn4lang as module
+from megspeech.data.raw.sources.kymatasync import Clock
+from megspeech.data.raw.sources.masc import HIGHPASS, Neuromag
+from megspeech.data.raw.sources.smn4lang import MANDARIN, SMN4LANG, Narration, Punctuated, Recording, Smn4Lang, main
 from megspeech.data.raw.textgrid import TextGrid
 
 FIF = "sub-03_task-RDR_run-7_meg.fif"

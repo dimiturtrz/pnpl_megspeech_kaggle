@@ -29,8 +29,8 @@ from megspeech.data.batching.split import SpanInput, Split
 from megspeech.data.constants import RATE
 from megspeech.data.labels.vocabulary import PRIMARY
 from megspeech.data.raw.fetch import NEUROMAG
-from megspeech.data.raw.masc import Neuromag
 from megspeech.data.raw.runs import Partition, Run
+from megspeech.data.raw.sources.masc import Neuromag
 from megspeech.device import Device
 from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel

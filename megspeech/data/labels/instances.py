@@ -13,7 +13,7 @@ from megspeech.data.raw.runs import Column
 from megspeech.data.raw.serialised import NAME
 
 STORY = re.compile(r"MASC(?P<story>\d+)")
-"""The task `megspeech.data.raw.masc.Recording.name` gives a MASC story's run."""
+"""The task `megspeech.data.raw.sources.masc.Recording.name` gives a MASC story's run."""
 NO_INSTANCE = -1
 
 

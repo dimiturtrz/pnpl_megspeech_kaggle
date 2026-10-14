@@ -9,7 +9,7 @@ import torch
 from jaxtyping import Float, Int
 from torch import Tensor, nn
 
-from megspeech.data.raw.smn4lang import SUBJECT_OFFSET
+from megspeech.data.raw.sources.smn4lang import SUBJECT_OFFSET
 from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
 
 BLOCK = 100

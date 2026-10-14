@@ -15,7 +15,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.raw.fetch import NEUROMAG
-from megspeech.data.raw.masc import Neuromag
+from megspeech.data.raw.sources.masc import Neuromag
 
 GATE = 8.0
 """Interquartile ranges from its median at which a sample on any channel is an artifact the covariance leaves out:

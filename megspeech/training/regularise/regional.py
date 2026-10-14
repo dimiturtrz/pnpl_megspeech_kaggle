@@ -15,7 +15,7 @@ from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.raw.fetch import NEUROMAG
-from megspeech.data.raw.masc import Neuromag
+from megspeech.data.raw.sources.masc import Neuromag
 
 
 @dataclass(frozen=True)

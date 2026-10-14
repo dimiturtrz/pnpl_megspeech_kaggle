@@ -9,11 +9,11 @@ from scipy.io import wavfile
 
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY, SECONDARY
-from megspeech.data.raw import scans as module
 from megspeech.data.raw.events import Event
-from megspeech.data.raw.kymatasync import Alignment, Clock, Envelope
-from megspeech.data.raw.masc import COLUMNS, Neuromag
-from megspeech.data.raw.scans import GERMAN, SCANS, Book, Recording, Scans, main
+from megspeech.data.raw.sources import scans as module
+from megspeech.data.raw.sources.kymatasync import Alignment, Clock, Envelope
+from megspeech.data.raw.sources.masc import COLUMNS, Neuromag
+from megspeech.data.raw.sources.scans import GERMAN, SCANS, Book, Recording, Scans, main
 
 FIF = "sub-03_task-audiobook2_run-01_meg.fif"
 NAME = "sub-403_ses-1_task-SCANSab2_run-1"
