@@ -37,6 +37,7 @@ only within draw noise.
 | timing expert fusion (incl. LibriSpeech pretrain) | LT −.0095 at VAL weight | r9m.1 → [timing](../deep/2026-10-13_timing_and_span_cuts.md) |
 | nd / ended / noint fusion | parked: ac05x 4-seed LT fail; publics unreadable | 7gf.105.1.x |
 | LM span fusion, kd, refiner | ~0 realistic | lvj, 7gf.130, 7gf.145.1 |
+| born-again KD from the 8-seed ac05x family (in-sample) | single student VAL +.009, LT −.012 / −.005 (+ OOV words); family + students LT .7167 < .7192 | d6r.12 |
 | other stems under the ac05x ft (pooled all-w15, sc10) | families LT −.018 / −.009, pooled public .66366 (−.027); 3 stems × 4 seeds LT .7153 | wbt, d6r.11 |
 | cross-kind / bigger Deep blends | public .655–.691; d-acd2v = d-ac05xfam to the 5th digit with 58% of top-10s moved | ugp |
 
