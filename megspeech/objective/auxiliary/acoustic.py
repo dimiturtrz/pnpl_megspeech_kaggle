@@ -57,12 +57,12 @@ class AcousticTerm(SpeechTerm):
 
     @override
     def head(self, width: int) -> nn.Module:
-        return Acoustic(width, self.speech.vectors.shape[-1]).to(self.speech.vectors.device)
+        return Acoustic(width, self.speech.vectors.shape[-1]).to(self.speech.rows.device)
 
     @override
     def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
         kinds = reading.target.flatten()
-        truth = self.speech.vectors[kinds.clamp(min=0)]
+        truth = self.speech.targets(kinds)
         chunks = truth.shape[-1] // CHUNK
         chunk = torch.arange(chunks, device=kinds.device)
         chunked = torch.where(kinds[:, None] >= 0, kinds[:, None] * chunks + chunk, -1)

@@ -199,7 +199,7 @@ def test_onsets_align_with_run_words(tmp_path: Path) -> None:
     assert Heard(run).onsets() + 10 - LAG == pytest.approx(run.words()["onset"].to_numpy())
 
 
-def test_targets(tmp_path: Path) -> None:
+def test_heard_targets(tmp_path: Path) -> None:
     """The first word starts the tone, so its block is aligned; the second's 0.5 s run past the chapter's end."""
     targets = Heard(heard_run(tmp_path)).targets(encoder(), CPU)
     assert targets.vectors.shape == (2, DIM)
@@ -295,10 +295,25 @@ def test_merged() -> None:
     assert empty.merged().rows.tolist() == [-1]
 
 
-def test_to() -> None:
-    speech = Speech(torch.tensor([0, -1]), torch.ones(1, DIM)).to(CPU)
+def test_placed() -> None:
+    """Rows go to the device, the table stays on the host, unpinned for a CPU device."""
+    vectors = torch.ones(1, DIM)
+    speech = Speech(torch.tensor([0, -1]), vectors).placed(CPU)
     assert speech.rows.device == CPU
-    assert speech.vectors.device == CPU
+    assert speech.vectors is vectors
+    assert not speech.vectors.is_pinned()
+
+
+def test_speech_targets() -> None:
+    """Each kind's row, row 0 for a negative kind, equal to indexing the table directly."""
+    vectors = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]).half()
+    speech = Speech(torch.tensor([2, 0, -1]), vectors).placed(CPU)
+    kinds = torch.tensor([2, -1, 1, 1])
+    gathered = speech.targets(kinds)
+    assert gathered.dtype == torch.float16
+    assert gathered.device == kinds.device
+    assert torch.equal(gathered, vectors[kinds.clamp(min=0)])
+    assert speech.targets(torch.zeros(0, dtype=torch.long)).shape == (0, DIM)
 
 
 def test_standardised() -> None:

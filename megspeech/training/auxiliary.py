@@ -164,10 +164,10 @@ class Auxiliary(ABC):
     def of(weights: AuxiliaryConfig, adversary: AdversaryConfig, tables: "Tables") -> "Auxiliary":
         """Nothing when every weight is 0, so no table is read; otherwise the terms of the nonzero weights, the
         `adversary`'s term among them at the strength it holds, their tables read as `tables` says. A table
-        several terms read is loaded once and shared, so the device holds one copy."""
+        several terms read is loaded once and shared, so memory holds one copy."""
         root, device, words = tables.root, tables.device, tables.words
         lexicon = cache(lambda: Lexicon.load(Lexicon.path(root)).to(device))
-        loudness = cache(lambda: Speech.covering(Loudness.directory(root, tables.cut), words).to(device))
+        loudness = cache(lambda: Speech.covering(Loudness.directory(root, tables.cut), words).placed(device))
         builders: tuple[tuple[float, Callable[[], AuxiliaryTerm]], ...] = (
             (
                 weights.speech,
@@ -175,7 +175,7 @@ class Auxiliary(ABC):
                     weights.speech,
                     Speech.covering(
                         Targets.directory(root, weights.speech_source), words, centred=weights.speech_centred
-                    ).to(device),
+                    ).placed(device),
                     softmax=weights.speech_softmax,
                 ),
             ),

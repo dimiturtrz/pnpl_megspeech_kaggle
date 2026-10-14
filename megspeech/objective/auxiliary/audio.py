@@ -97,7 +97,7 @@ class AudioTerm(SpeechTerm):
 
     @override
     def head(self, width: int) -> nn.Module:
-        return Listening(width, self.speech.vectors.shape[-1]).to(self.speech.vectors.device)
+        return Listening(width, self.speech.vectors.shape[-1]).to(self.speech.rows.device)
 
     @override
     def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
@@ -105,5 +105,5 @@ class AudioTerm(SpeechTerm):
         target = reading.target
         kinds = target.flatten()
         spans = torch.arange(target.shape[0], device=target.device).repeat_interleave(target.shape[1])
-        audio = listening.hear(self.speech.vectors[kinds.clamp(min=0)])
+        audio = listening.hear(self.speech.targets(kinds))
         return listening.loss(reading.output.flatten(0, 1), audio, kinds, spans, reading.rows.flatten())

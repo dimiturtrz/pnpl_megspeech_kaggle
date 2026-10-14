@@ -263,7 +263,8 @@ class Heard:
 
 @dataclass(frozen=True)
 class Speech:
-    """Each training word's row of `vectors`, or -1 where it has no speech target."""
+    """Each training word's row of `vectors`, or -1 where it has no speech target. A placed table (`placed`) keeps
+    `rows` on the training device and `vectors` in host memory, so a step moves only its batch's rows (`targets`)."""
 
     rows: Int[Tensor, " n"]
     vectors: Float[Tensor, "k d"]
@@ -312,8 +313,24 @@ class Speech:
         first = first.scatter_reduce(0, inverse, torch.arange(len(keys)), "amin")
         return Speech(torch.where(self.rows >= 0, first[inverse][self.rows.clamp(min=0)], self.rows), self.vectors)
 
-    def to(self, device: torch.device) -> "Speech":
-        return Speech(self.rows.to(device), self.vectors.to(device))
+    def placed(self, device: torch.device) -> "Speech":
+        """`rows` on `device`; `vectors` on the host, page-locked when `device` is a visible GPU so `targets` copies
+        to it without blocking: the wav2vec2 table alone is ~1.8 GB the card need not hold."""
+        pinned = device.type == Device.CUDA and torch.cuda.is_available()
+        return Speech(self.rows.to(device), self.vectors.pin_memory() if pinned else self.vectors)
+
+    def targets(self, kinds: Int[Tensor, " n"]) -> Float[Tensor, "n d"]:
+        """The row of `vectors` each of `kinds` names, row 0 for a negative kind, on `kinds`' device: the indices
+        cross to the table once, the gathered rows come back without blocking."""
+        at = kinds.clamp(min=0).to(self.vectors.device)
+        gathered = torch.empty(
+            (len(at), self.vectors.shape[1]),
+            dtype=self.vectors.dtype,
+            device=self.vectors.device,
+            pin_memory=self.vectors.is_pinned(),
+        )
+        torch.index_select(self.vectors, 0, at, out=gathered)
+        return gathered.to(kinds.device, non_blocking=True)
 
 
 if __name__ == "__main__":

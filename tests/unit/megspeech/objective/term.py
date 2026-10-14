@@ -323,6 +323,24 @@ def test_contrasted() -> None:
     assert seen[3].tolist() == [2.0, 3.0]
 
 
+def test_against() -> None:
+    """The contrast reads the given targets as they are, with the flattened kinds, output and row weights."""
+    seen: list[torch.Tensor] = []
+
+    def contrast(output: torch.Tensor, vectors: torch.Tensor, kinds: torch.Tensor, rows: torch.Tensor) -> torch.Tensor:
+        seen.extend([output, vectors, kinds, rows])
+        return rows.sum()
+
+    output = torch.arange(8.0).reshape(1, 2, 4)
+    targets = torch.tensor([[0.0, 1.0], [1.0, 0.0]])
+    reading = Reading(nn.Identity(), output, TOKEN_PAIR, torch.tensor([[2.0, 3.0]]))
+    assert reading.against(contrast, targets, torch.tensor([[1, -1]])).item() == 5.0
+    assert torch.equal(seen[0], output.flatten(0, 1))
+    assert seen[1] is targets
+    assert seen[2].tolist() == [1, -1]
+    assert seen[3].tolist() == [2.0, 3.0]
+
+
 def smoothed() -> torch.Tensor:
     return functional.cross_entropy(logits().flatten(0, 1), Y.flatten(), ignore_index=IGNORE, label_smoothing=0.1)
 

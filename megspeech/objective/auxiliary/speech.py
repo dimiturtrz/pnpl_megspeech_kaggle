@@ -24,7 +24,7 @@ class SpeechTerm(AuxiliaryTerm):
 
     @override
     def head(self, width: int) -> nn.Module:
-        return Semantic(width, self.speech.vectors.shape[1]).to(self.speech.vectors.device)
+        return Semantic(width, self.speech.vectors.shape[1]).to(self.speech.rows.device)
 
     @override
     def labels(self, split: Split) -> Int[Tensor, " n"]:
@@ -37,4 +37,4 @@ class SpeechTerm(AuxiliaryTerm):
     def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
         semantic = cast("Semantic", reading.head)
         contrast = semantic.softmax_loss if self.softmax else semantic.loss
-        return reading.contrasted(contrast, self.speech.vectors, reading.target)
+        return reading.against(contrast, self.speech.targets(reading.target.flatten()), reading.target)

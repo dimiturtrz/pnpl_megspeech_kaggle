@@ -21,6 +21,11 @@ from megspeech.objective.context import Objective
 from megspeech.objective.isda import Unaugmented
 from megspeech.objective.topk import TopKMix
 
+Contrast = Callable[
+    [Float[Tensor, "n d"], Float[Tensor, "n e"], Int[Tensor, " n"], Float[Tensor, " n"]], Float[Tensor, ""]
+]
+"""A contrastive loss of outputs against their targets, the kind each names, and each row's weight."""
+
 
 @dataclass(frozen=True)
 class Reading:
@@ -33,17 +38,18 @@ class Reading:
     rows: Float[Tensor, "g w"]
 
     def contrasted(
-        self,
-        contrast: Callable[
-            [Float[Tensor, "n d"], Float[Tensor, "n e"], Int[Tensor, " n"], Float[Tensor, " n"]], Float[Tensor, ""]
-        ],
-        table: Float[Tensor, "v e"],
-        kinds: Int[Tensor, "g w"],
+        self, contrast: Contrast, table: Float[Tensor, "v e"], kinds: Int[Tensor, "g w"]
     ) -> Float[Tensor, ""]:
         """`contrast` of every position's output against the `table` row its word `kinds` names, a negative kind
         naming none."""
-        flat = kinds.flatten()
-        return contrast(self.output.flatten(0, 1), table[flat.clamp(min=0)], flat, self.rows.flatten())
+        return self.against(contrast, table[kinds.flatten().clamp(min=0)], kinds)
+
+    def against(
+        self, contrast: Contrast, targets: Float[Tensor, "n e"], kinds: Int[Tensor, "g w"]
+    ) -> Float[Tensor, ""]:
+        """`contrast` of every position's output against its row of `targets`, gathered in `kinds`' flattened
+        order, a negative kind naming none."""
+        return contrast(self.output.flatten(0, 1), targets, kinds.flatten(), self.rows.flatten())
 
 
 @dataclass(frozen=True)
