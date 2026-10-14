@@ -67,6 +67,9 @@ class OptimConfig:
     fused_lr: tuple[float, ...] = ()
     """Each `context.fused` encoder's learning rate as a share of `lr`, its decay alike, one per encoder; 0 freezes it.
     Empty trains them all at `lr`."""
+    isda: float = 0.0
+    """Final strength `lambda` of the word head's implicit semantic data augmentation (`megspeech.objective.isda`,
+    Wang et al. 2019), raised linearly as `isda * epoch / epochs`; 0 augments nothing."""
     sharpness: float = 0.0
     """SAM radius (`megspeech.training.regularise.sharpness`): each step's gradient is taken `sharpness` along the
     normalised gradient, at twice a step's compute; 0 descends plainly."""

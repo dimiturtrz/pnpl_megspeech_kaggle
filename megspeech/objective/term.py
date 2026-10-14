@@ -18,6 +18,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.objective.context import Objective
+from megspeech.objective.isda import Unaugmented
 from megspeech.objective.topk import TopKMix
 
 
@@ -175,7 +176,14 @@ class DistilledTerm(ContextTerm):
 @dataclass(frozen=True)
 class WordTerm(LabelTerm):
     """The isolated-word head's softmax at the autocast's precision: the logits stay bfloat16 into the
-    cross-entropy, unlike the context head's float32, which every trained run's numbers were made with."""
+    cross-entropy, unlike the context head's float32, which every trained run's numbers were made with. Its `isda`
+    augments the logits the loss reads (`megspeech.objective.isda`)."""
+
+    isda: Unaugmented = field(default_factory=Unaugmented, kw_only=True)
+
+    @override
+    def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
+        return super().unweighted(replace(reading, output=self.isda.augmented(reading.output, reading.target)))
 
     @override
     def labelled(self, logits: Float[Tensor, "n v"], y: Int[Tensor, " n"]) -> Float[Tensor, ""]:

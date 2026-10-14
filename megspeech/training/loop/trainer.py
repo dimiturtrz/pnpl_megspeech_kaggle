@@ -34,6 +34,7 @@ from megspeech.model.sentence import SentenceNet
 from megspeech.objective.anchors import Anchors
 from megspeech.objective.context import Objective
 from megspeech.objective.information import InformedTerm
+from megspeech.objective.isda import Isda, Unaugmented
 from megspeech.objective.targets.t5 import Prototypes
 from megspeech.objective.term import ContextTerm, LabelTerm, Term, WordTerm
 from megspeech.objective.topk import TopKMix
@@ -79,6 +80,7 @@ class TrainState:
     grads: GradNorms = field(default_factory=GradNorms)
     cut: Whole = field(default_factory=Whole)
     sharpness: Flat = field(default_factory=Flat)
+    isda: Unaugmented = field(default_factory=Unaugmented)
 
     @cached_property
     def parameters(self) -> tuple[nn.Parameter, ...]:
@@ -94,6 +96,7 @@ class TrainState:
             "bgmix mixed words": self.bgmix.drained(),
             "averaged words": self.average.drained(),
             "right cut": self.cut.drained(),
+            "isda lambda": self.isda.drained(),
             **tallies,
         }
 
@@ -225,9 +228,9 @@ class Trainer:
         )
         return torch.optim.AdamW(kept, lr=optim.lr, weight_decay=optim.weight_decay, fused=fused)
 
-    def terms(self, train: Split) -> tuple[Term, ...]:
-        """The context head's term as the teacher teaches it, the word head's softmax, then the auxiliary heads';
-        class-weighted alike."""
+    def terms(self, train: Split, isda: Unaugmented | None = None) -> tuple[Term, ...]:
+        """The context head's term as the teacher teaches it, the word head's softmax over the logits `isda` augments,
+        then the auxiliary heads'; class-weighted alike."""
         optim = self.config.optim
         classes = LabelTerm.balanced(train.y, train.weight, optim.balance)
         topk = TopKMix(optim.topk, optim.topk_temperature, optim.topk_margin)
@@ -239,7 +242,7 @@ class Trainer:
         )
         return (
             context,
-            WordTerm(optim.label_smoothing, classes, weight=optim.heads, topk=topk),
+            WordTerm(optim.label_smoothing, classes, weight=optim.heads, topk=topk, isda=isda or Unaugmented()),
             *self.auxiliary.terms,
         )
 
@@ -288,12 +291,14 @@ class Trainer:
         schedule = Scheduled(torch.optim.lr_scheduler.OneCycleLR(optimizer, peaks, total_steps=total))
         ema = Ema.hook(model, optim.ema)
         ramp = optim.adversarial.ramp(model, total, optim.epochs)
+        _, word = net.readouts()
+        isda = Isda.of(optim.isda, word)
         return TrainState(
             model,
             optimizer,
             schedule,
             self.rows(train),
-            self.terms(train),
+            self.terms(train, isda),
             model.readouts(),
             ema,
             (anchor, Pull.of(optim.pull, optim.lr, total, model, tuple(net.encoder())), schedule, ema, ramp),
@@ -303,6 +308,7 @@ class Trainer:
             GradNorms(tuple(net.encoder())),
             RightCut.of(train, self.config.augment.right_cut, self.config.data.rate),
             Sharp.of(optim.sharpness, adaptive=optim.adaptive),
+            isda,
         )
 
     def rows(self, train: Split) -> int:
@@ -325,6 +331,7 @@ class Trainer:
     def epoch(self, state: TrainState, at: Schedule, steps: int) -> Float[Tensor, " k"]:
         """`steps` optimiser steps over `at`'s draw of `at.train`'s spans, each term's loss averaged over them."""
         batch = self.config.optim.batch
+        state.isda.ramp(at.epoch, self.config.optim.epochs)
         weights = state.curriculum.weights(at)
         if summary := state.curriculum.summary(at, weights):
             LOG.info("epoch %d draw weights against base %s", at.epoch, summary)

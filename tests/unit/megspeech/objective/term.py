@@ -1,5 +1,6 @@
 import math
 from dataclasses import replace
+from typing import override
 
 import numpy as np
 import pytest
@@ -14,6 +15,7 @@ from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.spans.spans import Spans
 from megspeech.objective.auxiliary.lexical import LexicalTerm
 from megspeech.objective.context import Objective
+from megspeech.objective.isda import Unaugmented
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import AuxiliaryTerm, Classified, ContextTerm, DistilledTerm, LabelTerm, Reading, WordTerm
 from megspeech.objective.topk import TopKMix
@@ -151,6 +153,23 @@ def test_word_term_unweighted() -> None:
     word = WordTerm(0.1, None).unweighted(identity(logits(), Y))
     expected = functional.cross_entropy(logits().flatten(0, 1), Y.flatten(), ignore_index=IGNORE, label_smoothing=0.1)
     assert torch.equal(word, expected)
+
+
+class Raised(Unaugmented):
+    """Every logit but the label's raised by 1."""
+
+    @override
+    def augmented(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        return logits + 1 - functional.one_hot(target.clamp(min=0), VOCAB_SIZE)
+
+
+def test_word_term_isda() -> None:
+    """The word term's softmax reads the logits its augmentation hands it."""
+    word = WordTerm(0.1, None, isda=Raised()).unweighted(identity(logits(), Y))
+    raised = Raised().augmented(logits(), Y).flatten(0, 1)
+    expected = functional.cross_entropy(raised, Y.flatten(), ignore_index=IGNORE, label_smoothing=0.1)
+    assert torch.equal(word, expected)
+    assert not torch.equal(word, WordTerm(0.1, None).unweighted(identity(logits(), Y)))
 
 
 def test_classified_unweighted() -> None:

@@ -29,6 +29,7 @@ from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.adversarial import RunTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
+from megspeech.objective.isda import Isda
 from megspeech.objective.scorer import DIM
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import ContextTerm, LabelTerm, WordTerm
@@ -344,7 +345,13 @@ def test_drained() -> None:
     """Every epoch counter, named as the epoch's log spells it; a plain state tallied nothing."""
     made = trainer(RunConfig())
     state = made.state(made.model(split()), split(), 10)
-    assert state.drained() == {"grad norms": {}, "bgmix mixed words": 0, "averaged words": 0, "right cut": {}}
+    assert state.drained() == {
+        "grad norms": {},
+        "bgmix mixed words": 0,
+        "averaged words": 0,
+        "right cut": {},
+        "isda lambda": 0.0,
+    }
     runs = RunTerm.of(1.0, pd.DataFrame({"run": ["a", "b"]}), CPU)
     runs.hits.add_(torch.tensor([1.0, 4.0]))
     tallied = dataclasses.replace(state, terms=(*state.terms, runs)).drained()
@@ -368,6 +375,22 @@ def test_epoch() -> None:
     assert terms.shape == (len(state.terms),)
     assert torch.isfinite(terms).all()
     assert any(not torch.equal(a, b) for a, b in zip(before, state.model.parameters(), strict=True))
+
+
+def test_epoch_isda() -> None:
+    """The word head's augmentation trains each epoch at its ramped strength over the features its linear read."""
+    made = trainer(RunConfig(optim=OptimConfig(batch=4, isda=0.5, epochs=4)))
+    train = split()
+    net = made.model(train)
+    state = made.state(net, train, 10)
+    _, word = net.readouts()
+    assert isinstance(state.isda, Isda)
+    assert state.isda.linear is cast("nn.Sequential", word)[-1]
+    assert cast("WordTerm", state.terms[1]).isda is state.isda
+    terms = made.epoch(state, Schedule(train, 2, 4), 2)
+    assert torch.isfinite(terms).all()
+    assert state.drained()["isda lambda"] == pytest.approx(0.25)
+    assert state.isda.count.sum() > 0
 
 
 def test_fit() -> None:
