@@ -7,12 +7,14 @@ import pytest
 
 from megspeech.data.config import METRICS
 from megspeech.evaluation.metric.ruler import Interval
-from megspeech.evaluation.scoring.score import MIN_NOVEL, Epoch, Score, SelectionConfig
+from megspeech.evaluation.scoring.score import ADJUSTMENTS, MIN_NOVEL, UNSELECTED, Epoch, Score, SelectionConfig
 
 
 def test_best() -> None:
     score = Score.best({0.0: 0.2, 0.5: 0.4, 1.0: 0.3}, 7)
     assert (score.tau, score.bacc10, score.n) == (0.5, 0.4, 7)
+    assert Score.best({0.0: math.nan, 0.5: 0.4, 1.0: 0.3}, 7).tau == 0.5
+    assert Score.best(dict.fromkeys(ADJUSTMENTS, math.nan), 7).tau == UNSELECTED
 
 
 def test_mean() -> None:

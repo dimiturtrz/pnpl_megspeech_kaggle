@@ -16,6 +16,10 @@ from megspeech.evaluation.metric.ruler import Coverage, Interval
 ADJUSTMENTS = (0.0, 0.5, 1.0)
 """Logit-adjustment strengths tried on validation: none, half, and the full Bayes correction."""
 
+UNSELECTED = 0.5
+"""The adjustment when no validation score counts (a refit trained on val): 239 of 243 val-selected Deep models
+chose it (2026-10-14)."""
+
 MIN_NOVEL = 100
 """Unseen-span words a domain needs to count toward selection: two per class of the 50 on average."""
 
@@ -54,7 +58,8 @@ class Score:
 
     @classmethod
     def best(cls, by_tau: dict[float, float], n: int) -> "Score":
-        tau = max(by_tau, key=by_tau.__getitem__)
+        counted = {tau: value for tau, value in by_tau.items() if not math.isnan(value)}
+        tau = max(counted, key=counted.__getitem__, default=UNSELECTED)
         return cls(tau, by_tau[tau], by_tau, n)
 
     @classmethod
