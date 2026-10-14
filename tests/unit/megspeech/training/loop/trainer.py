@@ -43,6 +43,7 @@ from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.regularise.pull import Pull
 from megspeech.training.regularise.rightcut import RightCut, Whole
+from megspeech.training.regularise.sharpness import Flat, Sharp
 from megspeech.training.regularise.stretch import Stretch
 from megspeech.training.sampling.curriculum import Annealed, Natural, Robust, Schedule
 from megspeech.training.sampling.pairing import Pairing, Unpaired
@@ -231,6 +232,9 @@ def test_state() -> None:
     assert type(state.cut) is Whole
     cut = trainer(RunConfig(optim=optim, augment=Augment(right_cut=0.3))).state(net, split(), 10)
     assert isinstance(cut.cut, RightCut)
+    assert type(state.sharpness) is Flat
+    sharp = trainer(RunConfig(optim=OptimConfig(lr=0.01, sharpness=0.05))).state(net, split(), 10)
+    assert sharp.sharpness == Sharp(0.05)
 
 
 def test_rows() -> None:
@@ -257,6 +261,44 @@ def test_step() -> None:
     assert value.shape == (len(made.terms(split())),)
     assert not value.requires_grad
     assert any(not torch.equal(a, b) for a, b in zip(before, model.parameters(), strict=True))
+
+
+def stepped(made: Trainer) -> TrainState:
+    model = made.model(split())
+    optimizer = torch.optim.AdamW(model.parameters())
+    ema = Ema.of(model, 0.0)
+    schedule = Scheduled(torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0))
+    return TrainState(
+        model, optimizer, schedule, made.rows(split()), made.terms(split()), model.readouts(), ema, (schedule, ema)
+    )
+
+
+def test_step_sharp() -> None:
+    """A SAM step moves the weights too, its losses those at the unperturbed weights."""
+    made = trainer(RunConfig())
+    state = dataclasses.replace(stepped(made), sharpness=Sharp(0.05))
+    before = [p.clone() for p in state.model.parameters()]
+    value = made.step(state, split(), torch.tensor([0, 1]))
+    assert torch.isfinite(value).all()
+    assert any(not torch.equal(a, b) for a, b in zip(before, state.model.parameters(), strict=True))
+
+
+def test_losses() -> None:
+    made = trainer(RunConfig())
+    state = stepped(made)
+    state.model.eval()
+    batch = split().batch(torch.tensor([0, 1]), state.rows)
+    losses, outputs = made.losses(state, batch, split(), batch.inputs())
+    assert losses.shape == (len(state.terms),)
+    assert len(outputs) == len(state.readouts)
+    assert torch.allclose(made.value(state, batch, split(), batch.inputs()), losses.sum())
+
+
+def test_value() -> None:
+    made = trainer(RunConfig())
+    state = stepped(made)
+    batch = split().batch(torch.tensor([0, 1]), state.rows)
+    assert made.value(state, batch, split(), batch.inputs()).requires_grad
 
 
 def test_stretch(monkeypatch: pytest.MonkeyPatch) -> None:

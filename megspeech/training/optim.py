@@ -67,6 +67,9 @@ class OptimConfig:
     fused_lr: tuple[float, ...] = ()
     """Each `context.fused` encoder's learning rate as a share of `lr`, its decay alike, one per encoder; 0 freezes it.
     Empty trains them all at `lr`."""
+    sharpness: float = 0.0
+    """SAM radius (`megspeech.training.regularise.sharpness`): each step's gradient is taken `sharpness` along the
+    normalised gradient, at twice a step's compute; 0 descends plainly."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
     pretrained: float = 0.1

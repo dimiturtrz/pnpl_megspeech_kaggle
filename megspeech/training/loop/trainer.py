@@ -8,7 +8,7 @@ import logging
 import math
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from functools import cached_property
+from functools import cached_property, partial
 from pathlib import Path
 from typing import cast
 
@@ -17,7 +17,7 @@ from jaxtyping import Float, Int
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.data.batching.split import Split
+from megspeech.data.batching.split import Batch, SpanInput, Split
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.context_tags import ContextTags
 from megspeech.data.labels.vocabulary import IGNORE
@@ -49,6 +49,7 @@ from megspeech.training.regularise.noise import SAMPLES
 from megspeech.training.regularise.pull import Pull
 from megspeech.training.regularise.regional import Regional
 from megspeech.training.regularise.rightcut import RightCut, Whole
+from megspeech.training.regularise.sharpness import Flat, Sharp
 from megspeech.training.regularise.stretch import Stretch
 from megspeech.training.sampling.curriculum import Curriculum, Natural, Observation, Schedule
 from megspeech.training.sampling.pairing import Pairing, Unpaired
@@ -77,6 +78,7 @@ class TrainState:
     average: Untouched = field(default_factory=Untouched)
     grads: GradNorms = field(default_factory=GradNorms)
     cut: Whole = field(default_factory=Whole)
+    sharpness: Flat = field(default_factory=Flat)
 
     @cached_property
     def parameters(self) -> tuple[nn.Parameter, ...]:
@@ -243,23 +245,34 @@ class Trainer:
         batch = state.cut.apply(train.batch(spans, state.rows, self.config.augment.jitter), train)
         with torch.autocast(Device.CUDA, dtype=torch.bfloat16):
             mixed = state.bgmix.apply(state.average.apply(batch.x, batch, train), batch, train)
-            outputs = state.model(batch.inputs(self.regional(self.config.augment(self.stretch(mixed)))))
-            parts = zip(state.terms, state.readouts, outputs, strict=True)
-            target = batch.target(train.y)
-            inside = target != IGNORE
-            losses = torch.stack(
-                [term.loss(term.read(head, out, batch.target(term.labels(train)), inside)) for term, head, out in parts]
-            )
-            value = losses.sum()
-        state.curriculum.observe(Observation(spans, outputs[0], target))
+            inputs = batch.inputs(self.regional(self.config.augment(self.stretch(mixed))))
+        losses, outputs = self.losses(state, batch, train, inputs)
+        state.curriculum.observe(Observation(spans, outputs[0], batch.target(train.y)))
         state.optimizer.zero_grad(set_to_none=True)
-        value.backward()
+        state.sharpness.backward(losses.sum(), partial(self.value, state, batch, train, inputs), state.parameters)
         state.grads.record(nn.utils.clip_grad_norm_(state.parameters, self.config.optim.clip))
         state.optimizer.step()
         lr = state.schedule.lr()
         for hook in state.hooks:
             hook.step(state.model, lr)
         return losses.detach()
+
+    def value(self, state: TrainState, batch: Batch, train: Split, inputs: SpanInput) -> Float[Tensor, ""]:
+        """The summed loss on `batch` read from `inputs` at the current weights."""
+        return self.losses(state, batch, train, inputs)[0].sum()
+
+    def losses(
+        self, state: TrainState, batch: Batch, train: Split, inputs: SpanInput
+    ) -> tuple[Float[Tensor, " k"], tuple[Tensor, ...]]:
+        """Each term's loss on `batch` read from `inputs`, and the model's outputs."""
+        with torch.autocast(Device.CUDA, dtype=torch.bfloat16):
+            outputs = state.model(inputs)
+            inside = batch.target(train.y) != IGNORE
+            parts = zip(state.terms, state.readouts, outputs, strict=True)
+            losses = torch.stack(
+                [term.loss(term.read(head, out, batch.target(term.labels(train)), inside)) for term, head, out in parts]
+            )
+        return losses, outputs
 
     def state(self, net: SentenceNet, train: Split, total: int) -> TrainState:
         """Everything `step` advances to train `net` on `train` for `total` steps: `net` with its auxiliary heads, the
@@ -286,6 +299,7 @@ class Trainer:
             GroupAverage.of(train, self.config.augment.average, self.config.augment.average_chance),
             GradNorms(tuple(net.encoder())),
             RightCut.of(train, self.config.augment.right_cut, self.config.data.rate),
+            Sharp.of(optim.sharpness),
         )
 
     def rows(self, train: Split) -> int:
