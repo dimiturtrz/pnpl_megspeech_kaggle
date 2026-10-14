@@ -13,7 +13,7 @@ from megspeech.data.cache.run_cache import WORD_TABLE
 from megspeech.data.config import METRICS, DataConfig, Val
 from megspeech.data.constants import CHANNELS
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation.exported import ExportedModel
+from megspeech.evaluation.loaded.exported import ExportedModel
 from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.rulers import heldout as module
 from megspeech.evaluation.rulers.heldout import HeldOutRuler, Lineage

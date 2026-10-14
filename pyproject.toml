@@ -293,14 +293,25 @@ layers = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "megspeech.evaluation layers: metric -> scoring -> loaded model -> export -> track rulers and studies"
+name = "megspeech.evaluation layers: metric -> scoring -> loaded and exported models -> track rulers and studies"
 type = "layers"
 layers = [
     "megspeech.evaluation.rulers | megspeech.evaluation.studies",
-    "megspeech.evaluation.exported",
     "megspeech.evaluation.loaded",
     "megspeech.evaluation.scoring",
     "megspeech.evaluation.metric",
+]
+
+[[tool.importlinter.contracts]]
+name = "megspeech.evaluation.loaded layers: reader -> model -> export -> one group or blend -> ensemble -> label weights"
+type = "layers"
+layers = [
+    "megspeech.evaluation.loaded.labelweighted",
+    "megspeech.evaluation.loaded.ensemble",
+    "megspeech.evaluation.loaded.blended | megspeech.evaluation.loaded.group",
+    "megspeech.evaluation.loaded.exported",
+    "megspeech.evaluation.loaded.model",
+    "megspeech.evaluation.loaded.reader",
 ]
 
 [[tool.importlinter.contracts]]

@@ -15,7 +15,7 @@ from megspeech.data.config import DataConfig, Val
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.evaluation.exported import ExportedModel
+from megspeech.evaluation.loaded.exported import ExportedModel
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head

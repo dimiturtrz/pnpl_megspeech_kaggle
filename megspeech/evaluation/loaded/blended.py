@@ -21,7 +21,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
-from megspeech.evaluation.exported import ExportedModel
+from megspeech.evaluation.loaded.exported import ExportedModel
 from megspeech.evaluation.scoring.score import Head
 
 Read = Callable[[ExportedModel], tuple[Split, Float[Tensor, "n v"]]]

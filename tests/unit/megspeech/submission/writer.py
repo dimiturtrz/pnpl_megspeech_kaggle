@@ -13,7 +13,7 @@ from megspeech.data.cache.kaggle import KaggleCache, Track
 from megspeech.data.config import DataConfig
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import SECONDARY, VOCAB_SIZE
-from megspeech.evaluation.exported import ExportedModel
+from megspeech.evaluation.loaded.exported import ExportedModel
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.model.input.subjects import Reading
 from megspeech.submission.writer import KaggleWriter
