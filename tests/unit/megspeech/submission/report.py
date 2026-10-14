@@ -52,6 +52,13 @@ def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
 
+def test_write_pinned_tau(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    stub(tmp_path, monkeypatch, [])
+    written = Submission(Track.DEEP, tau=1.0).write(replace(loaded(tmp_path), names=(RUN,)), runs(tmp_path), tmp_path)
+    assert written.read_text() == f"{Track.DEEP} 1.0"
+    assert json.loads((tmp_path / "metrics.json").read_text())["tau"] == 1.0
+
+
 def test_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     """Asking for nothing writes nothing; each track lands under models/<name>-<track>, aligned for Broad alone."""
     scorings: list[Scoring] = []

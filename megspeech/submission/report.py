@@ -45,20 +45,25 @@ class Submission:
 
     track: Track
     scoring: Scoring = SCORING
+    tau: float | None = None
+    """The adjustment the rows are written at, pinned when the ruler cannot select one: a refit blend trained on its
+    val, so it carries the tau its unrefit recipe selected."""
 
     def write(self, loaded: ExportedModel, runs: list[Run], out: Path) -> Path:
         """The ruler's hits, the record and the Kaggle test rows under `out`; the submission's path."""
         ruler = RULERS[self.track](loaded, runs)
         selected = ruler.select()
+        tau = selected.tau if self.tau is None else self.tau
         out.mkdir(parents=True, exist_ok=True)
-        ruler.graded(selected.tau).save(out / HITS[self.track])
+        ruler.graded(tau).save(out / HITS[self.track])
         record = {
             "members": list(loaded.names),
             "config": {"data": asdict(loaded.data), "scoring": asdict(self.scoring)},
             "best": asdict(selected),
+            "tau": tau,
         }
         (out / METRICS).write_text(json.dumps(record, indent=1))
-        return KaggleWriter(self.track).write(loaded, selected.tau, out / SUBMISSIONS[self.track])
+        return KaggleWriter(self.track).write(loaded, tau, out / SUBMISSIONS[self.track])
 
 
 @dataclass(frozen=True)

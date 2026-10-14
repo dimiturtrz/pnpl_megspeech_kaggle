@@ -22,6 +22,7 @@ from megspeech.evaluation.loaded.labelweighted import Shrinkage
 from megspeech.evaluation.memorisation import Memorisation
 from megspeech.evaluation.rulers.localtest import LocalTest
 from megspeech.evaluation.scoring.config import Scoring
+from megspeech.evaluation.scoring.score import ADJUSTMENTS
 from megspeech.submission.labelweighted import LabelWeighted
 from megspeech.submission.report import SCORING, Recorded, Submission
 
@@ -50,6 +51,9 @@ def main() -> None:
         metavar=("K", "BETA"),
         help="blend members per label (shrinkage K, sharpness BETA) fit on the whole Broad ruler; Broad track only",
     )
+    parser.add_argument(
+        "--tau", type=float, choices=ADJUSTMENTS, help="write at this adjustment: a refit blend cannot select one"
+    )
     tree = Tree(Scoring, SCORING)
     tree.arguments(parser)
     args = parser.parse_args()
@@ -74,7 +78,9 @@ def main() -> None:
         if args.memorisation:
             Memorisation(replace(loaded, partition=Partition.TEST)).report(runs, test.tau(), label)
         return None
-    LOG.info("wrote %s", Submission(recorded.track, group.scoring).write(loaded, runs, root.models() / args.out))
+    LOG.info(
+        "wrote %s", Submission(recorded.track, group.scoring, args.tau).write(loaded, runs, root.models() / args.out)
+    )
 
 
 if __name__ == "__main__":
