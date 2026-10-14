@@ -1118,37 +1118,37 @@
     },
     {
       "kind": "import",
-      "source": "megspeech.evaluation.studies.readout.memorisation",
+      "source": "megspeech.evaluation.memorisation",
       "target": "megspeech.data.batching.split",
       "weight": 1
     },
     {
       "kind": "import",
-      "source": "megspeech.evaluation.studies.readout.memorisation",
+      "source": "megspeech.evaluation.memorisation",
       "target": "megspeech.data.labels.vocabulary",
       "weight": 1
     },
     {
       "kind": "import",
-      "source": "megspeech.evaluation.studies.readout.memorisation",
+      "source": "megspeech.evaluation.memorisation",
       "target": "megspeech.data.raw.runs",
       "weight": 1
     },
     {
       "kind": "import",
-      "source": "megspeech.evaluation.studies.readout.memorisation",
+      "source": "megspeech.evaluation.memorisation",
       "target": "megspeech.data.spans.spans",
       "weight": 1
     },
     {
       "kind": "import",
-      "source": "megspeech.evaluation.studies.readout.memorisation",
+      "source": "megspeech.evaluation.memorisation",
       "target": "megspeech.evaluation.loaded",
       "weight": 1
     },
     {
       "kind": "import",
-      "source": "megspeech.evaluation.studies.readout.memorisation",
+      "source": "megspeech.evaluation.memorisation",
       "target": "megspeech.evaluation.metric.ruler",
       "weight": 1
     },
@@ -6417,7 +6417,7 @@
     {
       "kind": "import",
       "source": "megspeech.submission.__main__",
-      "target": "megspeech.evaluation.studies.readout.memorisation",
+      "target": "megspeech.evaluation.memorisation",
       "weight": 1
     },
     {
@@ -12020,152 +12020,152 @@
     },
     {
       "kind": "references",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Heard",
+      "source": "megspeech.evaluation.memorisation.Heard",
       "target": "megspeech.data.batching.split.Split",
       "weight": 1
     },
     {
       "kind": "references",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Heard",
-      "target": "megspeech.evaluation.studies.readout.memorisation.Heard",
+      "source": "megspeech.evaluation.memorisation.Heard",
+      "target": "megspeech.evaluation.memorisation.Heard",
       "weight": 1
     },
     {
       "kind": "holds",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Heard",
-      "target": "megspeech.evaluation.studies.readout.memorisation.NGrams",
+      "source": "megspeech.evaluation.memorisation.Heard",
+      "target": "megspeech.evaluation.memorisation.NGrams",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Heard.of",
-      "target": "megspeech.evaluation.studies.readout.memorisation.NGrams.of",
+      "source": "megspeech.evaluation.memorisation.Heard.of",
+      "target": "megspeech.evaluation.memorisation.NGrams.of",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Heard.tags",
-      "target": "megspeech.evaluation.studies.readout.memorisation.Heard.texts",
+      "source": "megspeech.evaluation.memorisation.Heard.tags",
+      "target": "megspeech.evaluation.memorisation.Heard.texts",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Heard.tags",
-      "target": "megspeech.evaluation.studies.readout.memorisation.NGrams.coverage",
+      "source": "megspeech.evaluation.memorisation.Heard.tags",
+      "target": "megspeech.evaluation.memorisation.NGrams.coverage",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Heard.tags",
-      "target": "megspeech.evaluation.studies.readout.memorisation.NGrams.longest",
+      "source": "megspeech.evaluation.memorisation.Heard.tags",
+      "target": "megspeech.evaluation.memorisation.NGrams.longest",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Heard.texts",
+      "source": "megspeech.evaluation.memorisation.Heard.texts",
       "target": "megspeech.data.labels.vocabulary.Vocabulary.token",
       "weight": 1
     },
     {
       "kind": "references",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Memorisation",
+      "source": "megspeech.evaluation.memorisation.Memorisation",
       "target": "megspeech.data.raw.runs.Run",
       "weight": 1
     },
     {
       "kind": "holds",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Memorisation",
+      "source": "megspeech.evaluation.memorisation.Memorisation",
       "target": "megspeech.evaluation.loaded.LoadedModel",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Memorisation.report",
-      "target": "megspeech.evaluation.studies.readout.memorisation.Memorisation.words",
+      "source": "megspeech.evaluation.memorisation.Memorisation.report",
+      "target": "megspeech.evaluation.memorisation.Memorisation.words",
       "weight": 1
     },
     {
       "kind": "construct",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Memorisation.report",
-      "target": "megspeech.evaluation.studies.readout.memorisation.Tally",
+      "source": "megspeech.evaluation.memorisation.Memorisation.report",
+      "target": "megspeech.evaluation.memorisation.Tally",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Memorisation.report",
-      "target": "megspeech.evaluation.studies.readout.memorisation.Tally.report",
+      "source": "megspeech.evaluation.memorisation.Memorisation.report",
+      "target": "megspeech.evaluation.memorisation.Tally.report",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Memorisation.words",
+      "source": "megspeech.evaluation.memorisation.Memorisation.words",
       "target": "megspeech.data.raw.runs.Run.everywhere",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Memorisation.words",
-      "target": "megspeech.evaluation.studies.readout.memorisation.Heard.of",
+      "source": "megspeech.evaluation.memorisation.Memorisation.words",
+      "target": "megspeech.evaluation.memorisation.Heard.of",
       "weight": 1
     },
     {
       "kind": "construct",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Memorisation.words",
+      "source": "megspeech.evaluation.memorisation.Memorisation.words",
       "target": "megspeech.evaluation.metric.ruler.Ruler",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Memorisation.words",
+      "source": "megspeech.evaluation.memorisation.Memorisation.words",
       "target": "megspeech.evaluation.metric.ruler.Ruler.hits",
       "weight": 1
     },
     {
       "kind": "references",
-      "source": "megspeech.evaluation.studies.readout.memorisation.NGrams",
-      "target": "megspeech.evaluation.studies.readout.memorisation.NGrams",
+      "source": "megspeech.evaluation.memorisation.NGrams",
+      "target": "megspeech.evaluation.memorisation.NGrams",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.NGrams.coverage",
-      "target": "megspeech.evaluation.studies.readout.memorisation.NGrams.windows",
+      "source": "megspeech.evaluation.memorisation.NGrams.coverage",
+      "target": "megspeech.evaluation.memorisation.NGrams.windows",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.NGrams.longest",
-      "target": "megspeech.evaluation.studies.readout.memorisation.NGrams.windows",
+      "source": "megspeech.evaluation.memorisation.NGrams.longest",
+      "target": "megspeech.evaluation.memorisation.NGrams.windows",
       "weight": 1
     },
     {
       "kind": "holds",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Tally",
+      "source": "megspeech.evaluation.memorisation.Tally",
       "target": "megspeech.evaluation.metric.ruler.Ruler",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Tally.line",
+      "source": "megspeech.evaluation.memorisation.Tally.line",
       "target": "megspeech.evaluation.metric.ruler.Ruler.balanced",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Tally.line",
+      "source": "megspeech.evaluation.memorisation.Tally.line",
       "target": "megspeech.evaluation.metric.ruler.Ruler.draws",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Tally.line",
+      "source": "megspeech.evaluation.memorisation.Tally.line",
       "target": "megspeech.evaluation.metric.ruler.Ruler.interval",
       "weight": 1
     },
     {
       "kind": "calls",
-      "source": "megspeech.evaluation.studies.readout.memorisation.Tally.report",
-      "target": "megspeech.evaluation.studies.readout.memorisation.Tally.line",
+      "source": "megspeech.evaluation.memorisation.Tally.report",
+      "target": "megspeech.evaluation.memorisation.Tally.line",
       "weight": 1
     },
     {
@@ -28749,13 +28749,13 @@
     {
       "kind": "construct",
       "source": "megspeech.submission.__main__.main",
-      "target": "megspeech.evaluation.studies.readout.memorisation.Memorisation",
+      "target": "megspeech.evaluation.memorisation.Memorisation",
       "weight": 1
     },
     {
       "kind": "calls",
       "source": "megspeech.submission.__main__.main",
-      "target": "megspeech.evaluation.studies.readout.memorisation.Memorisation.report",
+      "target": "megspeech.evaluation.memorisation.Memorisation.report",
       "weight": 1
     },
     {
@@ -33440,7 +33440,7 @@
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation",
+      "id": "megspeech.evaluation.memorisation",
       "label": "memorisation",
       "level": "module",
       "parent": "megspeech.evaluation",
@@ -36192,42 +36192,42 @@
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.Bucket",
+      "id": "megspeech.evaluation.memorisation.Bucket",
       "label": "Bucket",
       "level": "class",
-      "parent": "megspeech.evaluation.studies.readout.memorisation",
+      "parent": "megspeech.evaluation.memorisation",
       "role": "satellite"
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.Heard",
+      "id": "megspeech.evaluation.memorisation.Heard",
       "label": "Heard",
       "level": "class",
-      "parent": "megspeech.evaluation.studies.readout.memorisation",
+      "parent": "megspeech.evaluation.memorisation",
       "role": "satellite"
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.Memorisation",
+      "id": "megspeech.evaluation.memorisation.Memorisation",
       "label": "Memorisation",
       "level": "class",
-      "parent": "megspeech.evaluation.studies.readout.memorisation",
+      "parent": "megspeech.evaluation.memorisation",
       "role": "satellite"
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.NGrams",
+      "id": "megspeech.evaluation.memorisation.NGrams",
       "label": "NGrams",
       "level": "class",
-      "parent": "megspeech.evaluation.studies.readout.memorisation",
+      "parent": "megspeech.evaluation.memorisation",
       "role": "satellite"
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.Tally",
+      "id": "megspeech.evaluation.memorisation.Tally",
       "label": "Tally",
       "level": "class",
-      "parent": "megspeech.evaluation.studies.readout.memorisation",
+      "parent": "megspeech.evaluation.memorisation",
       "role": "satellite"
     },
     {
@@ -44696,98 +44696,98 @@
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.Bucket.mask",
+      "id": "megspeech.evaluation.memorisation.Bucket.mask",
       "label": "mask",
       "level": "method",
-      "parent": "megspeech.evaluation.studies.readout.memorisation.Bucket",
+      "parent": "megspeech.evaluation.memorisation.Bucket",
       "role": null
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.Heard.of",
+      "id": "megspeech.evaluation.memorisation.Heard.of",
       "label": "of",
       "level": "method",
-      "parent": "megspeech.evaluation.studies.readout.memorisation.Heard",
+      "parent": "megspeech.evaluation.memorisation.Heard",
       "role": null
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.Heard.tags",
+      "id": "megspeech.evaluation.memorisation.Heard.tags",
       "label": "tags",
       "level": "method",
-      "parent": "megspeech.evaluation.studies.readout.memorisation.Heard",
+      "parent": "megspeech.evaluation.memorisation.Heard",
       "role": null
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.Heard.texts",
+      "id": "megspeech.evaluation.memorisation.Heard.texts",
       "label": "texts",
       "level": "method",
-      "parent": "megspeech.evaluation.studies.readout.memorisation.Heard",
+      "parent": "megspeech.evaluation.memorisation.Heard",
       "role": null
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.Memorisation.report",
+      "id": "megspeech.evaluation.memorisation.Memorisation.report",
       "label": "report",
       "level": "method",
-      "parent": "megspeech.evaluation.studies.readout.memorisation.Memorisation",
+      "parent": "megspeech.evaluation.memorisation.Memorisation",
       "role": null
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.Memorisation.words",
+      "id": "megspeech.evaluation.memorisation.Memorisation.words",
       "label": "words",
       "level": "method",
-      "parent": "megspeech.evaluation.studies.readout.memorisation.Memorisation",
+      "parent": "megspeech.evaluation.memorisation.Memorisation",
       "role": null
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.NGrams.coverage",
+      "id": "megspeech.evaluation.memorisation.NGrams.coverage",
       "label": "coverage",
       "level": "method",
-      "parent": "megspeech.evaluation.studies.readout.memorisation.NGrams",
+      "parent": "megspeech.evaluation.memorisation.NGrams",
       "role": null
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.NGrams.longest",
+      "id": "megspeech.evaluation.memorisation.NGrams.longest",
       "label": "longest",
       "level": "method",
-      "parent": "megspeech.evaluation.studies.readout.memorisation.NGrams",
+      "parent": "megspeech.evaluation.memorisation.NGrams",
       "role": null
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.NGrams.of",
+      "id": "megspeech.evaluation.memorisation.NGrams.of",
       "label": "of",
       "level": "method",
-      "parent": "megspeech.evaluation.studies.readout.memorisation.NGrams",
+      "parent": "megspeech.evaluation.memorisation.NGrams",
       "role": null
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.NGrams.windows",
+      "id": "megspeech.evaluation.memorisation.NGrams.windows",
       "label": "windows",
       "level": "method",
-      "parent": "megspeech.evaluation.studies.readout.memorisation.NGrams",
+      "parent": "megspeech.evaluation.memorisation.NGrams",
       "role": null
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.Tally.line",
+      "id": "megspeech.evaluation.memorisation.Tally.line",
       "label": "line",
       "level": "method",
-      "parent": "megspeech.evaluation.studies.readout.memorisation.Tally",
+      "parent": "megspeech.evaluation.memorisation.Tally",
       "role": null
     },
     {
       "descendants": 0,
-      "id": "megspeech.evaluation.studies.readout.memorisation.Tally.report",
+      "id": "megspeech.evaluation.memorisation.Tally.report",
       "label": "report",
       "level": "method",
-      "parent": "megspeech.evaluation.studies.readout.memorisation.Tally",
+      "parent": "megspeech.evaluation.memorisation.Tally",
       "role": null
     },
     {

@@ -11,8 +11,8 @@ from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import Vocabulary
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import Spans
-from megspeech.evaluation.studies.readout import memorisation as module
-from megspeech.evaluation.studies.readout.memorisation import POOLED, Bucket, Heard, Memorisation, NGrams, Tally
+from megspeech.evaluation import memorisation as module
+from megspeech.evaluation.memorisation import POOLED, Bucket, Heard, Memorisation, NGrams, Tally
 from tests.unit.megspeech.evaluation.loaded import SPOKEN, loaded, runs
 
 CPU = torch.device("cpu")
