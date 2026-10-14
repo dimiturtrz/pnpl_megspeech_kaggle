@@ -6,6 +6,7 @@ from typing import ClassVar, override
 import torch
 from torch import nn
 
+from megspeech.objective.auxiliary.adversarial import AdversaryTarget
 from megspeech.objective.auxiliary.reversal import Reversal
 from megspeech.training.hook import StepHook
 
@@ -38,7 +39,7 @@ class Ramp(StepHook):
 
 @dataclass(frozen=True)
 class AdversaryConfig:
-    """The timing adversary's reversal; the `optim.adversarial` group, its leaves also under their flat
+    """The adversary's target and reversal; the `optim.adversarial` group, its leaves also under their flat
     `--optim.<name>` flags."""
 
     FLAT: ClassVar[bool] = True
@@ -51,6 +52,9 @@ class AdversaryConfig:
     adversary_ramp: float = 2.0
     """Epochs over which the reversal's strength rises linearly from 0 to `adversary`: the adversary must be able to
     read timing before reversing its gradient means anything."""
+    adversary_target: AdversaryTarget = AdversaryTarget.TIMING
+    """What the adversary reads off each training word: `timing` its log duration and sentence position, `run` which
+    of the training runs it was heard in (megspeech-prm), so the embedding is trained to hold no run identity."""
 
     def ramp(self, model: nn.Module, total: int, epochs: int) -> Ramp:
         """The ramp raising `model`'s reversals to `adversary` over `adversary_ramp` of a run's `epochs`, `total`

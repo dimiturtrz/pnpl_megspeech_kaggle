@@ -86,12 +86,15 @@ class TrainState:
         return tuple(self.model.parameters())
 
     def drained(self) -> dict[str, object]:
-        """What the epoch's steps tallied, each counter emptied for the next epoch."""
+        """What the epoch's steps tallied, each counter emptied for the next epoch; a term's tally only when it keeps
+        one."""
+        tallies = {type(term).__name__: tally for term in self.terms if (tally := term.drained())}
         return {
             "grad norms": self.grads.drained(),
             "bgmix mixed words": self.bgmix.drained(),
             "averaged words": self.average.drained(),
             "right cut": self.cut.drained(),
+            **tallies,
         }
 
 
@@ -141,7 +144,7 @@ class Trainer:
         evaluator = Evaluator(device, corpus.seen, config.selection.min_novel)
         optim = config.optim
         auxiliary = Auxiliary.of(
-            optim.auxiliaries, optim.adversarial.adversary, Tables(root, device, corpus.positions, config.data.cut())
+            optim.auxiliaries, optim.adversarial, Tables(root, device, corpus.positions, config.data.cut())
         )
         regional = Regional.of(config.augment.spatial, root, device)
         timing = TimingExpert.load(root, optim.timing)

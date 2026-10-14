@@ -39,6 +39,10 @@ def identity(output: torch.Tensor, target: torch.Tensor) -> Reading:
     return Reading(nn.Identity(), output, target, torch.ones(target.shape))
 
 
+def test_term_drained() -> None:
+    assert WordTerm(0.0, None).drained() == {}
+
+
 def test_term_loss() -> None:
     """The weight scales the unweighted loss."""
     plain = WordTerm(0.0, None)

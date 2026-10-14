@@ -20,7 +20,6 @@ from megspeech.data.labels.syntax import PartsOfSpeech
 from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.sentence import SentenceNet
 from megspeech.objective.auxiliary.acoustic import AcousticTerm
-from megspeech.objective.auxiliary.adversarial import TimingTerm
 from megspeech.objective.auxiliary.audio import AudioTerm
 from megspeech.objective.auxiliary.contrastive.instance import InstanceTerm
 from megspeech.objective.auxiliary.contrastive.word import SameWordTerm
@@ -36,6 +35,7 @@ from megspeech.objective.targets.loudness import FRAMES, Loudness
 from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import AuxiliaryTerm
+from megspeech.training.adversary import AdversaryConfig
 
 
 @dataclass(frozen=True)
@@ -161,10 +161,10 @@ class Auxiliary(ABC):
     ) -> SentenceNet | WithAuxiliary: ...
 
     @staticmethod
-    def of(weights: AuxiliaryConfig, adversary: float, tables: "Tables") -> "Auxiliary":
-        """Nothing when every weight is 0, so no table is read; otherwise the terms of the nonzero weights, the timing
-        adversary's among them at its strength `adversary`, their tables read as `tables` says. A table several terms
-        read is loaded once and shared, so the device holds one copy."""
+    def of(weights: AuxiliaryConfig, adversary: AdversaryConfig, tables: "Tables") -> "Auxiliary":
+        """Nothing when every weight is 0, so no table is read; otherwise the terms of the nonzero weights, the
+        `adversary`'s term among them at the strength it holds, their tables read as `tables` says. A table
+        several terms read is loaded once and shared, so the device holds one copy."""
         root, device, words = tables.root, tables.device, tables.words
         lexicon = cache(lambda: Lexicon.load(Lexicon.path(root)).to(device))
         loudness = cache(lambda: Speech.covering(Loudness.directory(root, tables.cut), words).to(device))
@@ -197,7 +197,7 @@ class Auxiliary(ABC):
             ),
             (weights.next_word, lambda: NextWordTerm(weight=weights.next_word)),
             (weights.prev_word, lambda: PreviousWordTerm(weight=weights.prev_word)),
-            (adversary, lambda: TimingTerm.of(1.0, words, device)),
+            (adversary.adversary, lambda: adversary.adversary_target.term(words, device)),
             (weights.instance, lambda: InstanceTerm.of(weights.instance, words, device, apart=weights.instance_apart)),
             (weights.contrast, lambda: SameWordTerm.of(weights.contrast, words, device)),
             (weights.window, lambda: WindowTerm(weights.window, lexicon())),

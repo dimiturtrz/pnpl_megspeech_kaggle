@@ -9,6 +9,7 @@ from megspeech.data.batching.split import SpanInput
 from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.objective.auxiliary.contrastive.word import SameWord, SameWordTerm
 from megspeech.objective.targets.loudness import CUT
+from megspeech.training.adversary import AdversaryConfig
 from megspeech.training.auxiliary import Auxiliary, AuxiliaryConfig, Joint, Tables
 from tests.unit.megspeech.model.auxiliary import ONSET, SLOT, net, x
 
@@ -25,7 +26,9 @@ def test_builder_term_trains_a_tiny_model() -> None:
     """The auxiliary builder's same-word term, tapped on the context output, takes a finite step through a sentence
     model whose three words share a label across two sentences."""
     root = cast("DataRoot", Path())
-    built = Auxiliary.of(AuxiliaryConfig(contrast=0.5, tap=Tap.CONTEXT), 0.0, Tables(root, CPU, WORDS, CUT))
+    built = Auxiliary.of(
+        AuxiliaryConfig(contrast=0.5, tap=Tap.CONTEXT), AdversaryConfig(), Tables(root, CPU, WORDS, CUT)
+    )
     term = built.terms[0]
     assert isinstance(term, SameWordTerm)
     assert term.weight == 0.5

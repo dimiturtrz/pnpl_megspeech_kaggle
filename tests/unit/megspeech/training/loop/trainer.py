@@ -26,6 +26,7 @@ from megspeech.model.config import ContextConfig
 from megspeech.model.context.timing import TimingHead
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.sentence import SentenceNet
+from megspeech.objective.auxiliary.adversarial import RunTerm
 from megspeech.objective.auxiliary.phonetic import PhoneticTerm
 from megspeech.objective.auxiliary.semantic import SemanticTerm
 from megspeech.objective.scorer import DIM
@@ -344,6 +345,10 @@ def test_drained() -> None:
     made = trainer(RunConfig())
     state = made.state(made.model(split()), split(), 10)
     assert state.drained() == {"grad norms": {}, "bgmix mixed words": 0, "averaged words": 0, "right cut": {}}
+    runs = RunTerm.of(1.0, pd.DataFrame({"run": ["a", "b"]}), CPU)
+    runs.hits.add_(torch.tensor([1.0, 4.0]))
+    tallied = dataclasses.replace(state, terms=(*state.terms, runs)).drained()
+    assert tallied["RunTerm"] == {"accuracy": 0.25, "majority": 0.5, "classes": 2.0}
 
 
 def test_cloned() -> None:

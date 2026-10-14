@@ -66,6 +66,11 @@ class Term(ABC):
         """The `weight`ed loss of `reading`."""
         return self.weight * self.unweighted(reading)
 
+    def drained(self) -> dict[str, float]:
+        """What the term tallied over the steps since the last drain, then emptied; nothing for a term that tallies
+        nothing."""
+        return {}
+
     @abstractmethod
     def unweighted(self, reading: Reading) -> Float[Tensor, ""]:
         """The loss of `reading` before the term's weight."""
