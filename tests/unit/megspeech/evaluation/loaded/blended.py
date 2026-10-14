@@ -11,12 +11,12 @@ from megspeech.data.batching.split import SpanInput, Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation.blended import Blended
 from megspeech.evaluation.exported import ExportedModel
+from megspeech.evaluation.loaded.blended import Blended
 from megspeech.evaluation.scoring.score import Head
 from megspeech.evaluation.text import RULER
 from tests.unit.megspeech.evaluation.exported import kaggle_stub
-from tests.unit.megspeech.evaluation.loaded import POOLED, SPOKEN, loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import POOLED, SPOKEN, loaded, runs
 
 
 class Flat(nn.Module):

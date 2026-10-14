@@ -1,5 +1,5 @@
-"""A Kaggle submission whose members are weighted per label (`megspeech.evaluation.labelweighted`), the weights fit on
-every subject of the Broad ruler, whose labels are all known.
+"""A Kaggle submission whose members are weighted per label (`megspeech.evaluation.loaded.labelweighted`),
+the weights fit on every subject of the Broad ruler, whose labels are all known.
 
     uv run python -m megspeech.submission NAME [NAME ...] --track broad --labelweights K BETA --out NAME
 """
@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from megspeech.data.cache.kaggle import Track
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.labelweighted import Pool, Shrinkage
+from megspeech.evaluation.loaded.group import Group
+from megspeech.evaluation.loaded.labelweighted import Pool, Shrinkage
 from megspeech.submission.report import SUBMISSIONS
 
 LOG = logging.getLogger(__name__)

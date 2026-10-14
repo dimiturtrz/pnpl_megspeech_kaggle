@@ -44,7 +44,7 @@ from megspeech.data.raw.runs import Column, Run
 from megspeech.data.raw.serialised import Serialised
 from megspeech.data.spans.grouping import Grouping
 from megspeech.device import Device
-from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.scoring.score import MIN_NOVEL
 from megspeech.evaluation.studies.shrunklda import Dataset, Harness
 

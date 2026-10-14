@@ -5,7 +5,7 @@ from megspeech.evaluation.rulers.broad import BroadRuler
 from megspeech.evaluation.rulers.deep import DeepRuler
 from megspeech.evaluation.scoring.score import ADJUSTMENTS
 from megspeech.evaluation.text import RULER
-from tests.unit.megspeech.evaluation.loaded import loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import loaded, runs
 
 TRACKS: tuple[type[TrackRuler], ...] = (DeepRuler, BroadRuler)
 

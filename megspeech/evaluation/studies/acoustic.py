@@ -23,7 +23,7 @@ from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.raw.runs import Column, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
-from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.model.auxiliary import Tap
 from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.sentence import SentenceNet

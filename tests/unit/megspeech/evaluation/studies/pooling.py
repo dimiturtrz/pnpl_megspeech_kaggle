@@ -11,7 +11,7 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.evaluation.studies import pooling as module
 from megspeech.evaluation.studies.pooling import CHANCE, AlignedSubjects, Equal, Pool, Reliable, main
 from megspeech.evaluation.text import RULER
-from tests.unit.megspeech.evaluation.loaded import NAMES, POOLED, SPOKEN, TRAINED, loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import NAMES, POOLED, SPOKEN, TRAINED, loaded, runs
 
 
 def test_equal_weights() -> None:

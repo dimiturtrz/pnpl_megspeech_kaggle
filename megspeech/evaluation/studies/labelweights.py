@@ -18,8 +18,8 @@ import torch
 
 from core.paths import DataRoot
 from megspeech.device import Device
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.labelweighted import Pool, Shrinkage
+from megspeech.evaluation.loaded.group import Group
+from megspeech.evaluation.loaded.labelweighted import Pool, Shrinkage
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.input.subjects import Fallback, Unseen
 

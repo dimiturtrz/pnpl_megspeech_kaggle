@@ -15,8 +15,8 @@ from megspeech.data.raw.runs import Partition, Run
 from megspeech.evaluation.studies.templatemeans import Scale, Sums, Templates
 from megspeech.evaluation.studies.templates import ABSENT, Experiment, Noise, Readout, Whitener
 from megspeech.objective.targets.t5 import Prototypes
-from tests.unit.megspeech.evaluation.loaded import CPU as DEVICE
-from tests.unit.megspeech.evaluation.loaded import NAMES, SAMPLES, SPOKEN
+from tests.unit.megspeech.evaluation.loaded.model import CPU as DEVICE
+from tests.unit.megspeech.evaluation.loaded.model import NAMES, SAMPLES, SPOKEN
 from tests.unit.megspeech.evaluation.studies.templatemeans import CPU, REPS, SHAPE, WORDS, filled, windows
 
 

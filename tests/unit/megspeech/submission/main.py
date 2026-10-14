@@ -9,16 +9,16 @@ import pytest
 from core.paths import DataRoot
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.labelweighted import Shrinkage
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loaded.group import Group
+from megspeech.evaluation.loaded.labelweighted import Shrinkage
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.input.subjects import Reading, Unseen
 from megspeech.submission import __main__ as module
 from megspeech.submission import report
 from megspeech.submission.__main__ import main
 from megspeech.submission.report import HITS, SUBMISSIONS
-from tests.unit.megspeech.evaluation.loaded import loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import loaded, runs
 
 
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:

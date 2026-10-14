@@ -7,7 +7,7 @@ from megspeech.data.config import METRICS
 from megspeech.evaluation.scoring import config as module
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.input.lowpass import LowPass
-from tests.unit.megspeech.evaluation.loaded import CPU, Favourite
+from tests.unit.megspeech.evaluation.loaded.model import CPU, Favourite
 
 RATE = 50.0
 CUTOFF = 12.0

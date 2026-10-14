@@ -10,15 +10,15 @@ import torch
 from core.paths import DataRoot
 from megspeech.data.cache.alignment import AS_RECORDED
 from megspeech.data.cache.kaggle import Track
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loaded.group import Group
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.probabilities import PROBS, SECTIONS, Probabilities
 from megspeech.submission import __main__ as cli
 from megspeech.submission import report as module
 from megspeech.submission.config import ReportConfig
 from megspeech.submission.report import HITS, SCORING, SUBMISSIONS, Recorded, Report, Submission
-from tests.unit.megspeech.evaluation.loaded import CPU, loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import CPU, loaded, runs
 
 RUN = "run"
 

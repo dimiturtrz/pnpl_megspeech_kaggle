@@ -9,7 +9,7 @@ import torch
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import Partition
 from megspeech.data.spans.spans import Spans
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.studies.ioi import Held, Mode, Redraw, Replacement, Scored, Timing
 from tests.unit.megspeech.evaluation.studies.gap import Stub, split

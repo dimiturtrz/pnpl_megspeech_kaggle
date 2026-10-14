@@ -25,8 +25,8 @@ from torch import Tensor
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.loaded.ensemble import Loader
+from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Calibration

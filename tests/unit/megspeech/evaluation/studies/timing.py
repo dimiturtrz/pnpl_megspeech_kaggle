@@ -8,7 +8,7 @@ import torch
 
 from megspeech.data.batching.split import Split
 from megspeech.data.spans.spans import Spans
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.studies.timing import Agreement, Probe, Readings, Shuffled
 from megspeech.model.auxiliary import Tap

@@ -14,12 +14,12 @@ from megspeech.data.config import METRICS, DataConfig, Val
 from megspeech.data.constants import CHANNELS
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.exported import ExportedModel
-from megspeech.evaluation.group import Group
+from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.rulers import heldout as module
 from megspeech.evaluation.rulers.heldout import HeldOutRuler, Lineage
 from megspeech.evaluation.scoring.score import Head
 from megspeech.model.input.subjects import Reading
-from tests.unit.megspeech.evaluation.loaded import SAMPLES, SPOKEN, loaded
+from tests.unit.megspeech.evaluation.loaded.model import SAMPLES, SPOKEN, loaded
 
 NAMES = (
     "sub-124_ses-0_task-MASC1_run-1",

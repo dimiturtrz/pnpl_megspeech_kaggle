@@ -28,9 +28,9 @@ from megspeech.data.config import DataConfig
 from megspeech.data.labels.vocabulary import PRIMARY, Vocabulary
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loading import Loader
-from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.loaded.ensemble import Loader
+from megspeech.evaluation.loaded.group import Group
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head

@@ -21,7 +21,7 @@ from megspeech.data.config import DataConfig
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.raw.runs import Column, Run
 from megspeech.device import Device
-from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.studies.expert import Expert, Head
 from megspeech.objective.targets.speech import Speech, Targets
 

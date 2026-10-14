@@ -1,6 +1,6 @@
-from megspeech.evaluation.labelweighted import Shrinkage
+from megspeech.evaluation.loaded.labelweighted import Shrinkage
 from megspeech.evaluation.studies.labelweights import CrossFit
-from tests.unit.megspeech.evaluation.labelweighted import pool
+from tests.unit.megspeech.evaluation.loaded.labelweighted import pool
 
 
 def test_halves() -> None:

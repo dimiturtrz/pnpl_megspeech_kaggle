@@ -13,7 +13,7 @@ from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import Spans
 from megspeech.evaluation import memorisation as module
 from megspeech.evaluation.memorisation import POOLED, Bucket, Heard, Memorisation, NGrams, Tally
-from tests.unit.megspeech.evaluation.loaded import SPOKEN, loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import SPOKEN, loaded, runs
 
 CPU = torch.device("cpu")
 TRAIN = pd.DataFrame({"run": "r", "sentence": [0, 0, 0, 0, 1, 1, 1], "word": list("abcdxyz")})

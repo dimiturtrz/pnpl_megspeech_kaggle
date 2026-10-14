@@ -7,7 +7,7 @@ from megspeech.data.raw.runs import Partition
 from megspeech.evaluation.rulers import localtest as module
 from megspeech.evaluation.rulers.localtest import LocalTest
 from megspeech.evaluation.scoring.probabilities import PROBS, SECTIONS, Probabilities
-from tests.unit.megspeech.evaluation.loaded import loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import loaded, runs
 
 
 def local(tmp_path: Path) -> LocalTest:

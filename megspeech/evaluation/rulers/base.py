@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.metric.ruler import Graded
 from megspeech.evaluation.scoring.score import Epoch, Score
 

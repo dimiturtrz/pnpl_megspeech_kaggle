@@ -8,11 +8,11 @@ import torch
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Placed
-from megspeech.evaluation.loading import Scoring
+from megspeech.evaluation.loaded.ensemble import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.studies import diversity as module
 from megspeech.evaluation.studies.diversity import Board, Member, Reads, Relation, Scored, Study
-from tests.unit.megspeech.evaluation.loaded import CPU, Favourite, loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import CPU, Favourite, loaded, runs
 
 LABELS = torch.arange(8) % VOCAB_SIZE
 VAL, TEST = Partition.VALIDATION, Partition.TEST

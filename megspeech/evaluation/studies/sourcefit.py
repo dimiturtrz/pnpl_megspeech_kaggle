@@ -22,9 +22,9 @@ from megspeech.data.batching.split import Split
 from megspeech.data.corpus import Corpus
 from megspeech.data.raw.runs import Run
 from megspeech.device import Device
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loaded.ensemble import Loader, Scoring
+from megspeech.evaluation.loaded.group import Group
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.studies.gap import Condition, Locator
 from megspeech.model.context.timing import KAGGLE_GAP
 

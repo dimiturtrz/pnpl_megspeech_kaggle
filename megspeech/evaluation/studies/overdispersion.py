@@ -30,7 +30,7 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
-from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.scoring.probabilities import PROBS, SECTIONS, Probabilities, Words
 from megspeech.model.ensemble import Ensemble
 

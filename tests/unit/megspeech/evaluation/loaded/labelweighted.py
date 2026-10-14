@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.evaluation.labelweighted import Pool, Reads, Shrinkage
+from megspeech.evaluation.loaded.labelweighted import Pool, Reads, Shrinkage
 from megspeech.evaluation.scoring.evaluator import Evaluator
 
 MEMBERS = 3

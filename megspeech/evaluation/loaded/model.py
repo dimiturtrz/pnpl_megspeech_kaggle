@@ -8,8 +8,8 @@ from torch import Tensor, nn
 from megspeech.data.batching.split import Split
 from megspeech.data.config import ADAPTED
 from megspeech.data.raw.runs import DEEP, Run
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.metric.ruler import Graded
-from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.evaluator import Calibration, Evaluator
 from megspeech.evaluation.scoring.score import Epoch, Head, Score
 

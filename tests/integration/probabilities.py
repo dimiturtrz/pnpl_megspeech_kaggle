@@ -8,7 +8,7 @@ from megspeech.evaluation.scoring.evaluator import Calibration
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.evaluation.studies.uncertainty import Members, Saved
 from megspeech.evaluation.text import RULER
-from tests.unit.megspeech.evaluation.loaded import Favourite, loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import Favourite, loaded, runs
 from tests.unit.megspeech.evaluation.studies.uncertainty import Pair, Reversed
 
 

@@ -16,8 +16,8 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.data.spans.spans import PAD
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.loaded.ensemble import Loader
+from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.studies.knnreadout import SCORED
 

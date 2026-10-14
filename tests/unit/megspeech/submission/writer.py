@@ -17,7 +17,7 @@ from megspeech.evaluation.exported import ExportedModel
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.model.input.subjects import Reading
 from megspeech.submission.writer import KaggleWriter
-from tests.unit.megspeech.evaluation.loaded import CPU, Favourite
+from tests.unit.megspeech.evaluation.loaded.model import CPU, Favourite
 
 
 class Kaggle:

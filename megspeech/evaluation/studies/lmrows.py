@@ -25,8 +25,8 @@ from megspeech.data.config import METRICS
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device
 from megspeech.evaluation.exported import ExportedModel
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.loaded.ensemble import Loader
+from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.scoring.probabilities import SECTIONS
 from megspeech.evaluation.scoring.score import Head
 from megspeech.evaluation.studies.crowding import VAL

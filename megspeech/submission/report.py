@@ -18,8 +18,8 @@ from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
 from megspeech.data.raw.runs import Run
 from megspeech.evaluation.exported import ExportedModel
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.loaded.ensemble import Loader
+from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.rulers.base import TrackRuler
 from megspeech.evaluation.rulers.broad import BroadRuler
 from megspeech.evaluation.rulers.deep import DeepRuler

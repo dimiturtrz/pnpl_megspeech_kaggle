@@ -33,8 +33,8 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device, Placed
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.loaded.ensemble import Loader, Scoring
+from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.metric.ruler import Graded, Ruler
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Score

@@ -15,7 +15,7 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.spans.spans import PAD
 from megspeech.evaluation import exported as module
 from megspeech.evaluation.text import RULER
-from tests.unit.megspeech.evaluation.loaded import CPU, SPOKEN, Favourite, loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import CPU, SPOKEN, Favourite, loaded, runs
 
 
 def test_probabilities_of(tmp_path: Path) -> None:
