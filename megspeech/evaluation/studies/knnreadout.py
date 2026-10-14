@@ -241,18 +241,9 @@ class Builder:
         loaded = Loader.of(Group(self.root, self.scoring, self.device), [base])
         runs = Run.discover(self.root.raw())
         tau = loaded.report(runs).tau
-        partitions: dict[Partition, dict[str, tuple[Split, Float[Tensor, "n v"]]]] = {}
-        for partition in SCORED:
-            held = replace(loaded, partition=partition)
-            domains, _ = held.domains(held.ruled(runs))
-            counted = held.evaluator.eligible(domains)
-            partitions[partition] = {name: (split, held.context(split)) for name, split in counted.items()}
-            self.check(held, runs, tau, partitions[partition])
+        partitions = {partition: self.scored(loaded, partition, runs, tau) for partition in SCORED}
         embedders = [self.fold(name) for name in folds]
-        scored = {
-            run.name for p in SCORED for group in replace(loaded, partition=p).ruled(runs).values() for run in group
-        }
-        Builder.disjoint([[run.name for run in held] for _, held in embedders], scored)
+        Builder.disjoint([[run.name for run in held] for _, held in embedders], Builder.ruled(loaded, runs))
         stores = tuple(self.store(e, name, held) for (e, held), name in zip(embedders, folds, strict=True))
         rows = {
             partition: {
@@ -262,6 +253,23 @@ class Builder:
             for partition, domains in partitions.items()
         }
         return Dump(stores, rows, loaded.log_prior.cpu(), tau)
+
+    def scored(  # devtools-ignore: test-mirror
+        self, loaded: ExportedModel, partition: Partition, runs: list[Run], tau: float
+    ) -> dict[str, tuple[Split, Float[Tensor, "n v"]]]:
+        """`partition`'s eligible domains with the base's context logits, checked against `LocalTest`."""
+        held = replace(loaded, partition=partition)
+        domains, _ = held.domains(held.ruled(runs))
+        counted = {name: (split, held.context(split)) for name, split in held.evaluator.eligible(domains).items()}
+        self.check(held, runs, tau, counted)
+        return counted
+
+    @staticmethod
+    def ruled(loaded: ExportedModel, runs: list[Run]) -> set[str]:  # devtools-ignore: test-mirror
+        """Every session the base scores on, over all `SCORED` partitions."""
+        return {
+            run.name for p in SCORED for group in replace(loaded, partition=p).ruled(runs).values() for run in group
+        }
 
     @staticmethod
     def rows(  # devtools-ignore: test-mirror

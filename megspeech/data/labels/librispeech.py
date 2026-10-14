@@ -228,6 +228,42 @@ class Tally:
         return self.counts[f"{kind}_words"] / total if total else 0.0
 
 
+SCHEMA = pa.schema(
+    [
+        ("span", pa.int32()),
+        ("utterance", pa.string()),
+        ("speaker", pa.int32()),
+        ("book", pa.int32()),
+        ("word", pa.string()),
+        ("onset", pa.float32()),
+    ]
+)
+"""One row per word; onset in seconds from the span's first word."""
+
+
+@dataclass
+class Rows:
+    """One shard's output columns, filled span by span."""
+
+    columns: dict[str, list[int | float | str]] = field(default_factory=lambda: {name: [] for name in SCHEMA.names})
+
+    def add(self, span: int, utterance: Utterance, sentence: range, book: int) -> None:
+        words = [utterance.words[i] for i in sentence]
+        origin = words[0].start
+        for name, value in (
+            ("span", [span] * len(words)),
+            ("utterance", [utterance.uid] * len(words)),
+            ("speaker", [utterance.speaker] * len(words)),
+            ("book", [book] * len(words)),
+            ("word", [w.text for w in words]),
+            ("onset", [w.start - origin for w in words]),
+        ):
+            self.columns[name].extend(value)
+
+    def table(self) -> pa.Table:
+        return pa.table(self.columns, schema=SCHEMA)
+
+
 class Corpus:
     """Builds the span table from the fetched shards."""
 
@@ -283,63 +319,32 @@ class Corpus:
         span = 0
         with pq.ParquetWriter(part, SCHEMA, compression="zstd") as writer:
             for shard in shards:
-                texts = self.texts(shard)
-                rows = Rows()
-                for utterance in self.utterances(shard):
-                    if chapters.excluded(utterance.chapter):
-                        tally.add("excluded", len(utterance.words))
-                        continue
-                    text = texts.get(utterance.uid)
-                    ranges, punctuated = cutter.cut(utterance, text)
-                    tally.add("matched" if punctuated else "mismatched" if text else "absent", len(utterance.words))
-                    for sentence in ranges:
-                        if len(sentence) < self.min_words:
-                            tally.add("short", len(sentence))
-                            continue
-                        rows.add(span, utterance, sentence, chapters.book[utterance.chapter])
-                        tally.add("kept", len(sentence))
-                        span += 1
+                rows, span = self.rows(shard, cutter, chapters, tally, span)
                 writer.write_table(rows.table())
                 LOG.info("%s: %d spans so far", shard.name, span)
         part.replace(target)
         Report(target, tally, chapters).log()
         return target
 
-
-SCHEMA = pa.schema(
-    [
-        ("span", pa.int32()),
-        ("utterance", pa.string()),
-        ("speaker", pa.int32()),
-        ("book", pa.int32()),
-        ("word", pa.string()),
-        ("onset", pa.float32()),
-    ]
-)
-"""One row per word; onset in seconds from the span's first word."""
-
-
-@dataclass
-class Rows:
-    """One shard's output columns, filled span by span."""
-
-    columns: dict[str, list[int | float | str]] = field(default_factory=lambda: {name: [] for name in SCHEMA.names})
-
-    def add(self, span: int, utterance: Utterance, sentence: range, book: int) -> None:
-        words = [utterance.words[i] for i in sentence]
-        origin = words[0].start
-        for name, value in (
-            ("span", [span] * len(words)),
-            ("utterance", [utterance.uid] * len(words)),
-            ("speaker", [utterance.speaker] * len(words)),
-            ("book", [book] * len(words)),
-            ("word", [w.text for w in words]),
-            ("onset", [w.start - origin for w in words]),
-        ):
-            self.columns[name].extend(value)
-
-    def table(self) -> pa.Table:
-        return pa.table(self.columns, schema=SCHEMA)
+    def rows(self, shard: Path, cutter: Cutter, chapters: Chapters, tally: Tally, span: int) -> tuple[Rows, int]:
+        """`shard`'s kept spans numbered from `span`, and the next free span number; every word lands in `tally`."""
+        texts = self.texts(shard)
+        rows = Rows()
+        for utterance in self.utterances(shard):
+            if chapters.excluded(utterance.chapter):
+                tally.add("excluded", len(utterance.words))
+                continue
+            text = texts.get(utterance.uid)
+            ranges, punctuated = cutter.cut(utterance, text)
+            tally.add("matched" if punctuated else "mismatched" if text else "absent", len(utterance.words))
+            for sentence in ranges:
+                if len(sentence) < self.min_words:
+                    tally.add("short", len(sentence))
+                    continue
+                rows.add(span, utterance, sentence, chapters.book[utterance.chapter])
+                tally.add("kept", len(sentence))
+                span += 1
+        return rows, span
 
 
 @dataclass(frozen=True)

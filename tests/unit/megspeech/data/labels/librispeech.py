@@ -224,6 +224,18 @@ def test_build(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     assert "excluded" in caplog.text
 
 
+def test_rows(tmp_path: Path) -> None:
+    corpus = Corpus(world(tmp_path))
+    meta = corpus.fetch.meta
+    chapters = Chapters.read(meta / "CHAPTERS.TXT", meta / "lv-annotated.sqlite.db")
+    tally = Tally()
+    shard = corpus.fetch.home / "dev_clean-00000-of-00001.parquet"
+    rows, span = corpus.rows(shard, Cutter(0.5), chapters, tally, 5)
+    assert rows.columns["span"][0] == 5
+    assert rows.columns["span"][-1] == span - 1
+    assert tally.counts["kept_words"] == len(rows.columns["word"])
+
+
 def test_table() -> None:
     rows = Rows()
     rows.add(0, utterance(), range(0, 2), 5)
