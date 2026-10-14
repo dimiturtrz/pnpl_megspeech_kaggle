@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 from megspeech.objective.auxiliary.adversarial import Adversary
-from megspeech.training.ramp import AdversaryConfig, Ramp
+from megspeech.training.adversary import AdversaryConfig, Ramp
 
 
 def ramp() -> Ramp:

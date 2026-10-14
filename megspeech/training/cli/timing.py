@@ -14,8 +14,8 @@ from megspeech.device import Device
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.training.config import METRICS, RunConfig
 from megspeech.training.loop.trainer import Trainer
-from megspeech.training.timing_corpus import TimingCorpus
-from megspeech.training.timing_expert import TimingExpert
+from megspeech.training.timing.corpus import TimingCorpus
+from megspeech.training.timing.expert import TimingExpert
 
 LOG = logging.getLogger(__name__)
 

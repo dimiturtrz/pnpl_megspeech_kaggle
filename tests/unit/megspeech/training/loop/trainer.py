@@ -32,13 +32,13 @@ from megspeech.objective.scorer import DIM
 from megspeech.objective.targets.t5 import Lexicon
 from megspeech.objective.term import ContextTerm, LabelTerm, WordTerm
 from megspeech.objective.topk import TopKMix
+from megspeech.training.adversary import Ramp
 from megspeech.training.auxiliary import AuxiliaryConfig, Joint, NoAuxiliary
 from megspeech.training.config import RunConfig, SelectionConfig, StopConfig
 from megspeech.training.hook import Scheduled
 from megspeech.training.loop.ema import Ema, Unaveraged
 from megspeech.training.loop.trainer import Trainer, TrainState
 from megspeech.training.optim import OptimConfig
-from megspeech.training.ramp import Ramp
 from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.regularise.pull import Pull
@@ -48,7 +48,7 @@ from megspeech.training.regularise.stretch import Stretch
 from megspeech.training.sampling.curriculum import Annealed, Natural, Robust, Schedule
 from megspeech.training.sampling.pairing import Pairing, Unpaired
 from megspeech.training.sampling.sampler import SamplerConfig
-from megspeech.training.timing_expert import TimingExpert
+from megspeech.training.timing.expert import TimingExpert
 from megspeech.training.transfer import TransferConfig
 
 SAMPLES = 50
