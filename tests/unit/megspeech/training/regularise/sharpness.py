@@ -20,12 +20,15 @@ def test_of() -> None:
     assert Sharp.of(RHO) == Sharp(RHO)
 
 
-def test_backward() -> None:
-    """Plain descent leaves the gradient at the weights; SAM the one `rho` up the normalised gradient, and puts the
-    weights back."""
+def test_flat_backward() -> None:
+    """Plain descent leaves the gradient at the weights themselves."""
     w = weights()
     Flat().backward(bowl(w), lambda: bowl(w), (w,))
     assert torch.equal(w.grad, torch.tensor([3.0, 4.0]))
+
+
+def test_sharp_backward() -> None:
+    """SAM leaves the gradient `rho` up the normalised gradient, and puts the weights back."""
     w = weights()
     Sharp(RHO).backward(bowl(w), lambda: bowl(w), (w,))
     assert torch.allclose(w.grad, torch.tensor([3.0, 4.0]) * (1 + RHO / 5))
