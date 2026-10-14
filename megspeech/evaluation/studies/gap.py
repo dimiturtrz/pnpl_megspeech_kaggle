@@ -7,12 +7,12 @@ conditions. `real` reads the data as it is; `meg-shuffled` gives every word anot
 label while the slots keep their onsets (`Split.ordered`). If the order shuffle costs fit far more than validation,
 the model leans on training sentence text; if the MEG shuffle does, on training MEG.
 
-    uv run python -m megspeech.evaluation.studies.gap sent40-ioi-ema9998-s0 --grouping kaggle --seed 0
+    uv run python -m megspeech.evaluation.studies.gap sent40-ioi-ema9998-s0 --grouping kaggle --seed 0 [--k 1]
 """
 
 import argparse
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 import torch
@@ -28,6 +28,7 @@ from megspeech.device import Device
 from megspeech.evaluation.group import Group
 from megspeech.evaluation.loaded import LoadedModel
 from megspeech.evaluation.loading import Loader, Scoring
+from megspeech.evaluation.metric.ruler import TOP, Ruler
 from megspeech.evaluation.scoring.score import Head
 from megspeech.evaluation.scoring.telemetry import Telemetry
 
@@ -152,6 +153,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("names", nargs="+")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--k", type=int, default=TOP, help="top-k of every score; tau stays the top-10 selection's")
     tree = Tree(Scoring)
     tree.arguments(parser)
     args = parser.parse_args()
@@ -160,8 +162,9 @@ def main() -> None:
     for name in args.names:
         loaded = Loader.of(Group(root, scoring, device), [name])
         train = Corpus.load(loaded.data, root, device).train
-        locator = Locator.of(loaded, train, runs, args.seed)
-        LOG.info("%s tau %s seed %d", name, locator.tau, args.seed)
+        located = Locator.of(loaded, train, runs, args.seed)
+        locator = replace(located, loaded=replace(loaded, evaluator=replace(loaded.evaluator, ruler=Ruler(k=args.k))))
+        LOG.info("%s tau %s seed %d k %d", name, locator.tau, args.seed, args.k)
         for line in locator.grid().lines():
             LOG.info("%s", line)
         torch.cuda.empty_cache()
