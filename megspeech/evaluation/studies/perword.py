@@ -32,7 +32,7 @@ from megspeech.data.config import METRICS
 from megspeech.data.labels.phonemes import EVENTS, UNKNOWN, Pronunciation
 from megspeech.data.labels.syntax import TAGS, PartsOfSpeech
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
-from megspeech.data.raw.events import Event, Kind
+from megspeech.data.raw.events import Event, Events, Kind
 from megspeech.data.raw.runs import Column, Partition, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device, Placed
@@ -149,7 +149,7 @@ class Attributes:
     @staticmethod
     def durations(events: Sequence[Path]) -> Float[np.ndarray, " v"]:
         spoken = pd.concat(
-            [pd.read_csv(path, sep="	", usecols=[Event.KIND, Event.SEGMENT, Event.DURATION]) for path in events],
+            [Events(path).read(Event.DURATION) for path in events],
             ignore_index=True,
         )
         words = spoken[spoken[Event.KIND] == Kind.WORD]

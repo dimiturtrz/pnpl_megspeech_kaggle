@@ -29,7 +29,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import PRIMARY, Vocabulary
-from megspeech.data.raw.events import Event, Kind
+from megspeech.data.raw.events import Event, Events, Kind
 from megspeech.data.raw.runs import Column
 from megspeech.evaluation.scoring.score import Head
 from megspeech.evaluation.studies.perword import Attributes, Position, Scene
@@ -146,12 +146,7 @@ class Aligned:
     def read(cls, path: Path) -> "Aligned":
         """`path`'s word rows, each with its phonemes (position suffix dropped) and whether the next word's first
         phoneme is a vowel."""
-        table = pd.read_csv(
-            path,
-            sep="\t",
-            usecols=[Event.KIND, Event.SEGMENT, Event.SENTENCE, Event.WORD, Event.ONSET, Event.DURATION],
-            dtype={Event.SEGMENT: str},
-        )
+        table = Events(path).read(Event.SENTENCE, Event.WORD, Event.ONSET, Event.DURATION)
         phones = table[table[Event.KIND] == Kind.PHONEME]
         sounds = (
             phones.assign(phone=phones[Event.SEGMENT].str.split("_").str[0])

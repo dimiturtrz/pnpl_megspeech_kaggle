@@ -33,7 +33,7 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.phonemes import EVENTS, WORD
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE, Vocabulary
-from megspeech.data.raw.events import Event, Kind
+from megspeech.data.raw.events import Event, Events, Kind
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
@@ -120,7 +120,7 @@ class Spellings:
         """Each word's most common phoneme count in the events' forced alignment (NaN if it never occurs)."""
         pieces = []
         for path in events:
-            table = pd.read_csv(path, sep="\t", usecols=[Event.KIND, Event.SEGMENT, *WORD], dtype={Event.SEGMENT: str})
+            table = Events(path).read(*WORD)
             sounds = table[
                 (table[Event.KIND] == Kind.PHONEME) & ~table[Event.SEGMENT].str.startswith(NON_WORD_PHONEMES)
             ]
