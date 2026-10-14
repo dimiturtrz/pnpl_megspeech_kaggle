@@ -6,7 +6,7 @@ word a mask (its identity is unknown on the Kaggle test), on a grid of fusion we
 Sherlock1 is public-domain text a pretrained LM may have memorised; TheMoth is the clean read. A submission fused this
 way needs an owner rules decision (megspeech-7gf.60).
 
-    uv run python -m megspeech.evaluation.studies.fusion.masked ens-ema24
+    uv run python -m megspeech.evaluation.studies fusion.masked ens-ema24
 """
 
 import argparse

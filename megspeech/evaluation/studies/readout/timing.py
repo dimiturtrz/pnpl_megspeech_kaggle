@@ -7,7 +7,7 @@ words. Probe (b): the model's top-10 hits against its own hits with every word's
 word's of the same domain, onsets untouched (megspeech-7gf.71): the hits only timing can earn, how many of them the
 real model shares, and the overlap two independent hitters would show.
 
-    uv run python -m megspeech.evaluation.studies.readout.timing sent40-ioi-ema9998-s0
+    uv run python -m megspeech.evaluation.studies readout.timing sent40-ioi-ema9998-s0
 """
 
 import argparse

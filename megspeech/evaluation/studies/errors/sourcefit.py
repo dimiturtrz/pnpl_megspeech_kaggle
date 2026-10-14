@@ -3,7 +3,7 @@
 A saved run is scored, at its own tau, on the fixed seeded subset of training spans that `Telemetry.fit` reads, with
 the labelled words split by the source of the subject who heard them. Validation is the run's selection macro.
 
-    uv run python -m megspeech.evaluation.studies.errors.sourcefit --runs ema-bgmix05-w15-s0 ema-bgmix05-all-w15-s0
+    uv run python -m megspeech.evaluation.studies errors.sourcefit --runs ema-bgmix05-w15-s0 ema-bgmix05-all-w15-s0
 """
 
 import argparse

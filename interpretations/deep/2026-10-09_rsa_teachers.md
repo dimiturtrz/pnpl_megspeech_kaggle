@@ -38,7 +38,7 @@ Members, one per Deep ensemble kind:
 
 M is the clean reference. The full H/D/M table is in the 7gf.141.1 notes.
 
-Command: `CUDA_VISIBLE_DEVICES=-1 MEGSPEECH_DATA=D:/data/neural uv run --no-sync python -m megspeech.evaluation.studies.teachers.rsa`
+Command: `CUDA_VISIBLE_DEVICES=-1 MEGSPEECH_DATA=D:/data/neural uv run --no-sync python -m megspeech.evaluation.studies teachers.rsa`
 
 ## M table
 | teacher | rho raw [95% CI] | p raw | rho centred [95% CI] | p centred |
@@ -75,7 +75,7 @@ Command: `CUDA_VISIBLE_DEVICES=-1 MEGSPEECH_DATA=D:/data/neural uv run --no-sync
   apache-2.0, cached, and no member kind trained on it yet. The seeds are queued as bq67 (7gf.141.8).
 
 ## On the 36-member blend (2026-10-10)
-`python -m megspeech.evaluation.studies.teachers.blend m11wd` (eef38ae) uses the mean softmax of all 36 m11wd members, with
+`python -m megspeech.evaluation.studies teachers.blend m11wd` (eef38ae) uses the mean softmax of all 36 m11wd members, with
 teacher vectors fitted on subject-0 training words only. Every rho moves by at most .006 from the M table: t5 +.305 /
 +.279, xlsr +.132 / +.187, whisper L24 +.166 / +.210, word frequency (a log-count gap, as a control) +.055
 [−.090, +.217]. Averaging 36 members of mixed teachers leaves the geometry where a single no-aux member has it, which

@@ -6,7 +6,7 @@ neighbour term present only where that neighbour is a word of the span; the head
 `--optim.next_word` and `--optim.prev_word`, read off each word's local embedding. Scored as `ioi` scores: the tau the
 `--partition` report selects, the same domains and macro. `--alpha 0` is the context head alone.
 
-    uv run python -m megspeech.evaluation.studies.fusion.neighbour ema-cd25-nbr03-s1 --grouping kaggle \\
+    uv run python -m megspeech.evaluation.studies fusion.neighbour ema-cd25-nbr03-s1 --grouping kaggle \\
         --partition test --alpha 0 0.25 0.5 1
 """
 

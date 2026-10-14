@@ -8,7 +8,7 @@ repeats), read two ways: cosine to the class centroids of the training sessions'
 head, logit-adjusted by `TAU`. A score is the top-10 hit rate over eligible classes; `fixed` restricts every `k` to the
 classes holding at least the largest `k`, so the curve is not moved by classes dropping out.
 
-    uv run python -m megspeech.evaluation.studies.signal.trialaverage sent40-s0 --partition test
+    uv run python -m megspeech.evaluation.studies signal.trialaverage sent40-s0 --partition test
 """
 
 import argparse

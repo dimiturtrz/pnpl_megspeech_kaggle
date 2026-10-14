@@ -1,7 +1,7 @@
 """Own-task check of an expert fold model (megspeech-6ow.3): on runs it held out, does its speech head's output point
 at the teacher's target of the word, beyond the target of another word of the same runs?
 
-    uv run python -m megspeech.evaluation.studies.experts.owntask --expert textword --source gpt2-large --device cpu
+    uv run python -m megspeech.evaluation.studies experts.owntask --expert textword --source gpt2-large --device cpu
 """
 
 import argparse

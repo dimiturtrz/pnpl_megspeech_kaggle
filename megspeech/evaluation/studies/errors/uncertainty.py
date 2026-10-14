@@ -7,7 +7,7 @@ Uncertainty in Bayesian Deep Learning"; the deep-ensemble predictive of Lakshmin
 only by seed share data, architecture and recipe, so their disagreement UNDERESTIMATES the epistemic part: a bias every
 seed shares is invisible to it, and the aleatoric share is an upper bound.
 
-    uv run python -m megspeech.evaluation.studies.errors.uncertainty ens-ema16 --partitions validation test
+    uv run python -m megspeech.evaluation.studies errors.uncertainty ens-ema16 --partitions validation test
 """
 
 import argparse

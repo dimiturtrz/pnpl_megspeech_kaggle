@@ -21,7 +21,7 @@ Kaggle test), `SESSIONS` of them spread evenly through the sorted list so the ta
 `MINUTES * 30` averages per band bin, so the estimate's noise floor sits far under the effects looked for. CPU only,
 numpy.
 
-    uv run python -m megspeech.evaluation.studies.signal.sensors
+    uv run python -m megspeech.evaluation.studies signal.sensors
 """
 
 import argparse

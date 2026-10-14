@@ -6,7 +6,7 @@ clitics off their word (`it 's`, `do n't`); they are joined back so `it’s` is 
 token with no letter left once spelled (numbers, punctuation) is no heard word and is dropped; `.`, `!` and `?` end a
 sentence. The spans are saved under the models root as one `(g, MAX_WORDS)` state table, `PAD` past a span's end.
 
-    uv run python -m megspeech.evaluation.studies.refiner.wiki
+    uv run python -m megspeech.evaluation.studies refiner.wiki
 """
 
 import argparse

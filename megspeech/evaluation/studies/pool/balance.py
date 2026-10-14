@@ -4,7 +4,7 @@ per-subject balancing, from the same logits.
 The Kaggle Broad submission balances its test rows pooled across subjects; the ruler balances each subject alone. Both
 numbers read hits per subject and take the macro as `BroadRuler` does, so the gap is the balancing's scope alone.
 
-    uv run python -m megspeech.evaluation.studies.pool.balance sent40-s0 sent40-s1 --aligned [--fallback.unseen mean]
+    uv run python -m megspeech.evaluation.studies pool.balance sent40-s0 sent40-s1 --aligned [--fallback.unseen mean]
 """
 
 import argparse

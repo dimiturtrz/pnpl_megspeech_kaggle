@@ -6,7 +6,7 @@ apart at the median, as all words are in the training text, 0.53 s for the 50 wo
 posteriors of the rows no label counts. Sections: `val` and `local-test` per scored domain, `kaggle` the Deep track's
 rows in canonical order.
 
-    uv run python -m megspeech.evaluation.studies.lm.rows m11xsp7hub6d2v3
+    uv run python -m megspeech.evaluation.studies lm.rows m11xsp7hub6d2v3
 """
 
 import argparse

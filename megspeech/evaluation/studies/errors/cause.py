@@ -8,7 +8,7 @@ hit and top-1 hit are regressed on these per head, pooled and with word identity
 bootstrap over spans; and for `the` and `a` alone, top-1 and the P(the) - P(a) margin by surprisal, duration, vowel
 form and whether the next word starts with a vowel.
 
-    uv run python -m megspeech.evaluation.studies.errors.cause m11xsp7hub6d2v3
+    uv run python -m megspeech.evaluation.studies errors.cause m11xsp7hub6d2v3
 """
 
 import json

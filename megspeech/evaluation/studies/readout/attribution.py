@@ -7,7 +7,7 @@ An attribution is gradient times input against a zero window in raw MEG space, s
 the model's evidence sits, not that the sensor causes the word. Ablation drops are in nats of the label's
 log-probability, the model's own, before any logit adjustment.
 
-    uv run python -m megspeech.evaluation.studies.readout.attribution <run>
+    uv run python -m megspeech.evaluation.studies readout.attribution <run>
 """
 
 import argparse

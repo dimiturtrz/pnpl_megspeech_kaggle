@@ -9,7 +9,7 @@ confusion falls under five times the uniform rate); whether confusion tracks wor
 events'
 forced alignment, mean gap to the next onset); and where the real model's top-10 gain over timing lands.
 
-    uv run python -m megspeech.evaluation.studies.errors.confusion sent40-ioi-ema9998-s0 --device cpu
+    uv run python -m megspeech.evaluation.studies errors.confusion sent40-ioi-ema9998-s0 --device cpu
 """
 
 import argparse

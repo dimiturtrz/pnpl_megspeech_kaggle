@@ -6,8 +6,8 @@ representational similarity of the two is the Spearman correlation of their off-
 bootstrap over words for its interval and a Mantel permutation of the teacher's word labels for its one-sided p. CPU
 only.
 
-    uv run --no-sync python -m megspeech.evaluation.studies.teachers.rsa --run ema-cd25-masc27w-s1
-    PYTHONPATH=<transformers>=5.19 uv run --no-sync python -m megspeech.evaluation.studies.teachers.rsa --write-gemma
+    uv run --no-sync python -m megspeech.evaluation.studies teachers.rsa --run ema-cd25-masc27w-s1
+    PYTHONPATH=<transformers>=5.19 uv run --no-sync python -m megspeech.evaluation.studies teachers.rsa --write-gemma
 """
 
 import argparse

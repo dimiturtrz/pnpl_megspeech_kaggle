@@ -16,7 +16,7 @@ interval's low end above 0, and the same sign on the local test.
 The lone arm grades the words alone in their span (the Kaggle test's isolated rows, which take the word head) and mixes
 the context head into the word head there.
 
-    uv run python -m megspeech.evaluation.studies.errors.crowding m11xsp7hub6d2v3
+    uv run python -m megspeech.evaluation.studies errors.crowding m11xsp7hub6d2v3
 """
 
 import argparse

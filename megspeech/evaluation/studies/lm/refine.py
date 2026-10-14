@@ -19,7 +19,7 @@ to the local test exactly as `lmsoft` does. `oracle` refiners (`Oracle`) see eve
 `lmbound`'s gain. `rebased` grades the same refiners on the out-of-fold models' own full-data base (`peerbase-s0`) on
 validation, the base the refiner trained under.
 
-    uv run python -m megspeech.evaluation.studies.lm.refine m11xsp7hub6d2v3 --peer peerbase-s0
+    uv run python -m megspeech.evaluation.studies lm.refine m11xsp7hub6d2v3 --peer peerbase-s0
 """
 
 import argparse

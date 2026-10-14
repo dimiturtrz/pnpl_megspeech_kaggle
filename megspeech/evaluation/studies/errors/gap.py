@@ -7,7 +7,7 @@ conditions. `real` reads the data as it is; `meg-shuffled` gives every word anot
 label while the slots keep their onsets (`Split.ordered`). If the order shuffle costs fit far more than validation,
 the model leans on training sentence text; if the MEG shuffle does, on training MEG.
 
-    uv run python -m megspeech.evaluation.studies.errors.gap sent40-ioi-ema9998-s0 --grouping kaggle --seed 0 [--k 1]
+    uv run python -m megspeech.evaluation.studies errors.gap sent40-ioi-ema9998-s0 --grouping kaggle --seed 0 [--k 1]
 """
 
 import argparse

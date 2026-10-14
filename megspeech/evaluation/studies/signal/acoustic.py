@@ -3,7 +3,7 @@ between its prediction over each validation word's window and the true envelope 
 have an envelope file (`megspeech.objective.targets.loudness`). r > 0 on windows it never trained on is the gate;
 the mean over windows scores the envelope's shape within a window, the pooled r its level across them.
 
-    uv run python -m megspeech.evaluation.studies.signal.acoustic acoustic-s0
+    uv run python -m megspeech.evaluation.studies signal.acoustic acoustic-s0
 """
 
 import argparse

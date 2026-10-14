@@ -6,7 +6,7 @@ the halves swap. `shrunk[m, l] = (n_l * s[m, l] + k * s[m]) / (n_l + k)` shrinks
 log-probability on label `l` toward its overall one. `(k, beta)` is chosen on the fit half alone, by a second cross-fit
 inside it. Both blends are scored by the ruler's own metric (macro balanced top-10 at the macro's best adjustment).
 
-    uv run python -m megspeech.evaluation.studies.ensemble.labelweights NAME [NAME ...] --device cpu --aligned
+    uv run python -m megspeech.evaluation.studies ensemble.labelweights NAME [NAME ...] --device cpu --aligned
 """
 
 import argparse

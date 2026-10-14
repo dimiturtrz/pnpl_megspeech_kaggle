@@ -5,7 +5,7 @@ probability mix is `Mixing.LINEAR` over `sum_j w_ij p_j`. Pools are Kaggle-sized
 the whole domain); every knob is selected on val pools alone, and the local test is read at that setting and,
 labelled as an oracle, at its own best.
 
-    uv run python -m megspeech.evaluation.studies.pool.smooth ema-cd25-xsp10sem05-ac05x-s1-ft-s1 --device cpu
+    uv run python -m megspeech.evaluation.studies pool.smooth ema-cd25-xsp10sem05-ac05x-s1-ft-s1 --device cpu
 """
 
 import argparse

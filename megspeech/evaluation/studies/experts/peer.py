@@ -5,7 +5,7 @@ The base's out-of-fold features come from cross-fit fold models (`--folds`, each
 on), the booster trains on those rows alone, and the official validation split scores `base + booster` with the
 official ruler `megspeech.submission` reports. The booster's epoch count is picked on the last fold's rows.
 
-    uv run python -m megspeech.evaluation.studies.experts.peer --folds kf5t-f0 kf5t-f1 kf5t-f2 kf5t-f3 kf5t-f4 \\
+    uv run python -m megspeech.evaluation.studies experts.peer --folds kf5t-f0 kf5t-f1 kf5t-f2 kf5t-f3 kf5t-f4 \\
         --base peerbase-s0
 """
 

@@ -1,6 +1,6 @@
 # Deep: a span refiner over word-head beliefs gains only when the neighbours are true (2026-10-10)
 
-Study: `python -m megspeech.evaluation.studies.lm.refine` (dev `c568c18`). Issue: megspeech-7gf.145.1. Single seed.
+Study: `python -m megspeech.evaluation.studies lm.refine` (dev `c568c18`). Issue: megspeech-7gf.145.1. Single seed.
 
 ## Setup
 - A small transformer reads a span's word beliefs (50-way) and re-predicts each word.

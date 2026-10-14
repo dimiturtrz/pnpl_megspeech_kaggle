@@ -11,7 +11,7 @@ A span is a sentence as the model's grouping cuts it: a sentence longer than nin
 from the unseen-span (`novel`) words of `probs.pt`, the ones every score counts. The pooled row permutes within domain
 and label, never across domains, so a domain's own difficulty is not read as a sentence effect.
 
-    uv run python -m megspeech.evaluation.studies.signal.overdispersion <run> --section local-test --perms 2000
+    uv run python -m megspeech.evaluation.studies signal.overdispersion <run> --section local-test --perms 2000
 """
 
 import argparse

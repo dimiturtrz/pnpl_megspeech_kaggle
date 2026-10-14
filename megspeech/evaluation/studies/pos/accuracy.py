@@ -2,7 +2,7 @@
 speech, scored on the words whose in-context tag is known, with `syntax`'s probes' scores (all, in-50, outside, per
 domain) and per-tag recall.
 
-    uv run python -m megspeech.evaluation.studies.pos.accuracy posfac-s0
+    uv run python -m megspeech.evaluation.studies pos.accuracy posfac-s0
 """
 
 import argparse

@@ -10,7 +10,7 @@ prior the finish already has. The fused finish is `context - tau * log_prior + l
 halves against the tau-only finish exactly as `crowding` does, then refit on all of validation and reported on the
 local test. An instrument: the `backoff` or `drop` arm reaching +0.03 keeps LM fusion alive.
 
-    uv run python -m megspeech.evaluation.studies.lm.bound m11xsp7hub6d2v3
+    uv run python -m megspeech.evaluation.studies lm.bound m11xsp7hub6d2v3
 """
 
 import argparse

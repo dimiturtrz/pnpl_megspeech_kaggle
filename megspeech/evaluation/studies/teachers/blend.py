@@ -7,7 +7,7 @@ type-level word vectors over subject 0's training words. A word-frequency contro
 between two words' training counts. Spearman over the upper triangle, a bootstrap over words for the interval. CPU
 only; no model is run.
 
-    CUDA_VISIBLE_DEVICES= uv run --no-sync python -m megspeech.evaluation.studies.teachers.blend m11wd
+    CUDA_VISIBLE_DEVICES= uv run --no-sync python -m megspeech.evaluation.studies teachers.blend m11wd
 """
 
 import argparse

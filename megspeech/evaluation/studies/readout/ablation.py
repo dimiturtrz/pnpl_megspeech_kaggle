@@ -3,7 +3,7 @@ silenced (its own encoder, "primary", and every branch), tau fixed at the all-on
 
 Scored as `ioi` scores: the same domains, tau and macro on both partitions.
 
-    uv run python -m megspeech.evaluation.studies.readout.ablation sent40-fused-s0 --grouping kaggle --partition test
+    uv run python -m megspeech.evaluation.studies readout.ablation sent40-fused-s0 --grouping kaggle --partition test
 """
 
 import argparse

@@ -6,7 +6,7 @@ A teacher whose canonical correlations stay inside the shuffle null past its fir
 MEG predicts and a thousand it cannot; the probe's balanced accuracy at 10 candidates is the same teacher's own
 50-word ceiling and the MEG embedding's the reference it is read against.
 
-    uv run python -m megspeech.evaluation.studies.teachers.alignment --run sent40-ioi-ema9998-s0
+    uv run python -m megspeech.evaluation.studies teachers.alignment --run sent40-ioi-ema9998-s0
 """
 
 import argparse

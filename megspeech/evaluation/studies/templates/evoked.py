@@ -14,7 +14,7 @@ own mean and std, is averaged per word, pooled and per dataset (`DataConfig.stra
    words' mean log duration (onset gap to the next word) difference, their first phonemes' Hamming distance and their
    t5 prototypes' cosine distance.
 
-    uv run python -m megspeech.evaluation.studies.templates.evoked
+    uv run python -m megspeech.evaluation.studies templates.evoked
 """
 
 import argparse

@@ -8,7 +8,7 @@ full-data model. The booster of `megspeech.evaluation.studies.experts.boosted` t
 and the experts' features of the word and its neighbours, and a ridge asks whether the features predict the base's
 residual on rows no model trained on.
 
-    uv run python -m megspeech.evaluation.studies.experts.gates --folds kf5t-f0 ... kf5t-f4 --base peerbase-s0 \\
+    uv run python -m megspeech.evaluation.studies experts.gates --folds kf5t-f0 ... kf5t-f4 --base peerbase-s0 \\
         --experts textword textsent audword audsent
 """
 

@@ -17,7 +17,7 @@ its span has only the empty context, so its channel is exactly 0.
 Arms are cross-fit on validation halves and transferred to the local test as `lmbound`'s are. The Kaggle rows' channels
 and the all-validation fit are saved to `KAGGLE_OUT`, so a later finish step needs no GPU rerun.
 
-    uv run python -m megspeech.evaluation.studies.lm.soft m11xsp7hub6d2v3
+    uv run python -m megspeech.evaluation.studies lm.soft m11xsp7hub6d2v3
 """
 
 import argparse

@@ -9,7 +9,7 @@ model; its `k` nearest keys by cosine vote `softmax(cos / temperature)` per labe
 (prototype) readout of the same datastores is the control. Every knob is selected on val; the local test is read once,
 at the selected setting.
 
-    uv run python -m megspeech.evaluation.studies.pool.knn ema-cd25-xsp10sem05-ac05x-s1-ft-s1 \\
+    uv run python -m megspeech.evaluation.studies pool.knn ema-cd25-xsp10sem05-ac05x-s1-ft-s1 \\
         --folds kf5ac05-f0-ft kf5ac05-f1-ft kf5ac05-f2-ft kf5ac05-f3-ft kf5ac05-f4-ft [--grouping kaggle]
 """
 

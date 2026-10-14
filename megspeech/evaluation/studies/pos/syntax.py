@@ -5,7 +5,7 @@ Timing is what a test row carries besides MEG: each word's onset beside its neig
 timing alone predicts part of speech; MEG counts only for what it adds beyond it. The classes are
 `megspeech.data.labels.context_tags`', a training target: no holdout text is read.
 
-    uv run python -m megspeech.evaluation.studies.pos.syntax sent40-ioi-ema9998-s0
+    uv run python -m megspeech.evaluation.studies pos.syntax sent40-ioi-ema9998-s0
 """
 
 import argparse

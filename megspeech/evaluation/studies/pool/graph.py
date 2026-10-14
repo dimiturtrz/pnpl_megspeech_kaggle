@@ -6,7 +6,7 @@ needs both rows to list each other), two views (embedding and posterior cosine, 
 which never trained on a scored session, vote on who the neighbours are; the scores mixed stay the base's). Settings
 are chosen on VAL pools, the local test reports; then tau is re-selected on VAL under each arm's chosen setting.
 
-    uv run python -m megspeech.evaluation.studies.pool.graph <base> [--folds kf5ac05-f0-ft ...]
+    uv run python -m megspeech.evaluation.studies pool.graph <base> [--folds kf5ac05-f0-ft ...]
 """
 
 import argparse

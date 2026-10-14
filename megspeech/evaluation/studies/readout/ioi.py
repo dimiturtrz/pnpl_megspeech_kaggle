@@ -4,7 +4,7 @@
 each span's own gaps shuffled within it, gaps drawn from the Kaggle test's pool, or every gap that pool's median. The
 model is scored on the replaced onsets with MEG and labels untouched (megspeech-7gf.105).
 
-    uv run python -m megspeech.evaluation.studies.readout.ioi sent40-ioi-ema9998-s0 --grouping kaggle
+    uv run python -m megspeech.evaluation.studies readout.ioi sent40-ioi-ema9998-s0 --grouping kaggle
 """
 
 import argparse

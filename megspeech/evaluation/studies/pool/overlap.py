@@ -5,7 +5,7 @@ A run's words are matched by `Text`; if two runs are one recording of one text, 
 by one constant shift. A Kaggle test sentence is keyed by its word-onset vector: two archives holding one sentence hold
 the same onsets.
 
-    uv run python -m megspeech.evaluation.studies.pool.overlap
+    uv run python -m megspeech.evaluation.studies pool.overlap
 """
 
 import argparse

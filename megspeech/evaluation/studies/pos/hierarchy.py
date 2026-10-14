@@ -14,7 +14,7 @@ fusion runs on the CPU. The setting of each arm (`lam`, the threshold) is fit le
 validation domains: chosen on two, scored on the third, the macro read as the official scorer reads it. The score at
 every grid setting over all domains is a diagnostic fit on validation.
 
-    uv run python -m megspeech.evaluation.studies.pos.hierarchy sent40-ioi-ema9998-s0
+    uv run python -m megspeech.evaluation.studies pos.hierarchy sent40-ioi-ema9998-s0
 """
 
 import argparse

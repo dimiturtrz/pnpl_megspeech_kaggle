@@ -6,7 +6,7 @@ others, so `w0 = inf` is subject 0 alone. A subject's reliability is its balance
 Sherlock1 session-12 run, the text of subject 0's test run, which a subject-0 model never trained on (a model trained
 on other subjects' runs trained on it, so its reliabilities are optimistic).
 
-    uv run python -m megspeech.evaluation.studies.pool.subjects sent40-s7 [--grouping ...]
+    uv run python -m megspeech.evaluation.studies pool.subjects sent40-s7 [--grouping ...]
 """
 
 import argparse

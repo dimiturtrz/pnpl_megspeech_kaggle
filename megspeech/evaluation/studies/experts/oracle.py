@@ -2,7 +2,7 @@
 word's mean teacher vector, so it is effectively the word's label. An expert trained on it must read the 50 words off
 MEG about as well as the base does, or the expert pipeline, not the teacher, is what fails.
 
-    uv run python -m megspeech.evaluation.studies.experts.oracle gpt2-large
+    uv run python -m megspeech.evaluation.studies experts.oracle gpt2-large
 """
 
 import argparse

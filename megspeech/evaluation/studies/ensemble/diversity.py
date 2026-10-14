@@ -13,7 +13,7 @@ scheme (leading name token) different knob (`KNOB`), different scheme (`SCHEME`)
 
 Greedy forward selection picks on validation only; the test score beside each step is report-only.
 
-    uv run python -m megspeech.evaluation.studies.ensemble.diversity ema-cdrop25-s0 ema-cdrop25-s1 --grouping kaggle
+    uv run python -m megspeech.evaluation.studies ensemble.diversity ema-cdrop25-s0 ema-cdrop25-s1 --grouping kaggle
 """
 
 import argparse

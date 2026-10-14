@@ -11,8 +11,8 @@ standard error, and the between over within class variance of each feature again
 `(V - 1) / (N - V)`. A band whose grand mean is flat and whose variance ratio sits at chance holds no word-locked
 power response at this resolution, whatever the classifier does.
 
-    uv run python -m megspeech.evaluation.studies.signal.envelope --bands 30-45 55-95 105-120 --joint
-    uv run python -m megspeech.evaluation.studies.signal.envelope --bands 4-8 8-13 13-25
+    uv run python -m megspeech.evaluation.studies signal.envelope --bands 30-45 55-95 105-120 --joint
+    uv run python -m megspeech.evaluation.studies signal.envelope --bands 4-8 8-13 13-25
 """
 
 import argparse

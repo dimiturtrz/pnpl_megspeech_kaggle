@@ -1,7 +1,7 @@
 """Each sensor's word-locked evoked field on subject 0's training words, and whether its early (M50-M100) peak sits
 over the temporal lobes, as the acoustic expert's spatial prior assumes (megspeech-7gf.77).
 
-    uv run python -m megspeech.evaluation.studies.signal.topography
+    uv run python -m megspeech.evaluation.studies signal.topography
 """
 
 import logging

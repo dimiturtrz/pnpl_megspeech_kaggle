@@ -3,7 +3,7 @@ weight times the expert's log-probabilities from its span's onsets, on a grid of
 out (megspeech-r9m). The expert reads only onsets, which the Kaggle test gives, so a fused submission needs no rules
 decision beyond the model's own.
 
-    uv run python -m megspeech.evaluation.studies.fusion.time ema-cd25-xsp10sem05-ac05x-s1-ft-s1 --expert zz-tseq-1.0
+    uv run python -m megspeech.evaluation.studies fusion.time ema-cd25-xsp10sem05-ac05x-s1-ft-s1 --expert zz-tseq-1.0
 """
 
 import argparse

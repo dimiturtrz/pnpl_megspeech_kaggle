@@ -8,7 +8,7 @@ part of speech; the most frequent top-1 confusions and whether they stay inside 
 phoneme beyond what the predicted marginal alone would give; and the hit rate by position in the span and
 inter-onset interval, both raw and as an excess over each word's own rate.
 
-    uv run python -m megspeech.evaluation.studies.errors.perword m11xsp7hub6d2v3
+    uv run python -m megspeech.evaluation.studies errors.perword m11xsp7hub6d2v3
 """
 
 import argparse
