@@ -2,7 +2,7 @@
 (`megspeech.objective.auxiliary.supcon`) over the embeddings the term's tap names, in which a word's positives are
 every other labelled word of the batch with its 50-way label from a different sentence, and its negatives every
 labelled word of another label. It pulls what the closed-vocabulary cross-entropy already pulls toward one class
-weight into neighbourhoods a kNN readout finds (`megspeech.evaluation.studies.knnreadout`), invariant to the context
+weight into neighbourhoods a kNN readout finds (`megspeech.evaluation.studies.pool.knn`), invariant to the context
 and timing that tell two hearings apart.
 
 A pair in one sentence is neither positive nor negative: a sentence's words are ~0.25 s apart, so their 1 s windows

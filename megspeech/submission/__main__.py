@@ -19,9 +19,9 @@ from megspeech.device import Device
 from megspeech.evaluation.group import Group
 from megspeech.evaluation.labelweighted import Shrinkage
 from megspeech.evaluation.loading import Loader
-from megspeech.evaluation.memorisation import Memorisation
 from megspeech.evaluation.rulers.localtest import LocalTest
 from megspeech.evaluation.scoring.config import Scoring
+from megspeech.evaluation.studies.readout.memorisation import Memorisation
 from megspeech.submission.labelweighted import LabelWeighted
 from megspeech.submission.report import SCORING, Recorded, Submission
 

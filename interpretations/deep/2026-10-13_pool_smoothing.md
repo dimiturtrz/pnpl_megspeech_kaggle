@@ -1,7 +1,7 @@
 # Transductive pool smoothing — the ceiling is real, the neighbours are not pure enough
 
-Beads: megspeech-d6r.8 (closed), continues as megspeech-7gf.86. Code: `megspeech.evaluation.studies.poolsmooth`
-(rounds 1–2), `megspeech.evaluation.studies.poolgraph` (round 3), `poolconfuser`.
+Beads: megspeech-d6r.8 (closed), continues as megspeech-7gf.86. Code: `megspeech.evaluation.studies.pool.smooth`
+(rounds 1–2), `megspeech.evaluation.studies.pool.graph` (round 3), `poolconfuser`.
 Base: `ema-cd25-xsp10sem05-ac05x-s1-ft-s1`, reproduced exactly (VAL .6386, local test .7088).
 
 ## Question

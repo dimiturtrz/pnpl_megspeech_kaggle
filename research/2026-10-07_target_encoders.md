@@ -123,7 +123,7 @@ Expected size [I]:
    - gpt2-large-ctx already reached 24 components vs t5's 14 (held-out), the most of any word-level teacher.
    - **Blocked by the same owner gate as gpt2-large.** The owner must lift that gate first; this ranks it, it does not authorise it.
 
-### How to rank them cheaply with the existing proxy (`megspeech.evaluation.studies.alignment`)
+### How to rank them cheaply with the existing proxy (`megspeech.evaluation.studies.teachers.alignment`)
 - **What it computes:** ridge-CCA (ridge 0.1 × mean eigenvalue) between the trained encoder's 512-d `Tap.WORD` embedding and each teacher's per-word targets.
   - Fit on train words, read on val.
   - Counts canonical components above a 200-shuffle null, per component and family-wise.
