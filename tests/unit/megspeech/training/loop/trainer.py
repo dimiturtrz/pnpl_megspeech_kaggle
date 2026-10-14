@@ -43,7 +43,7 @@ from megspeech.training.regularise.anchor import Anchor
 from megspeech.training.regularise.augment import Augment
 from megspeech.training.regularise.pull import Pull
 from megspeech.training.regularise.rightcut import RightCut, Whole
-from megspeech.training.regularise.sharpness import Flat, Sharp
+from megspeech.training.regularise.sharpness import Adaptive, Flat, Sharp
 from megspeech.training.regularise.stretch import Stretch
 from megspeech.training.sampling.curriculum import Annealed, Natural, Robust, Schedule
 from megspeech.training.sampling.pairing import Pairing, Unpaired
@@ -235,6 +235,8 @@ def test_state() -> None:
     assert type(state.sharpness) is Flat
     sharp = trainer(RunConfig(optim=OptimConfig(lr=0.01, sharpness=0.05))).state(net, split(), 10)
     assert sharp.sharpness == Sharp(0.05)
+    asam = RunConfig(optim=OptimConfig(lr=0.01, sharpness=0.5, adaptive=True))
+    assert trainer(asam).state(net, split(), 10).sharpness == Adaptive(0.5)
 
 
 def test_rows() -> None:

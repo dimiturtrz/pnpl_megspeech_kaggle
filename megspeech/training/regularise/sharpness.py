@@ -13,6 +13,8 @@ from torch import Tensor, nn
 
 EPS = 1e-12
 """Keeps the ascent finite when every gradient is zero."""
+ETA = 0.01
+"""ASAM's floor on a weight's stretch, so a zero weight still moves (Kwon et al. 2021, arXiv 2102.11600, eta)."""
 
 
 class Flat:
@@ -34,20 +36,26 @@ class Sharp(Flat):
     rho: float
 
     @classmethod
-    def of(cls, rho: float) -> Flat:
-        """Sharpness-aware at radius `rho`; plain descent when it is 0."""
-        return cls(rho) if rho else Flat()
+    def of(cls, rho: float, *, adaptive: bool = False) -> Flat:
+        """Sharpness-aware at radius `rho`, scale-adaptive (ASAM) when `adaptive`; plain descent when it is 0."""
+        kind = Adaptive if adaptive else cls
+        return kind(rho) if rho else Flat()
+
+    def stretch(self, p: nn.Parameter, grad: Float[Tensor, "*shape"]) -> Float[Tensor, "*shape"]:
+        """The ball's metric at `p`: SAM's is the identity."""
+        del p
+        return grad
 
     @override
     def backward(
         self, value: Float[Tensor, ""], again: Callable[[], Float[Tensor, ""]], params: tuple[nn.Parameter, ...]
     ) -> None:
         value.backward()
-        graded = [(p, p.grad) for p in params if p.grad is not None]
+        graded = [(p, self.stretch(p, p.grad)) for p in params if p.grad is not None]
         norm = torch.linalg.vector_norm(torch.stack([torch.linalg.vector_norm(grad) for _, grad in graded]))
         scale = self.rho / (norm + EPS)
         with torch.no_grad():
-            ascent = [(p, grad * scale) for p, grad in graded]
+            ascent = [(p, self.stretch(p, grad) * scale) for p, grad in graded]
             for p, step in ascent:
                 p.add_(step)
                 p.grad = None
@@ -55,3 +63,12 @@ class Sharp(Flat):
         with torch.no_grad():
             for p, step in ascent:
                 p.sub_(step)
+
+
+class Adaptive(Sharp):
+    """ASAM (Kwon et al. 2021): the ball stretches with each weight's magnitude, so its radius is scale-invariant and
+    a normalised net's large and small weights are perturbed alike; `rho` is relative, ~10x SAM's."""
+
+    @override
+    def stretch(self, p: nn.Parameter, grad: Float[Tensor, "*shape"]) -> Float[Tensor, "*shape"]:
+        return (p.detach().abs() + ETA) * grad

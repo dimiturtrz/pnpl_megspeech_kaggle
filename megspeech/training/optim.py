@@ -70,6 +70,8 @@ class OptimConfig:
     sharpness: float = 0.0
     """SAM radius (`megspeech.training.regularise.sharpness`): each step's gradient is taken `sharpness` along the
     normalised gradient, at twice a step's compute; 0 descends plainly."""
+    adaptive: bool = False
+    """Make the `sharpness` ball scale-adaptive (ASAM): each weight is perturbed in proportion to its magnitude."""
     compiled: bool = True
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
     pretrained: float = 0.1

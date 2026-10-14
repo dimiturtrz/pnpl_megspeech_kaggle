@@ -299,7 +299,7 @@ class Trainer:
             GroupAverage.of(train, self.config.augment.average, self.config.augment.average_chance),
             GradNorms(tuple(net.encoder())),
             RightCut.of(train, self.config.augment.right_cut, self.config.data.rate),
-            Sharp.of(optim.sharpness),
+            Sharp.of(optim.sharpness, adaptive=optim.adaptive),
         )
 
     def rows(self, train: Split) -> int:
