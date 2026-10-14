@@ -15,7 +15,7 @@ from core.tree import Tree
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.corpus import Corpus
 from megspeech.device import Device
-from megspeech.evaluation.exported import ExportedModel
+from megspeech.evaluation.loaded.exported import ExportedModel
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.submission.report import Report
 from megspeech.submission.writer import KaggleWriter

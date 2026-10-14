@@ -8,10 +8,10 @@ from core.paths import DataRoot
 from megspeech.data.batching.split import FEATURES
 from megspeech.data.config import DataConfig, Val
 from megspeech.data.raw.runs import Partition
-from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.text import RULER
 from megspeech.model.input.subjects import Reading
-from tests.unit.megspeech.evaluation.loaded import CPU, NAMES, POOLED, SPOKEN, TESTED, runs
+from tests.unit.megspeech.evaluation.loaded.model import CPU, NAMES, POOLED, SPOKEN, TESTED, runs
 
 PAST = torch.iinfo(torch.int64).max
 

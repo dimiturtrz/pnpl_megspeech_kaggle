@@ -6,10 +6,10 @@ import pytest
 
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.evaluation.labelweighted import Shrinkage
+from megspeech.evaluation.loaded.labelweighted import Shrinkage
 from megspeech.submission.labelweighted import LabelWeighted
 from megspeech.submission.report import SUBMISSIONS
-from tests.unit.megspeech.evaluation.labelweighted import TEST_ROWS, pool
+from tests.unit.megspeech.evaluation.loaded.labelweighted import TEST_ROWS, pool
 
 
 def test_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:

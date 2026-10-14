@@ -14,7 +14,7 @@ from megspeech.evaluation.scoring.evaluator import Calibration, Evaluator
 from megspeech.evaluation.scoring.probabilities import PROBS, Probabilities
 from megspeech.evaluation.studies.uncertainty import POOLED, Decomposition, Members, Reading, Saved, Tally
 from megspeech.evaluation.text import RULER
-from tests.unit.megspeech.evaluation.loaded import CPU, SPOKEN, Favourite, loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import CPU, SPOKEN, Favourite, loaded, runs
 
 
 class Reversed(Favourite):

@@ -10,15 +10,15 @@ from megspeech.data import heard as heard_module
 from megspeech.data.cache.alignment import AS_RECORDED, Geometry
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.evaluation import reader as reader_module
-from megspeech.evaluation.blended import Blended
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.loaded import reader as reader_module
+from megspeech.evaluation.loaded.blended import Blended
+from megspeech.evaluation.loaded.ensemble import Loader
+from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.scoring import config as module
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.input.subjects import Reading
-from tests.unit.megspeech.evaluation.loaded import CPU, Favourite
+from tests.unit.megspeech.evaluation.loaded.model import CPU, Favourite
 
 
 def members(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selections: dict[str, int]) -> None:

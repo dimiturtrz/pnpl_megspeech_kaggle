@@ -11,7 +11,7 @@ from megspeech.data.batching.split import KAGGLE_FEATURES, Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.corpus import Corpus
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.scoring.probabilities import Probabilities
 from megspeech.evaluation.scoring.score import Head
 

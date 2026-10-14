@@ -37,7 +37,7 @@ from megspeech.data.labels.vocabulary import PRIMARY, Vocabulary
 from megspeech.data.raw.runs import Column, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Placed
-from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.scoring.probabilities import PROBS, SECTIONS, Probabilities
 from megspeech.evaluation.studies.crowding import TAUS, TEST, VAL, Arm, Finish, Rows, Section
 from megspeech.evaluation.studies.crowding import Study as Crossfit

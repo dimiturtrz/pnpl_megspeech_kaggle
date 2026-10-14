@@ -5,10 +5,10 @@ import torch
 
 from core.paths import DataRoot
 from megspeech.data.cache.alignment import AS_RECORDED
-from megspeech.evaluation.group import Group
+from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.scoring.config import Scoring
-from tests.unit.megspeech.evaluation.loaded import CPU
-from tests.unit.megspeech.evaluation.loading import members
+from tests.unit.megspeech.evaluation.loaded.ensemble import members
+from tests.unit.megspeech.evaluation.loaded.model import CPU
 
 
 def test_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -19,9 +19,9 @@ from core.paths import DataRoot
 from core.tree import Tree
 from megspeech.data.raw.runs import Run
 from megspeech.device import Device
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.loaded.ensemble import Loader
+from megspeech.evaluation.loaded.group import Group
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import ADJUSTMENTS, Score

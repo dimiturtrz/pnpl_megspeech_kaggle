@@ -38,7 +38,7 @@ from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import DEEP, Column, Run
 from megspeech.device import Device
-from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head, Score, SelectionConfig
 from megspeech.evaluation.studies.syntax import FLOOR, Embedded, Probe, Table, Timing

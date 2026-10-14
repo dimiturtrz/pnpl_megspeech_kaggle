@@ -27,9 +27,9 @@ from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import DEEP, Partition, Run
 from megspeech.device import Device
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.loaded.ensemble import Loader
+from megspeech.evaluation.loaded.group import Group
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.metric.ruler import Ruler
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.ensemble import Ensemble

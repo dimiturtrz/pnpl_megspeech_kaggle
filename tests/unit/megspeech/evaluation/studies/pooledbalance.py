@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.metric.balance import Sinkhorn
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.studies.pooledbalance import GROUPS, Parts, PooledBalance, Unseen

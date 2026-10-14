@@ -16,9 +16,9 @@ from core.tree import Tree
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.labelweighted import Shrinkage
-from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.loaded.ensemble import Loader
+from megspeech.evaluation.loaded.group import Group
+from megspeech.evaluation.loaded.labelweighted import Shrinkage
 from megspeech.evaluation.memorisation import Memorisation
 from megspeech.evaluation.rulers.localtest import LocalTest
 from megspeech.evaluation.scoring.config import Scoring

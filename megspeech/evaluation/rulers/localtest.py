@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.evaluation.exported import ExportedModel
+from megspeech.evaluation.loaded.exported import ExportedModel
 from megspeech.evaluation.metric.ruler import Graded, Ruler
 from megspeech.evaluation.scoring.probabilities import SECTIONS
 

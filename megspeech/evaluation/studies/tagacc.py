@@ -18,7 +18,7 @@ from megspeech.data.labels.context_tags import ContextTags
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.raw.runs import Column, Run
 from megspeech.device import Device
-from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.studies.syntax import Embedded, Probed
 
 LOG = logging.getLogger(__name__)

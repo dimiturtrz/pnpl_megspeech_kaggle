@@ -31,7 +31,7 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import DEEP, Column, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
-from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.studies.grammar import Grammar
 from megspeech.evaluation.studies.logistic import TorchLogistic
 from megspeech.model.auxiliary import Tap

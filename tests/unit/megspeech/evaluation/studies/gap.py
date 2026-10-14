@@ -11,7 +11,7 @@ from megspeech.data.batching.windows import Windows
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Run
 from megspeech.data.spans.spans import Spans
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.scoring.evaluator import Calibration, Evaluator
 from megspeech.evaluation.scoring.score import Head, Score
 from megspeech.evaluation.studies.gap import Condition, Grid, Locator, Subset

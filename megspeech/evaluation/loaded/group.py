@@ -9,8 +9,8 @@ from core.paths import DataRoot
 from megspeech.data.cache.alignment import Geometry
 from megspeech.data.config import DataConfig
 from megspeech.data.heard import Heard
-from megspeech.evaluation.exported import ExportedModel
-from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.loaded.exported import ExportedModel
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import SelectionConfig

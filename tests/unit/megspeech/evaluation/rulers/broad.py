@@ -6,7 +6,7 @@ import pytest
 
 from megspeech.evaluation.rulers import broad as module
 from megspeech.evaluation.rulers.broad import BroadRuler
-from tests.unit.megspeech.evaluation.loaded import SPOKEN, loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import SPOKEN, loaded, runs
 
 
 def test_select(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:

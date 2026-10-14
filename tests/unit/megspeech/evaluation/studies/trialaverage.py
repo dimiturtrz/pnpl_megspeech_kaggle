@@ -8,7 +8,7 @@ from torch import nn
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.evaluation.studies.trialaverage import TRIALS, Averaging, Ceiling, Centroids, Encoder
 from megspeech.evaluation.text import RULER
-from tests.unit.megspeech.evaluation.loaded import SPOKEN, loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import SPOKEN, loaded, runs
 
 WIDTH = 4
 

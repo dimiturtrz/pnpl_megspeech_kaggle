@@ -19,9 +19,9 @@ from core.tree import Tree
 from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loaded import LoadedModel
-from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.loaded.ensemble import Loader
+from megspeech.evaluation.loaded.group import Group
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.fusion import Fusion
 from megspeech.model.input.subjects import Fallback, Unseen

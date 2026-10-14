@@ -25,7 +25,7 @@ from core.paths import DataRoot
 from megspeech.data.config import DataConfig
 from megspeech.data.raw.runs import DEEP, Column, Partition, Run
 from megspeech.device import Device
-from megspeech.evaluation.reader import Reader
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.studies.expertcheck import Probe
 from megspeech.evaluation.studies.syntax import Embedded
 from megspeech.model.auxiliary import Tap

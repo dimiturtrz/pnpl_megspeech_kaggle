@@ -1,9 +1,9 @@
 """A trained ensemble loaded for scoring: the model, prior and evaluator that result."""
 
 from megspeech.data.config import DataConfig
-from megspeech.evaluation.blended import Blended
-from megspeech.evaluation.exported import ExportedModel
-from megspeech.evaluation.group import Group
+from megspeech.evaluation.loaded.blended import Blended
+from megspeech.evaluation.loaded.exported import ExportedModel
+from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.score import SelectionConfig
 

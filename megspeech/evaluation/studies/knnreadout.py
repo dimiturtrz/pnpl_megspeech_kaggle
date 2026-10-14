@@ -34,11 +34,11 @@ from megspeech.data.config import DataConfig
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device
-from megspeech.evaluation.exported import ExportedModel
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.loaded.ensemble import Loader
+from megspeech.evaluation.loaded.exported import ExportedModel
+from megspeech.evaluation.loaded.group import Group
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.metric.ruler import Graded, Ruler
-from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Calibration
 from megspeech.evaluation.scoring.score import ADJUSTMENTS

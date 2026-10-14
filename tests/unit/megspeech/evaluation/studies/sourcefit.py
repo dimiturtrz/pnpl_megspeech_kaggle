@@ -4,7 +4,7 @@ from typing import cast
 import pytest
 import torch
 
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.studies.gap import Locator
 from megspeech.evaluation.studies.sourcefit import UNSEEN_SUBJECT, Ablated, Source, SourceFit, Variant
 from megspeech.model.context.timing import KAGGLE_GAP

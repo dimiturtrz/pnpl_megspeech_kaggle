@@ -34,8 +34,8 @@ from megspeech.data.config import DataConfig, Val
 from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.raw.runs import Partition, Run
 from megspeech.device import Device
+from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.metric.ruler import Ruler
-from megspeech.evaluation.reader import Reader
 from megspeech.evaluation.studies.templatecontent import PERMUTATIONS, Durations, Rsa
 from megspeech.evaluation.studies.templatemeans import FLOOR, Reliability, Scale, Sums, Templates
 from megspeech.evaluation.studies.timing import Readings

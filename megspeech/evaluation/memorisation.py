@@ -21,7 +21,7 @@ from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE, Vocabulary
 from megspeech.data.raw.runs import Column, Run
 from megspeech.data.spans.spans import PAD
-from megspeech.evaluation.loaded import LoadedModel
+from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.metric.ruler import Ruler
 
 LOG = logging.getLogger(__name__)

@@ -6,7 +6,7 @@ import pytest
 from megspeech.evaluation.rulers import deep as module
 from megspeech.evaluation.rulers.deep import DeepRuler
 from megspeech.evaluation.text import RULER
-from tests.unit.megspeech.evaluation.loaded import loaded, runs
+from tests.unit.megspeech.evaluation.loaded.model import loaded, runs
 
 
 def test_select(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:

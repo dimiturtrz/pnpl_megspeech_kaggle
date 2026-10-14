@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from megspeech.data.cache.kaggle import Track
-from megspeech.evaluation.exported import ExportedModel
+from megspeech.evaluation.loaded.exported import ExportedModel
 
 
 @dataclass(frozen=True)

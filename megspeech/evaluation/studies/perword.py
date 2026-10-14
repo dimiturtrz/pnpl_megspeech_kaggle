@@ -36,8 +36,8 @@ from megspeech.data.raw.events import Event, Events, Kind
 from megspeech.data.raw.runs import Column, Partition, Run
 from megspeech.data.spans.spans import PAD
 from megspeech.device import Device, Placed
-from megspeech.evaluation.group import Group
-from megspeech.evaluation.loading import Loader
+from megspeech.evaluation.loaded.ensemble import Loader
+from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.metric.ruler import TOP
 from megspeech.evaluation.studies.confusion import Lengths
 from megspeech.evaluation.studies.crowding import TEST, VAL, Finishes, Saved
