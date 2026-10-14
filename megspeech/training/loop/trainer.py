@@ -208,13 +208,15 @@ class Trainer:
         anchor: Anchor,
         encoder: tuple[nn.Parameter, ...] = (),
         branches: tuple[list[nn.Parameter], ...] = (),
+        subjects: tuple[nn.Parameter, ...] = (),
     ) -> torch.optim.AdamW:
         """AdamW as one fused kernel on the GPU; per-parameter launches were most of a step's device time. Each of the
         anchor's groups splits off its `encoder` parameters at `encoder_lr` times the rate, and each fused branch's at
-        its `fused_lr`'s."""
+        its `fused_lr`'s; the `subjects` layer's at `subject_lr` times the encoder's."""
         optim = self.config.optim
         fused = self.evaluator.device.type == Device.CUDA
         shares = {id(p): optim.transfer.encoder_lr for p in encoder}
+        shares |= {id(p): optim.transfer.encoder_lr * optim.transfer.subject_lr for p in subjects}
         for params, share in zip(branches, optim.fused_lr or (1.0,) * len(branches), strict=True):
             shares |= {id(p): share for p in params}
         kept: list[dict[str, object]] = []
@@ -286,7 +288,9 @@ class Trainer:
         optim = self.config.optim
         model = self.auxiliary.trained(net, self.compiled)
         anchor = Anchor.of(optim.anchor, optim.lr, total, Unseen(optim.anchor_toward))
-        optimizer = self.optimizer(model, anchor, tuple(net.encoder()), net.fusion.encoders())
+        optimizer = self.optimizer(
+            model, anchor, tuple(net.encoder()), net.fusion.encoders(), tuple(net.subjects.parameters())
+        )
         peaks = [group["lr"] for group in optimizer.param_groups]
         schedule = Scheduled(torch.optim.lr_scheduler.OneCycleLR(optimizer, peaks, total_steps=total))
         ema = Ema.hook(model, optim.ema)

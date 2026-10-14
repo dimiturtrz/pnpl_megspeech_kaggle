@@ -191,6 +191,19 @@ def test_optimizer_encoder_share(share: float) -> None:
     assert sum(len(group["params"]) for group in optimizer.param_groups) == len(list(net.parameters()))
 
 
+def test_optimizer_subject_share() -> None:
+    """A surgical adapt moves the subject layer at its own share of the encoder's rate, the rest of the encoder at
+    the encoder's."""
+    transfer = TransferConfig(encoder_lr=0.1, subject_lr=10.0)
+    made = trainer(RunConfig(context=ContextConfig(subjects=2), optim=OptimConfig(lr=0.01, transfer=transfer)))
+    net = made.model(split())
+    subjects = tuple(net.subjects.parameters())
+    optimizer = made.optimizer(net, Anchor(), tuple(net.encoder()), (), subjects)
+    chosen = {id(p) for p in subjects}
+    rates = {group["lr"] for group in optimizer.param_groups for p in group["params"] if id(p) in chosen}
+    assert list(rates) == [pytest.approx(0.01)]
+
+
 def test_terms() -> None:
     """The context head's objective, the word head's softmax, then the auxiliary terms, sharing the class weights."""
     train = split()

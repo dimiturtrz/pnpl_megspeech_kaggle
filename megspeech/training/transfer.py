@@ -29,6 +29,9 @@ class TransferConfig:
     encoder_lr: float = 1.0
     """The encoder's learning rate as a share of `lr`, its decay alike; 0 freezes it: a `stem` encoder kept while the
     span transformer trains on top of it."""
+    subject_lr: float = 1.0
+    """The subject layer's learning rate as a share of the encoder's: above 1 a surgical adapt, the per-subject input
+    map moving faster than the shared encoder it feeds, a subject shift being one at the input."""
 
     def motion(self) -> Moving:
         """How the encoder moves: held as it is at an `encoder_lr` of 0, else with the rest."""
