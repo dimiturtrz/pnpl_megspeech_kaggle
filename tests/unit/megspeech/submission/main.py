@@ -73,3 +73,26 @@ def test_main_labelweights(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(sys, "argv", [*argv, "--track", "deep"])
     with pytest.raises(SystemExit):
         main()
+
+
+def test_main_rebuild(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--rebuild takes members, scoring and track from a written blend's record, over the flags; nothing named fails."""
+    scoring = Scoring(reading=Reading.UNSEEN)
+    recorded = report.Recorded(("a", "b"), scoring, Track.BROAD)
+    built: list[tuple[list[str], Scoring]] = []
+    written: list[Track] = []
+
+    def of(group: Group, names: list[str]) -> LoadedModel:
+        built.append((names, group.scoring))
+        return replace(loaded(tmp_path), names=tuple(names))
+
+    monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))
+    monkeypatch.setattr(module.Recorded, "read", classmethod(lambda _, out: recorded if out.name == "old" else None))
+    monkeypatch.setattr(module.Loader, "of", staticmethod(of))
+    monkeypatch.setattr(module.Submission, "write", lambda self, *_: written.append(self.track) or tmp_path)
+    monkeypatch.setattr(sys, "argv", ["submission", "--rebuild", "old", "--out", "new", "--device", "cpu"])
+    main()
+    assert (built, written) == ([(["a", "b"], scoring)], [Track.BROAD])
+    monkeypatch.setattr(sys, "argv", ["submission", "--out", "new"])
+    with pytest.raises(SystemExit):
+        main()

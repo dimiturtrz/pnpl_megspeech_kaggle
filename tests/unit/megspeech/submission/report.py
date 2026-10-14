@@ -17,7 +17,7 @@ from megspeech.evaluation.scoring.probabilities import PROBS, SECTIONS, Probabil
 from megspeech.submission import __main__ as cli
 from megspeech.submission import report as module
 from megspeech.submission.config import ReportConfig
-from megspeech.submission.report import HITS, SCORING, SUBMISSIONS, Report, Submission
+from megspeech.submission.report import HITS, SCORING, SUBMISSIONS, Recorded, Report, Submission
 from tests.unit.megspeech.evaluation.loaded import CPU, loaded, runs
 
 RUN = "run"
@@ -116,3 +116,11 @@ def test_in_process_equals_separate_process(
         files = sorted(path.name for path in separate.iterdir())
         assert files == sorted(path.name for path in inline.iterdir())
         assert all((separate / name).read_bytes() == (inline / name).read_bytes() for name in files)
+
+
+def test_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    stub(tmp_path, monkeypatch, [])
+    scoring = replace(SCORING, aligned=True, shifts=(0, 2))
+    out = tmp_path / "blend"
+    Submission(Track.BROAD, scoring).write(replace(loaded(tmp_path), names=(RUN, "other")), runs(tmp_path), out)
+    assert Recorded.read(out) == Recorded((RUN, "other"), scoring, Track.BROAD)

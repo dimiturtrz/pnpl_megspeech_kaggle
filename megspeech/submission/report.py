@@ -12,6 +12,7 @@ from pathlib import Path
 import torch
 
 from core.paths import DataRoot
+from core.tree import Tree
 from megspeech.data.cache.alignment import Geometry
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
@@ -58,6 +59,22 @@ class Submission:
         }
         (out / METRICS).write_text(json.dumps(record, indent=1))
         return KaggleWriter(self.track).write(loaded, selected.tau, out / SUBMISSIONS[self.track])
+
+
+@dataclass(frozen=True)
+class Recorded:
+    """A written blend as its record left it: members, scoring, and the track whose submission sits beside them."""
+
+    members: tuple[str, ...]
+    scoring: Scoring
+    track: Track
+
+    @classmethod
+    def read(cls, out: Path) -> "Recorded":
+        record = json.loads((out / METRICS).read_text())
+        track = next(track for track, name in SUBMISSIONS.items() if (out / name).is_file())
+        scoring = Tree(Scoring, SCORING).load(record["config"]["scoring"], saved=True)
+        return cls(tuple(record["members"]), scoring, track)
 
 
 @dataclass(frozen=True)
