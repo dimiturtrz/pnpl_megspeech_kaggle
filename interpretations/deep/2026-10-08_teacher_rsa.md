@@ -5,7 +5,7 @@ VAL words (2545 words, all 50 words present), symmetrised. Teacher matrix = cosi
 forms: RAW, and CENTRED (mean over the 50 type vectors subtracted before the cosine). RSA = Spearman over the 1225
 off-diagonal pairs; CI = percentile interval of 1000 seeded word resamples. CIs cover word sampling only, not model-seed variance.
 
-Command: `CUDA_VISIBLE_DEVICES= uv run --no-sync python -m megspeech.evaluation.studies.rsa --run ema-cd25-syn05-s1 ema-cd25-s0r ema-cd25-s10`
+Command: `CUDA_VISIBLE_DEVICES= uv run --no-sync python -m megspeech.evaluation.studies.teachers.rsa --run ema-cd25-syn05-s1 ema-cd25-s0r ema-cd25-s10`
 
 EmbeddingGemma 2 vectors were written once with `--write-gemma` under a side-installed transformers 5.19 (the venv's
 5.18.0 does not know the architecture). Not reproducible from pyproject yet.

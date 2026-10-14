@@ -26,7 +26,7 @@ DEEP = 0
 
 SOURCES = (range(DEEP, DEEP + 1), range(1, 13), range(13, 23), range(23, 33))
 """Subject-id ranges recorded under one source: subject 0 alone, then 1-12, 13-22 and 23-32 (the `GROUPS` of
-`megspeech.evaluation.studies.pooledbalance`, the Broad track's recording sources); any other id is its own source."""
+`megspeech.evaluation.studies.pool.balance`, the Broad track's recording sources); any other id is its own source."""
 
 
 class Column(StrEnum):

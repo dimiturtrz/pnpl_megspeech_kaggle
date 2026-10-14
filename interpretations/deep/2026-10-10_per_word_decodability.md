@@ -1,6 +1,6 @@
 # Per-word decodability of the best Deep blend: the loss is function-word confusion and span-final words (megspeech-7gf.106, megspeech-7gf.102)
 
-Study: `megspeech/evaluation/studies/perword.py`; run `python -m megspeech.evaluation.studies.perword m11xsp7hub6d2v3`
+Study: `megspeech/evaluation/studies/errors/perword.py`; run `python -m megspeech.evaluation.studies.errors.perword m11xsp7hub6d2v3`
 (CPU, no training; full per-word table in `models/m11xsp7hub6d2v3/perword.json`). Issues: megspeech-7gf.106, .102.
 
 ## Setup (what the numbers are)

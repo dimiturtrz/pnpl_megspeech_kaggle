@@ -83,7 +83,7 @@ times. A second arm kept only words of classes that subjects 23–32 also have.
 ## Balancing scope: pooled vs per-subject
 
 The Kaggle submission balances test rows pooled over subjects; the ruler balances each subject alone. Same
-`xc5w6all6` logits, 32 subjects, `megspeech.evaluation.studies.pooledbalance`:
+`xc5w6all6` logits, 32 subjects, `megspeech.evaluation.studies.pool.balance`:
 
 | balancing | ruler | 1–12 | 13–22 | 23–32 |
 |---|---|---|---|---|

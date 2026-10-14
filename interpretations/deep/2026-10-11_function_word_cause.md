@@ -1,7 +1,7 @@
 # Why function words are confused: the word head cannot tell `the` from `a`, and context fails on surprising or "thee" occurrences (megspeech-7gf.106)
 
-Study: `megspeech/evaluation/studies/cause.py`. It extends perword's `Scene` with the word head, span ids and the spoken
-words. Run `python -m megspeech.evaluation.studies.cause m11xsp7hub6d2v3` (CPU, no training, about 3 minutes). Output
+Study: `megspeech/evaluation/studies/errors/cause.py`. It extends perword's `Scene` with the word head, span ids and the spoken
+words. Run `python -m megspeech.evaluation.studies.errors.cause m11xsp7hub6d2v3` (CPU, no training, about 3 minutes). Output
 goes to `models/m11xsp7hub6d2v3/cause.json`. Follows `2026-10-10_per_word_decodability.md`, which left stress and LM
 surprisal unmeasured.
 
