@@ -72,7 +72,8 @@ class Sources:
 
 class Refit(StrEnum):
     """Which held-out sessions a final fit of an already selected recipe also trains on; whatever trains no longer
-    scores. `VAL` trains val, `ALL` the local test too, subject 0's only."""
+    scores. `VAL` trains val, `ALL` the local test too: subject 0's, and an adapted model's Broad ruler session
+    (`DataConfig.adapted`)."""
 
     NONE = "none"
     VAL = "val"
