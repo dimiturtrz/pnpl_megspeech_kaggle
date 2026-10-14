@@ -26,9 +26,8 @@ from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
 from megspeech.evaluation.loaded.ensemble import Loader
 from megspeech.evaluation.loaded.group import Group
-from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.scoring.config import Scoring
-from megspeech.evaluation.scoring.score import Head
+from megspeech.evaluation.studies.fusion.fused import Fusion
 from megspeech.model.input.subjects import Fallback, Unseen
 
 LOG = logging.getLogger(__name__)
@@ -103,33 +102,9 @@ class MaskedPrior:
                 out[word[part]] = logits[torch.arange(len(part), device=rows.device), at[part]][:, self.ids].float()
         return out.log_softmax(-1)
 
-
-@dataclass(frozen=True)
-class Fusion:
-    """A loaded model's validation domains read with and without the masked LM."""
-
-    loaded: LoadedModel
-    prior: MaskedPrior
-
-    def domain(self, split: Split) -> dict[float, float]:  # devtools-ignore: test-mirror
-        """BAcc@10 on `split`'s unseen-span words at every fusion weight."""
-        evaluator = self.loaded.evaluator
-        context = evaluator.logits(self.loaded.model, split)[Head.CONTEXT]
-        lm = self.prior(split.index, split.y, context.argmax(dim=1))
-        novel = split.novel(evaluator.seen)
-        alone = evaluator.evaluate(lm[novel], split.y[novel], self.loaded.log_prior)
-        LOG.info("masked LM alone %.4f over %d words", alone.bacc10, alone.n)
-        return {
-            weight: evaluator.evaluate((context + weight * lm)[novel], split.y[novel], self.loaded.log_prior).bacc10
-            for weight in WEIGHTS
-        }
-
-    def table(self, held: dict[str, list[Run]]) -> dict[str, dict[float, float]]:  # devtools-ignore: test-mirror
-        """Every counted domain's scores by fusion weight."""
-        domains, _ = self.loaded.domains(held)
-        evaluator = self.loaded.evaluator
-        counted = {name: s for name, s in domains.items() if len(s.novel(evaluator.seen)) >= evaluator.min_novel}
-        return {name: self.domain(split) for name, split in counted.items()}
+    def logp(self, split: Split, context: Float[Tensor, "n v"]) -> Float[Tensor, "n v"]:
+        """`split`'s words read with the span's other labelled words as the context head's guesses."""
+        return self(split.index, split.y, context.argmax(dim=1))
 
 
 def main() -> None:
@@ -141,7 +116,7 @@ def main() -> None:
     root, device = DataRoot.from_config(), Device.CUDA.as_torch()
     loaded = Loader.of(Group(root, Scoring(fallback=Fallback(Unseen.DEEP)), device), args.names)
     held = loaded.data.held(Run.discover(root.raw()))
-    table = Fusion(loaded, MaskedPrior.load(args.model, device)).table(held)
+    table = Fusion(loaded, MaskedPrior.load(args.model, device), WEIGHTS, "masked LM").table(held)
     for name, scores in table.items():
         LOG.info("%s %s", name, {weight: round(score, 4) for weight, score in scores.items()})
     for weight in WEIGHTS:

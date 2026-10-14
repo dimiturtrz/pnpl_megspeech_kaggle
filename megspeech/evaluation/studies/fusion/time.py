@@ -24,9 +24,8 @@ from megspeech.data.spans.spans import PAD
 from megspeech.device import Device
 from megspeech.evaluation.loaded.ensemble import Loader
 from megspeech.evaluation.loaded.group import Group
-from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.scoring.config import Scoring
-from megspeech.evaluation.scoring.score import Head
+from megspeech.evaluation.studies.fusion.fused import Fusion
 from megspeech.model.context.timing_only import FILE, TimingOnly
 from megspeech.model.input.subjects import Fallback, Unseen
 
@@ -58,33 +57,9 @@ class Expert:
         out[split.index[mask]] = logp[mask]
         return out
 
-
-@dataclass(frozen=True)
-class TimeFusion:
-    """A loaded model's held-out domains read with and without the timing expert."""
-
-    loaded: LoadedModel
-    expert: Expert
-
-    def domain(self, split: Split) -> dict[float, float]:  # devtools-ignore: test-mirror
-        """BAcc@10 on `split`'s unseen-span words at every fusion weight."""
-        evaluator = self.loaded.evaluator
-        context = evaluator.logits(self.loaded.model, split)[Head.CONTEXT]
-        timing = self.expert.words(split)
-        novel = split.novel(evaluator.seen)
-        alone = evaluator.evaluate(timing[novel], split.y[novel], self.loaded.log_prior)
-        LOG.info("expert alone %.4f over %d words", alone.bacc10, alone.n)
-        return {
-            weight: evaluator.evaluate((context + weight * timing)[novel], split.y[novel], self.loaded.log_prior).bacc10
-            for weight in WEIGHTS
-        }
-
-    def table(self, held: dict[str, list[Run]]) -> dict[str, dict[float, float]]:  # devtools-ignore: test-mirror
-        """Every counted domain's scores by fusion weight."""
-        domains, _ = self.loaded.domains(held)
-        evaluator = self.loaded.evaluator
-        counted = {name: s for name, s in domains.items() if len(s.novel(evaluator.seen)) >= evaluator.min_novel}
-        return {name: self.domain(split) for name, split in counted.items()}
+    def logp(self, split: Split, context: Float[Tensor, "n v"]) -> Float[Tensor, "n v"]:
+        """`words`: the expert reads only onsets, never the context head."""
+        return self.words(split)
 
 
 def main() -> None:
@@ -97,7 +72,7 @@ def main() -> None:
     root, device = DataRoot.from_config(), args.device.as_torch()
     loaded = Loader.of(Group(root, Scoring(fallback=Fallback(Unseen.DEEP)), device), args.names)
     runs = Run.discover(root.raw())
-    fusion = TimeFusion(loaded, Expert.load(root, args.expert, device))
+    fusion = Fusion(loaded, Expert.load(root, args.expert, device), WEIGHTS, "expert")
     for part, held in (("val", loaded.data.held(runs)), ("local test", loaded.data.tested(runs))):
         table = fusion.table(held)
         for name, scores in table.items():

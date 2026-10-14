@@ -132,6 +132,15 @@ def test_aligned(tmp_path: Path) -> None:
         Blended.aligned(split, replace(split, y=split.y + 1), "x")
 
 
+def test_orders(tmp_path: Path) -> None:
+    """The first group keeps its rows; a group missing a scored domain is refused."""
+    domains, _ = loaded(tmp_path).domains({RULER: runs(tmp_path)[:1]})
+    first, second = Blended.orders([domains, domains])
+    assert first[RULER].tolist() == second[RULER].tolist() == list(range(len(domains[RULER].y)))
+    with pytest.raises(ValueError, match="the scored domains"):
+        Blended.orders([domains, {}])
+
+
 def test_blend_aligns_rows_by_word(tmp_path: Path) -> None:
     """A group that lists the same words in another row order blends to the same result."""
     run = runs(tmp_path)[POOLED]

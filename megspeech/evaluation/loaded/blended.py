@@ -93,17 +93,25 @@ class Blended(ExportedModel):
             raise ValueError(f"the groups of a blended ensemble read different words for {what}")
         return rows
 
+    @classmethod
+    def orders(cls, reads: list[dict[str, Split]]) -> list[dict[str, Int[Tensor, " n"]]]:
+        """Per group and scored domain, its rows in the first group's word order; a refusal when the groups score
+        different domains or read different words."""
+        lead = reads[0]
+        rows = [{name: torch.arange(len(split.y)) for name, split in lead.items()}]
+        for domains in reads[1:]:
+            if domains.keys() != lead.keys():
+                raise ValueError("the groups of a blended ensemble read different words for the scored domains")
+            rows.append({name: cls.aligned(lead[name], domains[name], f"the scored domain {name}") for name in lead})
+        return rows
+
     @override
     def domain_logits(self, runs: list[Run]) -> tuple[dict[str, Split], dict[str, dict[Head, Float[Tensor, "n v"]]]]:
         """Each group's domains under its own config, scored in the blend's partition; per domain and head the
         weighted mean of the groups' log-probabilities, after checking that every group read the same words."""
         reads = [replace(group, partition=self.partition).domain_logits(runs) for group in self.groups]
         lead, lead_logits = reads[0]
-        rows = [{name: torch.arange(len(split.y)) for name, split in lead.items()}]
-        for domains, _ in reads[1:]:
-            if domains.keys() != lead.keys():
-                raise ValueError("the groups of a blended ensemble read different words for the scored domains")
-            rows.append({name: self.aligned(lead[name], domains[name], f"the scored domain {name}") for name in lead})
+        rows = self.orders([domains for domains, _ in reads])
         logits = {
             name: {
                 head: torch.stack(
