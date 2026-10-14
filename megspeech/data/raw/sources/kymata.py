@@ -11,8 +11,8 @@ Each run plays the same ~400 s podcast clip twice; the clip's forced alignment (
 from the clip's start) is placed on each play's fitted clock (`kymatasync`): the audio the recording carries on
 `MISC006` gives the play's start and the stimulus clock's drift, the start trigger only says where to look.
 
-    uv run python -m megspeech.data.raw.kymata                  # every recording, into processed/kymata
-    uv run python -m megspeech.data.raw.kymata --events-only    # rewrite the events of converted runs, MEG untouched
+    uv run python -m megspeech.data.raw.sources.kymata                  # every recording, into processed/kymata
+    uv run python -m megspeech.data.raw.sources.kymata --events-only  # rewrite events of converted runs, MEG untouched
 """
 
 import argparse
@@ -32,13 +32,13 @@ from mne.preprocessing import find_bad_channels_maxwell, maxwell_filter
 
 from core.paths import DataRoot
 from megspeech.data.constants import QUIET, SFREQ
-from megspeech.data.raw.appleseed import KIND_ORDER, Story
 from megspeech.data.raw.events import Event
 from megspeech.data.raw.fetch import NEUROMAG
-from megspeech.data.raw.kymatasync import Alignment, Clock, Envelope
 from megspeech.data.raw.mains import Mains
-from megspeech.data.raw.masc import COLUMNS, HIGHPASS, ORIGIN, Neuromag
 from megspeech.data.raw.serialised import Corpus, RunName
+from megspeech.data.raw.sources.appleseed import KIND_ORDER, Story
+from megspeech.data.raw.sources.kymatasync import Alignment, Clock, Envelope
+from megspeech.data.raw.sources.masc import COLUMNS, HIGHPASS, ORIGIN, Neuromag
 from megspeech.data.raw.textgrid import Interval, TextGrid
 
 LOG = logging.getLogger(__name__)

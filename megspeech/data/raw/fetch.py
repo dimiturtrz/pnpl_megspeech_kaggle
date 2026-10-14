@@ -237,13 +237,14 @@ are the system's and the same in every recording, are the sensor geometry MEG-XL
 
 MASC = OsfProject("ag3kj", "meg_masc")
 """MEG-MASC (Gwilliams et al. 2023, CC0): 27 subjects hearing four English stories on a KIT-208 system, ~100 GB of
-BIDS; `megspeech.data.raw.masc` rewrites it as LibriBrain runs."""
+BIDS; `megspeech.data.raw.sources.masc` rewrites it as LibriBrain runs."""
 MASC_PARTS = (MASC, OsfProject("h2tzn", MASC.dataset), OsfProject("u5327", MASC.dataset))
 """OSF caps a project's storage, so MEG-MASC is three projects (subjects 01-11 in the first) merged into one tree."""
 
 APPLESEED = OpenNeuroDataset("ds007870", "1.3.2", "appleseed")
 """Appleseed (Brodbeck et al. 2022, CC0): 12 subjects hearing an audiobook for ~1 h on a KIT 157-channel system, ~25 GB
-of BIDS with forced-aligned word/phone TextGrids; `megspeech.data.raw.appleseed` rewrites it as LibriBrain runs."""
+of BIDS with forced-aligned word/phone TextGrids; `megspeech.data.raw.sources.appleseed` rewrites it as
+LibriBrain runs."""
 
 
 def main() -> None:

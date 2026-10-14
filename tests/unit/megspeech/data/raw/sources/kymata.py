@@ -11,10 +11,10 @@ from scipy.io import wavfile
 
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.constants import SFREQ
-from megspeech.data.raw import kymata as module
-from megspeech.data.raw.kymata import KYMATA, Clip, Kymata, Recording, Study, main
-from megspeech.data.raw.kymatasync import Alignment, Clock, Envelope
-from megspeech.data.raw.masc import COLUMNS, HIGHPASS, Neuromag
+from megspeech.data.raw.sources import kymata as module
+from megspeech.data.raw.sources.kymata import KYMATA, Clip, Kymata, Recording, Study, main
+from megspeech.data.raw.sources.kymatasync import Alignment, Clock, Envelope
+from megspeech.data.raw.sources.masc import COLUMNS, HIGHPASS, Neuromag
 
 FIF = "sub-E3b_task-en_run-2_meg.fif"
 NAME = "sub-323_ses-1_task-Kymata_run-2"

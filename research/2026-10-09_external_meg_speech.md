@@ -6,7 +6,7 @@ listening could we still add?
 
 **Already pooled or converted:**
 - LibriBrain subject 0.
-- MEG-MASC (`megspeech/data/raw/masc.py`).
+- MEG-MASC (`megspeech/data/raw/sources/masc.py`).
 - Appleseed ds007870 (`appleseed.py`).
 - Kymata-SOTO (`kymata.py` + `kymatasync.py`).
 - MEG-SCANS ds006468 (`scans.py`, German, converted under megspeech-u2m.3).

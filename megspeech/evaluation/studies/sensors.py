@@ -34,8 +34,8 @@ from jaxtyping import Bool, Complex, Float, Int
 from core.paths import DataRoot
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.raw.fetch import NEUROMAG
-from megspeech.data.raw.masc import Neuromag
 from megspeech.data.raw.runs import DEEP, Partition, Run
+from megspeech.data.raw.sources.masc import Neuromag
 
 LOG = logging.getLogger(__name__)
 

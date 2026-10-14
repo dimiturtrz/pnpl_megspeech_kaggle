@@ -17,7 +17,7 @@ The words are Mandarin, so each segment carries the `MANDARIN` prefix and is `IG
 the run's `timechapter` (the word's start in the wav) feeds `megspeech.objective.targets.scansloudness`' acoustic
 targets, as MEG-SCANS' does.
 
-    uv run python -m megspeech.data.raw.smn4lang                  # every story recording, into processed/smn4lang
+    uv run python -m megspeech.data.raw.sources.smn4lang                # every story recording, into processed/smn4lang
 """
 
 import argparse
@@ -38,16 +38,16 @@ from scipy.io import loadmat
 
 from core.paths import DataRoot
 from megspeech.data.constants import QUIET, SFREQ
-from megspeech.data.raw.appleseed import Story
 from megspeech.data.raw.events import Event, Kind
 from megspeech.data.raw.fetch import NEUROMAG
-from megspeech.data.raw.kymata import Study
-from megspeech.data.raw.kymatasync import Clock
 from megspeech.data.raw.mains import Mains
-from megspeech.data.raw.masc import HIGHPASS, Neuromag
-from megspeech.data.raw.scans import Book
-from megspeech.data.raw.scans import Recording as Played
 from megspeech.data.raw.serialised import Corpus, RunName
+from megspeech.data.raw.sources.appleseed import Story
+from megspeech.data.raw.sources.kymata import Study
+from megspeech.data.raw.sources.kymatasync import Clock
+from megspeech.data.raw.sources.masc import HIGHPASS, Neuromag
+from megspeech.data.raw.sources.scans import Book
+from megspeech.data.raw.sources.scans import Recording as Played
 from megspeech.data.raw.textgrid import Interval, TextGrid
 
 LOG = logging.getLogger(__name__)
