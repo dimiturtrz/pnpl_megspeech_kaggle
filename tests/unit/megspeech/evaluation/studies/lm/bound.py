@@ -72,6 +72,17 @@ def test_pieces() -> None:
     assert lm.pieces([]) == []
 
 
+def test_continuations() -> None:
+    lm = Causal(torch.nn.Module(), lambda texts: [[len(text)] for text in texts], 0)  # pyrefly: ignore[bad-argument-type]
+    ids, ends = lm.continuations(["a", "bc"], torch.device("cpu"))
+    assert ids.shape == (VOCAB_SIZE, 3)
+    assert ids[:, 1:].tolist() == [[2, 3]] * VOCAB_SIZE
+    assert ends.tolist() == [[1, 2, 3]] * VOCAB_SIZE
+    alone, ended = lm.continuations([], torch.device("cpu"))
+    assert alone.shape == (VOCAB_SIZE, 1)
+    assert ended.tolist() == [[1]] * VOCAB_SIZE
+
+
 def test_cumulative() -> None:
     first = torch.log(torch.tensor([0.5, 0.25, 0.25]))
     after = torch.log(torch.full((1, 2, 3), 1 / 3))

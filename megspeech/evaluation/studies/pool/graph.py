@@ -30,7 +30,6 @@ from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Calibration
 from megspeech.evaluation.studies.errors.crowding import TAUS
 from megspeech.evaluation.studies.pool.confuser import Confusers
-from megspeech.evaluation.studies.pool.knn import Dump
 from megspeech.evaluation.studies.pool.layout import Layout
 from megspeech.evaluation.studies.pool.smooth import (
     BASE_SCORES,
@@ -304,6 +303,16 @@ class Study:
             parts.append(Confusers.of(keep, views.span, views.place, views.pool.y))
         return Confusers.mean(parts)
 
+    def survey(self) -> dict[tuple[Source, Draw], Confusers]:
+        """The local test's confusers under each source and each way of drawing pools, each logged."""
+        found: dict[tuple[Source, Draw], Confusers] = {}
+        for source, drawn in itertools.product(
+            (Source.EMBEDDING, Source.POSTERIOR), (Draw(), Draw(grouped=True), Draw(size=0))
+        ):
+            found[source, drawn] = self.confusers(Partition.TEST, drawn, source)
+            LOG.info("confusers k=%d %s %s test: %s", PURITY_K, source, drawn, found[source, drawn])
+        return found
+
     def retuned(
         self, partition: Partition, draw: Draw, config: Config, taus: Sequence[float], ruler: Ruler = RULER
     ) -> dict[float, tuple[float, float]]:
@@ -413,24 +422,14 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()
     collector = Collector(root, Scoring(fallback=Fallback(Unseen.DEEP)), torch.device(args.device))
-    dumps = []
-    for reader in ("", *args.folds):
-        path = Collector.path(root, args.base, reader)
-        if not path.exists():
-            collector.build(args.base, reader).save(path)
-        dumps.append(Dump.load(path))
+    dumps = collector.dumps(args.base, ("", *args.folds))
     LOG.info("base reproduces %s", Collector.reproduces(dumps[0], BASE_SCORES))
     layout = Layout.path(root, args.base)
     if not layout.exists():
         Layout.save(Layout.build(root, collector.scoring, collector.device, args.base), layout)
     study = Study(Smoothing(dumps[0]), tuple(Smoothing(d) for d in dumps[1:]), Layout.load(layout))
     draw = Draw(grouped=args.grouped)
-    for source, drawn in itertools.product(
-        (Source.EMBEDDING, Source.POSTERIOR), (Draw(), Draw(grouped=True), Draw(size=0))
-    ):
-        LOG.info(
-            "confusers k=%d %s %s test: %s", PURITY_K, source, drawn, study.confusers(Partition.TEST, drawn, source)
-        )
+    study.survey()
     reports = Experiment(study, draw).run()
     for report in reports:
         LOG.info(report.line())

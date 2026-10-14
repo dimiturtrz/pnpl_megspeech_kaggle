@@ -148,6 +148,22 @@ class Causal:
         left, right = key
         device = self.model.device
         head = torch.tensor([[self.bos, *(token for piece in self.pieces(left) for token in piece)]], device=device)
+        ids, ends = self.continuations(right, device)
+        with torch.no_grad():
+            opened = self.model(head, use_cache=True)
+            first = opened.logits[0, -1].float().log_softmax(-1)
+            cache = opened.past_key_values
+            cache.batch_repeat_interleave(ids.shape[0])
+            mask = torch.ones(ids.shape[0], head.shape[1] + ids.shape[1], device=device, dtype=torch.long)
+            steps = self.model(ids, past_key_values=cache, attention_mask=mask).logits.float().log_softmax(-1)
+        raw = self.cumulative(first, steps, ids, ends).cpu()
+        return torch.cat([raw, raw[:, -1:].expand(-1, RIGHT + 1 - raw.shape[1])], dim=1)
+
+    def continuations(
+        self, right: Sequence[str], device: torch.device
+    ) -> tuple[Int[Tensor, "c w"], Int[Tensor, "c s"]]:
+        """Each candidate's tokens followed by every right word's, zero-padded to one width, and the token count up to
+        the candidate's end and then up to each right word's end."""
         own, after = self.pieces(CANDIDATES), self.pieces(right)
         flat = [token for piece in after for token in piece]
         reach = list(itertools.accumulate(map(len, after)))
@@ -155,15 +171,7 @@ class Causal:
         ends = torch.tensor([[len(piece), *(len(piece) + length for length in reach)] for piece in own], device=device)
         width = max(map(len, tails))
         ids = torch.tensor([tail + [0] * (width - len(tail)) for tail in tails], device=device)
-        with torch.no_grad():
-            opened = self.model(head, use_cache=True)
-            first = opened.logits[0, -1].float().log_softmax(-1)
-            cache = opened.past_key_values
-            cache.batch_repeat_interleave(len(tails))
-            mask = torch.ones(len(tails), head.shape[1] + width, device=device, dtype=torch.long)
-            steps = self.model(ids, past_key_values=cache, attention_mask=mask).logits.float().log_softmax(-1)
-        raw = self.cumulative(first, steps, ids, ends).cpu()
-        return torch.cat([raw, raw[:, -1:].expand(-1, RIGHT + 1 - raw.shape[1])], dim=1)
+        return ids, ends
 
     @staticmethod
     def cumulative(

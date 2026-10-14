@@ -12,7 +12,7 @@ import argparse
 import itertools
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import Path
@@ -405,6 +405,16 @@ class Collector:
                 Builder.check(held, runs, tau, contexts)
             partitions[partition] = {n: Builder.rows(s, c, held, [Embedder(net)]) for n, (s, c) in contexts.items()}
         return Dump((), partitions, loaded.log_prior.cpu(), tau)
+
+    def dumps(self, base: str, readers: Iterable[str]) -> list[Dump]:
+        """The base's dump as each of `readers` reads it, built and saved first where none is on disk."""
+        dumps = []
+        for reader in readers:
+            path = self.path(self.root, base, reader)
+            if not path.exists():
+                self.build(base, reader).save(path)
+            dumps.append(Dump.load(path))
+        return dumps
 
     @staticmethod
     def reproduces(dump: Dump, expected: dict[Partition, float]) -> dict[Partition, float]:

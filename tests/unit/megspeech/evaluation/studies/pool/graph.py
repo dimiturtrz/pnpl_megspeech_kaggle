@@ -267,3 +267,11 @@ def test_twinned(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(poolgraph, "ARMS", (small(), ensemble()))
     assert [r.arm for r in Experiment(study(), WHOLE).run()] == ["small", "ens"]
+
+
+def test_survey() -> None:
+    found = study_with_spans().survey()
+    assert len(found) == 6
+    assert set(found) >= {(Source.EMBEDDING, WHOLE), (Source.POSTERIOR, Draw(grouped=True))}
+    whole = study_with_spans().confusers(Partition.TEST, WHOLE, Source.EMBEDDING)
+    assert found[Source.EMBEDDING, WHOLE] == whole

@@ -9,6 +9,7 @@ from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import Partition
 from megspeech.evaluation.metric.ruler import Ruler
+from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Calibration
 from megspeech.evaluation.studies.pool.knn import SCORED, Dump, Mixing, Rows, Space, Study
 from megspeech.evaluation.studies.pool.smooth import (
@@ -317,3 +318,13 @@ def test_posterior_record() -> None:
     chosen = smoothing().gains(Partition.VALIDATION, Draw(size=0), posterior=True).best()
     assert record["posterior-chosen"] == str(chosen)
     assert set(record) >= {"posterior-test-at-oracle", "posterior-purity-validation", "posterior-purity-test"}
+
+
+def test_dumps(tmp_path: Path) -> None:
+    root = DataRoot(tmp_path)
+    for reader, tau in (("", 0.5), ("fold", 0.25)):
+        path = Collector.path(root, "base", reader)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Dump((), {}, torch.zeros(VOCAB_SIZE), tau).save(path)
+    dumps = Collector(root, Scoring(), torch.device("cpu")).dumps("base", ["", "fold"])
+    assert [d.tau for d in dumps] == [0.5, 0.25]

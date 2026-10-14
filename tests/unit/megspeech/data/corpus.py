@@ -154,3 +154,10 @@ def test_kaggle_delay_past_epoch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert (delayed.length, delayed.offset) == (round(0.2 * RATE), round(0.2 * RATE))
     with pytest.raises(ValueError, match="start past their epoch's end"):
         Corpus.kaggle(root, DataConfig(window=0.2, delay=SECONDS * 10.0), Track.DEEP, "cpu")
+
+
+def test_names(tmp_path: Path) -> None:
+    train, held, other = (Run(tmp_path / name) for name in (TRAIN, HELD, OTHER))
+    names = Corpus.names([train, held], {"a": [held, other], "b": [train]})
+    assert names == [train.name, held.name, other.name]
+    assert Corpus.names([], {}) == []

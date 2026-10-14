@@ -39,8 +39,7 @@ class Corpus:
         cache = data.run_cache(root)
         runs = Run.everywhere(root)
         trained, held = data.trained(runs), data.held(runs)
-        reading = [r.name for r in trained] + [r.name for group in held.values() for r in group]
-        names = list(dict.fromkeys(reading))
+        names = cls.names(trained, held)
         geometry = data.geometry(root, device)
         source = DeviceRecording.load(cache, device, names, geometry=geometry)
         table = source.words.assign(position=source.words.groupby(Column.RUN).cumcount())
@@ -65,6 +64,12 @@ class Corpus:
         if len(positions) != len(train.y):
             raise ValueError(f"{len(positions)} train positions against {len(train.y)} train words")
         return cls(train, validation, Heard.sequences(heard, data.grouping), positions, geometry)
+
+    @staticmethod
+    def names(trained: list[Run], held: dict[str, list[Run]]) -> list[str]:
+        """The runs a load reads, each once: the trained runs, then every held domain's, in that order."""
+        reading = [r.name for r in trained] + [r.name for group in held.values() for r in group]
+        return list(dict.fromkeys(reading))
 
     @staticmethod
     def kaggle(

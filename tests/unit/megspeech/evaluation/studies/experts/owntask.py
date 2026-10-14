@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import numpy as np
@@ -92,3 +93,15 @@ def test_accuracy() -> None:
     probe = Probe.learn(signal, words)
     noise = torch.from_numpy(rng.normal(size=signal.shape)).float()
     assert probe.accuracy(noise, words) < probe.accuracy(signal, words)
+
+
+def test_fitted() -> None:
+    """A probe learnt over two splits reads both splits' words from the head's outputs."""
+    rng = np.random.default_rng(6)
+    words = torch.from_numpy(np.arange(200) % 4)
+    vectors = (np.eye(DIM)[words.numpy()] * 5 + rng.normal(size=(200, DIM)) * 0.1).astype(np.float32)
+    head = Head(cast("Embedded", Reading(vectors)), Tap.WORD, torch.eye(DIM), torch.zeros(DIM))
+    split = cast("Split", SimpleNamespace(y=words))
+    probe = Probe.fitted(head, [(pd.DataFrame(), split), (pd.DataFrame(), split)])
+    assert probe.weight.shape == (DIM, 50)
+    assert probe.accuracy(head.vectors(split), words) == 1.0

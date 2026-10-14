@@ -6,6 +6,7 @@ at the teacher's target of the word, beyond the target of another word of the sa
 
 import argparse
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -137,6 +138,12 @@ class Probe:
         optimiser.step(closure)
         return cls(mean, scale, weight.detach(), bias.detach())
 
+    @classmethod
+    def fitted(cls, head: Head, parts: Iterable[tuple[pd.DataFrame, Split]]) -> "Probe":
+        """The probe learnt on `head`'s outputs over every split of `parts`, in order."""
+        fitted = [(head.vectors(split), split.y.cpu()) for _, split in parts]
+        return cls.learn(torch.cat([out for out, _ in fitted]), torch.cat([labels for _, labels in fitted]))
+
     def accuracy(self, out: Float[Tensor, "n d"], labels: Int[Tensor, " n"]) -> float:
         """Balanced accuracy over the vocabulary of `out` finding its word among the probe's `CANDIDATES` best."""
         return Centroids.found(((out - self.mean) / self.scale) @ self.weight + self.bias, labels)
@@ -164,8 +171,7 @@ def main() -> None:
     trained = [run for run in Run.everywhere(root) if run.name not in held][: args.fit_runs]
     centroids = Centroids.fit(reader.load(trained)[1], directory)
     LOG.info("targets: mean norm / std %.2f  top-5 variance share %.3f", centroids.offset, centroids.top)
-    fitted = [(head.vectors(split), split.y.cpu()) for _, split in reader.splits(trained).values()]
-    probe = Probe.learn(torch.cat([out for out, _ in fitted]), torch.cat([labels for _, labels in fitted]))
+    probe = Probe.fitted(head, reader.splits(trained).values())
     for run, (part, split) in reader.splits(runs).items():
         out, labels = head.vectors(split), split.y.cpu()
         LOG.info("%s %s", run.name, Agreement.of(head, split, part, directory))
