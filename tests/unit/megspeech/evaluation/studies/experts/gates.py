@@ -12,8 +12,17 @@ from megspeech.data.batching.split import Split
 from megspeech.data.raw.runs import Partition
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.studies.experts import gates as module
-from megspeech.evaluation.studies.experts.gates import COMPONENTS, FOLDS, TAPS, Expert, Features, Gate, Head
-from megspeech.evaluation.studies.experts.peer import Study
+from megspeech.evaluation.studies.experts.gates import (
+    COMPONENTS,
+    FOLDS,
+    TAPS,
+    BaseRun,
+    Expert,
+    Features,
+    Gate,
+    Head,
+)
+from megspeech.evaluation.studies.experts.peer import Dump, Study
 from megspeech.evaluation.studies.pos.syntax import Embedded
 from megspeech.model.auxiliary import Tap
 from tests.unit.megspeech.evaluation.studies.experts.boosted import VOCAB, rows
@@ -147,3 +156,19 @@ def test_held(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(module.DataConfig, "shared", staticmethod(lambda *_: split))
     root = SimpleNamespace(models=lambda: tmp_path)
     assert Expert("textword").held(cast("DataRoot", root), [0, 2]) == [{"a"}, {"a"}]
+
+
+def test_path(tmp_path: Path) -> None:
+    root = DataRoot(tmp_path)
+    assert BaseRun(root, "b", torch.device("cpu")).path("x") == Dump.path(root, "b-x")
+
+
+def test_features(tmp_path: Path) -> None:
+    """A saved dump is read, not rebuilt, and reduced."""
+    base = BaseRun(DataRoot(tmp_path), "b", torch.device("cpu"))
+    path = base.path("textword")
+    path.parent.mkdir(parents=True)
+    torch.save({"oof": torch.randn(COUNT, DIM), "val": torch.randn(COUNT // 2, DIM)}, path)
+    features = base.features(Expert("textword"), [], {}, refeature=False)
+    assert features.oof.shape == (COUNT, DIM)
+    assert features.val.shape == (COUNT // 2, DIM)

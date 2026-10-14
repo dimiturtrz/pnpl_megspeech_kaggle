@@ -96,6 +96,18 @@ def test_kaggle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert [(m.subject, m.matched, m.unique) for m in matches] == [(0, 2, 2), (1, 1, 1), (2, 1, 1)]
 
 
+def test_report_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger=module.__name__):
+        survey(tmp_path, monkeypatch).report_text()
+    assert "text: 1 runs, 4 of 4 words matched" in caplog.text
+
+
+def test_report_kaggle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger=module.__name__):
+        survey(tmp_path, monkeypatch).report_kaggle()
+    assert "Kaggle test: 2 of 4 subject-0 sentences matched one-to-one across 2 other subjects" in caplog.text
+
+
 def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     survey(tmp_path, monkeypatch)
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))

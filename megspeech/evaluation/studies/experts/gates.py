@@ -241,6 +241,48 @@ class Gate:
         return float(np.mean(scores))
 
 
+@dataclass(frozen=True)
+class BaseRun:
+    """The base model the experts gate: its dumps under `root`, its experts read on `device`."""
+
+    root: DataRoot
+    name: str
+    device: torch.device
+
+    def path(self, suffix: str) -> Path:
+        """The base's dump named `<name>-<suffix>`."""
+        return Dump.path(self.root, f"{self.name}-{suffix}")
+
+    def features(self, expert: Expert, folds: list[str], domains: dict[str, Split], *, refeature: bool) -> Features:
+        """`expert`'s reduced features, built over `folds` and saved first when missing or `refeature`."""
+        path = self.path(expert.name)
+        if refeature or not path.exists():
+            built = Features.build(expert, self.root, folds, domains, self.device)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            torch.save({"oof": built.oof, "val": built.val}, path)
+        saved = torch.load(path)
+        return Features(saved["oof"], saved["val"]).reduced()
+
+    def holdout(self, gate: Gate, split: Split, arms: list[str], out: Path) -> None:  # devtools-ignore: test-mirror
+        """Write the Deep Kaggle test `split`'s submission of each of `arms` to `<out's stem>-<arm>.csv`; `control`
+        is no expert."""
+        subsets = {arm: () if arm == "control" else tuple(arm.split(",")) for arm in arms}
+        rows = Probe.load(self.root.models() / self.name, self.root, self.device).rows(split, 0)
+        tested = {
+            name: Features(
+                torch.load(self.path(name))["oof"], Features.full(Expert(name), self.root, [split], self.device)
+            ).reduced()
+            for name in gate.features
+        }
+        for label, (score, probabilities) in gate.submissions(
+            subsets, Gate(replace(gate.study, val=rows), tested)
+        ).items():
+            path = out.with_name(f"{out.stem}-{label.replace(',', '-')}.csv")
+            LOG.info(
+                "%s: official %.4f -> %s", label, score, Track.DEEP.write(self.root.raw(), probabilities.numpy(), path)
+            )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--folds", nargs="+", required=True, help="the peer's cross-fit models, as for `peer`")
@@ -261,35 +303,18 @@ def main() -> None:
     loaded = Loader.of(Group(root, Scoring(), device), [args.base])
     domains, _ = loaded.domains(loaded.ruled(Run.discover(root.raw())))
     dump = Dump.load(Dump.path(root, args.base))
-    features = {}
-    for name in args.experts:
-        path = Dump.path(root, f"{args.base}-{name}")
-        if args.refeature or not path.exists():
-            built = Features.build(Expert(name), root, args.folds, domains, device)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            torch.save({"oof": built.oof, "val": built.val}, path)
-        saved = torch.load(path)
-        features[name] = Features(saved["oof"], saved["val"]).reduced()
+    base = BaseRun(root, args.base, device)
+    features = {
+        name: base.features(Expert(name), args.folds, domains, refeature=args.refeature) for name in args.experts
+    }
     study = Study(dump.oof, dump.val, dump.domains, loaded.evaluator, loaded.log_prior, domains, device)
     gate = Gate(study, features)
     if args.holdout:
-        subsets = {arm: () if arm == "control" else tuple(arm.split(",")) for arm in args.arms}
-        split = loaded.kaggle(Track.DEEP)
-        rows = Probe.load(root.models() / args.base, root, device).rows(split, 0)
-        tested = {
-            name: Features(
-                torch.load(Dump.path(root, f"{args.base}-{name}"))["oof"],
-                Features.full(Expert(name), root, [split], device),
-            ).reduced()
-            for name in features
-        }
-        for label, (score, probabilities) in gate.submissions(subsets, Gate(replace(study, val=rows), tested)).items():
-            path = args.holdout.with_name(f"{args.holdout.stem}-{label.replace(',', '-')}.csv")
-            LOG.info("%s: official %.4f -> %s", label, score, Track.DEEP.write(root.raw(), probabilities.numpy(), path))
+        base.holdout(gate, loaded.kaggle(Track.DEEP), args.arms, args.holdout)
         return
     results = {"arms": gate.arms(), "residual": {name: gate.residual(name) for name in features}}
     LOG.info("%s", json.dumps(results["residual"]))
-    (Dump.path(root, f"{args.base}-expert").with_suffix(".json")).write_text(json.dumps(results, indent=1))
+    base.path("expert").with_suffix(".json").write_text(json.dumps(results, indent=1))
 
 
 if __name__ == "__main__":

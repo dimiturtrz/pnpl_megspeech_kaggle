@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +8,7 @@ import torch
 
 from core.paths import DataRoot
 from megspeech.evaluation.studies.teachers.alignment import (
+    T5,
     Alignment,
     Anisotropy,
     Cca,
@@ -202,3 +204,17 @@ def test_held_out() -> None:
 def test_teacher(tmp_path: Path) -> None:
     root = DataRoot(tmp_path)
     assert isinstance(Study.teacher(root, "gpt2-large"), Directory)
+
+
+def test_report(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """The validation words align; the held-out training runs are too few to."""
+    root = DataRoot(tmp_path)
+    x, y = pair(shared=20)
+    Lexicon(torch.arange(ROWS), y).save(Lexicon.path(root))
+    runs = np.repeat(list("abcdefghijkl"), -(-ROWS // 12))[:ROWS]
+    table = pd.DataFrame({"target": np.arange(ROWS) % 50, "run": runs, "position": 0, "token": np.arange(ROWS)})
+    with caplog.at_level(logging.INFO):
+        Study(Words(table, x), Words(table, x)).report(root, [T5], SHUFFLES)
+    assert f"| {T5} / official-val | 26 |" in caplog.text
+    assert f"{T5} val corr by component" in caplog.text
+    assert f"| {T5} / held-out train runs | no targets |" in caplog.text

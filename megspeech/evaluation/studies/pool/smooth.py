@@ -336,6 +336,43 @@ class Smoothing:
         }
         return {n: float((s**2).sum()) for n, s in shares.items()}
 
+    def pooled_record(self, pooled: Draw) -> dict[str, object]:
+        """Each partition's purity, chance and per-label purity, then what is available, the oracle-label ceiling
+        and the purity-matched mixes on every partition, logged."""
+        record: dict[str, object] = {}
+        for partition in SCORED:
+            record[f"purity-{partition}"] = self.purity(partition, pooled)
+            record[f"chance-{partition}"] = self.chance(partition)
+            record[f"purity-by-label-{partition}"] = self.by_label(partition, pooled)
+            LOG.info("purity %s %s chance %s", partition, record[f"purity-{partition}"], record[f"chance-{partition}"])
+        record["available"] = {p: self.available(p, pooled) for p in SCORED}
+        record["oracle-label"] = {p: self.ceiling(p, pooled).best() for p in SCORED}
+        record["purity-matched"] = {p: self.matched(p, pooled).best() for p in SCORED}
+        LOG.info("available %s", record["available"])
+        LOG.info("oracle-label ceiling (best mix by test, k 0=all) %s", record["oracle-label"])
+        LOG.info("purity-matched (key = same-label of %d) %s", MATCH_K, record["purity-matched"])
+        return record
+
+    def posterior_record(self, pooled: Draw) -> dict[str, object]:
+        """The val-chosen and test-oracle posterior settings with their scores, and the posterior purity, logged."""
+        record: dict[str, object] = {}
+        val_post, test_post = (
+            self.gains(Partition.VALIDATION, pooled, posterior=True),
+            self.gains(Partition.TEST, pooled, posterior=True),
+        )
+        chosen_post = val_post.best()
+        record["posterior-chosen"] = str(chosen_post)
+        record["posterior-val-at-chosen"] = val_post.at(chosen_post)
+        record["posterior-test-at-chosen"] = test_post.at(chosen_post)
+        record["posterior-test-macro-at-chosen"] = float(test_post.macro()[chosen_post].mean())
+        record["posterior-oracle"] = str(test_post.best())
+        record["posterior-test-at-oracle"] = test_post.at(test_post.best())
+        for partition in SCORED:
+            record[f"posterior-purity-{partition}"] = self.purity(partition, pooled, posterior=True)
+        LOG.info("posterior chosen %s test %s", chosen_post, record["posterior-test-at-chosen"])
+        LOG.info("posterior purity %s", {p: record[f"posterior-purity-{p}"] for p in SCORED})
+        return record
+
 
 @dataclass(frozen=True)
 class Collector:
@@ -409,32 +446,8 @@ def main() -> None:
     record["test-full-pool-at-chosen"] = study.gains(Partition.TEST, whole).at(chosen)
     record["val-full-pool-at-chosen"] = study.gains(Partition.VALIDATION, whole).at(chosen)
     LOG.info("full pool at chosen: %s", record["test-full-pool-at-chosen"])
-    for partition in SCORED:
-        record[f"purity-{partition}"] = study.purity(partition, pooled)
-        record[f"chance-{partition}"] = study.chance(partition)
-        record[f"purity-by-label-{partition}"] = study.by_label(partition, pooled)
-        LOG.info("purity %s %s chance %s", partition, record[f"purity-{partition}"], record[f"chance-{partition}"])
-    record["available"] = {p: study.available(p, pooled) for p in SCORED}
-    record["oracle-label"] = {p: study.ceiling(p, pooled).best() for p in SCORED}
-    record["purity-matched"] = {p: study.matched(p, pooled).best() for p in SCORED}
-    LOG.info("available %s", record["available"])
-    LOG.info("oracle-label ceiling (best mix by test, k 0=all) %s", record["oracle-label"])
-    LOG.info("purity-matched (key = same-label of %d) %s", MATCH_K, record["purity-matched"])
-    val_post, test_post = (
-        study.gains(Partition.VALIDATION, pooled, posterior=True),
-        study.gains(Partition.TEST, pooled, posterior=True),
-    )
-    chosen_post = val_post.best()
-    record["posterior-chosen"] = str(chosen_post)
-    record["posterior-val-at-chosen"] = val_post.at(chosen_post)
-    record["posterior-test-at-chosen"] = test_post.at(chosen_post)
-    record["posterior-test-macro-at-chosen"] = float(test_post.macro()[chosen_post].mean())
-    record["posterior-oracle"] = str(test_post.best())
-    record["posterior-test-at-oracle"] = test_post.at(test_post.best())
-    for partition in SCORED:
-        record[f"posterior-purity-{partition}"] = study.purity(partition, pooled, posterior=True)
-    LOG.info("posterior chosen %s test %s", chosen_post, record["posterior-test-at-chosen"])
-    LOG.info("posterior purity %s", {p: record[f"posterior-purity-{p}"] for p in SCORED})
+    record.update(study.pooled_record(pooled))
+    record.update(study.posterior_record(pooled))
     path.with_suffix(".json").write_text(json.dumps(record, indent=1, default=str))
 
 

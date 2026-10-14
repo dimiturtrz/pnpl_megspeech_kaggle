@@ -320,6 +320,15 @@ class Study:
         """The T5 lexicon for `T5`, else the saved per-word targets under `name`."""
         return Lexical(Lexicon.load(Lexicon.path(root))) if name == T5 else Directory(name, root)
 
+    def report(self, root: DataRoot, teachers: list[str], shuffles: int = SHUFFLES) -> None:
+        """Log each teacher's row and component curve on the validation words, then on held-out training runs."""
+        for split, scored in (("official-val", self), ("held-out train runs", self.held_out())):
+            for name in teachers:
+                result = scored.align(name, split, self.teacher(root, name), shuffles)
+                LOG.info(result.row() if result else f"| {name} / {split} | no targets |")
+                if result:
+                    LOG.info("  %s val corr by component: %s", name, result.curve())
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -343,12 +352,7 @@ def main() -> None:
     LOG.info("words: train %d val %d", len(study.train.table), len(study.val.table))
     LOG.info("meg-word probe BAcc@10 (all words): %.4f", study.meg_ceiling())
     LOG.info(HEADER)
-    for split, scored in (("official-val", study), ("held-out train runs", study.held_out())):
-        for name in args.teachers:
-            result = scored.align(name, split, study.teacher(root, name), args.shuffles)
-            LOG.info(result.row() if result else f"| {name} / {split} | no targets |")
-            if result:
-                LOG.info("  %s val corr by component: %s", name, result.curve())
+    study.report(root, args.teachers, args.shuffles)
 
 
 if __name__ == "__main__":

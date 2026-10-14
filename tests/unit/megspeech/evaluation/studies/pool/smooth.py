@@ -301,3 +301,19 @@ def test_pick() -> None:
     assert torch.equal(rows, Draw(size=4, grouped=True).pick(6, span, 3))
     assert len(set(span[rows].tolist())) == 2
     assert len(set(Draw(size=4).pick(6, None, 3).tolist())) == 4
+
+
+def test_pooled_record() -> None:
+    record = smoothing().pooled_record(Draw(size=0))
+    assert record["chance-test"] == {"Sherlock1": pytest.approx(1 / PAIRS)}
+    assert set(record) >= {"purity-validation", "purity-by-label-test", "available", "oracle-label", "purity-matched"}
+    available = record["available"]
+    assert isinstance(available, dict)
+    assert set(available) == set(SCORED)
+
+
+def test_posterior_record() -> None:
+    record = smoothing().posterior_record(Draw(size=0))
+    chosen = smoothing().gains(Partition.VALIDATION, Draw(size=0), posterior=True).best()
+    assert record["posterior-chosen"] == str(chosen)
+    assert set(record) >= {"posterior-test-at-oracle", "posterior-purity-validation", "posterior-purity-test"}

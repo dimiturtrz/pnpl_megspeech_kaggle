@@ -123,6 +123,32 @@ class Survey:
         onsets = dict(zip(cache.subjects, sentences, strict=True))
         return [onsets[DEEP].match(other, subject) for subject, other in onsets.items()]
 
+    def report_text(self) -> None:
+        """Log, per pooled run, how much of subject 0's ruler text it repeats, with the totals."""
+        text = self.text()
+        for row in text:
+            LOG.info("text %s", row)
+        LOG.info(
+            "text: %d runs, %d of %d words matched (%d vocabulary)",
+            len(text),
+            sum(r.words for r in text),
+            sum(r.total for r in text),
+            sum(r.labelled for r in text),
+        )
+
+    def report_kaggle(self) -> None:
+        """Log, per subject, how many of subject 0's Kaggle test sentences its archive holds, with the totals."""
+        matches = self.kaggle()
+        for match in matches:
+            LOG.info("Kaggle test %s", match)
+        others = [match for match in matches if match.subject != DEEP]
+        LOG.info(
+            "Kaggle test: %d of %d subject-0 sentences matched one-to-one across %d other subjects",
+            sum(e.unique for e in others),
+            sum(e.total for e in others),
+            len(others),
+        )
+
 
 def main() -> None:
     """Log, per subject, how much of subject 0's ruler text its pooled run repeats and how many of subject 0's
@@ -131,26 +157,8 @@ def main() -> None:
     parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     survey = Survey(DataRoot.from_config())
-    text = survey.text()
-    for row in text:
-        LOG.info("text %s", row)
-    LOG.info(
-        "text: %d runs, %d of %d words matched (%d vocabulary)",
-        len(text),
-        sum(r.words for r in text),
-        sum(r.total for r in text),
-        sum(r.labelled for r in text),
-    )
-    matches = survey.kaggle()
-    for match in matches:
-        LOG.info("Kaggle test %s", match)
-    others = [match for match in matches if match.subject != DEEP]
-    LOG.info(
-        "Kaggle test: %d of %d subject-0 sentences matched one-to-one across %d other subjects",
-        sum(e.unique for e in others),
-        sum(e.total for e in others),
-        len(others),
-    )
+    survey.report_text()
+    survey.report_kaggle()
 
 
 if __name__ == "__main__":
