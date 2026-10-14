@@ -12,7 +12,7 @@ from megspeech.data.raw.runs import Run
 from megspeech.objective.targets import whisper as module
 from megspeech.objective.targets.speech import STRIDE, Chapter, Heard
 from megspeech.objective.targets.t5 import Encoder as T5Encoder
-from megspeech.objective.targets.whisper import FRAMES, LAYERS, STEM, WINDOW, Listener
+from megspeech.objective.targets.whisper import FRAMES, HOP, LAYERS, MARGIN, STEM, WINDOW, Listener
 from tests.unit.megspeech.data.config import HELD, TRAIN
 from tests.unit.megspeech.objective.targets.speech import CPU, DIM, Root, heard_run
 
@@ -81,6 +81,13 @@ def test_latents() -> None:
         assert frames.shape == (chapter.frames, DIM)
         expected = (layer + 1) * torch.from_numpy(chapter.audio[::STRIDE][: chapter.frames]) / PEAK
         assert frames[:, 0].tolist() == pytest.approx(expected.tolist(), rel=1e-5)
+
+
+def test_inside() -> None:
+    assert Listener.inside(0, HOP) == slice(0, FRAMES - MARGIN)
+    assert Listener.inside(HOP, 2 * HOP) == slice(MARGIN, FRAMES - MARGIN)
+    assert Listener.inside(HOP, HOP) == slice(MARGIN, FRAMES)
+    assert Listener.inside(0, 0) == slice(0, FRAMES)
 
 
 def test_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

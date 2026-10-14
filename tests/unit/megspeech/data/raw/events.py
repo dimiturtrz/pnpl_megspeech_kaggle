@@ -32,3 +32,17 @@ def test_words(tmp_path: Path) -> None:
     words = table(tmp_path).words(Event.ONSET)
     assert words["segment"].tolist() == ["The", "null"]
     assert words["timemeg"].tolist() == [0.5, 2.0]
+
+
+def test_ordered() -> None:
+    table = pd.DataFrame(
+        {
+            "kind": ["phoneme", "word", "phoneme", "word"],
+            "segment": ["a", "A", "b", "B"],
+            "timemeg": [1.0, 1.0, 1.0, 0.5],
+        }
+    )
+    ordered = Events.ordered(table, [Event.SEGMENT, Event.ONSET])
+    assert list(ordered.columns) == ["segment", "timemeg"]
+    assert ordered["segment"].tolist() == ["B", "A", "a", "b"]
+    assert ordered.index.tolist() == [0, 1, 2, 3]

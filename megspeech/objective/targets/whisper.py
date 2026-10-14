@@ -67,11 +67,16 @@ class Listener:
                 features = self.extractor([audio[s : s + WINDOW] for s in chosen]).to(device)
                 states = self.encoder(input_features=features, output_hidden_states=True).hidden_states
                 for row, start in enumerate(chosen):
-                    begin = 0 if start == 0 else MARGIN
-                    end = FRAMES if start == starts[-1] else FRAMES - MARGIN
+                    frames = self.inside(start, starts[-1])
                     for layer in LAYERS:
-                        kept[layer].append(states[layer][row, begin:end].float())
+                        kept[layer].append(states[layer][row, frames].float())
         return {layer: torch.cat(parts)[:total] for layer, parts in kept.items()}
+
+    @staticmethod
+    def inside(start: int, last: int) -> slice:
+        """The frames a window starting at sample `start` supplies: all but `MARGIN` at each edge another window
+        reads, the first window's leading edge and the `last` one's trailing edge kept."""
+        return slice(0 if start == 0 else MARGIN, FRAMES if start == last else FRAMES - MARGIN)
 
     @classmethod
     def load(cls, root: DataRoot, device: torch.device) -> "Listener":

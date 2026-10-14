@@ -80,21 +80,24 @@ class Blend:
         listed = json.loads((models / name / METRICS).read_text(encoding="utf-8"))["members"]
         return cls(tuple(listed), section)
 
+    def scored(self, models: Path, member: str) -> tuple[Float[np.ndarray, "n v"], Int[np.ndarray, " n"]]:
+        """`member`'s probabilities and true words on the unseen-span words of every domain, domains in name order."""
+        domains = Probabilities.load(models / member / PROBS, self.section).domains
+        scored = [domains[key] for key in sorted(domains)]
+        probabilities = np.concatenate([words.probabilities[words.novel].numpy() for words in scored])
+        return probabilities, np.concatenate([words.labels[words.novel].numpy() for words in scored])
+
     def meg(self, models: Path) -> Meg:
         """The members' mean probabilities on the unseen-span words of every domain, rowed by true word."""
-        total: np.ndarray | None = None
-        labels: np.ndarray | None = None
-        for member in self.members:
-            domains = Probabilities.load(models / member / PROBS, self.section).domains
-            scored = [domains[key] for key in sorted(domains)]
-            probabilities = np.concatenate([words.probabilities[words.novel].numpy() for words in scored])
-            truth = np.concatenate([words.labels[words.novel].numpy() for words in scored])
-            if labels is not None and not np.array_equal(labels, truth):
-                raise ValueError(f"{member}: scored words differ from the first member's")
-            labels = truth
-            total = probabilities if total is None else total + probabilities
-        if total is None or labels is None:
+        if not self.members:
             raise ValueError("no members")
+        first, *rest = self.members
+        total, labels = self.scored(models, first)
+        for member in rest:
+            probabilities, truth = self.scored(models, member)
+            if not np.array_equal(labels, truth):
+                raise ValueError(f"{member}: scored words differ from the first member's")
+            total = total + probabilities
         return Meg.of(total / len(self.members), labels)
 
 

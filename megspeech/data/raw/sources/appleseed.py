@@ -27,7 +27,7 @@ from jaxtyping import Bool, Float
 
 from core.paths import DataRoot
 from megspeech.data.constants import QUIET, SFREQ
-from megspeech.data.raw.events import Event, Kind
+from megspeech.data.raw.events import Event, Events, Kind
 from megspeech.data.raw.fetch import APPLESEED, NEUROMAG
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.serialised import Corpus, RunName
@@ -54,7 +54,6 @@ sentences, with a trough between them, and this is the trough's middle."""
 NO_PHONE = {"", "sil", "sp"}
 STRESS = re.compile(r"\d+$")
 """The stress digit a CMU phone ends in."""
-KIND_ORDER = {Kind.WORD: 0, Kind.PHONEME: 1}
 
 
 @dataclass(frozen=True)
@@ -237,10 +236,7 @@ class Recording:
                 for story, shift in zip(stories, before, strict=True)
             ]
         )
-        ordered = events.assign(order=events[Event.KIND].map(KIND_ORDER)).sort_values(
-            [Event.ONSET, "order"], kind="stable"
-        )
-        return ordered[COLUMNS].reset_index(drop=True)
+        return Events.ordered(events, COLUMNS)
 
 
 @dataclass(frozen=True)

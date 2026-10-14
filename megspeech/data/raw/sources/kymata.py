@@ -32,11 +32,11 @@ from mne.preprocessing import find_bad_channels_maxwell, maxwell_filter
 
 from core.paths import DataRoot
 from megspeech.data.constants import QUIET, SFREQ
-from megspeech.data.raw.events import Event
+from megspeech.data.raw.events import Event, Events
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.serialised import Corpus, RunName
-from megspeech.data.raw.sources.appleseed import KIND_ORDER, Story
+from megspeech.data.raw.sources.appleseed import Story
 from megspeech.data.raw.sources.kymatasync import Alignment, Clock, Envelope
 from megspeech.data.raw.sources.masc import COLUMNS, HIGHPASS, ORIGIN, Neuromag
 from megspeech.data.raw.textgrid import Interval, TextGrid
@@ -214,9 +214,7 @@ class Recording:
         shifted = [
             play.assign(sentenceidx=play[Event.SENTENCE] + shift * per_play) for shift, play in enumerate(placed)
         ]
-        events = pd.concat(shifted)
-        ordered = events.assign(order=events[Event.KIND].map(KIND_ORDER))
-        return ordered.sort_values([Event.ONSET, "order"], kind="stable")[COLUMNS].reset_index(drop=True)
+        return Events.ordered(pd.concat(shifted), COLUMNS)
 
 
 @dataclass(frozen=True)

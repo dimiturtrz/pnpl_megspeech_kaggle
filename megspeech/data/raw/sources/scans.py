@@ -31,10 +31,10 @@ from typing import override
 import pandas as pd
 
 from core.paths import DataRoot
-from megspeech.data.raw.events import Event, Kind
+from megspeech.data.raw.events import Event, Events, Kind
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.serialised import Corpus, RunName
-from megspeech.data.raw.sources.appleseed import KIND_ORDER, Story
+from megspeech.data.raw.sources.appleseed import Story
 from megspeech.data.raw.sources.kymata import Recording as Triux
 from megspeech.data.raw.sources.kymata import Study
 from megspeech.data.raw.sources.kymatasync import Alignment, Clock
@@ -140,8 +140,7 @@ class Recording(Triux):
         (clock,) = plays
         words = self.book.words
         placed = clock.place(words).assign(segment=self.prefix + words[Event.SEGMENT], timechapter=words[Event.ONSET])
-        ordered = placed.assign(order=placed[Event.KIND].map(KIND_ORDER))
-        return ordered.sort_values([Event.ONSET, "order"], kind="stable")[COLUMNS_WITH_AUDIO].reset_index(drop=True)
+        return Events.ordered(placed, COLUMNS_WITH_AUDIO)
 
 
 @dataclass(frozen=True)

@@ -1,3 +1,4 @@
+import dataclasses
 import json
 from pathlib import Path
 
@@ -92,3 +93,23 @@ def test_meg(tmp_path: Path) -> None:
     assert meg.counts[0] == PER_WORD - 1
     assert meg.scores[5, 5] == pytest.approx(0.8)
     assert meg.scores[5, 6] == pytest.approx(0.1 / (VOCAB_SIZE - 1) + 0.1)
+
+
+def test_scored(tmp_path: Path) -> None:
+    write_ensemble(tmp_path, (0.0, 0.2))
+    probabilities, truth = Blend.named(tmp_path, "ens").scored(tmp_path, "b")
+    assert probabilities.shape == (VOCAB_SIZE * PER_WORD - 1, VOCAB_SIZE)
+    assert truth.tolist() == torch.arange(VOCAB_SIZE).repeat(PER_WORD)[1:].tolist()
+    assert probabilities[0, truth[0]] == pytest.approx(0.7)
+
+
+def test_meg_rejects(tmp_path: Path) -> None:
+    write_ensemble(tmp_path, (0.0, 0.0))
+    with pytest.raises(ValueError, match="no members"):
+        Blend((), SECTION).meg(tmp_path)
+    (tmp_path / "c").mkdir()
+    other = words(0.0)
+    shifted = dataclasses.replace(other, labels=other.labels.roll(1))
+    Probabilities({"dom": shifted}, 1.0, torch.zeros(VOCAB_SIZE), 1).save(tmp_path / "c" / PROBS, SECTION)
+    with pytest.raises(ValueError, match="c: scored words differ"):
+        Blend(("a", "c"), SECTION).meg(tmp_path)

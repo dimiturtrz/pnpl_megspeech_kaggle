@@ -29,6 +29,10 @@ class Kind(StrEnum):
     PHONEME = "phoneme"
 
 
+KIND_ORDER = {Kind.WORD: 0, Kind.PHONEME: 1}
+"""A word's rank before its phonemes' at the same onset."""
+
+
 @dataclass(frozen=True)
 class Events:
     """One run's `events.tsv`, read with only an empty cell missing (`MISSING`)."""
@@ -49,6 +53,12 @@ class Events:
     def heard(table: pd.DataFrame) -> pd.Series:
         """Which rows are heard words: `kind` word with a `segment` spoken."""
         return (table[Event.KIND] == Kind.WORD) & table[Event.SEGMENT].notna()
+
+    @staticmethod
+    def ordered(table: pd.DataFrame, columns: list[Event]) -> pd.DataFrame:
+        """`table`'s `columns` in time, a word before its phonemes at the same onset, ties kept in their order."""
+        ranked = table.assign(order=table[Event.KIND].map(KIND_ORDER))
+        return ranked.sort_values([Event.ONSET, "order"], kind="stable")[columns].reset_index(drop=True)
 
     def words(self, *columns: Event) -> pd.DataFrame:
         """The heard words' rows."""
