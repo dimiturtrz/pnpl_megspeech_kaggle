@@ -4,8 +4,8 @@ import torch
 
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE
-from megspeech.objective.auxiliary.similarity import Similarity
-from megspeech.objective.auxiliary.supcon import Positives, SupConTerm
+from megspeech.objective.auxiliary.contrastive.similarity import Similarity
+from megspeech.objective.auxiliary.contrastive.supcon import Positives, SupConTerm
 from megspeech.objective.term import Reading
 
 TARGET = torch.tensor([[0, 1, 2, IGNORE]])

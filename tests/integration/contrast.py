@@ -7,7 +7,7 @@ import torch
 from core.paths import DataRoot
 from megspeech.data.batching.split import SpanInput
 from megspeech.model.auxiliary import Tap, WithAuxiliary
-from megspeech.objective.auxiliary.contrast import SameWord, SameWordTerm
+from megspeech.objective.auxiliary.contrastive.word import SameWord, SameWordTerm
 from megspeech.objective.targets.loudness import CUT
 from megspeech.training.auxiliary import Auxiliary, AuxiliaryConfig, Joint, Tables
 from tests.unit.megspeech.model.auxiliary import ONSET, SLOT, net, x

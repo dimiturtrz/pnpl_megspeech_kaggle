@@ -15,7 +15,7 @@ from torch import Tensor, nn
 from torch.nn import functional
 
 from megspeech.data.labels.vocabulary import IGNORE
-from megspeech.objective.auxiliary.similarity import Similarity
+from megspeech.objective.auxiliary.contrastive.similarity import Similarity
 from megspeech.objective.term import AuxiliaryTerm, Reading
 
 

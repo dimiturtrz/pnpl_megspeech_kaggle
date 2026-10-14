@@ -8,8 +8,8 @@ import torch
 from megspeech.data.batching.split import Split
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.spans.spans import Spans
-from megspeech.objective.auxiliary.instance import Apart, InstanceTerm, Together
-from megspeech.objective.auxiliary.similarity import Similarity
+from megspeech.objective.auxiliary.contrastive.instance import Apart, InstanceTerm, Together
+from megspeech.objective.auxiliary.contrastive.similarity import Similarity
 from megspeech.objective.term import Reading
 
 CPU = torch.device("cpu")

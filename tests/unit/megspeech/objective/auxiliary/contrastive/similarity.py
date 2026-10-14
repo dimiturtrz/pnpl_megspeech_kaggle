@@ -3,7 +3,7 @@ import math
 import pytest
 import torch
 
-from megspeech.objective.auxiliary.similarity import Similarity
+from megspeech.objective.auxiliary.contrastive.similarity import Similarity
 
 
 def test_forward() -> None:

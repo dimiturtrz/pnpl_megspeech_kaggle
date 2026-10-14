@@ -1,4 +1,5 @@
-"""The head of the supervised-contrastive terms (`megspeech.objective.auxiliary.supcon`): the embeddings unchanged and
+"""The head of the supervised-contrastive terms
+(`megspeech.objective.auxiliary.contrastive.supcon`): the embeddings unchanged and
 the learned temperature of their cosine logits.
 
 The logits are cosines times `exp(theta) * ln N` over the batch's `N` labelled words, `theta` learned from 0: at
