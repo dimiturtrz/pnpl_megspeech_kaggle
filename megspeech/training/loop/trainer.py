@@ -55,7 +55,7 @@ from megspeech.training.sampling.curriculum import Curriculum, Natural, Observat
 from megspeech.training.sampling.pairing import Pairing, Unpaired
 from megspeech.training.sampling.sampler import Sampler
 from megspeech.training.teacher import Teacher, Untaught
-from megspeech.training.timing_expert import TimingExpert
+from megspeech.training.timing.expert import TimingExpert
 
 LOG = logging.getLogger(__name__)
 

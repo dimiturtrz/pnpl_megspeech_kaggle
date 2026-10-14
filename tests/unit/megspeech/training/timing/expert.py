@@ -13,8 +13,8 @@ from megspeech.data.spans.spans import Spans
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.model.context.timing import TimingHead
 from megspeech.model.context.timing_only import FILE, TimingOnly
-from megspeech.training.timing_corpus import TimingCorpus
-from megspeech.training.timing_expert import TimingExpert
+from megspeech.training.timing.corpus import TimingCorpus
+from megspeech.training.timing.expert import TimingExpert
 
 CPU = torch.device("cpu")
 SAMPLES = 50

@@ -6,7 +6,7 @@ import torch
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import IGNORE, PRIMARY
 from megspeech.data.spans.spans import MAX_WORDS, PAD
-from megspeech.training.timing_corpus import FILE, TimingCorpus
+from megspeech.training.timing.corpus import FILE, TimingCorpus
 
 KNOWN = PRIMARY.words[0]
 

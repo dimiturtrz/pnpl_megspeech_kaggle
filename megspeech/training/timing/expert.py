@@ -17,7 +17,7 @@ from megspeech.data.spans.spans import PAD
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Epoch
 from megspeech.model.context.timing_only import FILE, TimingOnly
-from megspeech.training.timing_corpus import Timed, TimingCorpus
+from megspeech.training.timing.corpus import Timed, TimingCorpus
 
 LOG = logging.getLogger(__name__)
 

@@ -1,9 +1,9 @@
 import argparse
 
 from core.tree import Tree
+from megspeech.training.adversary import AdversaryConfig
 from megspeech.training.auxiliary import AuxiliaryConfig
 from megspeech.training.optim import OptimConfig
-from megspeech.training.ramp import AdversaryConfig
 from megspeech.training.teacher import TeacherConfig
 from megspeech.training.transfer import TransferConfig
 

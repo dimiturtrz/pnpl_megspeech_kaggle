@@ -3,8 +3,8 @@
 import math
 from dataclasses import dataclass
 
+from megspeech.training.adversary import AdversaryConfig
 from megspeech.training.auxiliary import AuxiliaryConfig
-from megspeech.training.ramp import AdversaryConfig
 from megspeech.training.teacher import TeacherConfig
 from megspeech.training.transfer import TransferConfig
 
