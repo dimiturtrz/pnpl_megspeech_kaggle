@@ -1,9 +1,9 @@
 """The viewer's samples: whole sentences drawn per source the way `Stratify` draws val's sessions, and their text.
 
-`Stratify` assigns whole sessions; here the unit is one sentence, whose profile is its words' sums in the same additive
-layout (`WORDS`...`KNOWN`, label counts, book counts) a session's sums to, and the pick is the draw of least summed
-scaled `Stratify.gaps` against the rest of its source. Its exhaustive pair-swap search is quadratic in the units, so over
-thousands of words it is replaced by rounds of sampled swaps.
+`Stratify` assigns whole sessions; here the unit is one sentence, whose profile is its words' sums in the same
+additive layout (`WORDS`...`KNOWN`, label counts, book counts) a session's sums to, and the pick is the draw of least
+summed scaled `Stratify.gaps` against the rest of its source. Its exhaustive pair-swap search is quadratic in the units,
+so over thousands of words it is replaced by rounds of sampled swaps.
 """
 
 from dataclasses import dataclass

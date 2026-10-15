@@ -1,13 +1,15 @@
-"""What a model's context head reads for each word, and its 2-D principal-component projection."""
+"""What a model's context head reads for each word, and its 2-D projections (PCA, UMAP)."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import Protocol
 
 import numpy as np
 import torch
 from jaxtyping import Float
 from torch import Tensor, nn
+from umap import UMAP
 
 from megspeech.data.batching.split import EVAL_SPANS, Split
 from megspeech.evaluation.scoring.evaluator import Evaluator
@@ -55,13 +57,33 @@ class Embedder:
 
 @dataclass(frozen=True)
 class Projection:
-    """Points on their first `COMPONENTS` principal components, with the variance share each explains."""
+    """Points in 2-D, with the variance share each axis explains where the projector defines one (else empty)."""
 
     points: Float[np.ndarray, "n 2"]
-    explained: Float[np.ndarray, " 2"]
+    explained: Float[np.ndarray, " k"]
 
     @classmethod
-    def of(cls, x: Float[np.ndarray, "n h"]) -> "Projection":
+    def flat(cls, rows: int) -> "Projection":
+        """Every point at the origin: what a projector returns for input it cannot spread."""
+        return cls(np.zeros((rows, COMPONENTS)), np.zeros(0))
+
+
+class Projector(Protocol):
+    """Maps embeddings to a 2-D `Projection`, under its own `name` in the export."""
+
+    @property
+    def name(self) -> str: ...
+
+    def project(self, x: Float[np.ndarray, "n h"]) -> Projection: ...
+
+
+@dataclass(frozen=True)
+class Principal:
+    """The first `COMPONENTS` principal components and the variance share each explains."""
+
+    name: str = "pca"
+
+    def project(self, x: Float[np.ndarray, "n h"]) -> Projection:
         centred = x - x.mean(axis=0, keepdims=True)
         _, values, vectors = np.linalg.svd(centred, full_matrices=False)
         variance = values**2
@@ -71,4 +93,29 @@ class Projection:
         kept = min(COMPONENTS, len(values))
         points[:, :kept] = centred @ vectors[:kept].T
         explained[:kept] = share[:kept]
-        return cls(points, explained)
+        return Projection(points, explained)
+
+
+@dataclass(frozen=True)
+class Manifold:
+    """UMAP on cosine distance: keeps each word's `neighbours` nearest, so clusters linear axes average away show."""
+
+    name: str = "umap"
+    neighbours: int = 15
+    spread: float = 0.1
+    seed: int = 0
+
+    def project(self, x: Float[np.ndarray, "n h"]) -> Projection:
+        if x.shape[1] == 0 or len(x) <= self.neighbours or not np.ptp(x, axis=0).any():
+            return Projection.flat(len(x))
+        reducer = UMAP(
+            n_components=COMPONENTS,
+            metric="cosine",
+            n_neighbors=self.neighbours,
+            min_dist=self.spread,
+            random_state=self.seed,
+        )
+        return Projection(np.asarray(reducer.fit_transform(x), dtype=np.float64), np.zeros(0))
+
+
+PROJECTORS: tuple[Projector, ...] = (Principal(), Manifold())

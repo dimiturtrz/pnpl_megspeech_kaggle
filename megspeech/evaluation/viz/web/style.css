@@ -95,6 +95,7 @@ audio[hidden] { display:none; }
 .cgrad { flex:0 1 9rem; height:.6rem; border-radius:.3rem;
   background:linear-gradient(90deg,hsl(120,80%,50%),hsl(60,80%,50%),hsl(0,80%,50%)); }
 .mselect { width:100%; font:inherit; font-size:.85rem; }
+.projsel { width:auto; margin-left:auto; }
 .sent { display:grid; grid-template-columns:3.4em minmax(0,1fr) 2.6em; gap:.4rem; padding:.25rem .5rem; cursor:pointer;
   border-top:1px solid var(--line); font-size:.82rem; }
 .sent:hover { background:#1a2030; }

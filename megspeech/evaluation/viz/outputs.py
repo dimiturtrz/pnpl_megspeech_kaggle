@@ -26,12 +26,11 @@ from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.metric.ruler import TOP, Graded, Ruler
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.probabilities import Words
-from megspeech.evaluation.viz.embed import Embedder, Projection
+from megspeech.evaluation.viz.embed import PROJECTORS, Embedder
 from megspeech.evaluation.viz.records import KEY
 
 METRIC = f"macro bAcc@{TOP}, unseen-span words"
 """The selection macro (`Ruler.point`): each counted domain's balanced top-10 accuracy over its unseen-span words."""
-PCA = "pca"
 
 
 @dataclass(frozen=True)
@@ -41,7 +40,7 @@ class Outputs:
     name: str
     track: str
     score: float | None
-    explained: list[float]
+    projections: dict[str, dict[str, list[float]]]
     samples: dict[str, dict[str, object]]
 
     def manifest(self) -> dict[str, object]:
@@ -57,14 +56,14 @@ class Outputs:
         """`<directory>/<name>.json`."""
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{self.name}.json"
-        document = {"name": self.name, "projection": PCA, "explained": self.explained, "samples": self.samples}
+        document = {"name": self.name, "projections": self.projections, "samples": self.samples}
         path.write_text(json.dumps(document), encoding="utf-8")
         return path
 
 
 @dataclass(frozen=True)
 class Predictions:
-    """Per-sample records from probabilities, labels and projected embeddings, rows aligned with `ids`."""
+    """Per-sample records from probabilities, labels and each projector's embedding points, rows aligned with `ids`."""
 
     ruler: Ruler = Ruler()
 
@@ -73,7 +72,7 @@ class Predictions:
         ids: Sequence[str],
         probabilities: Float[Tensor, "n v"],
         labels: Int[Tensor, " n"],
-        points: Float[np.ndarray, "n 2"],
+        points: dict[str, Float[np.ndarray, "n 2"]],
     ) -> dict[str, dict[str, object]]:
         hits = self.ruler.hits(probabilities, labels)
         truth = probabilities.gather(1, labels[:, None])[:, 0]
@@ -85,7 +84,7 @@ class Predictions:
                 "p_true": float(truth[i]),
                 "error": 1 - float(truth[i]),
                 "topk": [[PRIMARY.words[int(c)], float(p)] for c, p in zip(top.indices[i], top.values[i], strict=True)],
-                "emb": [float(x) for x in points[i]],
+                "emb": {projector: [float(x) for x in at[i]] for projector, at in points.items()},
             }
             for i, name in enumerate(ids)
         }
@@ -179,7 +178,7 @@ class Reader:
         emb = torch.zeros(size, dims)
         for domain, values in embedded.items():
             emb[located.at(domain)] = values
-        projection = Projection.of(emb.numpy())
+        projections = {projector.name: projector.project(emb.numpy()) for projector in PROJECTORS}
         counted = evaluator.eligible(splits)
         graded = evaluator.grade({d: evaluator.head(logits[d]) for d in counted}, counted, calibration)
         novel = {d: split.novel(evaluator.seen) for d, split in counted.items()}
@@ -189,6 +188,8 @@ class Reader:
             name,
             self.track(loaded),
             None if math.isnan(score) else score,
-            projection.explained.tolist(),
-            Predictions().records(keys["id"].tolist(), probabilities, labels, projection.points),
+            {name: {"explained": p.explained.tolist()} for name, p in projections.items()},
+            Predictions().records(
+                keys["id"].tolist(), probabilities, labels, {name: p.points for name, p in projections.items()}
+            ),
         )

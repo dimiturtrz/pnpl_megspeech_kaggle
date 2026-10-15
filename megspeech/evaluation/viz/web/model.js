@@ -8,6 +8,8 @@ const DIM = 0.1;
 const SHOWN = 0.9;
 const RING = 8;
 const COLOR_KEY = "megspeech-viz:color-by";
+const PREFERRED = "umap";
+const AXES = { pca: "PC" };
 
 const COLORINGS = {
   label: { fill: (p, a) => labelColor(p.label, a), hint: "colour = true label" },
@@ -27,6 +29,7 @@ export class ModelPanel {
     cv.addEventListener("mouseleave", () => { this.hover = null; $("tip").hidden = true; this.layer.paint(); });
     cv.addEventListener("click", (e) => { const p = this.nearest(e); if (p) onPick(p.id); });
     for (const b of $("colorby").children) b.onclick = () => this.setColor(b.dataset.c);
+    $("projsel").onchange = () => { state.projection = $("projsel").value; this.draw(); };
     this.setColor(store.get(COLOR_KEY, "label"), { redraw: false });
   }
 
@@ -75,19 +78,33 @@ export class ModelPanel {
       + outs.map(([n, o]) => `<span><span class="${o?.correct ? "ok" : "no"}">${o ? (o.correct ? "✓" : "✗") : "·"}</span> ${esc(n)}: ${esc(o?.pred ?? "—")}</span>`).join("");
   }
 
+  projection(m) {
+    const names = Object.keys(m?.projections ?? {}), pick = $("projsel");
+    if ([...pick.options].map((o) => o.value).join() !== names.join()) {
+      pick.replaceChildren(...names.map((n) => h("option", { value: n, textContent: n })));
+    }
+    if (!names.includes(state.projection)) state.projection = names.includes(PREFERRED) ? PREFERRED : names[0] ?? null;
+    pick.value = state.projection ?? "";
+    pick.hidden = !names.length;
+    return state.projection;
+  }
+
   draw() {
-    const m = state.models.get(state.active);
-    $("embhead").textContent = m ? `${m.projection ?? ""} · ${(m.explained ?? []).map((e, i) => `PC${i + 1} ${(100 * e).toFixed(1)}%`).join(" · ")}` : "";
+    const m = state.models.get(state.active), proj = this.projection(m);
+    const axis = AXES[proj] ?? `${(proj ?? "").toUpperCase()} `;
+    $("embhead").textContent = proj === "pca"
+      ? (m.projections.pca.explained ?? []).map((e, i) => `PC${i + 1} ${(100 * e).toFixed(1)}%`).join(" · ")
+      : "";
     this.layer.draw((ctx, W, H) => {
       this.pts = [];
       if (!m) return;
-      const raw = state.samples.map((s) => ({ s, o: m.samples[s.id] })).filter((p) => p.o?.emb);
+      const raw = state.samples.map((s) => ({ s, o: m.samples[s.id] })).map((p) => ({ ...p, e: p.o?.emb?.[proj] })).filter((p) => p.e);
       if (!raw.length) return;
-      const xs = raw.map((p) => p.o.emb[0]), ys = raw.map((p) => p.o.emb[1]);
+      const xs = raw.map((p) => p.e[0]), ys = raw.map((p) => p.e[1]);
       const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
       const sx = (W - 2 * PAD) / (x1 - x0 || 1), sy = (H - 2 * PAD) / (y1 - y0 || 1);
-      this.pts = raw.map(({ s, o }) => ({ id: s.id, label: s.label, o,
-        x: PAD + (o.emb[0] - x0) * sx, y: H - PAD - (o.emb[1] - y0) * sy, on: state.visSet.has(s.id) }));
+      this.pts = raw.map(({ s, o, e }) => ({ id: s.id, label: s.label, o,
+        x: PAD + (e[0] - x0) * sx, y: H - PAD - (e[1] - y0) * sy, on: state.visSet.has(s.id) }));
       const fill = COLORINGS[state.colorBy].fill;
       for (const pass of [false, true]) {
         for (const p of this.pts) {
@@ -97,9 +114,9 @@ export class ModelPanel {
           if (p.o.correct) { ctx.fillStyle = col; ctx.fill(); } else { ctx.strokeStyle = col; ctx.lineWidth = 1.3; ctx.stroke(); }
         }
       }
-      ctx.fillStyle = "#8b94a3"; ctx.font = "10px system-ui";
-      ctx.fillText("PC1 →", W - PAD - 30, H - 3);
-      ctx.save(); ctx.translate(10, PAD + 30); ctx.rotate(-Math.PI / 2); ctx.fillText("PC2 →", 0, 0); ctx.restore();
+      ctx.save(); ctx.fillStyle = "#8b94a3"; ctx.font = "10px system-ui"; ctx.textAlign = "right";
+      ctx.fillText(`${axis}1 →`, W - PAD, H - 3);
+      ctx.translate(10, PAD); ctx.rotate(-Math.PI / 2); ctx.fillText(`${axis}2 →`, 0, 0); ctx.restore();
     });
   }
 

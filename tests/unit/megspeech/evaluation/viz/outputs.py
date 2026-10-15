@@ -14,13 +14,14 @@ from megspeech.data.config import METRICS
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.evaluation.loaded.exported import ExportedModel
 from megspeech.evaluation.metric.ruler import TOP, Graded
-from megspeech.evaluation.viz.outputs import METRIC, PCA, Located, Outputs, Predictions, Reader
+from megspeech.evaluation.viz.outputs import METRIC, Located, Outputs, Predictions, Reader
 
 RUN = "sub-0_ses-11_task-Sherlock1_run-2"
+PROJECTIONS = {"pca": {"explained": [0.2, 0.1]}, "umap": {"explained": []}}
 
 
 def outputs() -> Outputs:
-    return Outputs("model", str(Track.DEEP), 0.5, [0.2, 0.1], {"0000": {"pred": "the"}})
+    return Outputs("model", str(Track.DEEP), 0.5, PROJECTIONS, {"0000": {"pred": "the"}})
 
 
 def test_manifest() -> None:
@@ -38,8 +39,7 @@ def test_write(tmp_path: Path) -> None:
     assert path == tmp_path / "models" / "model.json"
     assert json.loads(path.read_text(encoding="utf-8")) == {
         "name": "model",
-        "projection": PCA,
-        "explained": [0.2, 0.1],
+        "projections": PROJECTIONS,
         "samples": {"0000": {"pred": "the"}},
     }
 
@@ -49,7 +49,8 @@ def test_records() -> None:
     probabilities[0, 3] = 0.9
     probabilities[1, 5] = 0.5
     labels = torch.tensor([3, VOCAB_SIZE - 1])
-    records = Predictions().records(["a", "b"], probabilities, labels, np.array([[1.0, 2.0], [3.0, 4.0]]))
+    points = {"pca": np.array([[1.0, 2.0], [3.0, 4.0]]), "umap": np.array([[5.0, 6.0], [7.0, 8.0]])}
+    records = Predictions().records(["a", "b"], probabilities, labels, points)
     assert records["a"]["pred"] == PRIMARY.words[3]
     assert records["a"]["correct"] is True
     assert records["a"]["p_true"] == pytest.approx(0.9)
@@ -57,7 +58,7 @@ def test_records() -> None:
     assert records["b"]["correct"] is False
     assert records["b"]["pred"] == PRIMARY.words[5]
     assert len(cast("list[object]", records["b"]["topk"])) == TOP
-    assert records["b"]["emb"] == [3.0, 4.0]
+    assert records["b"]["emb"] == {"pca": [3.0, 4.0], "umap": [7.0, 8.0]}
 
 
 def rows() -> dict[str, pd.DataFrame]:

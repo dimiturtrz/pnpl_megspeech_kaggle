@@ -8,6 +8,7 @@ export const state = {
   active: null,
   sel: null,
   colorBy: "label",
+  projection: null,
   filter: { strata: {}, correct: "all", q: "" },
   visible: [],
   visSet: new Set(),
