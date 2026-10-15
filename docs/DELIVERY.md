@@ -38,8 +38,8 @@ records the members together with the scoring flags.
 
 - **Format:** the test rows are read by `pnpl.competition.holdout.LibriBrainCompetitionHoldout`, the organisers'
   own loader. New data in that layout runs unchanged. Any other layout needs an adapter to it.
-- **Training data is required too.** The command re-selects its temperature on the labelled local ruler, so the
-  training data has to be present (`python -m megspeech.data.raw.fetch`, public). The ruler does not depend on the
+- **Training data is required too.** The command re-selects its temperature on the labelled local test, so the
+  training data has to be present (`python -m megspeech.data.raw.fetch`, public). The local test does not depend on the
   test rows, so new test data gets the same temperature.
 - **Runtime on CPU:** about 10 min for a 4-member Deep blend. Broad's 29 members take over an hour.
 
