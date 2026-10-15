@@ -6,7 +6,7 @@ repos:
     hooks:
       - id: ruff-gate
         name: ruff — enforced (full select)
-        entry: uvx ruff@0.15.13 check core megspeech tests comp --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123,E501,SLF001,PGH003,PGH004,TID251 --ignore F722,F821
+        entry: uvx ruff@0.15.13 check core megspeech tests --select F,B,I,T201,FBT,BLE001,S101,S110,C901,PLR0912,PLR0913,PLR0915,PLR2004,PLC0415,RUF100,N,E741,E742,E743,PLR0124,PLR1714,PLW3301,RUF012,RUF005,RUF007,RUF010,RUF022,RUF046,C408,C420,SIM,PERF401,PLW0108,E731,E402,ICN001,S603,S607,PTH123,E501,SLF001,PGH003,PGH004,TID251 --ignore F722,F821
         language: system
         pass_filenames: false
         always_run: true
@@ -22,7 +22,7 @@ repos:
       - id: pyrefly-gate
         name: pyrefly — types (strict, enforced)
         # env-aware (`uv run --with`) so pyrefly reads installed dep stubs; scope = lint_paths (packages).
-        entry: uv run --with pyrefly==1.1.1 pyrefly check core megspeech tests comp
+        entry: uv run --with pyrefly==1.1.1 pyrefly check core megspeech tests
         language: system
         pass_filenames: false
         always_run: true

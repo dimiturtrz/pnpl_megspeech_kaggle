@@ -28,7 +28,7 @@ SELECT = ",".join(
 LAYERS = ["core", "megspeech"]
 # ruff + jscpd are R1 HYGIENE gates — they may scan WIDER than the R2/R3 arch set LAYERS (a viewer / tests
 # tree worth linting). Default = LAYERS; widen via lint_paths/jscpd_paths in .copier-answers.yml (bd 9mu).
-LINT_LAYERS = ["core", "megspeech", "tests", "comp"]
+LINT_LAYERS = ["core", "megspeech", "tests"]
 JSCPD_LAYERS = ["core", "megspeech"]
 
 

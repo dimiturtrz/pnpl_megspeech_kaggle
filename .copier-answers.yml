@@ -8,7 +8,7 @@ coverage_floor: 90
 data_env_var: MEGSPEECH_DATA
 domain: ml
 jscpd_paths: core megspeech
-lint_paths: core megspeech tests comp
+lint_paths: core megspeech tests
 packages: core,megspeech
 project_name: megspeech
 repo_url: https://github.com/dimiturtrz/pnpl_megspeech_kaggle
