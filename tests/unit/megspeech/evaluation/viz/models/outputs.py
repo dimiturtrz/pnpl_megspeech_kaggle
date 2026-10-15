@@ -9,12 +9,14 @@ import pytest
 import torch
 
 from core.paths import DataRoot
+from megspeech.data.batching.split import Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.evaluation.loaded.exported import ExportedModel
 from megspeech.evaluation.metric.ruler import TOP, Graded
-from megspeech.evaluation.viz.models.outputs import LEVELS, METRIC, Located, Outputs, Predictions, Reader
+from megspeech.evaluation.scoring.evaluator import Calibration
+from megspeech.evaluation.viz.models.outputs import LEVELS, METRIC, Located, Outputs, Pass, Predictions, Reader
 
 RUN = "sub-0_ses-11_task-Sherlock1_run-2"
 PROJECTIONS = {"pca": {"explained": [0.2, 0.1]}, "umap": {"explained": []}}
@@ -152,3 +154,25 @@ def loaded(subjects: tuple[int, ...]) -> ExportedModel:
 def test_track() -> None:
     assert Reader.track(loaded((0,))) == str(Track.DEEP)
     assert Reader.track(loaded((0, 1))) == str(Track.BROAD)
+
+
+def sampling(graded: Graded) -> Pass:
+    evaluator = SimpleNamespace(seen=None, graded_logits=lambda *_: graded)
+    splits = {name: cast("Split", SimpleNamespace(novel=lambda _: torch.arange(3))) for name in ("a", "b", "c")}
+    model = cast("ExportedModel", SimpleNamespace(evaluator=evaluator))
+    return Pass(model, splits, located(), cast("Calibration", None), {})
+
+
+def test_present() -> None:
+    present = sampling(Graded({})).present()
+    assert [(name, mine.tolist()) for name, _, mine in present] == [("a", [1, 2]), ("b", [0])]
+
+
+def test_rows() -> None:
+    assert sampling(Graded({})).rows(np.array([0, 2])).tolist() == [1, 2]
+
+
+def test_score() -> None:
+    hits = Graded({"a": (torch.tensor([False, True, True]), torch.tensor([1, 2, 3]))})
+    assert sampling(hits).score() == 1.0
+    assert sampling(Graded({})).score() is None

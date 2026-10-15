@@ -14,6 +14,7 @@ from jaxtyping import Float, Int, UInt8
 from torch import Tensor
 
 from core.paths import DataRoot
+from megspeech.data.batching.split import Split
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
 from megspeech.data.constants import CHANNELS
@@ -27,7 +28,9 @@ from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.metric.ruler import TOP, Graded, Ruler
 from megspeech.evaluation.saliency import Integrated
 from megspeech.evaluation.scoring.config import Scoring
+from megspeech.evaluation.scoring.evaluator import Calibration
 from megspeech.evaluation.scoring.probabilities import Words
+from megspeech.evaluation.scoring.score import Head
 from megspeech.evaluation.viz.bundle.records import KEY
 from megspeech.evaluation.viz.models.embed import PROJECTORS, Embedder
 
@@ -168,6 +171,68 @@ class Located:
         return Graded(kept)
 
 
+@dataclass(frozen=True)
+class Pass:
+    """One loaded model's logits on every domain, read back at the samples `located` there."""
+
+    loaded: ExportedModel
+    splits: dict[str, Split]
+    located: Located
+    calibration: Calibration
+    logits: dict[str, dict[Head, Float[Tensor, "n v"]]]
+
+    def present(self) -> list[tuple[str, Split, Int[np.ndarray, " k"]]]:
+        """Each domain holding samples: its name, split, and those samples' rows."""
+        return [
+            (name, split, self.located.at(name)) for name, split in self.splits.items() if len(self.located.at(name))
+        ]
+
+    def rows(self, mine: Int[np.ndarray, " k"]) -> Int[Tensor, " k"]:
+        """The domain word positions of the samples `mine`."""
+        return torch.from_numpy(self.located.position[mine])
+
+    def predicted(self) -> tuple[Float[Tensor, "n v"], Int[Tensor, " n"]]:  # devtools-ignore: test-mirror
+        """Each sample's calibrated word probabilities and true word."""
+        size = len(self.located.domain)
+        probabilities = torch.zeros(size, len(PRIMARY.words))
+        labels = torch.zeros(size, dtype=torch.int64)
+        for name, split, mine in self.present():
+            chosen = Words.of(self.loaded.evaluator, self.logits[name], split, self.calibration)
+            row = torch.searchsorted(chosen.ids, self.rows(mine))
+            probabilities[mine] = chosen.probabilities[row]
+            labels[mine] = chosen.labels[row]
+        return probabilities, labels
+
+    def saliency(self) -> Float[Tensor, "n c"]:  # devtools-ignore: test-mirror
+        """Each sample's integrated-gradients share per sensor."""
+        integrated = Integrated(self.loaded.model)
+        saliency = torch.zeros(len(self.located.domain), CHANNELS)
+        for _, split, mine in self.present():
+            saliency[mine] = integrated.sensors(split, self.rows(mine).to(split.y.device)).cpu()
+        return saliency
+
+    def embedding(self) -> Float[Tensor, "n d"]:  # devtools-ignore: test-mirror
+        """Each sample's word embedding; zero-width when no domain holds samples."""
+        embedder = Embedder(self.loaded.evaluator)
+        embedded = [
+            (mine, embedder.embedded(self.loaded.model, split)[self.located.position[mine]].cpu())
+            for _, split, mine in self.present()
+        ]
+        embedding = torch.zeros(len(self.located.domain), max((e.shape[1] for _, e in embedded), default=0))
+        for mine, values in embedded:
+            embedding[mine] = values
+        return embedding
+
+    def score(self) -> float | None:
+        """`METRIC` on the sampled words; `None` when none counts."""
+        evaluator = self.loaded.evaluator
+        graded = evaluator.graded_logits(self.logits, self.splits, self.calibration)
+        novel = {name: self.splits[name].novel(evaluator.seen) for name in graded.domains}
+        kept = self.located.sampled(graded, novel)
+        score = Ruler().point(kept) if kept.domains else math.nan
+        return None if math.isnan(score) else score
+
+
 class Reading(Protocol):
     def read(self, root: DataRoot, name: str, runs: list[Run], keys: pd.DataFrame) -> Outputs: ...
 
@@ -205,42 +270,17 @@ class Reader:
         located = Located.of(keys, rows)
         evaluator, calibration = loaded.evaluator, loaded.calibration(self.tau(root, name))
         logits = {domain: evaluator.logits(loaded.model, split) for domain, split in splits.items()}
-        embedder, integrated = Embedder(evaluator), Integrated(loaded.model)
-        size = len(keys)
-        saliency = torch.zeros(size, CHANNELS)
-        probabilities = torch.zeros(size, len(PRIMARY.words))
-        labels = torch.zeros(size, dtype=torch.int64)
-        embedded: dict[str, Tensor] = {}
-        for domain, split in splits.items():
-            mine = located.at(domain)
-            if not len(mine):
-                continue
-            chosen = Words.of(evaluator, logits[domain], split, calibration)
-            row = torch.searchsorted(chosen.ids, torch.from_numpy(located.position[mine]))
-            probabilities[mine] = chosen.probabilities[row]
-            labels[mine] = chosen.labels[row]
-            embedded[domain] = embedder.embedded(loaded.model, split)[located.position[mine]].cpu()
-            saliency[mine] = integrated.sensors(
-                split, torch.from_numpy(located.position[mine]).to(split.y.device)
-            ).cpu()
-        dims = max((e.shape[1] for e in embedded.values()), default=0)
-        emb = torch.zeros(size, dims)
-        for domain, values in embedded.items():
-            emb[located.at(domain)] = values
-        projections = {projector.name: projector.project(emb.numpy()) for projector in PROJECTORS}
-        counted = evaluator.eligible(splits)
-        graded = evaluator.grade({d: evaluator.head(logits[d]) for d in counted}, counted, calibration)
-        novel = {d: split.novel(evaluator.seen) for d, split in counted.items()}
-        kept = located.sampled(graded, novel)
-        score = Ruler().point(kept) if kept.domains else math.nan
+        sampled = Pass(loaded, splits, located, calibration, logits)
+        probabilities, labels = sampled.predicted()
+        projections = {projector.name: projector.project(sampled.embedding().numpy()) for projector in PROJECTORS}
         return Outputs(
             name,
             self.track(loaded),
-            None if math.isnan(score) else score,
+            sampled.score(),
             {name: {"explained": p.explained.tolist()} for name, p in projections.items()},
             Predictions().records(
                 keys["id"].tolist(), probabilities, labels, {name: p.points for name, p in projections.items()}
             ),
             Predictions().metrics(probabilities, labels),
-            saliency,
+            sampled.saliency(),
         )
