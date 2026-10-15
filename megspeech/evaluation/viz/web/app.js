@@ -71,9 +71,7 @@ function restore() {
 
 async function main() {
   await load();
-  const man = state.man;
-  $("sub").textContent = `${man.name} · ${state.samples.length} words · seed ${man.seed} · ${man.models.length} models`;
-  signals.setSensors(man.sensors);
+  signals.setSensors(state.man.sensors);
   buildFilters(refilter);
   restore();
   window.addEventListener("hashchange", restore);

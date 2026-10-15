@@ -4,9 +4,11 @@ export const state = {
   samples: [],
   byId: new Map(),
   models: new Map(),
+  saliency: new Map(),
+  row: new Map(),
   active: null,
   sel: null,
-  colorBy: "label",
+  colorBy: "class",
   focus: null,
   projection: null,
   filter: { strata: {}, ranges: {}, q: "" },
@@ -26,8 +28,16 @@ const within = (v, [lo, hi]) => (lo == null || v >= lo) && (hi == null || v <= h
 export const activeFilters = () => {
   const f = state.filter;
   return Object.values(f.strata).filter(Boolean).length
-    + Object.values(f.ranges).filter(([lo, hi]) => lo != null || hi != null).length;
+    + Object.values(f.ranges).filter(([lo, hi]) => lo != null || hi != null).length
+    + (f.q.trim() ? 1 : 0);
 };
+
+export function weightOf(model, id) {
+  const w = state.saliency.get(model), r = state.row.get(id);
+  return w && r != null ? w.data.subarray(r * w.channels, (r + 1) * w.channels) : null;
+}
+
+export const rankedOf = (o) => o.ranked ?? o.topk;
 
 export const errorOf = (o) => o.error ?? 1 - (o.p_true ?? 0);
 
@@ -48,6 +58,12 @@ export function applyFilter() {
   state.visSet = new Set(state.visible.map((s) => s.id));
 }
 
+async function getSaliency(m) {
+  if (!m.saliency) return null;
+  const r = await fetch(`data/models/${encodeURIComponent(m.saliency.file)}`);
+  return r.ok ? { data: new Uint8Array(await r.arrayBuffer()), channels: m.saliency.channels } : null;
+}
+
 async function getJson(path) {
   const r = await fetch(`data/${path}`);
   if (!r.ok) throw new Error(`data/${path}: HTTP ${r.status}`);
@@ -62,7 +78,10 @@ export async function load() {
   ]);
   state.samples = samples;
   for (const s of samples) state.byId.set(s.id, s);
+  samples.forEach((s, i) => state.row.set(s.id, i));
   state.man.models.forEach((m, i) => state.models.set(m.name, models[i]));
+  const weights = await Promise.all(state.man.models.map(getSaliency));
+  state.man.models.forEach((m, i) => weights[i] && state.saliency.set(m.name, weights[i]));
   state.active = state.man.models[0]?.name ?? null;
   setLabels(state.man.models[0]?.labels ?? []);
 }

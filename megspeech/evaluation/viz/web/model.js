@@ -1,4 +1,4 @@
-import { state, out, errorOf } from "./state.js";
+import { state, out, errorOf, rankedOf } from "./state.js";
 import { $, h, esc, Layer, labelColor, errorColor, store, wordCount } from "./util.js";
 import { Legend, sourceColor } from "./legend.js";
 import { wordClass, classColor } from "./classes.js";
@@ -10,6 +10,7 @@ const DIM = 0.1;
 const SHOWN = 0.9;
 const RING = 8;
 const COLOR_KEY = "megspeech-viz:color-by";
+const CUT = 10;
 const PREFERRED = "umap";
 const AXES = { pca: "PC" };
 
@@ -44,7 +45,7 @@ export class ModelPanel {
     cv.addEventListener("mousemove", (e) => this.onMove(e));
     cv.addEventListener("mouseleave", () => { this.hover = null; $("tip").hidden = true; this.layer.paint(); this.mark(); });
     cv.addEventListener("click", (e) => { const p = this.nearest(e); if (p) onPick(p.id); });
-    for (const b of $("colorby").children) b.onclick = () => this.setColor(b.dataset.c);
+    $("colorby").onchange = () => this.setColor($("colorby").value);
     $("projsel").onchange = () => { state.projection = $("projsel").value; this.draw(); };
     this.setColor(store.get(COLOR_KEY, "class"), { redraw: false });
   }
@@ -53,7 +54,7 @@ export class ModelPanel {
     state.colorBy = c in COLORINGS ? c : "class";
     state.focus = null;
     store.set(COLOR_KEY, state.colorBy);
-    for (const b of $("colorby").children) b.classList.toggle("on", b.dataset.c === state.colorBy);
+    $("colorby").value = state.colorBy;
     $("schint").title = `${COLORINGS[state.colorBy].hint}
 filled = correct · hollow = wrong · faint = filtered out
 click a point to open it · ↑/↓ step · space play`;
@@ -71,19 +72,19 @@ click a point to open it · ↑/↓ step · space play`;
   topk(s) {
     const o = out(state.active, s.id), box = $("topk");
     if (!o) { box.textContent = "no output for this sample"; return; }
-    const max = o.topk[0]?.[1] || 1;
-    box.replaceChildren(...o.topk.map(([lab, p]) => {
-      const cls = `kbar${lab === s.label ? " truth" : ""}${lab === o.pred ? " pred" : ""}`;
+    const rows = rankedOf(o), max = rows[0]?.[1] || 1;
+    box.replaceChildren(...rows.map(([lab, p], i) => {
+      const cut = i === CUT - 1 && rows.length > CUT;
+      const cls = `kbar${lab === s.label ? " truth" : ""}${lab === o.pred ? " pred" : ""}${cut ? " cut" : ""}`;
       const bar = h("i");
       bar.style.width = `${(100 * p) / max}%`;
-      return h("div", { className: cls, title: `${lab}: ${p}` },
+      return h("div", { className: cls, title: `#${i + 1} ${lab}: ${p}${cut ? ` · top-${CUT} ends here` : ""}` },
+        h("span", { className: "krank", textContent: i + 1 }),
         h("span", { className: "kname", textContent: lab }),
         h("span", { className: "ktrack" }, bar),
         h("span", { className: "kval", textContent: p.toFixed(3) }));
     }));
-    if (!o.topk.some(([lab]) => lab === s.label)) {
-      box.append(h("div", { className: "hint", textContent: `true label "${s.label}" not in top-${o.topk.length} · p(true) ${(o.p_true ?? 0).toFixed(3)}` }));
-    }
+    box.scrollTop = 0;
   }
 
   projection(m) {

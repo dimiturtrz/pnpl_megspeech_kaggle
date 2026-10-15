@@ -14,14 +14,15 @@ from megspeech.data.config import METRICS
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.evaluation.loaded.exported import ExportedModel
 from megspeech.evaluation.metric.ruler import TOP, Graded
-from megspeech.evaluation.viz.outputs import METRIC, Located, Outputs, Predictions, Reader
+from megspeech.evaluation.viz.outputs import LEVELS, METRIC, Located, Outputs, Predictions, Reader
 
 RUN = "sub-0_ses-11_task-Sherlock1_run-2"
 PROJECTIONS = {"pca": {"explained": [0.2, 0.1]}, "umap": {"explained": []}}
 
 
 def outputs() -> Outputs:
-    return Outputs("model", str(Track.DEEP), 0.5, PROJECTIONS, {"0000": {"pred": "the"}}, {"mrr": 0.5})
+    saliency = torch.tensor([[0.25, 0.5, 0.25]])
+    return Outputs("model", str(Track.DEEP), 0.5, PROJECTIONS, {"0000": {"pred": "the"}}, {"mrr": 0.5}, saliency)
 
 
 def test_manifest() -> None:
@@ -32,6 +33,7 @@ def test_manifest() -> None:
         "metric": METRIC,
         "score": 0.5,
         "metrics": {"mrr": 0.5},
+        "saliency": {"file": "model.saliency.u8", "channels": 3},
     }
 
 
@@ -43,6 +45,13 @@ def test_write(tmp_path: Path) -> None:
         "projections": PROJECTIONS,
         "samples": {"0000": {"pred": "the"}},
     }
+    assert (tmp_path / "models" / "model.saliency.u8").read_bytes() == bytes([128, LEVELS, 128])
+
+
+def test_quantised() -> None:
+    """Each row scales to its own peak; an all-zero row stays zero."""
+    shares = torch.tensor([[0.1, 0.4, 0.5], [0.0, 0.0, 0.0]])
+    assert Outputs.quantised(shares).tolist() == [[51, 204, LEVELS], [0, 0, 0]]
 
 
 def test_records() -> None:
@@ -58,7 +67,9 @@ def test_records() -> None:
     assert records["a"]["error"] == pytest.approx(0.1)
     assert records["b"]["correct"] is False
     assert records["b"]["pred"] == PRIMARY.words[5]
-    assert len(cast("list[object]", records["b"]["topk"])) == TOP
+    ranked = cast("list[list[object]]", records["b"]["ranked"])
+    assert len(ranked) == VOCAB_SIZE
+    assert ranked[0] == [PRIMARY.words[5], 0.5]
     assert records["b"]["emb"] == {"pca": [3.0, 4.0], "umap": [7.0, 8.0]}
     assert records["a"]["rank"] == 1
     rank = records["b"]["rank"]

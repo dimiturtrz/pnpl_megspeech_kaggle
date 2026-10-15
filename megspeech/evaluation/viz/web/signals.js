@@ -1,5 +1,6 @@
 import { $, Layer, dataUrl, niceStep, clamp, store } from "./util.js";
 import { ChannelPick } from "./channels.js";
+import { state, weightOf } from "./state.js";
 
 const PAD = { l: 46, r: 10, t: 6, b: 18 };
 const AMP = 0.3;
@@ -9,6 +10,9 @@ const MAX_TICKS = 8;
 const LABEL_MIN_ROW = 9;
 const MEG_KEY = "megspeech-viz:meg-open";
 const COL = { grid: "#222937", axis: "#8b94a3", chan: "rgba(159,179,209,.75)", rms: "#5b8def", wave: "#7fdca4", head: "#ff6a5a", target: "rgba(91,141,239,.16)" };
+
+const COLD = [159, 179, 209], HOT = [255, 140, 40], FAINT = 0.3, FULL = 255;
+const weighted = (w) => `rgba(${COLD.map((c, i) => Math.round(c + (HOT[i] - c) * w)).join(",")},${FAINT + (1 - FAINT) * w})`;
 
 const cache = new Map();
 function fetchBuf(url) {
@@ -80,7 +84,7 @@ export class Signals {
     if (this.player.paused) this.player.play(); else this.player.pause();
   }
 
-  setSensors(sensors) { this.pick.setSensors(sensors); }
+  setSensors(sensors) { this.pick.setSensors(sensors, state.saliency.size > 0); }
 
   async show(s) {
     const tok = ++this.token;
@@ -161,7 +165,8 @@ export class Signals {
 
   drawMeg() {
     if (!this.megOpen) return;
-    const m = this.meg, { rows, total } = m ? this.pick.rows(m, this.target, +$("nch").value) : { rows: [], total: 0 };
+    const m = this.meg, weights = this.s ? weightOf(state.active, this.s.id) : null;
+    const { rows, total } = m ? this.pick.rows(m, this.target, +$("nch").value, weights) : { rows: [], total: 0 };
     const n = rows.length;
     $("nchlabel").textContent = m ? `${n}/${total}` : "";
     this.megL.draw((ctx, W, H) => {
@@ -174,6 +179,7 @@ export class Signals {
       ctx.strokeStyle = COL.chan; ctx.lineWidth = 0.8;
       for (let r = 0; r < n; r++) {
         const c = rows[r], y0 = rmsBase + (r + 0.5) * rowH;
+        ctx.strokeStyle = weights ? weighted(weights[c] / FULL) : COL.chan;
         this.trace(ctx, m.data, c * m.T, m.T, m.t0, m.sfreq, y0, rowH * AMP, W);
         if (rowH >= LABEL_MIN_ROW) { ctx.fillStyle = COL.axis; ctx.fillText(this.pick.label(c), 4, y0); }
       }

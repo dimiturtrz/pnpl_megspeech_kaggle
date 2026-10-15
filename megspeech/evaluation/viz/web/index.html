@@ -8,10 +8,7 @@
 </head>
 <body>
   <header>
-    <div class="head-text">
-      <h1>megspeech · viz</h1>
-      <p class="sub" id="sub"></p>
-    </div>
+    <h1>megspeech · viz</h1>
     <div id="models" class="models"></div>
     <p class="sub status" id="status"></p>
   </header>
@@ -54,14 +51,14 @@
     </section>
 
     <section class="panel right">
-      <h2>top-k</h2>
+      <h2>ranking</h2>
       <div id="topk" class="topk"></div>
       <div class="trackhead">
         <h2>embedding <span class="mut" id="embhead"></span> <span class="help" id="schint" tabindex="0">?</span></h2>
-        <select id="projsel" class="mselect projsel" title="2-D projection of the embedding"></select>
-        <div class="seg" id="colorby">
-          <button data-c="class" class="on">class</button><button data-c="label">label</button><button data-c="word">word</button><button data-c="source">source</button><button data-c="position">position</button><button data-c="error">error</button>
-        </div>
+        <select id="projsel" class="mselect pick projsel" title="2-D projection of the embedding"></select>
+        <select id="colorby" class="mselect pick" title="colour points by">
+          <option value="class">class</option><option value="label">label</option><option value="word">word</option><option value="source">source</option><option value="position">position</option><option value="error">error</option>
+        </select>
       </div>
       <div class="scatter-box"><canvas id="scatter"></canvas><div id="tip" class="tip" hidden></div></div>
       <div id="legend" class="legend"></div>

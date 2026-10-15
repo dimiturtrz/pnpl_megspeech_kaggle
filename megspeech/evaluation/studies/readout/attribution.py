@@ -19,13 +19,13 @@ from typing import cast
 
 import numpy as np
 import torch
-from captum.attr import FeatureAblation, IntegratedGradients
+from captum.attr import FeatureAblation
 from jaxtyping import Float, Int
 from matplotlib.figure import Figure
 from torch import Tensor, nn
 
 from core.paths import DataRoot
-from megspeech.data.batching.split import SpanInput, Split
+from megspeech.data.batching.split import Split
 from megspeech.data.constants import RATE
 from megspeech.data.labels.vocabulary import PRIMARY
 from megspeech.data.raw.fetch import NEUROMAG
@@ -35,6 +35,7 @@ from megspeech.device import Device
 from megspeech.evaluation.loaded.ensemble import Loader
 from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.loaded.model import LoadedModel
+from megspeech.evaluation.saliency import Integrated, Reads
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.model.context.timing import KAGGLE_GAP
 
@@ -60,65 +61,19 @@ class AttributionConfig:
 
 
 @dataclass(frozen=True)
-class Objective:
-    """One span's context head, read as each of `positions`' label log-probability: what captum differentiates and
-    ablates. `x` and `onset` carry a leading dimension of `n` copies of the span (captum's steps and ablated copies),
-    cycling through the targets."""
-
-    model: nn.Module
-    slot: Int[Tensor, "w"]
-    subject: Int[Tensor, "r"]
-    positions: Int[Tensor, "b"]
-    labels: Int[Tensor, "b"]
-
-    def __call__(self, x: Float[Tensor, "n r c t"], onset: Float[Tensor, "n w"]) -> Float[Tensor, " n"]:
-        n, rows = x.shape[:2]
-        which = torch.arange(n, device=x.device)
-        slot = torch.where(self.slot < rows, self.slot + which[:, None] * rows, n * rows)
-        context, _ = self.model(SpanInput(x.flatten(0, 1), onset, slot, self.subject.repeat(n)))
-        target = which % len(self.labels)
-        return context.log_softmax(-1)[which, self.positions[target], self.labels[target]]
-
-
-@dataclass(frozen=True)
-class Reads:
-    """The sampled words of one span: the model's inputs for it and where each target sits."""
-
-    x: Float[Tensor, "r c t"]
-    onset: Float[Tensor, "w"]
-    objective: Objective
-    own: Int[Tensor, "b"]
-    """Each target's own window, a row of `x`."""
-
-    @classmethod
-    def of(cls, model: nn.Module, split: Split, span: int, words: Int[Tensor, "b"]) -> "Reads":
-        batch = split.batch(torch.tensor([span], device=split.y.device), split.index.shape[1])
-        positions = (batch.index[0, None, :] == words[:, None]).float().argmax(dim=1)
-        objective = Objective(model, batch.slot[0], batch.subject, positions, split.y[words])
-        return cls(batch.x, batch.onset[0], objective, batch.slot[0][positions])
-
-    def copies(self, count: int) -> tuple[Float[Tensor, "n r c t"], Float[Tensor, "n w"]]:
-        return self.x.expand(count, *self.x.shape).contiguous(), self.onset.expand(count, -1).contiguous()
-
-
-@dataclass(frozen=True)
 class Saliency:
     """Each attributed word's magnitude of attribution over its own window, with its class."""
 
     magnitude: Float[Tensor, "n c t"]
     labels: Int[Tensor, " n"]
 
-    @staticmethod
-    def share(values: Float[Tensor, "... k"]) -> Float[Tensor, "... k"]:
-        return values / values.sum(dim=-1, keepdim=True).clamp_min(torch.finfo(values.dtype).tiny)
-
     def sensors(self) -> Float[Tensor, " c"]:
         """Each sensor's share of the evidence, summed over words and lags."""
-        return self.share(self.magnitude.sum(dim=(0, 2)))
+        return Integrated.share(self.magnitude.sum(dim=(0, 2)))
 
     def lags(self) -> Float[Tensor, " t"]:
         """Each sample after the onset's share of the evidence."""
-        return self.share(self.magnitude.sum(dim=(0, 1)))
+        return Integrated.share(self.magnitude.sum(dim=(0, 1)))
 
     def frequent(self, count: int) -> list[int]:
         """The `count` most frequent labels, most first."""
@@ -185,29 +140,12 @@ class Attribution:
             chosen[name] = words[order[: max(1, round(len(words) * keep))]] if len(words) else words
         return chosen
 
-    @staticmethod
-    def spans(split: Split, words: Int[Tensor, " k"]) -> dict[int, Int[Tensor, " b"]]:
-        """The sampled `words` of each span that reads them, by the span's first read."""
-        found = (split.index[:, :, None] == words[None, None, :]).any(dim=1).float()
-        first = found.argmax(dim=0)
-        return {int(span): words[first == span] for span in first.unique()}
-
     def reads(self) -> list[Reads]:
-        self.model.eval()
-        reads: list[Reads] = []
-        for name, words in self.sampled().items():
-            split = self.domains[name]
-            for span, group in self.spans(split, words).items():
-                reads += [Reads.of(self.model, split, span, part) for part in group.split(self.config.chunk)]
-        return reads
+        integrated = self.integrated()
+        return [read for name, words in self.sampled().items() for read in integrated.reads(self.domains[name], words)]
 
-    def integrated(self, read: Reads) -> Float[Tensor, "b c t"]:
-        """Each target's magnitude of attribution over its own window."""
-        count = len(read.own)
-        x, _ = read.copies(count)
-        method = IntegratedGradients(lambda window: read.objective(window, read.onset.expand(len(window), -1)))
-        attributed = method.attribute(x, baselines=torch.zeros_like(x), n_steps=self.config.steps)
-        return attributed[torch.arange(count), read.own].abs().detach()
+    def integrated(self) -> Integrated:
+        return Integrated(self.model, self.config.steps, self.config.chunk)
 
     def ablated(self, read: Reads, baselines: tuple[Tensor, Tensor]) -> Float[Tensor, " b"]:
         """What each target's log-probability loses when the inputs become `baselines`, the MEG and the onsets ablated
@@ -230,7 +168,8 @@ class Attribution:
 
     def run(self) -> tuple[Saliency, Drops]:
         reads = self.reads()
-        magnitude = torch.cat([self.integrated(read) for read in reads])
+        integrated = self.integrated()
+        magnitude = torch.cat([integrated.magnitude(read) for read in reads])
         labels = torch.cat([read.objective.labels for read in reads])
         parts = list(zip(*(self.dropped(read) for read in reads), strict=True))
         full, meg, interval, timing = (float(torch.cat(part).mean()) for part in parts)

@@ -1,4 +1,4 @@
-import { state, out, RANGES, activeFilters, errorOf } from "./state.js";
+import { state, out, RANGES, activeFilters, errorOf, rankedOf } from "./state.js";
 import { $, h, store, errorColor } from "./util.js";
 import { sourceColor } from "./legend.js";
 
@@ -71,17 +71,18 @@ export function buildFilters(onChange) {
   dlg.onclick = (e) => { if (e.target === dlg) dlg.close(); };
   $("filterdone").onclick = () => dlg.close();
   $("filterreset").onclick = () => {
-    Object.assign(state.filter, { strata: {}, ranges: {} });
+    Object.assign(state.filter, { strata: {}, ranges: {}, q: "" });
+    $("q").value = "";
     buildFilters(onChange);
     changed();
   };
-  $("q").oninput = () => { state.filter.q = $("q").value; onChange(); };
+  $("q").oninput = () => { state.filter.q = $("q").value; changed(); };
 }
 
 const SORT_KEY = "megspeech-viz:sort";
 const rankOf = (s, o) => {
   if (o?.rank != null) return o.rank;
-  const i = o?.topk.findIndex(([lab]) => lab === s.label) ?? -1;
+  const i = o ? rankedOf(o).findIndex(([lab]) => lab === s.label) : -1;
   return i < 0 ? Infinity : i + 1;
 };
 const COLUMNS = [
@@ -91,7 +92,7 @@ const COLUMNS = [
     cls: (s, o) => (o ? (o.pred === s.label ? "ok" : "no") : "") },
   { key: "error", title: "err", title_: "1 − p(true word); sort", by: (s, o) => (o ? errorOf(o) : -1), text: (s, o) => (o ? errorOf(o).toFixed(2) : ""), num: true,
     tint: (s, o) => (o ? errorColor(errorOf(o)) : null) },
-  { key: "rank", title: "rank", by: rankOf, text: (s, o) => (o ? (rankOf(s, o) === Infinity ? `>${o.topk.length}` : rankOf(s, o)) : ""),
+  { key: "rank", title: "rank", by: rankOf, text: (s, o) => (o ? (rankOf(s, o) === Infinity ? `>${rankedOf(o).length}` : rankOf(s, o)) : ""),
     num: true, title_: "rank of the true word among all words" },
 ];
 const DESCENDING = new Set(["error", "rank"]);

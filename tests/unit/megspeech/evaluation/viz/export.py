@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import torch
 
 from core.paths import DataRoot
 from megspeech.data.raw.runs import Run
@@ -36,7 +37,13 @@ class Drawn:
 class Read:
     def read(self, root: DataRoot, name: str, runs: list[Run], keys: pd.DataFrame) -> Outputs:
         return Outputs(
-            name, "deep", 0.5, {"pca": {"explained": [0.3, 0.2]}}, {i: {"p_true": 0.5} for i in keys["id"]}, {}
+            name,
+            "deep",
+            0.5,
+            {"pca": {"explained": [0.3, 0.2]}},
+            {i: {"p_true": 0.5} for i in keys["id"]},
+            {},
+            torch.ones(len(keys), 1),
         )
 
 

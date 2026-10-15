@@ -23,6 +23,10 @@ function evoked(meg, target) {
   return all(meg.C).sort((a, b) => ratio[b] - ratio[a]);
 }
 
+function byWeight(weights) {
+  return all(weights.length).sort((a, b) => weights[b] - weights[a]);
+}
+
 export class ChannelPick {
   constructor(onChange) {
     this.sensors = null;
@@ -30,13 +34,14 @@ export class ChannelPick {
     this.sel.onchange = () => { store.set(PICK_KEY, this.sel.value); onChange(); };
   }
 
-  setSensors(sensors) {
+  setSensors(sensors, weighted) {
     this.sensors = sensors?.names ? sensors : null;
     const kinds = this.sensors ? [...new Set(this.sensors.kinds)] : [];
     const regions = Object.keys(this.sensors?.regions ?? {});
     const opt = (value, text, title = "") => h("option", { value, textContent: text, title });
     this.sel.replaceChildren(
       opt("spread", "spread", "every channel, evenly spaced by index"),
+      ...(weighted ? [opt("weight", "model weight", "ranked by the active model's integrated-gradients share for this word")] : []),
       opt("evoked", "word-evoked", "ranked by RMS inside the target word over RMS of the whole window"),
       ...kinds.map((k) => opt(`kind:${k}`, KIND[k] ?? k)),
       ...regions.map((r) => opt(`region:${r}`, r.toLowerCase())));
@@ -44,8 +49,9 @@ export class ChannelPick {
     this.sel.value = [...this.sel.options].some((o) => o.value === saved) ? saved : "spread";
   }
 
-  members(meg, target) {
+  members(meg, target, weights) {
     const [mode, arg] = this.sel.value.split(":");
+    if (mode === "weight" && weights?.length === meg.C) return { list: byWeight(weights), ranked: true };
     const named = this.sensors?.names.length === meg.C;
     if (mode === "evoked") return { list: evoked(meg, target), ranked: true };
     if (named && mode === "kind") return { list: all(meg.C).filter((c) => this.sensors.kinds[c] === arg), ranked: false };
@@ -53,8 +59,8 @@ export class ChannelPick {
     return { list: all(meg.C), ranked: false };
   }
 
-  rows(meg, target, n) {
-    const { list, ranked } = this.members(meg, target);
+  rows(meg, target, n, weights) {
+    const { list, ranked } = this.members(meg, target, weights);
     return { rows: ranked ? list.slice(0, n) : spread(list, n), total: list.length };
   }
 

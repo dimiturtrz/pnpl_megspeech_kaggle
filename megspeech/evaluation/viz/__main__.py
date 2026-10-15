@@ -1,6 +1,6 @@
 """The viewer's two steps: `export` a stratified sample set with model outputs, `serve` it.
 
-uv run python -m megspeech.evaluation.viz export --models <run> [<run> ...] [--n 1000] [--seed 0]
+uv run python -m megspeech.evaluation.viz export --models <run> [<run> ...] [--n 1000] [--seed 0] [--device cuda]
 uv run python -m megspeech.evaluation.viz serve [--port 8000]
 """
 
@@ -10,7 +10,9 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from megspeech.evaluation.viz.export import ExportConfig, Exporter
+from megspeech.device import Device
+from megspeech.evaluation.viz.export import ExportConfig, Exporter, Sampler
+from megspeech.evaluation.viz.outputs import Reader
 from megspeech.evaluation.viz.serve import ServeConfig, Server
 
 log = logging.getLogger(__name__)
@@ -29,6 +31,7 @@ class Cli:
         export.add_argument("--n", type=int, default=1000)
         export.add_argument("--seed", type=int, default=0)
         export.add_argument("--name", default="default")
+        export.add_argument("--device", default=Device.CPU, help="where models read and attribute")
         export.set_defaults(run=self.export)
         serve = commands.add_parser("serve", help="serve web/ at / and <data>/viz/<name>/ at /data/")
         serve.add_argument("--port", type=int, default=8000)
@@ -39,7 +42,8 @@ class Cli:
     def export(self, args: argparse.Namespace) -> None:
         """Write the export `args` describe and log where it landed."""
         config = ExportConfig(models=tuple(args.models), n=args.n, seed=args.seed, name=args.name)
-        log.info("exported %s", Exporter().run(config))
+        exporter = Exporter(sampler=Sampler(args.device), reader=Reader(args.device))
+        log.info("exported %s", exporter.run(config))
 
     def serve(self, args: argparse.Namespace) -> None:
         """Serve the export `args.name` on `args.port` until interrupted."""

@@ -10,12 +10,13 @@ from typing import Protocol
 import numpy as np
 import pandas as pd
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Float, Int, UInt8
 from torch import Tensor
 
 from core.paths import DataRoot
 from megspeech.data.cache.kaggle import Track
 from megspeech.data.config import METRICS
+from megspeech.data.constants import CHANNELS
 from megspeech.data.corpus import Corpus
 from megspeech.data.labels.vocabulary import PRIMARY
 from megspeech.data.raw.runs import DEEP, Column, Run
@@ -24,6 +25,7 @@ from megspeech.evaluation.loaded.ensemble import Loader
 from megspeech.evaluation.loaded.exported import ExportedModel
 from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.metric.ruler import TOP, Graded, Ruler
+from megspeech.evaluation.saliency import Integrated
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.probabilities import Words
 from megspeech.evaluation.viz.embed import PROJECTORS, Embedder
@@ -31,6 +33,9 @@ from megspeech.evaluation.viz.records import KEY
 
 METRIC = f"macro bAcc@{TOP}, unseen-span words"
 """The selection macro (`Ruler.point`): each counted domain's balanced top-10 accuracy over its unseen-span words."""
+SALIENCY = ".saliency.u8"
+LEVELS = 255
+DIGITS = 4
 
 
 @dataclass(frozen=True)
@@ -43,6 +48,14 @@ class Outputs:
     projections: dict[str, dict[str, list[float]]]
     samples: dict[str, dict[str, object]]
     metrics: dict[str, float]
+    saliency: Float[Tensor, "n c"]
+    """Each sample's share of its attribution per sensor, rows in sample order."""
+
+    @staticmethod
+    def quantised(saliency: Float[Tensor, "n c"]) -> UInt8[np.ndarray, "n c"]:
+        """Each row over its own peak, in `LEVELS` steps."""
+        peak = saliency.amax(dim=1, keepdim=True).clamp_min(torch.finfo(saliency.dtype).tiny)
+        return (saliency / peak * LEVELS).round().to(torch.uint8).numpy()
 
     def manifest(self) -> dict[str, object]:
         return {
@@ -52,14 +65,16 @@ class Outputs:
             "metric": METRIC,
             "score": self.score,
             "metrics": self.metrics,
+            "saliency": {"file": f"{self.name}{SALIENCY}", "channels": self.saliency.shape[1]},
         }
 
     def write(self, directory: Path) -> Path:
-        """`<directory>/<name>.json`."""
+        """`<directory>/<name>.json`, and its saliency as `<name>.saliency.u8` (row-major uint8)."""
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{self.name}.json"
         document = {"name": self.name, "projections": self.projections, "samples": self.samples}
         path.write_text(json.dumps(document), encoding="utf-8")
+        (directory / f"{self.name}{SALIENCY}").write_bytes(self.quantised(self.saliency).tobytes())
         return path
 
 
@@ -79,15 +94,15 @@ class Predictions:
         hits = self.ruler.hits(probabilities, labels)
         truth = probabilities.gather(1, labels[:, None])[:, 0]
         rank = self.rank(probabilities, labels)
-        top = probabilities.topk(self.ruler.k, dim=1)
+        order = probabilities.argsort(dim=1, descending=True)
         return {
             name: {
-                "pred": PRIMARY.words[int(top.indices[i, 0])],
+                "pred": PRIMARY.words[int(order[i, 0])],
                 "correct": bool(hits[i]),
                 "p_true": float(truth[i]),
                 "error": 1 - float(truth[i]),
                 "rank": int(rank[i]),
-                "topk": [[PRIMARY.words[int(c)], float(p)] for c, p in zip(top.indices[i], top.values[i], strict=True)],
+                "ranked": [[PRIMARY.words[c], round(float(probabilities[i, c]), DIGITS)] for c in order[i].tolist()],
                 "emb": {projector: [float(x) for x in at[i]] for projector, at in points.items()},
             }
             for i, name in enumerate(ids)
@@ -190,8 +205,9 @@ class Reader:
         located = Located.of(keys, rows)
         evaluator, calibration = loaded.evaluator, loaded.calibration(self.tau(root, name))
         logits = {domain: evaluator.logits(loaded.model, split) for domain, split in splits.items()}
-        embedder = Embedder(evaluator)
+        embedder, integrated = Embedder(evaluator), Integrated(loaded.model)
         size = len(keys)
+        saliency = torch.zeros(size, CHANNELS)
         probabilities = torch.zeros(size, len(PRIMARY.words))
         labels = torch.zeros(size, dtype=torch.int64)
         embedded: dict[str, Tensor] = {}
@@ -204,6 +220,9 @@ class Reader:
             probabilities[mine] = chosen.probabilities[row]
             labels[mine] = chosen.labels[row]
             embedded[domain] = embedder.embedded(loaded.model, split)[located.position[mine]].cpu()
+            saliency[mine] = integrated.sensors(
+                split, torch.from_numpy(located.position[mine]).to(split.y.device)
+            ).cpu()
         dims = max((e.shape[1] for e in embedded.values()), default=0)
         emb = torch.zeros(size, dims)
         for domain, values in embedded.items():
@@ -223,4 +242,5 @@ class Reader:
                 keys["id"].tolist(), probabilities, labels, {name: p.points for name, p in projections.items()}
             ),
             Predictions().metrics(probabilities, labels),
+            saliency,
         )
