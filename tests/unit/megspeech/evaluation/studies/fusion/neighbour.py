@@ -18,7 +18,7 @@ from megspeech.model.config import ContextConfig
 from megspeech.model.ensemble import Ensemble
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig
-from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
+from megspeech.objective.auxiliary.neighbours.neighbour import NextWordTerm, PreviousWordTerm
 from megspeech.training.auxiliary import AuxiliaryConfig
 from megspeech.training.config import RunConfig
 from megspeech.training.optim import OptimConfig

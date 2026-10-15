@@ -7,7 +7,7 @@ from torch import Tensor, nn
 
 from megspeech.data.labels.context_tags import CLASSES
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.objective.auxiliary.tagging import Tagging
+from megspeech.objective.auxiliary.classified.tagging import Tagging
 
 
 class TaggedHead(Tagging):

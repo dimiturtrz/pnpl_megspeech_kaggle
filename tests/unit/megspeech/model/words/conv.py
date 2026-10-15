@@ -8,12 +8,12 @@ from core.tree import Tree
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.words.conv import ConvConfig, ConvWords
-from megspeech.model.words.layers.flattenfuse import FlattenFuse
-from megspeech.model.words.layers.noattention import NoAttention
-from megspeech.model.words.layers.sensorwise import Sensorwise
-from megspeech.model.words.layers.setpool import SetPool
-from megspeech.model.words.layers.siteattention import SiteAttention
-from megspeech.model.words.layers.spatial import SpatialAttention
+from megspeech.model.words.layers.sites.flattenfuse import FlattenFuse
+from megspeech.model.words.layers.sites.noattention import NoAttention
+from megspeech.model.words.layers.sites.sensorwise import Sensorwise
+from megspeech.model.words.layers.sites.setpool import SetPool
+from megspeech.model.words.layers.sites.siteattention import SiteAttention
+from megspeech.model.words.layers.sites.spatial import SpatialAttention
 
 SMALL = ConvConfig(hidden=8, dilations=(1, 2))
 SAMPLES = 50

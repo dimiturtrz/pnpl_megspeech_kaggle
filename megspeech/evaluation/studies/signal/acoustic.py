@@ -27,7 +27,7 @@ from megspeech.evaluation.loaded.reader import Reader
 from megspeech.model.auxiliary import Tap
 from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.sentence import SentenceNet
-from megspeech.objective.auxiliary.acoustic import Acoustic
+from megspeech.objective.auxiliary.aligned.acoustic import Acoustic
 from megspeech.objective.auxiliary.order import HeadOrder
 from megspeech.objective.targets.loudness import Loudness
 

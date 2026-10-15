@@ -16,7 +16,7 @@ from megspeech.model.config import ContextConfig
 from megspeech.model.hierarchy import Factorised
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig
-from megspeech.objective.auxiliary.tagging import TagTerm
+from megspeech.objective.auxiliary.classified.tagging import TagTerm
 from megspeech.objective.term import ContextTerm
 from megspeech.training.auxiliary import Joint
 

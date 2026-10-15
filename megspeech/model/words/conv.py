@@ -12,13 +12,13 @@ from megspeech.data.constants import CHANNELS
 from megspeech.model.pyramid import PYRAMID, PyramidConfig
 from megspeech.model.words.base import WordEncoder
 from megspeech.model.words.heads import WordHead
-from megspeech.model.words.layers.attention_pool import AttentionPool
 from megspeech.model.words.layers.conformer import TimeConformer
 from megspeech.model.words.layers.dilated import DilatedBlock
 from megspeech.model.words.layers.downsample import Downsample
-from megspeech.model.words.layers.mean_max import MeanMax
-from megspeech.model.words.layers.sensorwise import Grouping, Sensorwise
-from megspeech.model.words.layers.spatial import SpatialAttention
+from megspeech.model.words.layers.readouts.attention_pool import AttentionPool
+from megspeech.model.words.layers.readouts.mean_max import MeanMax
+from megspeech.model.words.layers.sites.sensorwise import Grouping, Sensorwise
+from megspeech.model.words.layers.sites.spatial import SpatialAttention
 
 
 @dataclass(frozen=True)

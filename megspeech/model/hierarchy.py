@@ -27,7 +27,7 @@ from megspeech.data.labels.context_tags import CLASSES
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.model.config import ContextConfig
-from megspeech.objective.auxiliary.tagging import Tagging
+from megspeech.objective.auxiliary.classified.tagging import Tagging
 
 LOG = logging.getLogger(__name__)
 

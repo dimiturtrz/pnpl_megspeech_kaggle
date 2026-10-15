@@ -18,19 +18,19 @@ from megspeech.model.config import ContextConfig
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig
 from megspeech.model.words.heads import WordHead
-from megspeech.objective.auxiliary.acoustic import Acoustic, AcousticTerm
-from megspeech.objective.auxiliary.adversarial import AdversaryTarget, RunTerm, TimingTerm
-from megspeech.objective.auxiliary.audio import AudioTerm, Listening
+from megspeech.objective.auxiliary.adversary.adversarial import AdversaryTarget, RunTerm, TimingTerm
+from megspeech.objective.auxiliary.aligned.acoustic import Acoustic, AcousticTerm
+from megspeech.objective.auxiliary.aligned.audio import AudioTerm, Listening
+from megspeech.objective.auxiliary.aligned.semantic import SemanticTerm
+from megspeech.objective.auxiliary.aligned.speech import SpeechTerm
+from megspeech.objective.auxiliary.classified.lexical import LexicalTerm
+from megspeech.objective.auxiliary.classified.phonetic import PhoneticTerm
+from megspeech.objective.auxiliary.classified.syntactic import SyntacticTerm
+from megspeech.objective.auxiliary.classified.tagging import TagTerm
 from megspeech.objective.auxiliary.contrastive.instance import Apart, InstanceTerm, Together
 from megspeech.objective.auxiliary.contrastive.word import SameWordTerm
-from megspeech.objective.auxiliary.lexical import LexicalTerm
-from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
-from megspeech.objective.auxiliary.phonetic import PhoneticTerm
-from megspeech.objective.auxiliary.semantic import SemanticTerm
-from megspeech.objective.auxiliary.speech import SpeechTerm
-from megspeech.objective.auxiliary.syntactic import SyntacticTerm
-from megspeech.objective.auxiliary.tagging import TagTerm
-from megspeech.objective.auxiliary.window import WindowTerm
+from megspeech.objective.auxiliary.neighbours.neighbour import NextWordTerm, PreviousWordTerm
+from megspeech.objective.auxiliary.neighbours.window import WindowTerm
 from megspeech.objective.scorer import DIM
 from megspeech.objective.targets.loudness import CUT, FRAMES, LENGTH, Loudness
 from megspeech.objective.targets.speech import Speech, Targets

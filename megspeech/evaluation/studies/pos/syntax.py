@@ -37,7 +37,7 @@ from megspeech.evaluation.studies.pos.logistic import TorchLogistic
 from megspeech.model.auxiliary import Tap
 from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.sentence import SentenceNet
-from megspeech.objective.auxiliary.tagging import Tagging
+from megspeech.objective.auxiliary.classified.tagging import Tagging
 
 LOG = logging.getLogger(__name__)
 

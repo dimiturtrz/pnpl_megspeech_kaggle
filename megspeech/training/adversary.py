@@ -6,8 +6,8 @@ from typing import ClassVar, override
 import torch
 from torch import nn
 
-from megspeech.objective.auxiliary.adversarial import AdversaryTarget
-from megspeech.objective.auxiliary.reversal import Reversal
+from megspeech.objective.auxiliary.adversary.adversarial import AdversaryTarget
+from megspeech.objective.auxiliary.adversary.reversal import Reversal
 from megspeech.training.hook import StepHook
 
 
@@ -45,8 +45,8 @@ class AdversaryConfig:
     FLAT: ClassVar[bool] = True
 
     adversary: float = 0.0
-    """Strength of the timing adversary's gradient reversal (`megspeech.objective.auxiliary.adversarial`): a head
-    regresses each word's log duration and sentence position from the `tap`, and the encoder receives its gradient
+    """Strength of the timing adversary's gradient reversal (`megspeech.objective.auxiliary.adversary.adversarial`): a
+    head regresses each word's log duration and sentence position from the `tap`, and the encoder receives its gradient
     times -`adversary`, so the MEG embedding is trained to hold none of the timing the onsets already give; 0 trains
     no adversary (megspeech-7gf.98)."""
     adversary_ramp: float = 2.0

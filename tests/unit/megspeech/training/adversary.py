@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch import nn
 
-from megspeech.objective.auxiliary.adversarial import Adversary, AdversaryTarget
+from megspeech.objective.auxiliary.adversary.adversarial import Adversary, AdversaryTarget
 from megspeech.training.adversary import AdversaryConfig, Ramp
 
 

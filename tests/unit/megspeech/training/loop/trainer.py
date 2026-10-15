@@ -26,9 +26,9 @@ from megspeech.model.config import ContextConfig
 from megspeech.model.context.timing import TimingHead
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.sentence import SentenceNet
-from megspeech.objective.auxiliary.adversarial import RunTerm
-from megspeech.objective.auxiliary.phonetic import PhoneticTerm
-from megspeech.objective.auxiliary.semantic import SemanticTerm
+from megspeech.objective.auxiliary.adversary.adversarial import RunTerm
+from megspeech.objective.auxiliary.aligned.semantic import SemanticTerm
+from megspeech.objective.auxiliary.classified.phonetic import PhoneticTerm
 from megspeech.objective.isda import Isda
 from megspeech.objective.scorer import DIM
 from megspeech.objective.targets.t5 import Lexicon

@@ -2,7 +2,7 @@ import torch
 
 from megspeech.data.batching.split import SpanInput
 from megspeech.model.auxiliary import WithAuxiliary
-from megspeech.objective.auxiliary.audio import AudioTerm, Listening
+from megspeech.objective.auxiliary.aligned.audio import AudioTerm, Listening
 from megspeech.objective.targets.loudness import LENGTH
 from megspeech.objective.targets.speech import Speech
 from megspeech.training.auxiliary import Joint

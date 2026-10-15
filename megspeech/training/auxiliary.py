@@ -19,18 +19,18 @@ from megspeech.data.labels.phonemes import Pronunciation
 from megspeech.data.labels.syntax import PartsOfSpeech
 from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.sentence import SentenceNet
-from megspeech.objective.auxiliary.acoustic import AcousticTerm
-from megspeech.objective.auxiliary.audio import AudioTerm
+from megspeech.objective.auxiliary.aligned.acoustic import AcousticTerm
+from megspeech.objective.auxiliary.aligned.audio import AudioTerm
+from megspeech.objective.auxiliary.aligned.semantic import SemanticTerm
+from megspeech.objective.auxiliary.aligned.speech import SpeechTerm
+from megspeech.objective.auxiliary.classified.lexical import LexicalTerm
+from megspeech.objective.auxiliary.classified.phonetic import PhoneticTerm
+from megspeech.objective.auxiliary.classified.syntactic import SyntacticTerm
+from megspeech.objective.auxiliary.classified.tagging import TagTerm
 from megspeech.objective.auxiliary.contrastive.instance import InstanceTerm
 from megspeech.objective.auxiliary.contrastive.word import SameWordTerm
-from megspeech.objective.auxiliary.lexical import LexicalTerm
-from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
-from megspeech.objective.auxiliary.phonetic import PhoneticTerm
-from megspeech.objective.auxiliary.semantic import SemanticTerm
-from megspeech.objective.auxiliary.speech import SpeechTerm
-from megspeech.objective.auxiliary.syntactic import SyntacticTerm
-from megspeech.objective.auxiliary.tagging import TagTerm
-from megspeech.objective.auxiliary.window import WindowTerm
+from megspeech.objective.auxiliary.neighbours.neighbour import NextWordTerm, PreviousWordTerm
+from megspeech.objective.auxiliary.neighbours.window import WindowTerm
 from megspeech.objective.targets.loudness import FRAMES, Loudness
 from megspeech.objective.targets.speech import Speech, Targets
 from megspeech.objective.targets.t5 import Lexicon
@@ -46,18 +46,18 @@ class AuxiliaryConfig:
     FLAT: ClassVar[bool] = True
 
     semantic: float = 0.0
-    """Weight of the semantic auxiliary (`megspeech.objective.auxiliary.semantic`): every heard word's window, the
-    ~60% outside the 50 included, SigLIP-aligned to the word's t5-large layer-12 embedding, d'Ascoli et al.'s
+    """Weight of the semantic auxiliary (`megspeech.objective.auxiliary.aligned.semantic`): every heard word's window,
+    the ~60% outside the 50 included, SigLIP-aligned to the word's t5-large layer-12 embedding, d'Ascoli et al.'s
     objective. It supervises ~2.5x the windows the heads see; 0 trains the heads alone and never reads the lexicon."""
     window: float = 0.0
-    """Weight of the window auxiliary (`megspeech.objective.auxiliary.window`): every heard word's window also predicts
-    the t5-large embeddings of the words at offsets -1 to +3 of its span, each offset weighted by the share of its
-    0.2-0.5 s response the 1 s window holds, since at ~4 words/s it mixes the responses to ~4 words
+    """Weight of the window auxiliary (`megspeech.objective.auxiliary.neighbours.window`): every heard word's window
+    also predicts the t5-large embeddings of the words at offsets -1 to +3 of its span, each offset weighted by the
+    share of its 0.2-0.5 s response the 1 s window holds, since at ~4 words/s it mixes the responses to ~4 words
     (megspeech-7gf.108); 0 never reads the lexicon."""
     lexical: float = 0.0
     """Weight of the lexical auxiliary: every heard word's window, in or out of the 50, classified into its word among
-    the ~25k distinct words of the lexicon (`megspeech.objective.auxiliary.lexical`). Word identity, where the
-    semantic auxiliary aligns to a frozen embedding; 0 never reads the lexicon."""
+    the ~25k distinct words of the lexicon (`megspeech.objective.auxiliary.classified.lexical`). Word identity, where
+    the semantic auxiliary aligns to a frozen embedding; 0 never reads the lexicon."""
     phonetic: float = 0.0
     """Weight of the phonetic auxiliary: every heard word's window, in or out of the 50, classified into the first of
     its 39 ARPAbet phonemes (`megspeech.data.labels.phonemes`). Speech MEG decodes phonetic features (Gwilliams et al.
@@ -67,20 +67,20 @@ class AuxiliaryConfig:
     universal part of speech as spaCy tags it in its sentence (`megspeech.data.labels.syntax`): dense placeholder
     classes for the windows the 50 leave unlabelled, where the ~25k-way lexical target is sparse; 0 never reads it."""
     acoustic: float = 0.0
-    """Weight of the acoustic auxiliary (`megspeech.objective.auxiliary.acoustic`): every training word whose chapter
-    audio is aligned, its window's per-timestep encoder features read through a learned channel mix and lag into
+    """Weight of the acoustic auxiliary (`megspeech.objective.auxiliary.aligned.acoustic`): every training word whose
+    chapter audio is aligned, its window's per-timestep encoder features read through a learned channel mix and lag into
     the 50 Hz speech envelope heard over the window, contrasted chunk by chunk against the batch's true chunks
     (Défossez et al. 2023); a dense target the 50 labels' and the word-level targets' sparse supervision lacks. 0
     creates no head and reads no envelope (megspeech-7gf.125.1)."""
     audio: float = 0.0
-    """Weight of the audio contrastive term (`megspeech.objective.auxiliary.audio`): the same windows and envelopes as
-    `acoustic`, each embedded by its own tower and aligned by CLIP's symmetric InfoNCE across the batch's spans,
-    subjects and languages. With `heads` 0 it is the label-free all-language encoder pretrain (megspeech-7gf.109.3);
-    0 creates no head and reads no envelope."""
+    """Weight of the audio contrastive term (`megspeech.objective.auxiliary.aligned.audio`): the same windows and
+    envelopes as `acoustic`, each embedded by its own tower and aligned by CLIP's symmetric InfoNCE across the batch's
+    spans, subjects and languages. With `heads` 0 it is the label-free all-language encoder pretrain
+    (megspeech-7gf.109.3); 0 creates no head and reads no envelope."""
     speech: float = 0.0
-    """Weight of the speech auxiliary (`megspeech.objective.auxiliary.speech`): every training word whose chapter audio
-    is aligned, SigLIP-aligned to the wav2vec2 latent of its 0.5 s of heard speech (Défossez et al. 2023), one target
-    per word token, not per word type as the semantic auxiliary's; 0 never reads the targets."""
+    """Weight of the speech auxiliary (`megspeech.objective.auxiliary.aligned.speech`): every training word whose
+    chapter audio is aligned, SigLIP-aligned to the wav2vec2 latent of its 0.5 s of heard speech (Défossez et al. 2023),
+    one target per word token, not per word type as the semantic auxiliary's; 0 never reads the targets."""
     speech_source: str = ""
     """The targets the speech auxiliary aligns to, a directory of `<run>.npy` under processed/speech: empty is the
     wav2vec2 latents, `hubert-large-ll60k` / `data2vec-audio-large` those teachers' (a
@@ -96,12 +96,13 @@ class AuxiliaryConfig:
     """Each row of a word in the 50 weighs this against 1 for the others in every auxiliary term's mean, normalised by
     the weights (megspeech-7gf.126); 1 weighs every row alike."""
     tagging: float = 0.0
-    """Weight of the tag auxiliary (`megspeech.objective.auxiliary.tagging`): every training word's embedding classified
-    into its in-context part of speech (`megspeech.data.labels.context_tags`), 11 universal tags and `OTHER`. It trains
-    the tag head a `tagged` word head (`ConvConfig.head`) mixes its per-tag readouts by; 0 never reads the table."""
+    """Weight of the tag auxiliary (`megspeech.objective.auxiliary.classified.tagging`): every training word's embedding
+    classified into its in-context part of speech (`megspeech.data.labels.context_tags`), 11 universal tags and `OTHER`.
+    It trains the tag head a `tagged` word head (`ConvConfig.head`) mixes its per-tag readouts by; 0 never reads the
+    table."""
     next_word: float = 0.0
-    """Weight of the next-word auxiliary (`megspeech.objective.auxiliary.neighbour`): each word slot's local encoder
-    embedding, before the span transformer whatever the `tap`, predicts the next word's 50-way label in its span
+    """Weight of the next-word auxiliary (`megspeech.objective.auxiliary.neighbours.neighbour`): each word slot's local
+    encoder embedding, before the span transformer whatever the `tap`, predicts the next word's 50-way label in its span
     (ignored where that word is outside the 50, absent or in another span); 0 creates no head."""
     prev_word: float = 0.0
     """Weight of the previous-word auxiliary, the next-word one's mirror; 0 creates no head."""

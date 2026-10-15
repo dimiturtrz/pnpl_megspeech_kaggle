@@ -13,7 +13,7 @@ from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.spans.spans import Spans
-from megspeech.objective.auxiliary.lexical import LexicalTerm
+from megspeech.objective.auxiliary.classified.lexical import LexicalTerm
 from megspeech.objective.context import Objective
 from megspeech.objective.isda import Unaugmented
 from megspeech.objective.targets.t5 import Lexicon

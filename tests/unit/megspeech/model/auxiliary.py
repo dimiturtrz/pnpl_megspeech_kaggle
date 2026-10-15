@@ -7,7 +7,7 @@ from megspeech.model.auxiliary import Tap, WithAuxiliary
 from megspeech.model.config import ContextConfig
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig
-from megspeech.objective.auxiliary.semantic import Semantic
+from megspeech.objective.auxiliary.aligned.semantic import Semantic
 from megspeech.objective.scorer import DIM
 
 SAMPLES = 50

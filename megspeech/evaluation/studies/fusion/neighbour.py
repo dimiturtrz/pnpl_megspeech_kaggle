@@ -38,7 +38,7 @@ from megspeech.model.auxiliary import Tap
 from megspeech.model.ensemble import Ensemble
 from megspeech.model.input.subjects import Fallback, Unseen
 from megspeech.model.sentence import SentenceNet
-from megspeech.objective.auxiliary.neighbour import NextWordTerm, PreviousWordTerm
+from megspeech.objective.auxiliary.neighbours.neighbour import NextWordTerm, PreviousWordTerm
 from megspeech.objective.auxiliary.order import HeadOrder
 
 LOG = logging.getLogger(__name__)
