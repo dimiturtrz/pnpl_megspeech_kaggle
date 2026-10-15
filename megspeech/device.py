@@ -20,6 +20,11 @@ class Device(StrEnum):
     def as_torch(self) -> torch.device:
         return torch.device(self.value)
 
+    @classmethod
+    def autocast(cls) -> torch.autocast:
+        """bfloat16 autocast on the GPU; full precision, silently, when no GPU is visible."""
+        return torch.autocast(cls.CUDA, dtype=torch.bfloat16, enabled=torch.cuda.is_available())
+
 
 @dataclass(frozen=True)
 class Placed:

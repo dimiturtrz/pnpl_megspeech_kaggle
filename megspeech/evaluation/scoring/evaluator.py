@@ -95,7 +95,7 @@ class Evaluator:
         """
         words, rows = len(split.y), EVAL_SPANS * split.index.shape[1]
         out = {head: torch.zeros(words + 1, VOCAB_SIZE, device=self.device) for head in Head}
-        with torch.no_grad(), torch.autocast(Device.CUDA, dtype=torch.bfloat16):
+        with torch.no_grad(), Device.autocast():
             for spans in torch.arange(len(split.index), device=self.device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
                 context, word = model(batch.inputs())

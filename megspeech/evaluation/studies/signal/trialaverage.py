@@ -129,7 +129,7 @@ class Encoder:
         """The stage-1 embedding of every word window of `split`, on the CPU."""
         net = self.network.eval()
         out = []
-        with torch.no_grad(), torch.autocast(Device.CUDA, dtype=torch.bfloat16):
+        with torch.no_grad(), Device.autocast():
             for words in torch.arange(len(split.y), device=split.y.device).split(BATCH):
                 valid = torch.ones(len(words), dtype=torch.bool, device=words.device)
                 out.append(net.embed(split.windows(words), split.subject[words], valid).float().cpu())

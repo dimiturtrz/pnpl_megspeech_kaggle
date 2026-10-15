@@ -106,7 +106,7 @@ class Neighbours:
         device = split.index.device
         words, rows = len(split.y), EVAL_SPANS * split.index.shape[1]
         out = torch.zeros(words + 1, VOCAB_SIZE, device=device)
-        with torch.no_grad(), torch.autocast(Device.CUDA, dtype=torch.bfloat16):
+        with torch.no_grad(), Device.autocast():
             for spans in torch.arange(len(split.index), device=device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
                 at = torch.where(batch.index != PAD, batch.index, words)

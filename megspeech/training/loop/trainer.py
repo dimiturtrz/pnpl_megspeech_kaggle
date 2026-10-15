@@ -251,7 +251,7 @@ class Trainer:
     def step(self, state: TrainState, train: Split, spans: Int[Tensor, " b"]) -> Float[Tensor, " k"]:
         """One optimiser step on the words of `spans`; returns each term's loss without syncing it to the host."""
         batch = state.cut.apply(train.batch(spans, state.rows, self.config.augment.jitter), train)
-        with torch.autocast(Device.CUDA, dtype=torch.bfloat16):
+        with Device.autocast():
             mixed = state.bgmix.apply(state.average.apply(batch.x, batch, train), batch, train)
             inputs = batch.inputs(self.regional(self.config.augment(self.stretch(mixed))))
         losses, outputs = self.losses(state, batch, train, inputs)
@@ -273,7 +273,7 @@ class Trainer:
         self, state: TrainState, batch: Batch, train: Split, inputs: SpanInput
     ) -> tuple[Float[Tensor, " k"], tuple[Tensor, ...]]:
         """Each term's loss on `batch` read from `inputs`, and the model's outputs."""
-        with torch.autocast(Device.CUDA, dtype=torch.bfloat16):
+        with Device.autocast():
             outputs = state.model(inputs)
             inside = batch.target(train.y) != IGNORE
             parts = zip(state.terms, state.readouts, outputs, strict=True)

@@ -78,7 +78,7 @@ class Embedder:
     def swept(self, split: Split) -> Float[Tensor, "n h"]:
         words, rows = len(split.y), EVAL_SPANS * split.index.shape[1]
         out = torch.zeros(words + 1, self.net.width, device=split.y.device)
-        with torch.no_grad(), torch.autocast(Device.CUDA, dtype=torch.bfloat16):
+        with torch.no_grad(), Device.autocast():
             for spans in torch.arange(len(split.index), device=split.y.device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
                 out[batch.words_at(words)] = self.net.heard(batch.inputs())[0].float()

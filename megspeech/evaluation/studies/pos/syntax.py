@@ -121,7 +121,7 @@ class Embedded:
         logp = torch.zeros(words + 1, VOCAB_SIZE, device=device)
         slots = torch.zeros(words + 1, Tap.WORD.width(self.net), device=device)
         self.net.eval()
-        with torch.no_grad(), torch.autocast(Device.CUDA, dtype=torch.bfloat16):
+        with torch.no_grad(), Device.autocast():
             for spans in torch.arange(len(split.index), device=device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
                 _, embedded, context, _ = self.net.heard(batch.inputs())
@@ -145,7 +145,7 @@ class Embedded:
         device = split.index.device
         out = {tap: torch.zeros(words + 1, tap.width(self.net), device=device) for tap in Tap.pooled()}
         self.net.eval()
-        with torch.no_grad(), torch.autocast(Device.CUDA, dtype=torch.bfloat16):
+        with torch.no_grad(), Device.autocast():
             for spans in torch.arange(len(split.index), device=device).split(EVAL_SPANS):
                 batch = split.batch(spans, rows)
                 refined, slots, _, _ = self.net.heard(batch.inputs())
