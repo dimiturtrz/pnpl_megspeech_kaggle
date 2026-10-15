@@ -13,7 +13,7 @@ Metric: balanced top-1 accuracy over the 50-word vocabulary.
 | track | best public | local test | submission |
 |---|---|---|---|
 | Deep | .695 | .720 | 16 fine-tunes over 8 pretraining seeds |
-| Broad | .631 | — | 29 members, mean-subject fallback for unseen subjects |
+| Broad | .631 | — | 29 members, mean-subject fallback for unseen subjects, per-subject Sinkhorn on test outputs |
 
 For scale: the d'Ascoli et al. recipe reproduced here scores .444 public. The Kaggle leaders at 10-11 were at .775
 (Deep) and .732 (Broad), so this entry is not at the top. Every public delta under ~.03 between families is inside the

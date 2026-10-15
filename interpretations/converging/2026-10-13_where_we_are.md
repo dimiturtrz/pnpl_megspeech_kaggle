@@ -8,7 +8,7 @@ Levers close 2026-10-14 23:00 Sofia; 10-15/16 is final selection only (7gf.29.1)
 | track | best public | submission | 10-07 best | leader (10-11) |
 |---|---|---|---|---|
 | Deep | **.69133** | d-old4 (xsp10sem05-ft, 4 seeds) | .6638 | .77474 |
-| Broad | **.63097** | b-xc5k25b0ps (xc5w6all6 29 members + mean fallback keep .25, no Sinkhorn) | .5879 | .73235 |
+| Broad | **.63097** | b-xc5k25b0ps (xc5w6all6 29 members + mean fallback keep .25, per-subject Sinkhorn toward 0) | .5879 | .73235 |
 
 Broad met its goal. Deep did not: no public gain since d-old4 (10-10). Recipe families score .685–.691
 (d-ac05xfam .691, m11 .689, d-old9 .685), so that is this recipe's public ceiling, and seeds or family size move it
