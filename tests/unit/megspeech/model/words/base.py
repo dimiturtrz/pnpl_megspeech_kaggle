@@ -67,11 +67,6 @@ def test_positions() -> None:
     assert torch.all(out[slot == 3] == 0)
 
 
-def test_backbone() -> None:
-    encoder = Pooled()
-    assert {id(p) for p in encoder.backbone()} == {id(p) for p in encoder.parameters()}
-
-
 def test_forward() -> None:
     encoder = Pooled()
     x = torch.randn(3, 5, SAMPLES, generator=GENERATOR)

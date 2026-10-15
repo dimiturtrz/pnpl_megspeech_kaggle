@@ -102,7 +102,7 @@ def test_encoder_spanned(monkeypatch: pytest.MonkeyPatch) -> None:
     model = spanned(monkeypatch)
     ids = [id(p) for p in model.encoder()]
     assert len(ids) == len(set(ids))
-    assert {id(p) for p in model.words.backbone()} <= set(ids)
+    assert {id(p) for m in model.words.core() for p in m.parameters()} <= set(ids)
     words = model.words
     assert isinstance(words, SpanWords)
     assert not set(ids) & {id(p) for p in [*words.reduce.parameters(), *words.mix.parameters()]}
@@ -121,7 +121,7 @@ def test_features_spanned(monkeypatch: pytest.MonkeyPatch) -> None:
     context, word = model.forward(SpanInput(x, onset, slot, subject))
     assert context.shape == word.shape == (2, 3, VOCAB_SIZE)
     context[slot < 2].sum().backward()
-    assert all(p.grad is not None for p in model.words.backbone())
+    assert all(p.grad is not None for m in model.words.core() for p in m.parameters())
 
 
 def test_adopt() -> None:

@@ -89,10 +89,6 @@ class WordEncoder(nn.Module, ABC):
         """The modules `TransferConfig.encoder_lr` scales: the whole encoder, but for one over a pretrained trunk."""
         return (self,)
 
-    def backbone(self) -> tuple[nn.Parameter, ...]:
-        """The parameters of `core`."""
-        return tuple(p for module in self.core() for p in module.parameters())
-
     def normalise(self, x: Float[Tensor, "b c t"], present: Bool[Tensor, "b 1 t"]) -> Float[Tensor, "b c t"]:
         """`x` standardised when `instance`, else unchanged."""
         return self.standardise(x, present) if self.instance else x

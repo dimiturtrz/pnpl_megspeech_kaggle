@@ -24,13 +24,6 @@ def test_pretrained(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     assert SpanWords.pretrained(DataRoot(tmp_path), ConvConfig(), TINY, SENSORS).trunk is trunk
 
 
-def test_backbone():
-    encoder = words()
-    backbone = encoder.backbone()
-    assert {id(p) for p in backbone} == {id(p) for p in encoder.trunk.parameters()}
-    assert not {id(p) for p in backbone} & {id(p) for p in encoder.mix.parameters()}
-
-
 def test_positions():
     encoder = words()
     x = torch.randn(2, SENSORS, 3 * DOWNSAMPLING)

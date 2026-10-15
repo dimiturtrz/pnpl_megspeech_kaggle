@@ -55,7 +55,7 @@ class Encoding(nn.Module):
 
     def encoder(self) -> list[nn.Parameter]:
         """The stage-1 parameters, every one a word's embedding and word-head logits depend on: the subject layer, the
-        word CNN and its head, or for an encoder over a pretrained trunk (`WordEncoder.backbone`) the trunk alone, its
+        word CNN and its head, or for an encoder over a pretrained trunk (`WordEncoder.core`) the trunk alone, its
         read layers training with the span transformer and context head, the rest."""
         return [p for module in self.stage() for p in module.parameters()]
 
