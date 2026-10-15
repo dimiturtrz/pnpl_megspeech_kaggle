@@ -145,3 +145,25 @@ geometry.
    Dropping them saves compute but gains no accuracy. Not a score lever.
 5. **Session/run invariance:** run is 3× stronger than word in E. A per-run normalisation or adversarial head
    may help transfer to the final test's unseen stimuli. Size unknown.
+
+## Addendum 2026-10-15 — per-word sensor maps across 8 independent stems
+
+Source: the viz export of fam8 (`ema-cd25-xsp10sem05-ac05x-s{1..8}-ft-s{k}`, eight separately pretrained stems), IG per word
+over its own window, summed per sensor and normalised per word. The sample is 4697 words from 1000 local-test sentences
+(`python -m megspeech.evaluation.viz --device cuda`).
+
+- **Replication.** Temporal sensors get 1.6× the uniform share, and every other region 0.7–0.9×. Gradiometers get
+  1.2× uniform and magnetometers 0.6×. The top sensors are MEG0212/0342/1322/0243 — the same as the single-model
+  study above.
+- **Word-specific part is real.** Subtract each model's mean map, then correlate the residuals. The same word across two
+  different stems gives r = .79. Words from different sentences give r = .00. Neighbouring words in the same sentence
+  give .32, because their windows overlap. Most of a raw map is shared across words (r = .82 even for a different
+  word), so the viz's per-word colouring mostly shows the residual on top of a fixed temporal prior.
+- **Not an input-amplitude echo.** IG = input × gradient, so a loud sensor could earn attribution on its own. But the
+  residual correlates with the residual of the target span's |x| at only r = .08. After that direction is projected out,
+  cross-stem agreement stays at .78.
+- **Errors do not look elsewhere.** The temporal share is .410 for top-1 correct words and .408 for wrong ones (top-1
+  accuracy .36). Wrong words are read from the same sensors; the information there is insufficient, not mislocated.
+
+**Inference:** sensor attention is a stable property of the recipe, not of a seed. A sensor-selection or re-weighting
+lever has nothing to correct, which agrees with the region-ablation costs above.
