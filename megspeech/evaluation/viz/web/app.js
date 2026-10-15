@@ -1,4 +1,4 @@
-import { state, load, applyFilter, checkedModels, out } from "./state.js";
+import { state, load, applyFilter, out } from "./state.js";
 import { $, esc } from "./util.js";
 import { buildModels, buildFilters, SampleList } from "./controls.js";
 import { Signals } from "./signals.js";
@@ -18,11 +18,9 @@ function renderText() {
   if (!s) return;
   const [a, b] = s.target ?? [0, 0];
   $("sentence").innerHTML = `${esc(s.text.slice(0, a))}<mark>${esc(s.text.slice(a, b))}</mark>${esc(s.text.slice(b))}`;
+  const o = out(state.active, s.id);
   $("preds").innerHTML = `<span>label <b class="ok">${esc(s.label)}</b></span>`
-    + checkedModels().map((n) => {
-      const o = out(n, s.id);
-      return `<span>${esc(n)} <b class="${o?.correct ? "ok" : "no"}">${esc(o?.pred ?? "—")}</b> ${o ? (o.correct ? "✓" : "✗") : ""}</span>`;
-    }).join("");
+    + `<span>pred <b class="${o?.correct ? "ok" : "no"}">${esc(o?.pred ?? "—")}</b> ${o ? (o.correct ? "✓" : "✗") : ""}</span>`;
   const strata = Object.entries(s.strata ?? {}).map(([k, v]) => `${k}=${v}`).join(" · ");
   $("meta").textContent = `${s.id} · ${s.source} · subject ${s.subject} · session ${s.session}${strata ? ` · ${strata}` : ""}`;
 }
