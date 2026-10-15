@@ -1,5 +1,5 @@
-import { state, out, RANGES, activeFilters } from "./state.js";
-import { $, h } from "./util.js";
+import { state, out, RANGES, activeFilters, errorOf } from "./state.js";
+import { $, h, store, errorColor } from "./util.js";
 
 const fmtScore = (v) => (typeof v === "number" ? v.toFixed(3) : "");
 
@@ -55,104 +55,94 @@ export function buildFilters(onChange) {
     select(box, k, [["", "all"], ...vals.map((v) => [v, v])], state.filter.strata[k] ?? "",
       (v) => { state.filter.strata[k] = v; }, changed);
   }
-  select(box, "active model", [["all", "all"], ["correct", "✓ correct"], ["wrong", "✗ wrong"]], state.filter.correct,
-    (v) => { state.filter.correct = v; }, changed);
   btn.onclick = () => dlg.showModal();
   dlg.onclick = (e) => { if (e.target === dlg) dlg.close(); };
   $("filterdone").onclick = () => dlg.close();
   $("filterreset").onclick = () => {
-    Object.assign(state.filter, { strata: {}, ranges: {}, correct: "all" });
+    Object.assign(state.filter, { strata: {}, ranges: {} });
     buildFilters(onChange);
     changed();
   };
   $("q").oninput = () => { state.filter.q = $("q").value; onChange(); };
 }
 
-export class SampleList {
+const SORT_KEY = "megspeech-viz:sort";
+const rankOf = (s, o) => {
+  const i = o?.topk.findIndex(([lab]) => lab === s.label) ?? -1;
+  return i < 0 ? Infinity : i + 1;
+};
+const COLUMNS = [
+  { key: "id", title: "#", by: (s) => s.id, text: (s) => s.id, cls: () => "mut" },
+  { key: "word", title: "word", by: (s) => s.label, text: (s) => s.label },
+  { key: "pred", title: "pred", by: (s, o) => o?.pred ?? "", text: (s, o) => o?.pred ?? "—",
+    cls: (s, o) => (o ? (o.correct ? "ok" : "no") : "") },
+  { key: "error", title: "error", by: (s, o) => (o ? errorOf(o) : -1), text: (s, o) => (o ? errorOf(o).toFixed(2) : ""), num: true,
+    tint: (s, o) => (o ? errorColor(errorOf(o)) : null) },
+  { key: "rank", title: "rank", by: rankOf, text: (s, o) => (o ? (rankOf(s, o) === Infinity ? `>${o.topk.length}` : rankOf(s, o)) : ""),
+    num: true, title_: "rank of the true word in the model's top-k" },
+  { key: "src", title: "src", by: (s) => s.source, text: (s) => s.source.slice(0, 3), cls: () => "mut" },
+];
+const DESCENDING = new Set(["error", "rank"]);
+
+export class SampleTable {
   constructor(onPick) {
     this.onPick = onPick;
     this.rows = new Map();
-    this.open = new Set();
     this.on = null;
+    const saved = store.get(SORT_KEY, { key: "id", dir: 1 });
+    this.sortBy(COLUMNS.some((c) => c.key === saved.key) ? saved : { key: "id", dir: 1 });
     $("list").addEventListener("click", (e) => {
+      const head = e.target.closest("[data-col]");
+      if (head) { this.resort(head.dataset.col); return; }
       const hit = e.target.closest("[data-id]");
-      if (hit) { onPick(hit.dataset.id); return; }
-      const head = e.target.closest(".sent");
-      if (head) this.toggle(head.dataset.key);
+      if (hit) onPick(hit.dataset.id);
     });
   }
 
-  static key(s) { return s.sentence ?? s.id; }
-
-  groups() {
-    const groups = new Map();
-    for (const s of state.visible) {
-      const k = SampleList.key(s);
-      if (!groups.has(k)) groups.set(k, []);
-      groups.get(k).push(s);
-    }
-    return groups;
+  sortBy({ key, dir }) {
+    const col = COLUMNS.find((c) => c.key === key);
+    state.sort = { key, dir, by: (s) => col.by(s, out(state.active, s.id)) };
+    store.set(SORT_KEY, { key, dir });
   }
 
-  toggle(k) {
-    if (this.open.has(k)) this.open.delete(k); else this.open.add(k);
-    this.render();
+  resort(key) {
+    const dir = state.sort.key === key ? -state.sort.dir : (DESCENDING.has(key) ? -1 : 1);
+    this.sortBy({ key, dir });
+    this.onResort();
   }
 
-  word(s) {
-    const o = out(state.active, s.id), [a, b] = s.target ?? [0, 0];
-    const mark = h("span", { className: `sw ${o ? (o.correct ? "ok" : "no") : ""}`, textContent: s.text.slice(a, b) || s.label });
-    mark.dataset.id = s.id;
-    this.rows.set(s.id, mark);
-    return [mark, b];
+  header() {
+    return h("div", { className: "trow thead" }, ...COLUMNS.map((c) => {
+      const arrow = state.sort.key === c.key ? (state.sort.dir > 0 ? " ▲" : " ▼") : "";
+      const cell = h("span", { className: c.num ? "num" : "", textContent: `${c.title}${arrow}`, title: c.title_ ?? `sort by ${c.title}` });
+      cell.dataset.col = c.key;
+      return cell;
+    }));
   }
 
-  head(k, words) {
-    words = [...words].sort((x, y) => (x.target?.[0] ?? 0) - (y.target?.[0] ?? 0));
-    const text = words[0].text, parts = [];
-    let at = 0, right = 0;
-    for (const s of words) {
-      const [a] = s.target ?? [0, 0], [mark, b] = this.word(s);
-      parts.push(text.slice(at, a), mark);
-      at = b;
-      right += out(state.active, s.id)?.correct ? 1 : 0;
-    }
-    parts.push(text.slice(at));
-    const open = this.open.has(k);
-    const row = h("div", { className: `sent${open ? " open" : ""}`, title: `${words[0].source} · ${k}` },
-      h("span", { className: "rsrc", textContent: `${open ? "▾" : "▸"} ${words[0].source.slice(0, 3)}` }),
-      h("span", { className: "stext" }, ...parts),
-      h("span", { className: "badge", textContent: `${right}/${words.length}` }));
-    row.dataset.key = k;
-    return row;
+  row(s) {
+    const o = out(state.active, s.id);
+    const r = h("div", { className: "trow", title: s.text }, ...COLUMNS.map((c) => {
+      const cell = h("span", { className: `${c.num ? "num " : ""}${c.cls?.(s, o) ?? ""}`, textContent: c.text(s, o) });
+      const tint = c.tint?.(s, o);
+      if (tint) cell.style.color = tint;
+      return cell;
+    }));
+    r.dataset.id = s.id;
+    this.rows.set(s.id, r);
+    return r;
   }
 
   render() {
-    const frag = document.createDocumentFragment(), groups = this.groups();
     this.rows.clear();
-    for (const [k, words] of groups) {
-      frag.append(this.head(k, words));
-      if (!this.open.has(k)) continue;
-      for (const s of words) {
-        const o = out(state.active, s.id);
-        const r = h("div", { className: "row", title: `${s.id} · ${s.label}` },
-          h("span", { className: "rid", textContent: s.id }),
-          h("span", { className: "rlab", textContent: `${s.label}${o ? ` → ${o.pred}` : ""}` }),
-          h("span", { className: `badge ${o ? (o.correct ? "ok" : "no") : ""}`, textContent: o ? (o.correct ? "✓" : "✗") : "·" }));
-        r.dataset.id = s.id;
-        this.rows.set(s.id, r);
-        frag.append(r);
-      }
-    }
-    $("list").replaceChildren(frag);
-    $("count").textContent = `${groups.size} sentences · ${state.visible.length} / ${state.samples.length} words`;
+    $("list").replaceChildren(this.header(), ...state.visible.map((s) => this.row(s)));
+    const sentences = new Set(state.visible.map((s) => s.sentence ?? s.id)).size;
+    $("count").textContent = `${sentences} sentences · ${state.visible.length} / ${state.samples.length} words`;
     this.on = null;
     this.mark();
   }
 
   mark() {
-    const k = SampleList.key(state.byId.get(state.sel) ?? {});
-    if (state.sel && !this.open.has(k) && state.visSet.has(state.sel)) { this.open.add(k); this.render(); return; }
     this.on?.classList.remove("on");
     this.on = this.rows.get(state.sel) ?? null;
     this.on?.classList.add("on");

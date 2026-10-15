@@ -1,13 +1,14 @@
 import { state, load, applyFilter, out } from "./state.js";
 import { $, esc, wordCount } from "./util.js";
-import { buildModels, buildFilters, SampleList } from "./controls.js";
+import { buildModels, buildFilters, SampleTable } from "./controls.js";
 import { Signals } from "./signals.js";
 import { ModelPanel } from "./model.js";
 
 const TYPING = new Set(["INPUT", "SELECT", "TEXTAREA"]);
 const KEYS = { ArrowDown: () => list.step(1), ArrowUp: () => list.step(-1), " ": () => signals.togglePlay() };
 
-const list = new SampleList(select);
+const list = new SampleTable(select);
+list.onResort = () => refilter();
 const signals = new Signals();
 const panel = new ModelPanel(select);
 

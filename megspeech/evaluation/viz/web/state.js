@@ -9,7 +9,8 @@ export const state = {
   colorBy: "label",
   focus: null,
   projection: null,
-  filter: { strata: {}, ranges: {}, correct: "all", q: "" },
+  filter: { strata: {}, ranges: {}, q: "" },
+  sort: null,
   visible: [],
   visSet: new Set(),
 };
@@ -25,23 +26,25 @@ const within = (v, [lo, hi]) => (lo == null || v >= lo) && (hi == null || v <= h
 export const activeFilters = () => {
   const f = state.filter;
   return Object.values(f.strata).filter(Boolean).length
-    + Object.values(f.ranges).filter(([lo, hi]) => lo != null || hi != null).length
-    + (f.correct !== "all");
+    + Object.values(f.ranges).filter(([lo, hi]) => lo != null || hi != null).length;
 };
 
-const CORRECT = {
-  all: () => true,
-  correct: (o) => !!o?.correct,
-  wrong: (o) => !!o && !o.correct,
-};
+export const errorOf = (o) => o.error ?? 1 - (o.p_true ?? 0);
+
+const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 export function applyFilter() {
-  const f = state.filter, q = f.q.trim().toLowerCase(), keep = CORRECT[f.correct];
+  const f = state.filter, q = f.q.trim().toLowerCase();
   state.visible = state.samples.filter((s) =>
     Object.entries(f.strata).every(([k, v]) => !v || s.strata?.[k] === v)
     && Object.entries(f.ranges).every(([k, r]) => within(RANGES[k].of(s), r))
-    && keep(out(state.active, s.id))
     && (!q || `${s.id} ${s.label} ${s.text}`.toLowerCase().includes(q)));
+  const { by, dir } = state.sort ?? {};
+  if (by) {
+    const keyed = state.visible.map((s) => [by(s), s]);
+    keyed.sort(([a], [b]) => dir * compare(a, b));
+    state.visible = keyed.map(([, s]) => s);
+  }
   state.visSet = new Set(state.visible.map((s) => s.id));
 }
 

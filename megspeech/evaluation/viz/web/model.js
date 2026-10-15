@@ -1,4 +1,4 @@
-import { state, out } from "./state.js";
+import { state, out, errorOf } from "./state.js";
 import { $, h, esc, Layer, labelColor, errorColor, store, wordCount } from "./util.js";
 import { Legend, sourceColor } from "./legend.js";
 
@@ -22,7 +22,7 @@ const COLORINGS = {
   source: { key: (p) => p.s.source, color: sourceColor, hint: "colour = source" },
   position: { value: (p) => p.rel, color: positionColor, scale: ["start", "end", "word position in its sentence"],
     hint: "colour = where the word sits in its sentence" },
-  error: { value: (p) => p.o.error ?? 1 - (p.o.p_true ?? 0), color: errorColor, scale: ["0", "1", "error = 1 − p(true)"],
+  error: { value: (p) => errorOf(p.o), color: errorColor, scale: ["0", "1", "error = 1 − p(true)"],
     hint: "colour = error (1 − p true), green → red" },
 };
 
