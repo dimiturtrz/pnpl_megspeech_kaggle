@@ -143,6 +143,12 @@ class RunCache:
 
     parsed: ClassVar[dict[Path, tuple[int, pd.DataFrame]]] = {}
 
+    def current(self, sources: Sequence[Path]) -> bool:
+        """Whether the word table exists and is newer than every one of `sources`: a rewrite would race any other
+        process reading or writing it."""
+        path = self.cache / WORD_TABLE
+        return path.exists() and all(source.stat().st_mtime_ns <= path.stat().st_mtime_ns for source in sources)
+
     def published(self) -> pd.DataFrame:
         """The cache's word table as `publish` wrote it, parsed once per process and file version: an ensemble reads
         it for every member and run."""

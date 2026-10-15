@@ -185,6 +185,9 @@ def test_build(tmp_path: Path) -> None:
     assert not list(cache.cache.cache.glob("*.partial"))
     assert table["run"].tolist()[-WORD_EPOCHS:] == [f"subj00_{ArchiveKind.WORD}"] * WORD_EPOCHS
     assert np.load(cache.cache.path(f"subj00_{ArchiveKind.WORD}")).shape == (CHANNELS, WORD_EPOCHS * RATE)
+    stamp = (cache.cache.cache / WORD_TABLE).stat().st_mtime_ns
+    assert cache.build().equals(cache.cache.published())
+    assert (cache.cache.cache / WORD_TABLE).stat().st_mtime_ns == stamp
 
 
 def test_windows(tmp_path: Path) -> None:

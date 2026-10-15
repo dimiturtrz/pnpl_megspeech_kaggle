@@ -175,7 +175,7 @@ class KaggleCache:
         return Run.discover(self.raw.parent)[0].meg
 
     def build(self) -> pd.DataFrame:
-        """Cache every archive, then write the word table of all of them."""
+        """Cache every archive, then write the word table of all of them unless it is newer than every archive."""
         self.cache.ready()
         archives = self.archives()
         clean = self.cache.cleaner(self.layout)
@@ -183,6 +183,8 @@ class KaggleCache:
             LOG.info(
                 "%s", self.cache.write(archive.name, partial(archive.signal, self.cache, clean), archive.path).name
             )
+        if self.cache.current([archive.path for archive in archives]):
+            return self.cache.published()
         return self.cache.publish(pd.concat([archive.words(self.cache) for archive in archives], ignore_index=True))
 
     def windows(

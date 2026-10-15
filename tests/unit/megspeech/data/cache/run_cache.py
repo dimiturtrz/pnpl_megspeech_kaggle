@@ -20,6 +20,7 @@ from megspeech.data.spans.grouping import Grouping
 CHANNELS = 3
 SECONDS = 4
 SAMPLES = SECONDS * RATE
+SECOND = 10**9
 
 
 def recording(root: Path, session: int = 1, rate: float = SFREQ) -> Run:
@@ -164,6 +165,22 @@ def test_publish(tmp_path: Path) -> None:
     assert cache.publish(table) is table
     assert pd.read_csv(cache.cache / WORD_TABLE, sep="	").equals(table)
     assert not list(cache.cache.glob("*.partial"))
+
+
+def test_current(tmp_path: Path) -> None:
+    cache = RunCache(tmp_path / "cache")
+    cache.ready()
+    source = tmp_path / "archive.npz"
+    source.write_bytes(b"")
+    assert not cache.current([source])
+    cache.publish(pd.DataFrame({"run": ["a"]}))
+    table = cache.cache / WORD_TABLE
+    stamp = source.stat().st_mtime_ns
+    os.utime(table, ns=(stamp + SECOND, stamp + SECOND))
+    assert cache.current([source])
+    assert cache.current([])
+    os.utime(source, ns=(stamp + 2 * SECOND, stamp + 2 * SECOND))
+    assert not cache.current([source])
 
 
 def test_published(tmp_path: Path) -> None:
