@@ -45,6 +45,7 @@ from megspeech.evaluation.studies.errors.crowding import Study as Crossfit
 from megspeech.evaluation.studies.lm.bound import CANDIDATES, LAMS, RIGHT, Causal, Context, Table
 from megspeech.evaluation.studies.lm.rows import KAGGLE, ROWS, Posteriors
 from megspeech.model.ensemble import Ensemble
+from megspeech.objective.targets.context import MODEL as LM
 
 LOG = logging.getLogger(__name__)
 
@@ -299,7 +300,7 @@ class Study:
     def main() -> None:  # devtools-ignore: test-mirror
         parser = argparse.ArgumentParser(description=__doc__)
         parser.add_argument("name", help="an ensemble under models/ with probs.pt per member and lmrows.pt")
-        parser.add_argument("--lm", default="gpt2-large")
+        parser.add_argument("--lm", default=LM)
         parser.add_argument("--device", default="cuda")
         parser.add_argument("--seed", type=int, default=0)
         args = parser.parse_args()

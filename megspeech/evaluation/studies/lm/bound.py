@@ -42,6 +42,7 @@ from megspeech.evaluation.scoring.probabilities import PROBS, SECTIONS, Probabil
 from megspeech.evaluation.studies.errors.crowding import TAUS, TEST, VAL, Arm, Finish, Rows, Section
 from megspeech.evaluation.studies.errors.crowding import Study as Crossfit
 from megspeech.model.ensemble import Ensemble
+from megspeech.objective.targets.context import MODEL as LM
 
 LOG = logging.getLogger(__name__)
 
@@ -280,7 +281,7 @@ class Study:
     def main() -> None:  # devtools-ignore: test-mirror
         parser = argparse.ArgumentParser(description=__doc__)
         parser.add_argument("name", help="an ensemble under models/ whose members saved probs.pt")
-        parser.add_argument("--lm", default="gpt2-large")
+        parser.add_argument("--lm", default=LM)
         parser.add_argument("--device", default="cuda")
         parser.add_argument("--seed", type=int, default=0)
         args = parser.parse_args()

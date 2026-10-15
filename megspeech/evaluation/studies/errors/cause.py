@@ -34,6 +34,7 @@ from megspeech.data.raw.runs import Column
 from megspeech.evaluation.scoring.score import Head
 from megspeech.evaluation.studies.errors.perword import Attributes, Position, Scene
 from megspeech.evaluation.studies.errors.scored import Scored
+from megspeech.objective.targets.context import MODEL as LM
 
 LOG = logging.getLogger(__name__)
 
@@ -371,7 +372,7 @@ class Study:
     @classmethod
     def main(cls) -> None:  # devtools-ignore: test-mirror
         parser = Scene.parser(__doc__)
-        parser.add_argument("--lm", default="gpt2-large")
+        parser.add_argument("--lm", default=LM)
         parser.add_argument("--draws", type=int, default=DRAWS)
         root, args, scene = Scene.opened(parser)
         if scene.spoken is None:
