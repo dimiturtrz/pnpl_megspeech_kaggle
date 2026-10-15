@@ -57,3 +57,10 @@ def test_context_tagged_head_forward() -> None:
     assert torch.allclose(head.forward(x, context), head.words(x), atol=1e-6)
     with pytest.raises(ValueError, match="context"):
         head.forward(x)
+
+
+def test_read() -> None:
+    head = ContextTaggedHead(WIDTH, 0.0, tags=1)
+    head.attach(CONTEXT_WIDTH)
+    x, context = torch.randn(4, WIDTH, generator=GENERATOR), torch.randn(4, CONTEXT_WIDTH, generator=GENERATOR)
+    assert torch.equal(head.read(x, context), head(x, context))

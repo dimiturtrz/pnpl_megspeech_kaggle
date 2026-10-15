@@ -34,8 +34,7 @@ class SentenceNet(Span):
     ) -> None:
         """`prototypes` are the fixed per-word anchors the context head reads against; see `Span` for the rest."""
         super().__init__(scale, context, unseen, channels=channels)
-        self.reading = context.conv.head
-        self.reading.attach(self.words.head, context.width)
+        self.words.attach(context.width)
         self.context = Mixer.of(context)
         self.head = ContextReadout.build(context, prototypes)
         self.timing = TimingHead.over_vocabulary(active=context.rhythm)
@@ -126,7 +125,7 @@ class SentenceNet(Span):
         self, refined: Float[Tensor, "g w h"], slots: Float[Tensor, "g w e"]
     ) -> tuple[Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
         """The context head's logits over the `refined` positions, and the word head's over their `slots`."""
-        return self.hierarchy(self.head(refined), refined), self.reading.read(self.words.head, slots, refined)
+        return self.hierarchy(self.head(refined), refined), self.words.classify(slots, refined)
 
     def readouts(self) -> tuple[nn.Module, ...]:
         """The modules reading each of `forward`'s outputs, in order: the context head, then the word head."""

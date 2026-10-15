@@ -17,14 +17,7 @@ def test_build(kind: WordHead) -> None:
 
 
 @pytest.mark.parametrize("kind", list(WordHead))
-def test_attach(kind: WordHead) -> None:
+def test_built_head_reads(kind: WordHead) -> None:
     head = kind.build(WIDTH, 0.0)
-    kind.attach(head, WIDTH + 1)
-    assert sum(p.numel() for p in head.parameters()) > 0
-
-
-@pytest.mark.parametrize("kind", list(WordHead))
-def test_read(kind: WordHead) -> None:
-    head = kind.build(WIDTH, 0.0)
-    kind.attach(head, WIDTH)
-    assert kind.read(head, torch.zeros(2, WIDTH), torch.zeros(2, WIDTH)).shape == (2, VOCAB_SIZE)
+    head.attach(WIDTH)
+    assert head.read(torch.zeros(2, WIDTH), torch.zeros(2, WIDTH)).shape == (2, VOCAB_SIZE)

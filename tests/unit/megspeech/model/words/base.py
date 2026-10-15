@@ -39,6 +39,17 @@ def test_classifier() -> None:
     assert Pooled().classifier(0.5)(torch.zeros(2, 5)).shape == (2, VOCAB_SIZE)
 
 
+def test_attach() -> None:
+    encoder = Pooled()
+    encoder.attach(3)
+    assert encoder.classify(torch.zeros(2, 4, 5), torch.zeros(2, 4, 3)).shape == (2, 4, VOCAB_SIZE)
+
+
+def test_classify() -> None:
+    encoder, slots = Pooled(), torch.randn(2, 4, 5, generator=GENERATOR)
+    assert torch.equal(encoder.classify(slots, torch.zeros(2, 4, 3)), encoder.head(slots))
+
+
 def test_normalise() -> None:
     x = 3.0 + 2.0 * torch.randn(4, 5, SAMPLES, generator=GENERATOR)
     present = torch.ones(4, 1, SAMPLES, dtype=torch.bool)

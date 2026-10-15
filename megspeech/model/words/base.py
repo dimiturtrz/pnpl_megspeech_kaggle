@@ -8,6 +8,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from megspeech.model.words.heads import WordHead
+from megspeech.model.words.readout import WordReadout
 
 EPSILON = 1e-6
 
@@ -16,15 +17,23 @@ class WordEncoder(nn.Module, ABC):
     """A word classifier over one window; subclasses build `head` from `classifier` after their own layers, so a
     seeded initialisation draws in the order checkpoints were trained with."""
 
-    head: nn.Module
+    head: WordReadout
 
     def __init__(self, width: int, *, instance: bool) -> None:
         super().__init__()
         self.width = width
         self.instance = instance
 
-    def classifier(self, dropout: float, head: WordHead = WordHead.LINEAR) -> nn.Module:
+    def classifier(self, dropout: float, head: WordHead = WordHead.LINEAR) -> WordReadout:
         return head.build(self.width, dropout)
+
+    def attach(self, context_width: int) -> None:
+        """Size `head` for the `context_width` span-refined positions it may read."""
+        self.head.attach(context_width)
+
+    def classify(self, slots: Float[Tensor, "g w e"], refined: Float[Tensor, "g w h"]) -> Float[Tensor, "g w v"]:
+        """`head`'s words over the word embeddings `slots`, given the `refined` positions it may read."""
+        return self.head.read(slots, refined)
 
     @abstractmethod
     def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:

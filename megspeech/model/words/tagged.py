@@ -7,10 +7,11 @@ from torch import Tensor, nn
 
 from megspeech.data.labels.context_tags import CLASSES
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
+from megspeech.model.words.readout import WordReadout
 from megspeech.objective.auxiliary.classified.tagging import Tagging
 
 
-class TaggedHead(Tagging):
+class TaggedHead(Tagging, WordReadout):
     """A word head factorised through a part of speech: each tag has its own linear readout `h_t` of the 50 words,
     and word `w` scores `logsumexp_t(log_softmax(tag)_t + h_t(x)_w)`. The tag head is trained beside it
     (`TagTerm`), so the readout that fires for a word is the one of the tag the embedding says it has."""
@@ -47,6 +48,7 @@ class ContextTaggedHead(TaggedHead):
         self.dropout = dropout
         self.tags = tags
 
+    @override
     def attach(self, context_width: int) -> None:
         """Have the tag head read `context_width` refined positions."""
         self.tag = nn.Sequential(nn.Dropout(self.dropout), nn.Linear(context_width, self.tags))
@@ -56,3 +58,7 @@ class ContextTaggedHead(TaggedHead):
         if context is None:
             raise ValueError("a context-tagged head reads the refined positions too: call it with `context`")
         return self.mix(self.tag(context), x)
+
+    @override
+    def read(self, slots: Float[Tensor, "g w e"], refined: Float[Tensor, "g w h"]) -> Float[Tensor, "g w v"]:
+        return self(slots, refined)
