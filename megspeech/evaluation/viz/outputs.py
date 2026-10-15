@@ -42,6 +42,7 @@ class Outputs:
     score: float | None
     projections: dict[str, dict[str, list[float]]]
     samples: dict[str, dict[str, object]]
+    metrics: dict[str, float]
 
     def manifest(self) -> dict[str, object]:
         return {
@@ -50,6 +51,7 @@ class Outputs:
             "labels": list(PRIMARY.words),
             "metric": METRIC,
             "score": self.score,
+            "metrics": self.metrics,
         }
 
     def write(self, directory: Path) -> Path:
@@ -76,6 +78,7 @@ class Predictions:
     ) -> dict[str, dict[str, object]]:
         hits = self.ruler.hits(probabilities, labels)
         truth = probabilities.gather(1, labels[:, None])[:, 0]
+        rank = self.rank(probabilities, labels)
         top = probabilities.topk(self.ruler.k, dim=1)
         return {
             name: {
@@ -83,11 +86,38 @@ class Predictions:
                 "correct": bool(hits[i]),
                 "p_true": float(truth[i]),
                 "error": 1 - float(truth[i]),
+                "rank": int(rank[i]),
                 "topk": [[PRIMARY.words[int(c)], float(p)] for c, p in zip(top.indices[i], top.values[i], strict=True)],
                 "emb": {projector: [float(x) for x in at[i]] for projector, at in points.items()},
             }
             for i, name in enumerate(ids)
         }
+
+    @staticmethod
+    def rank(probabilities: Float[Tensor, "n v"], labels: Int[Tensor, " n"]) -> Int[Tensor, " n"]:
+        """The true word's rank over the whole vocabulary, ties ranked above it (`Ruler.hits`' order)."""
+        return (probabilities >= probabilities.gather(1, labels[:, None])).sum(dim=1)
+
+    def metrics(self, probabilities: Float[Tensor, "n v"], labels: Int[Tensor, " n"]) -> dict[str, float]:
+        """Over these samples, macro over the words present: top-k and top-1 balanced accuracy, top-1 F1, and
+        mAP (the samples ranked by each word's probability); plus MRR, the mean of one true word's AP = 1 / rank."""
+        words = torch.arange(probabilities.shape[1])
+        truth = labels[:, None] == words
+        support = truth.sum(dim=0).double()
+        present = support > 0
+        predicted = probabilities.argmax(dim=1)[:, None] == words
+        top1 = (truth & predicted).sum(dim=0).double()
+        topk = (truth & self.ruler.hits(probabilities, labels)[:, None]).sum(dim=0).double()
+        relevant = truth.gather(0, probabilities.argsort(dim=0, descending=True)).double()
+        precision = relevant.cumsum(dim=0) / torch.arange(1, len(labels) + 1, dtype=torch.float64)[:, None]
+        per_word = {
+            f"bacc@{self.ruler.k}": topk / support,
+            "bacc@1": top1 / support,
+            "f1@1": 2 * top1 / (support + predicted.sum(dim=0).double()),
+            "map": (precision * relevant).sum(dim=0) / support,
+        }
+        macro = {key: float(rate[present].mean()) for key, rate in per_word.items()}
+        return {**macro, "mrr": float((1 / self.rank(probabilities, labels).double()).mean())}
 
 
 @dataclass(frozen=True)
@@ -192,4 +222,5 @@ class Reader:
             Predictions().records(
                 keys["id"].tolist(), probabilities, labels, {name: p.points for name, p in projections.items()}
             ),
+            Predictions().metrics(probabilities, labels),
         )

@@ -12,7 +12,10 @@ export function buildModels(onChange) {
   pick.value = state.active ?? "";
   pick.onchange = () => { state.active = pick.value; onChange(); };
   const metric = state.man.models[0]?.metric ?? "score";
-  box.replaceChildren(pick, h("div", { className: "mut", textContent: `${metric} on this sample` }));
+  const extra = Object.entries(state.man.models.find((m) => m.name === state.active)?.metrics ?? {})
+    .map(([k, v]) => `${k} ${v.toFixed(3)}`).join(" · ");
+  box.replaceChildren(pick, h("div", { className: "mut", textContent: `${metric} on this sample` }),
+    ...(extra ? [h("div", { className: "mut", textContent: `all sampled words: ${extra}` })] : []));
 }
 
 function select(box, label, options, current, set, onChange) {
@@ -68,6 +71,7 @@ export function buildFilters(onChange) {
 
 const SORT_KEY = "megspeech-viz:sort";
 const rankOf = (s, o) => {
+  if (o?.rank != null) return o.rank;
   const i = o?.topk.findIndex(([lab]) => lab === s.label) ?? -1;
   return i < 0 ? Infinity : i + 1;
 };
@@ -79,7 +83,7 @@ const COLUMNS = [
   { key: "error", title: "error", by: (s, o) => (o ? errorOf(o) : -1), text: (s, o) => (o ? errorOf(o).toFixed(2) : ""), num: true,
     tint: (s, o) => (o ? errorColor(errorOf(o)) : null) },
   { key: "rank", title: "rank", by: rankOf, text: (s, o) => (o ? (rankOf(s, o) === Infinity ? `>${o.topk.length}` : rankOf(s, o)) : ""),
-    num: true, title_: "rank of the true word in the model's top-k" },
+    num: true, title_: "rank of the true word among all words" },
   { key: "src", title: "src", by: (s) => s.source, text: (s) => s.source.slice(0, 3), cls: () => "mut" },
 ];
 const DESCENDING = new Set(["error", "rank"]);

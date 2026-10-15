@@ -35,7 +35,9 @@ class Drawn:
 @dataclass(frozen=True)
 class Read:
     def read(self, root: DataRoot, name: str, runs: list[Run], keys: pd.DataFrame) -> Outputs:
-        return Outputs(name, "deep", 0.5, {"pca": {"explained": [0.3, 0.2]}}, {i: {"p_true": 0.5} for i in keys["id"]})
+        return Outputs(
+            name, "deep", 0.5, {"pca": {"explained": [0.3, 0.2]}}, {i: {"p_true": 0.5} for i in keys["id"]}, {}
+        )
 
 
 def test_run(tmp_path: Path) -> None:

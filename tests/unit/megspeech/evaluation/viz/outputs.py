@@ -21,7 +21,7 @@ PROJECTIONS = {"pca": {"explained": [0.2, 0.1]}, "umap": {"explained": []}}
 
 
 def outputs() -> Outputs:
-    return Outputs("model", str(Track.DEEP), 0.5, PROJECTIONS, {"0000": {"pred": "the"}})
+    return Outputs("model", str(Track.DEEP), 0.5, PROJECTIONS, {"0000": {"pred": "the"}}, {"mrr": 0.5})
 
 
 def test_manifest() -> None:
@@ -31,6 +31,7 @@ def test_manifest() -> None:
         "labels": list(PRIMARY.words),
         "metric": METRIC,
         "score": 0.5,
+        "metrics": {"mrr": 0.5},
     }
 
 
@@ -59,6 +60,29 @@ def test_records() -> None:
     assert records["b"]["pred"] == PRIMARY.words[5]
     assert len(cast("list[object]", records["b"]["topk"])) == TOP
     assert records["b"]["emb"] == {"pca": [3.0, 4.0], "umap": [7.0, 8.0]}
+    assert records["a"]["rank"] == 1
+    assert records["b"]["rank"] > TOP
+
+
+def test_rank() -> None:
+    probabilities = torch.tensor([[0.5, 0.3, 0.2], [0.4, 0.4, 0.2], [0.1, 0.2, 0.7]])
+    assert Predictions.rank(probabilities, torch.tensor([0, 1, 0])).tolist() == [1, 2, 3]
+
+
+def test_metrics() -> None:
+    probabilities = torch.full((4, VOCAB_SIZE), 0.001)
+    probabilities[0, 0] = 0.9
+    probabilities[1, 0] = 0.8
+    probabilities[1, 1] = 0.5
+    probabilities[2, 1] = 0.9
+    probabilities[3, 0] = 0.7
+    labels = torch.tensor([0, 1, 1, 2])
+    metrics = Predictions().metrics(probabilities, labels)
+    assert metrics["bacc@1"] == pytest.approx((1 + 0.5 + 0) / 3)
+    assert metrics["f1@1"] == pytest.approx((0.5 + 2 / 3 + 0) / 3)
+    assert metrics[f"bacc@{TOP}"] == pytest.approx(2 / 3)
+    assert 0 < metrics["map"] <= 1
+    assert metrics["mrr"] == pytest.approx((1 + 1 / 2 + 1 + 1 / VOCAB_SIZE) / 4)
 
 
 def rows() -> dict[str, pd.DataFrame]:
