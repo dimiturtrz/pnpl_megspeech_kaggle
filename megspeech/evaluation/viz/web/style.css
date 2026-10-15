@@ -68,7 +68,8 @@ input[type=search] { margin-bottom:.5rem; }
 
 .textbox { padding:.5rem .7rem; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg); }
 .sentence { margin:0; font-size:1.05rem; }
-.sentence mark { background:#5b8def44; color:var(--ink); border-bottom:2px solid var(--accent); padding:0 .1rem; border-radius:.15rem; }
+.sentence .elig { border-bottom:2px solid var(--err); cursor:pointer; }
+.sentence .elig.sel { background:#5b8def44; color:var(--ink); padding:0 .1rem; border-radius:.15rem; outline:1px solid var(--accent); }
 .preds { display:flex; flex-wrap:wrap; gap:.3rem .9rem; margin-top:.35rem; font-size:.85rem; }
 .trackhead { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:.3rem .6rem; margin-bottom:.3rem; }
 .trackhead h2 { margin:0; }

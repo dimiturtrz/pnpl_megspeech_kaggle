@@ -3,6 +3,7 @@ export const state = {
   man: null,
   samples: [],
   byId: new Map(),
+  bySentence: new Map(),
   models: new Map(),
   saliency: new Map(),
   row: new Map(),
@@ -41,6 +42,18 @@ export const rankedOf = (o) => o.ranked ?? o.topk;
 
 export const errorOf = (o) => o.error ?? 1 - (o.p_true ?? 0);
 
+const sortedErrors = new Map();
+
+export function errorShare(model, o) {
+  if (!sortedErrors.has(model)) {
+    sortedErrors.set(model, Float64Array.from(Object.values(state.models.get(model)?.samples ?? {}), errorOf).sort());
+  }
+  const sorted = sortedErrors.get(model), e = errorOf(o);
+  let lo = 0, hi = sorted.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] < e) lo = mid + 1; else hi = mid; }
+  return sorted.length > 1 ? lo / (sorted.length - 1) : 0;
+}
+
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 export function applyFilter() {
@@ -77,7 +90,12 @@ export async function load() {
     ...state.man.models.map((m) => getJson(`models/${encodeURIComponent(m.name)}.json`)),
   ]);
   state.samples = samples;
-  for (const s of samples) state.byId.set(s.id, s);
+  for (const s of samples) {
+    state.byId.set(s.id, s);
+    const key = s.sentence ?? s.id;
+    state.bySentence.set(key, [...(state.bySentence.get(key) ?? []), s]);
+  }
+  for (const group of state.bySentence.values()) group.sort((a, b) => a.target[0] - b.target[0]);
   samples.forEach((s, i) => state.row.set(s.id, i));
   state.man.models.forEach((m, i) => state.models.set(m.name, models[i]));
   const weights = await Promise.all(state.man.models.map(getSaliency));

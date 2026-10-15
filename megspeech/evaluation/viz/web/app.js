@@ -1,5 +1,5 @@
-import { state, load, applyFilter, out } from "./state.js";
-import { $, esc, wordCount } from "./util.js";
+import { state, load, applyFilter, out, errorOf, errorShare } from "./state.js";
+import { $, esc, wordCount, errorColor } from "./util.js";
 import { buildModels, buildFilters, SampleTable } from "./controls.js";
 import { Signals } from "./signals.js";
 import { ModelPanel } from "./model.js";
@@ -15,16 +15,31 @@ const panel = new ModelPanel(select);
 
 function status(msg) { $("status").textContent = msg; }
 
+const errorTint = (o) => (o ? errorColor(errorShare(state.active, o)) : "var(--mut)");
+const errorTip = (o) => `error ${errorOf(o).toFixed(2)}, worse than ${Math.round(100 * errorShare(state.active, o))}% of this model's words`;
+
+function sentenceHtml(s) {
+  let html = "", at = 0;
+  for (const w of state.bySentence.get(s.sentence ?? s.id) ?? [s]) {
+    const [a, b] = w.target ?? [0, 0];
+    if (a < at) continue;
+    const o = out(state.active, w.id), tip = o ? `${w.label} · ${errorTip(o)}` : w.label;
+    html += `${esc(s.text.slice(at, a))}<span class="elig${w.id === s.id ? " sel" : ""}" data-id="${esc(w.id)}" `
+      + `style="--err:${errorTint(o)}" title="${esc(tip)}">${esc(s.text.slice(a, b))}</span>`;
+    at = b;
+  }
+  return html + esc(s.text.slice(at));
+}
+
 function renderText() {
   const s = state.byId.get(state.sel);
   if (!s) return;
-  const [a, b] = s.target ?? [0, 0];
-  $("sentence").innerHTML = `${esc(s.text.slice(0, a))}<mark>${esc(s.text.slice(a, b))}</mark>${esc(s.text.slice(b))}`;
+  $("sentence").innerHTML = sentenceHtml(s);
   const o = out(state.active, s.id);
   const exact = o?.pred === s.label;
   $("preds").innerHTML = `<span>label <b class="ok">${esc(s.label)}</b></span>`
     + `<span>pred <b class="${exact ? "ok" : "no"}">${esc(o?.pred ?? "—")}</b></span>`
-    + (o?.rank ? `<span class="${o.correct ? "ok" : "no"}">true word at rank ${o.rank}</span>` : "");
+    + (o?.rank ? `<span style="color:${errorTint(o)}" title="${errorTip(o)}">true word at rank ${o.rank}</span>` : "");
   const strata = Object.entries(s.strata ?? {}).filter(([k]) => k !== "source").map(([k, v]) => `${k}=${v}`).join(" · ");
   $("meta").textContent = `subject ${s.subject} · session ${s.session} · ${wordCount(s.text)} words${strata ? ` · ${strata}` : ""}`;
 }
@@ -76,6 +91,7 @@ async function main() {
   buildFilters(refilter);
   restore();
   window.addEventListener("hashchange", restore);
+  $("sentence").onclick = (e) => { const id = e.target.closest(".elig")?.dataset.id; if (id) select(id); };
   document.addEventListener("keydown", (e) => {
     const act = KEYS[e.key];
     if (!act || TYPING.has(e.target.tagName) || e.target.tagName === "AUDIO") return;
