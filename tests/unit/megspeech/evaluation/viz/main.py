@@ -71,3 +71,28 @@ def test_run(tmp_path: Path) -> None:
     assert FakeServer.seen == [ServeConfig(data=tmp_path / "viz" / "y", port=9001)]
     assert FakeExporter.seen == [ExportConfig(models=("m",))]
     assert FakeExporter.devices == [Device.CPU, Device.CPU]
+
+
+@pytest.mark.usefixtures("fakes")
+def test_agree(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
+    seen: list[Path] = []
+
+    class FakeSaliencies:
+        @staticmethod
+        def read(export: Path) -> str:
+            seen.append(export)
+            return "maps"
+
+    class FakeAgreement:
+        def __init__(self, saliencies: str) -> None:
+            self.saliencies = saliencies
+
+        def report(self) -> dict[str, str]:
+            return {"of": self.saliencies}
+
+    monkeypatch.setattr(entry, "Saliencies", FakeSaliencies)
+    monkeypatch.setattr(entry, "Agreement", FakeAgreement)
+    with caplog.at_level("INFO"):
+        Cli().agree(argparse.Namespace(name="z"))
+    assert seen == [tmp_path / "viz" / "z"]
+    assert '"of": "maps"' in caplog.text

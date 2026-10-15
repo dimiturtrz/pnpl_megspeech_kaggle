@@ -2,7 +2,7 @@ import { $, h, store } from "./util.js";
 
 const PICK_KEY = "megspeech-viz:channels";
 const KIND = { mag: "magnetometers", grad: "gradiometers" };
-const SHORT = { mag: "m", grad: "g" };
+const SHORT = { mag: "mag", grad: "grad" };
 
 const all = (C) => Array.from({ length: C }, (_, c) => c);
 const spread = (members, n) => Array.from({ length: Math.min(n, members.length) },

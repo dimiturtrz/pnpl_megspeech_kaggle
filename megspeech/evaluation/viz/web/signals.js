@@ -2,17 +2,25 @@ import { $, Layer, dataUrl, niceStep, clamp, store } from "./util.js";
 import { ChannelPick } from "./channels.js";
 import { state, weightOf } from "./state.js";
 
-const PAD = { l: 46, r: 10, t: 6, b: 18 };
+const PAD = { l: 62, r: 10, t: 6, b: 18 };
 const AMP = 0.3;
 const RMS_ROWS = 2;
 const CACHE_MAX = 24;
 const MAX_TICKS = 8;
-const LABEL_MIN_ROW = 9;
+const LABEL_MIN_ROW = 9, MIN_ROW = 14;
 const MEG_KEY = "megspeech-viz:meg-open";
 const COL = { grid: "#222937", axis: "#8b94a3", chan: "rgba(159,179,209,.75)", rms: "#5b8def", wave: "#7fdca4", head: "#ff6a5a", target: "rgba(91,141,239,.16)" };
 
-const COLD = [159, 179, 209], HOT = [255, 140, 40], FAINT = 0.3, FULL = 255;
-const weighted = (w) => `rgba(${COLD.map((c, i) => Math.round(c + (HOT[i] - c) * w)).join(",")},${FAINT + (1 - FAINT) * w})`;
+const HEAT = [[70, 95, 150], [55, 165, 170], [235, 200, 60], [255, 75, 40]], FAINT = 0.35;
+function heat(q) {
+  const x = q * (HEAT.length - 1), i = Math.min(HEAT.length - 2, Math.floor(x)), f = x - i;
+  return `rgba(${HEAT[i].map((c, k) => Math.round(c + (HEAT[i + 1][k] - c) * f)).join(",")},${FAINT + (1 - FAINT) * q})`;
+}
+function percentiles(weights) {
+  const q = new Float32Array(weights.length);
+  [...weights.keys()].sort((a, b) => weights[a] - weights[b]).forEach((c, r) => { q[c] = r / Math.max(1, weights.length - 1); });
+  return q;
+}
 
 const cache = new Map();
 function fetchBuf(url) {
@@ -166,9 +174,13 @@ export class Signals {
   drawMeg() {
     if (!this.megOpen) return;
     const m = this.meg, weights = this.s ? weightOf(state.active, this.s.id) : null;
+    const q = weights ? percentiles(weights) : null;
+    $("heatkey").hidden = !q;
     const { rows, total } = m ? this.pick.rows(m, this.target, +$("nch").value, weights) : { rows: [], total: 0 };
     const n = rows.length;
     $("nchlabel").textContent = m ? `${n}/${total}` : "";
+    const box = $("megbox").clientHeight;
+    $("meg").style.height = `${Math.max(box, (n + RMS_ROWS) * MIN_ROW + PAD.t + PAD.b)}px`;
     this.megL.draw((ctx, W, H) => {
       this.axis(ctx, W, H);
       if (!m) return;
@@ -179,7 +191,8 @@ export class Signals {
       ctx.strokeStyle = COL.chan; ctx.lineWidth = 0.8;
       for (let r = 0; r < n; r++) {
         const c = rows[r], y0 = rmsBase + (r + 0.5) * rowH;
-        ctx.strokeStyle = weights ? weighted(weights[c] / FULL) : COL.chan;
+        ctx.strokeStyle = q ? heat(q[c]) : COL.chan;
+        ctx.lineWidth = q ? 0.7 + q[c] : 0.8;
         this.trace(ctx, m.data, c * m.T, m.T, m.t0, m.sfreq, y0, rowH * AMP, W);
         if (rowH >= LABEL_MIN_ROW) { ctx.fillStyle = COL.axis; ctx.fillText(this.pick.label(c), 4, y0); }
       }

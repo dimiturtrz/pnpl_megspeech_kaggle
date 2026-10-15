@@ -36,12 +36,13 @@
       </div>
       <div class="trackhead">
         <button id="megtoggle" class="fold" aria-expanded="true"><span class="caret">▾</span> MEG <span class="mut" id="meghead"></span></button>
+        <span class="heatkey" id="heatkey" title="trace colour: the channel's model-weight percentile for this word" hidden><span class="glabel">weight</span><i></i></span>
         <label class="nch" id="nchbox"><span class="glabel">channels</span>
           <select id="chsel" title="which channels to draw"></select>
           <input id="nch" type="range" min="1" max="64" value="24" />
           <span id="nchlabel" class="tlabel"></span></label>
       </div>
-      <canvas id="meg" class="meg"></canvas>
+      <div id="megbox" class="megbox"><canvas id="meg" class="meg"></canvas></div>
       <div class="trackhead">
         <h2>audio <span class="mut" id="audhead"></span></h2>
         <span id="tlabel" class="tlabel"></span>

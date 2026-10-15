@@ -20,7 +20,7 @@ h2 { margin:0 0 .4rem; font-size:.85rem; font-weight:600; color:var(--mut); }
 
 main { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,22fr) minmax(0,48fr) minmax(0,30fr);
   gap:var(--gap); padding:0 var(--pad) var(--pad); }
-@media (max-width:64rem){ main{ grid-template-columns:1fr; } .list{ max-height:22rem; } .meg{ min-height:22rem; } }
+@media (max-width:64rem){ main{ grid-template-columns:1fr; } .list{ max-height:22rem; } .megbox{ min-height:22rem; } }
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:.75rem; padding:var(--gap);
   display:flex; flex-direction:column; min-height:0; min-width:0; }
 canvas { display:block; width:100%; }
@@ -75,12 +75,13 @@ input[type=search] { margin-bottom:.5rem; }
 .fold { background:transparent; border:0; color:var(--mut); font:inherit; font-size:.85rem; font-weight:600; padding:0; cursor:pointer; text-align:left; }
 .fold .caret { display:inline-block; transition:transform .15s; }
 .mid.megoff .fold .caret { transform:rotate(-90deg); }
-.mid.megoff .meg, .mid.megoff #nchbox { display:none; }
+.mid.megoff .megbox, .mid.megoff #nchbox { display:none; }
 .mid.megoff .wave { flex:0 0 9rem; }
 .nch { display:flex; align-items:center; gap:.4rem; }
 .nch input { accent-color:var(--accent); width:8rem; }
 .tlabel { color:var(--mut); font-variant-numeric:tabular-nums; font-size:.8rem; min-width:3.4em; text-align:right; }
-.meg { flex:3; min-height:12rem; cursor:crosshair; margin-bottom:.5rem; }
+.megbox { flex:3; min-height:12rem; overflow-y:auto; margin-bottom:.5rem; position:relative; }
+.meg { position:absolute; inset:0 0 auto 0; height:100%; cursor:crosshair; }
 .wave { flex:1; min-height:4.5rem; cursor:crosshair; margin-bottom:.4rem; }
 audio { width:100%; height:2.2rem; }
 audio[hidden] { display:none; }
@@ -128,3 +129,6 @@ audio[hidden] { display:none; }
 .thead > span { cursor:pointer; user-select:none; }
 .thead > span:hover { color:var(--ink); }
 #chsel { font-size:.75rem; padding:.1rem .3rem; }
+.heatkey { display:inline-flex; align-items:center; gap:6px; }
+.heatkey[hidden] { display:none; }
+.heatkey i { width:72px; height:8px; border-radius:4px; background:linear-gradient(90deg, rgb(70,95,150), rgb(55,165,170), rgb(235,200,60), rgb(255,75,40)); }
