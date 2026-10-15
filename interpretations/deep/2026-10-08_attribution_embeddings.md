@@ -167,3 +167,19 @@ over its own window, summed per sensor and normalised per word. The sample is 46
 
 **Inference:** sensor attention is a stable property of the recipe, not of a seed. A sensor-selection or re-weighting
 lever has nothing to correct, which agrees with the region-ablation costs above.
+
+### 2026-10-15 — stem and frozen-encoder controls (`viz agree --name deep11`)
+
+Same 4697 words, 11 models: fine-tuned `ac05x-s{1..8}`, the s1 stem (pre-fine-tune), s1 with a frozen encoder (`ft-elr00`), `base-hl`.
+Each model's mean same-word residual correlation with the other ten:
+
+| model | score on sample | agreement |
+|---|---|---|
+| fine-tuned s1–s8 | .669–.679 | .727–.744 |
+| frozen encoder (s1-ft-elr00) | .658 | .656 |
+| base-hl | .657 | .640 |
+| stem s1 (no fine-tune) | .185 | .526 |
+
+Region ratios, amplitude control (.07) and correct/wrong temporal share (.408/.402) are unchanged from fam8.
+The word-specific map is already half there in the stem, and the encoder's fine-tuning is what pulls the eight seeds together.
+Models that score worse also share less of it. This is still correlation, not cause: it does not show that the shared map is *why* they score better.

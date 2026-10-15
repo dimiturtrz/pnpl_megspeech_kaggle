@@ -2,7 +2,7 @@ import { $, h, store } from "./util.js";
 
 const PICK_KEY = "megspeech-viz:channels";
 const KIND = { mag: "magnetometers", grad: "gradiometers" };
-const SHORT = { mag: "mag", grad: "grad" };
+const SENSOR = { 1: "mag", 2: "grad1", 3: "grad2" };
 
 const all = (C) => Array.from({ length: C }, (_, c) => c);
 const spread = (members, n) => Array.from({ length: Math.min(n, members.length) },
@@ -66,6 +66,7 @@ export class ChannelPick {
 
   label(c) {
     const s = this.sensors;
-    return s?.names[c] ? `${s.names[c].replace("MEG", "")} ${SHORT[s.kinds[c]] ?? ""}` : `ch ${c}`;
+    const name = s?.names[c];
+    return name ? `#${name.slice(3, 6)} ${SENSOR[name[6]] ?? name}` : `ch ${c}`;
   }
 }
