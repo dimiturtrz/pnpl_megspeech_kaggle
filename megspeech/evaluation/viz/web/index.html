@@ -39,14 +39,14 @@
         <div class="megctl">
           <div class="megtitle">
             <button id="megtoggle" class="fold" aria-expanded="true"><span class="caret">▾</span> MEG <span class="mut" id="meghead"></span></button>
-            <span class="heatkey" id="heatkey" title="trace colour: the channel's model-weight percentile for this word" hidden><span class="glabel">weight</span><i></i></span>
           </div>
           <label class="nch" id="nchbox"><span class="glabel">channels</span>
             <select id="chsel" title="which channels to draw"></select>
             <input id="nch" type="range" min="1" max="64" value="24" />
             <span id="nchlabel" class="tlabel"></span></label>
+          <span class="heatkey" id="heatkey" title="trace colour: the channel's model-weight percentile for this word" hidden><span class="glabel">weight</span><i></i></span>
         </div>
-        <canvas id="helmet" class="helmet" title="helmet from above, nose up: one dot per sensor location, coloured by its summed weight for this word; click a dot to show it and its neighbours"></canvas>
+        <div class="helmetbox" id="helmetbox"><canvas id="helmet" class="helmet" title="helmet from above, nose up: one dot per sensor location, coloured by its summed weight for this word; click a dot to show it and its neighbours"></canvas><div class="grip" id="helmetgrip" title="drag down or left to enlarge the map"></div></div>
       </div>
       <div id="megbox" class="megbox"><canvas id="meg" class="meg"></canvas></div>
       </div>
