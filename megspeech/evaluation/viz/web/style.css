@@ -75,7 +75,7 @@ input[type=search] { margin-bottom:.5rem; }
 .fold { background:transparent; border:0; color:var(--mut); font:inherit; font-size:.85rem; font-weight:600; padding:0; cursor:pointer; text-align:left; }
 .fold .caret { display:inline-block; transition:transform .15s; }
 .mid.megoff .fold .caret { transform:rotate(-90deg); }
-.mid.megoff .megbox, .mid.megoff #nchbox, .mid.megoff .helmetbox { display:none; }
+.mid.megoff .megbox, .mid.megoff #nchbox, .mid.megoff #nchrow, .mid.megoff .helmetbox { display:none; }
 .mid.megoff #pmeg, .mid.noaud #paud { flex:0 0 auto !important; }
 .nch { display:flex; align-items:center; gap:.4rem; }
 .nch input { accent-color:var(--accent); width:8rem; }
