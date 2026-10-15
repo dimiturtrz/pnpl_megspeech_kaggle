@@ -65,3 +65,20 @@ decodes, and that narrowing costs transfer. The gpt2-large third block (`anchor-
 local-test gain; it did not, so it was not run. Not ruled out: an anchor added *beside* the full wav2vec2 target, or
 one fit on held-out-run canonical correlations (out-of-sample ρ) — neither has a mechanism that predicts ≥1.5 pt, so
 both stay unfiled.
+
+## Beside arm — base recipe kept, anchor added as a second speech term (`reachable .5`), seeds 1–2
+
+megspeech-7gf.170. Pre-registered bar: 2-seed mean local test ≥ .726 (base .711 + 1.5).
+
+| seed | VAL best (ancbes / base) | local test τ .5 (ancbes / base) |
+|---|---|---|
+| 1 | .6488 / .6387 | .7067 / .7088 |
+| 2 | .6527 / .6407 | .6876 / .7131 |
+
+Mean local test .6972, −1.4 against base; seed 2 loses on TheMoth (.638). As a ninth fam8 member ancbes-s1 lowers
+the blend .7192 → .7136.
+
+Across all three arms (replace, split, beside) the anchor raises VAL by 0.5–1.2 and lowers the local test by 0.2–2.6.
+Keeping the full wav2vec2 target does not protect transfer: any pull toward one trained encoder's CCA axes helps on
+stimuli that encoder read and costs on stimuli it did not. Closed; the out-of-sample-ρ variant shares the mechanism
+and is not filed.
