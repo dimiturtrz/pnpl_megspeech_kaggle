@@ -163,6 +163,15 @@ def test_of(tmp_path: Path) -> None:
     assert cast("AcousticTerm", loud.terms[0]).speech.rows.tolist() == [0, -1]
 
 
+def test_of_reachable(tmp_path: Path) -> None:
+    """The reachable weight adds a second speech term on its own source beside the first."""
+    root = cast("DataRoot", Root(tmp_path))
+    for source in ("", "anchor-cca"):
+        Targets(np.ones((2, DIM), np.float16)).save(Targets.directory(root, source) / "a.npy")
+    both = Auxiliary.of(AuxiliaryConfig(speech=1.0, reachable=0.5), AdversaryConfig(), Tables(root, CPU, WORDS, CUT))
+    assert [(type(t), t.weight) for t in both.terms] == [(SpeechTerm, 1.0), (SpeechTerm, 0.5)]
+
+
 def test_of_run_adversary(tmp_path: Path) -> None:
     """The run target builds the run adversary at weight 1, one class per training run, whatever its strength."""
     against_runs = AdversaryConfig(adversary=0.05, adversary_target=AdversaryTarget.RUN)

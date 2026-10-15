@@ -92,6 +92,11 @@ class AuxiliaryConfig:
     speech_softmax: bool = False
     """Contrast the speech targets by softmax over the batch's kinds, not independent sigmoids: the sigmoid contrast
     cannot learn a word-identity oracle in 40 epochs where the 50-way heads learn it in 4."""
+    reachable: float = 0.0
+    """Weight of a second speech auxiliary beside the first, aligned to `reachable_source`: by default the teacher
+    directions a trained MEG encoder reaches (`megspeech.evaluation.studies.teachers.anchor`, megspeech-7gf.170);
+    0 never reads them."""
+    reachable_source: str = "anchor-cca"
     vocab_weight: float = 1.0
     """Each row of a word in the 50 weighs this against 1 for the others in every auxiliary term's mean, normalised by
     the weights (megspeech-7gf.126); 1 weighs every row alike."""
@@ -169,17 +174,14 @@ class Auxiliary(ABC):
         root, device, words = tables.root, tables.device, tables.words
         lexicon = cache(lambda: Lexicon.load(Lexicon.path(root)).to(device))
         loudness = cache(lambda: Speech.covering(Loudness.directory(root, tables.cut), words).placed(device))
+
+        def speech(weight: float, source: str) -> SpeechTerm:
+            targets = Speech.covering(Targets.directory(root, source), words, centred=weights.speech_centred)
+            return SpeechTerm(weight, targets.placed(device), softmax=weights.speech_softmax)
+
         builders: tuple[tuple[float, Callable[[], AuxiliaryTerm]], ...] = (
-            (
-                weights.speech,
-                lambda: SpeechTerm(
-                    weights.speech,
-                    Speech.covering(
-                        Targets.directory(root, weights.speech_source), words, centred=weights.speech_centred
-                    ).placed(device),
-                    softmax=weights.speech_softmax,
-                ),
-            ),
+            (weights.speech, lambda: speech(weights.speech, weights.speech_source)),
+            (weights.reachable, lambda: speech(weights.reachable, weights.reachable_source)),
             (weights.semantic, lambda: SemanticTerm(weights.semantic, lexicon())),
             (weights.lexical, lambda: LexicalTerm(weights.lexical, lexicon())),
             (
