@@ -3,7 +3,7 @@ from pathlib import Path
 import torch
 
 from core.paths import DataRoot
-from megspeech.model.motion import Frozen, Moving
+from megspeech.model.encoder.motion import Frozen, Moving
 from megspeech.training.transfer import WEIGHTS, TransferConfig
 
 CPU = torch.device("cpu")

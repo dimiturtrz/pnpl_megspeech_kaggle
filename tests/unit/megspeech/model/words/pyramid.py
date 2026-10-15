@@ -4,8 +4,8 @@ from torch import nn
 
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.model.pyramid import Pyramid, PyramidConfig, Surface
 from megspeech.model.words.conv import ConvConfig, ConvWords
+from megspeech.model.words.pyramid import Pyramid, PyramidConfig, Surface
 
 SMALL = ConvConfig(hidden=8, dilations=(1, 2, 4))
 CONFIG = PyramidConfig(taps=(0, 1), levels=(1, 2), width=6, bound=0.25)

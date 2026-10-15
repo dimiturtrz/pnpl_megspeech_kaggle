@@ -11,8 +11,8 @@ from megspeech.model.config import CONTEXT, ContextConfig, OnsetEncoding
 from megspeech.model.context.intervals import NextDrop
 from megspeech.model.context.masking import WordMask
 from megspeech.model.context.timing import Jitter
-from megspeech.model.encoding import Encoding
-from megspeech.model.fusion import Fusion
+from megspeech.model.encoder.encoding import Encoding
+from megspeech.model.encoder.fusion import Fusion
 from megspeech.model.input.subjects import Unseen
 from megspeech.model.words.layers.centring import RunCentring
 

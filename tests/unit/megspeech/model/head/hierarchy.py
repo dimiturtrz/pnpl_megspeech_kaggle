@@ -6,7 +6,7 @@ from megspeech.data.labels.context_tags import CLASSES
 from megspeech.data.labels.phonemes import UNKNOWN
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.model.config import ContextConfig
-from megspeech.model.hierarchy import ADMIT, Factorised, Flat, Hierarchy
+from megspeech.model.head.hierarchy import ADMIT, Factorised, Flat, Hierarchy
 
 WIDTH = 6
 GENERATOR = torch.Generator().manual_seed(0)

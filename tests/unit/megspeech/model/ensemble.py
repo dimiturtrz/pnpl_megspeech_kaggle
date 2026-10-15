@@ -9,8 +9,8 @@ from megspeech.data.batching.split import SpanInput
 from megspeech.data.config import METRICS
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.model.branch import SCALE_MEDIAN
 from megspeech.model.config import ContextConfig, Encoder
+from megspeech.model.encoder.branch import SCALE_MEDIAN
 from megspeech.model.ensemble import Ensemble
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import SubjectLayer, Unseen

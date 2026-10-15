@@ -13,7 +13,7 @@ from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head
 from megspeech.model.auxiliary import Tap
 from megspeech.model.config import ContextConfig
-from megspeech.model.hierarchy import Factorised
+from megspeech.model.head.hierarchy import Factorised
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig
 from megspeech.objective.auxiliary.classified.tagging import TagTerm

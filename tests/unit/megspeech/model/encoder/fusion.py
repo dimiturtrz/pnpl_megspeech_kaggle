@@ -7,10 +7,10 @@ from torch import nn
 
 from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
-from megspeech.model.branch import Branch
 from megspeech.model.checkpoint import Checkpoint
 from megspeech.model.config import ContextConfig
-from megspeech.model.fusion import PRIMARY, Fusion
+from megspeech.model.encoder.branch import Branch
+from megspeech.model.encoder.fusion import PRIMARY, Fusion
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig

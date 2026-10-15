@@ -11,7 +11,7 @@ import torch
 from jaxtyping import Float
 from torch import Tensor, nn
 
-from megspeech.model.branch import Branch
+from megspeech.model.encoder.branch import Branch
 
 PRIMARY = "primary"
 """The name of the model's own encoder among its sources."""

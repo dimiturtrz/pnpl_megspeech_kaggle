@@ -9,9 +9,9 @@ from megspeech.model.config import CONTEXT as DEFAULT
 from megspeech.model.config import FILE, ContextConfig, Covariance, Encoder, OnsetEncoding
 from megspeech.model.context.intervals import Intervals
 from megspeech.model.context.timing import Clock
-from megspeech.model.pyramid import PyramidConfig
 from megspeech.model.words.conv import ConvConfig
 from megspeech.model.words.heads import WordHead
+from megspeech.model.words.pyramid import PyramidConfig
 from megspeech.model.words.spanned import SpannedConfig
 from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective

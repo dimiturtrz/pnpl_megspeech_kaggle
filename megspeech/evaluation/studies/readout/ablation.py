@@ -23,7 +23,7 @@ from megspeech.evaluation.loaded.ensemble import Loader
 from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.loaded.model import LoadedModel
 from megspeech.evaluation.scoring.config import Scoring
-from megspeech.model.fusion import Fusion
+from megspeech.model.encoder.fusion import Fusion
 from megspeech.model.input.subjects import Fallback, Unseen
 
 LOG = logging.getLogger(__name__)

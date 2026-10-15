@@ -10,8 +10,8 @@ from megspeech.evaluation.scoring.score import Epoch, Score
 from megspeech.model.auxiliary import Tap
 from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.context.timing import Clock
-from megspeech.model.pyramid import PyramidConfig
 from megspeech.model.words.conv import ConvConfig
+from megspeech.model.words.pyramid import PyramidConfig
 from megspeech.submission.config import ReportConfig
 from megspeech.training.auxiliary import AuxiliaryConfig
 from megspeech.training.config import METRICS, RunConfig, StopConfig

@@ -10,9 +10,9 @@ from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
 from megspeech.model.config import CONTEXT, ContextConfig
 from megspeech.model.context.timing import TimingHead
+from megspeech.model.head.readout import ContextReadout
 from megspeech.model.input.subjects import Unseen
 from megspeech.model.mixer import Mixer
-from megspeech.model.readout import ContextReadout
 from megspeech.model.span import Span
 
 

@@ -6,8 +6,8 @@ from torch import nn
 
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import ContextConfig
-from megspeech.model.hierarchy import Factorised, Flat
-from megspeech.model.readout import ContextReadout
+from megspeech.model.head.hierarchy import Factorised, Flat
+from megspeech.model.head.readout import ContextReadout
 from megspeech.objective.anchored import AnchoredHead
 from megspeech.objective.anchors import Source
 from megspeech.objective.context import Objective

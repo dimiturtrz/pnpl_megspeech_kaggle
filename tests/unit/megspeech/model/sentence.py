@@ -13,9 +13,9 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import ContextConfig, Encoder
 from megspeech.model.context.droplayer import DropPathLayer
 from megspeech.model.input.subjects import SubjectLayer
-from megspeech.model.pyramid import Pyramid, PyramidConfig
 from megspeech.model.sentence import SentenceNet
 from megspeech.model.words.conv import ConvConfig, ConvWords
+from megspeech.model.words.pyramid import Pyramid, PyramidConfig
 from megspeech.model.words.spanned import SpannedConfig, SpanWords
 from megspeech.model.words.trunk import DOWNSAMPLING, Geometry, Trunk
 from tests.unit.megspeech.model.words.trunk import CHANNELS as GEOMETRY

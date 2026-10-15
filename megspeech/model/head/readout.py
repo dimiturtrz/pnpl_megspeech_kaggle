@@ -6,7 +6,7 @@ from torch import Tensor, nn
 
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.config import ContextConfig
-from megspeech.model.hierarchy import Hierarchy
+from megspeech.model.head.hierarchy import Hierarchy
 from megspeech.objective.anchored import AnchoredHead
 from megspeech.objective.scorer import DIM
 

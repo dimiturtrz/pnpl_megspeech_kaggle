@@ -6,7 +6,7 @@ from torch import nn
 from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
 from megspeech.model.context.intervals import Intervals
-from megspeech.model.fusion import Fusion
+from megspeech.model.encoder.fusion import Fusion
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.sentence import SentenceNet
 from tests.unit.megspeech.model.sentence import CONTEXT, GENERATOR, SAMPLES

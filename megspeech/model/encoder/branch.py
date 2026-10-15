@@ -10,7 +10,7 @@ from torch import Tensor, nn
 from megspeech.data.batching.split import SpanInput
 from megspeech.device import Device
 from megspeech.model.config import ContextConfig
-from megspeech.model.encoding import Encoding
+from megspeech.model.encoder.encoding import Encoding
 from megspeech.model.input.stem import Stem
 from megspeech.model.input.subjects import Unseen
 

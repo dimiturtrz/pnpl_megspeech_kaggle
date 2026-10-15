@@ -5,11 +5,11 @@ from typing import Self, override
 from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
-from megspeech.model.builder import WordBuilder
 from megspeech.model.config import ContextConfig
+from megspeech.model.encoder.builder import WordBuilder
+from megspeech.model.encoder.motion import Moving
 from megspeech.model.input.stem import Stages, Stem
 from megspeech.model.input.subjects import Unseen
-from megspeech.model.motion import Moving
 from megspeech.model.words.base import WordEncoder
 
 ENCODER = ("scale", "whiten", "subjects", "words")

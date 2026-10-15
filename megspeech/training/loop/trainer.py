@@ -25,9 +25,9 @@ from megspeech.device import Device
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Epoch
 from megspeech.evaluation.scoring.telemetry import Telemetry
-from megspeech.model.branch import Branch
-from megspeech.model.fusion import Fusion
-from megspeech.model.hierarchy import Hierarchy
+from megspeech.model.encoder.branch import Branch
+from megspeech.model.encoder.fusion import Fusion
+from megspeech.model.head.hierarchy import Hierarchy
 from megspeech.model.input.scaler import SCALER_SAMPLE, Scaler
 from megspeech.model.input.subjects import Unseen
 from megspeech.model.sentence import SentenceNet

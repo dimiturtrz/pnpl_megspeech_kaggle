@@ -1,6 +1,6 @@
 from torch import nn
 
-from megspeech.model.motion import Frozen, Moving
+from megspeech.model.encoder.motion import Frozen, Moving
 
 
 def stage() -> tuple[nn.Module, ...]:

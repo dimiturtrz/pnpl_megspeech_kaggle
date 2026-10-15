@@ -7,7 +7,7 @@ import torch
 from torch import Tensor
 
 from core.paths import DataRoot
-from megspeech.model.motion import Frozen, Moving
+from megspeech.model.encoder.motion import Frozen, Moving
 
 WEIGHTS = "model.pt"
 

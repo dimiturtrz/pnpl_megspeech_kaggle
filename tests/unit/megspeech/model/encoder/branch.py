@@ -5,9 +5,9 @@ import torch
 
 from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
-from megspeech.model.branch import Branch
 from megspeech.model.config import ContextConfig
-from megspeech.model.encoding import ENCODER
+from megspeech.model.encoder.branch import Branch
+from megspeech.model.encoder.encoding import ENCODER
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import Unseen
 from megspeech.model.sentence import SentenceNet

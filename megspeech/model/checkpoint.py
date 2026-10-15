@@ -5,9 +5,9 @@ from pathlib import Path
 import torch
 
 from megspeech.device import Device
-from megspeech.model.branch import SCALE_MEDIAN, Branch
 from megspeech.model.config import ContextConfig
-from megspeech.model.fusion import Fusion
+from megspeech.model.encoder.branch import SCALE_MEDIAN, Branch
+from megspeech.model.encoder.fusion import Fusion
 from megspeech.model.input.stem import Stem
 from megspeech.model.input.subjects import Unseen
 from megspeech.model.sentence import SentenceNet

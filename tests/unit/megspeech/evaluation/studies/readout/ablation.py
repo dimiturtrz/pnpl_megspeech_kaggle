@@ -4,8 +4,8 @@ import pytest
 from torch import nn
 
 from megspeech.evaluation.studies.readout.ablation import ALL_ON, Sources
-from megspeech.model.branch import Branch
-from megspeech.model.fusion import Fusion
+from megspeech.model.encoder.branch import Branch
+from megspeech.model.encoder.fusion import Fusion
 
 
 class Stub(nn.Module):

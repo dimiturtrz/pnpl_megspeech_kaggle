@@ -6,10 +6,10 @@ from torch import nn
 
 from megspeech.data.constants import CHANNELS
 from megspeech.model.config import ContextConfig
-from megspeech.model.encoding import Encoding
+from megspeech.model.encoder.encoding import Encoding
+from megspeech.model.encoder.motion import Frozen
 from megspeech.model.input.scaler import Scaler
 from megspeech.model.input.subjects import Unseen
-from megspeech.model.motion import Frozen
 from megspeech.model.words.conv import ConvConfig
 
 CONTEXT = ContextConfig(width=16, heads=2, layers=1, conv=ConvConfig(hidden=8, dilations=(1, 2)))

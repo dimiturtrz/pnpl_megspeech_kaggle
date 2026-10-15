@@ -9,7 +9,6 @@ from torch import Tensor, nn
 
 from core.tree import Retired
 from megspeech.data.constants import CHANNELS
-from megspeech.model.pyramid import PYRAMID, PyramidConfig
 from megspeech.model.words.base import WordEncoder
 from megspeech.model.words.heads import WordHead
 from megspeech.model.words.layers.conformer import TimeConformer
@@ -19,6 +18,7 @@ from megspeech.model.words.layers.readouts.attention_pool import AttentionPool
 from megspeech.model.words.layers.readouts.mean_max import MeanMax
 from megspeech.model.words.layers.sites.sensorwise import Grouping, Sensorwise
 from megspeech.model.words.layers.sites.spatial import SpatialAttention
+from megspeech.model.words.pyramid import PYRAMID, PyramidConfig
 
 
 @dataclass(frozen=True)
