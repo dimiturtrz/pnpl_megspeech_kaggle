@@ -5,21 +5,14 @@ const fmtScore = (v) => (typeof v === "number" ? v.toFixed(3) : "");
 
 export function buildModels(onChange) {
   const box = $("models");
-  box.replaceChildren();
+  const pick = h("select", { className: "mselect", title: "active model" });
   for (const m of state.man.models) {
-    const cb = h("input", { type: "checkbox", checked: state.checked.has(m.name), title: "show in comparison" });
-    const name = h("button", { className: `mname${m.name === state.active ? " on" : ""}`, textContent: m.name,
-      title: `${m.name} · ${m.track ?? ""} — make active` });
-    cb.onchange = () => {
-      if (cb.checked) state.checked.add(m.name);
-      else if (state.checked.size > 1) state.checked.delete(m.name);
-      if (!state.checked.has(state.active)) state.active = [...state.checked][0];
-      onChange();
-    };
-    name.onclick = () => { state.checked.add(m.name); state.active = m.name; onChange(); };
-    box.append(h("div", { className: "mrow" }, cb, name,
-      h("span", { className: "mscore", textContent: `${m.metric ?? ""} ${fmtScore(m.score)}`.trim(), title: `${m.metric ?? "score"} on this sample · ${m.track ?? ""}` })));
+    pick.append(h("option", { value: m.name, textContent: `${fmtScore(m.score)}  ${m.name}`.trim() }));
   }
+  pick.value = state.active ?? "";
+  pick.onchange = () => { state.active = pick.value; onChange(); };
+  const metric = state.man.models[0]?.metric ?? "score";
+  box.replaceChildren(pick, h("div", { className: "mut", textContent: `${metric} on this sample` }));
 }
 
 function select(box, label, options, current, set, onChange) {

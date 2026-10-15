@@ -1,5 +1,5 @@
 import { state, out, checkedModels } from "./state.js";
-import { $, h, esc, Layer, labelColor, viridis, store } from "./util.js";
+import { $, h, esc, Layer, labelColor, errorColor, store } from "./util.js";
 
 const PAD = 16;
 const R = 3.2;
@@ -11,7 +11,9 @@ const COLOR_KEY = "megspeech-viz:color-by";
 
 const COLORINGS = {
   label: { fill: (p, a) => labelColor(p.label, a), hint: "colour = true label" },
-  error: { fill: (p, a) => viridis(p.o.error ?? 1 - (p.o.p_true ?? 0), a), hint: "colour = error (1 − p true)" },
+  error: { fill: (p, a) => errorColor(p.o.error ?? 1 - (p.o.p_true ?? 0), a), hint: "colour = error (1 − p true), green → red" },
+  word: { fill: (p, a) => (p.label === state.byId.get(state.sel)?.label ? labelColor(p.label, a) : `rgba(110,118,130,${a * 0.35})`),
+    hint: "colour = same word as the selected sample", follows: true },
 };
 
 export class ModelPanel {
@@ -43,7 +45,8 @@ export class ModelPanel {
     if (!s) return;
     this.topk(s);
     this.agree(s);
-    this.layer.paint();
+    if (COLORINGS[state.colorBy].follows) this.draw();
+    else this.layer.paint();
   }
 
   topk(s) {

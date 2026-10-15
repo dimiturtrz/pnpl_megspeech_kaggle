@@ -1,3 +1,4 @@
+import { setLabels } from "./util.js";
 export const state = {
   man: null,
   samples: [],
@@ -46,5 +47,6 @@ export async function load() {
   for (const s of samples) state.byId.set(s.id, s);
   state.man.models.forEach((m, i) => state.models.set(m.name, models[i]));
   state.active = state.man.models[0]?.name ?? null;
-  if (state.active) state.checked.add(state.active);
+  for (const m of state.man.models) state.checked.add(m.name);
+  setLabels(state.man.models[0]?.labels ?? []);
 }

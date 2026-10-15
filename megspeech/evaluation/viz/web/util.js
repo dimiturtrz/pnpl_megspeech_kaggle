@@ -10,18 +10,19 @@ export const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt
 export const dataUrl = (file) => `data/${file}`;
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+const GOLDEN = 137.508;
+const LIGHTS = [62, 48, 74];
+const labelIndex = new Map();
+export function setLabels(labels) {
+  labelIndex.clear();
+  labels.forEach((l, i) => labelIndex.set(l, i));
+}
 export function labelColor(label, alpha = 1) {
-  let x = 2166136261;
-  for (const c of String(label)) x = Math.imul(x ^ c.charCodeAt(0), 16777619);
-  return `hsla(${(x >>> 0) % 360},70%,62%,${alpha})`;
+  const i = labelIndex.get(label) ?? labelIndex.size;
+  return `hsla(${(i * GOLDEN) % 360},75%,${LIGHTS[i % LIGHTS.length]}%,${alpha})`;
 }
 
-const VIRIDIS = [[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]];
-export function viridis(t, alpha = 1) {
-  const x = clamp(t, 0, 1) * (VIRIDIS.length - 1), i = Math.min(Math.floor(x), VIRIDIS.length - 2), f = x - i;
-  const [a, b] = [VIRIDIS[i], VIRIDIS[i + 1]];
-  return `rgba(${a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(",")},${alpha})`;
-}
+export const errorColor = (t, alpha = 1) => `hsla(${120 * (1 - clamp(t, 0, 1))},80%,50%,${alpha})`;
 
 export function niceStep(span, maxTicks) {
   const raw = span / maxTicks, p = 10 ** Math.floor(Math.log10(raw));

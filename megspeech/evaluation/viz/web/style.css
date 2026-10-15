@@ -93,4 +93,5 @@ audio[hidden] { display:none; }
 .cbar { display:flex; align-items:center; gap:.45rem; color:var(--mut); font-size:.75rem; margin-top:.4rem; }
 .cbar[hidden] { display:none; }
 .cgrad { flex:0 1 9rem; height:.6rem; border-radius:.3rem;
-  background:linear-gradient(90deg,#440154,#3b528b,#21918c,#5ec962,#fde725); }
+  background:linear-gradient(90deg,hsl(120,80%,50%),hsl(60,80%,50%),hsl(0,80%,50%)); }
+.mselect { width:100%; font:inherit; font-size:.85rem; }
