@@ -1,6 +1,7 @@
 import { state, out, errorOf } from "./state.js";
 import { $, h, esc, Layer, labelColor, errorColor, store, wordCount } from "./util.js";
 import { Legend, sourceColor } from "./legend.js";
+import { wordClass, classColor } from "./classes.js";
 
 const PAD = 16;
 const R = 3.2;
@@ -17,6 +18,7 @@ const positionColor = (t, a = 1) => `hsla(${200 - 170 * Math.min(1, Math.max(0, 
 const label = (p) => p.label;
 
 const COLORINGS = {
+  class: { key: (p) => wordClass(p.label), color: classColor, hint: "colour = word class · hover a legend class to highlight, click to pin" },
   label: { key: label, color: labelColor, hint: "colour = true label · hover a legend word to highlight, click to pin" },
   word: { key: label, color: labelColor, follows: true, hint: "colour = the selected sample's word (or a pinned legend word)" },
   source: { key: (p) => p.s.source, color: sourceColor, hint: "colour = source" },
@@ -44,11 +46,11 @@ export class ModelPanel {
     cv.addEventListener("click", (e) => { const p = this.nearest(e); if (p) onPick(p.id); });
     for (const b of $("colorby").children) b.onclick = () => this.setColor(b.dataset.c);
     $("projsel").onchange = () => { state.projection = $("projsel").value; this.draw(); };
-    this.setColor(store.get(COLOR_KEY, "label"), { redraw: false });
+    this.setColor(store.get(COLOR_KEY, "class"), { redraw: false });
   }
 
   setColor(c, { redraw = true } = {}) {
-    state.colorBy = c in COLORINGS ? c : "label";
+    state.colorBy = c in COLORINGS ? c : "class";
     state.focus = null;
     store.set(COLOR_KEY, state.colorBy);
     for (const b of $("colorby").children) b.classList.toggle("on", b.dataset.c === state.colorBy);

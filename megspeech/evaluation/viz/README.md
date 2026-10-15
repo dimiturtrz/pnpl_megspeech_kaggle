@@ -26,7 +26,7 @@ mounts `web/` at `/` and the export at `/data/`.
 
 Multiclass outputs have no positive/negative split, so the right panel shows the top-k bar list for
 the selected sample and a 2-D embedding scatter (the context head's input embedding → UMAP or PCA, picked in the
-panel header) coloured by label, word, source, position in the sentence or error, not a score KDE. A legend under the
+panel header) coloured by word class (default: pronoun, determiner, preposition, conjunction, auxiliary, adverb, content word, in the colour-blind-safe Okabe-Ito palette, each word in its dominant Penn/UD class), label, word, source, position in the sentence or error, not a score KDE. A legend under the
 scatter lists the categories by count; hovering a chip highlights its points, clicking pins it. Only the active model's
 prediction is shown. UMAP (cosine, 15 neighbours, min_dist 0.1,
 seed 0) keeps local neighbourhoods, so word clusters show; PCA's two axes explain little of the variance (the header
