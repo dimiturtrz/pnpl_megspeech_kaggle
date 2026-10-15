@@ -1,6 +1,8 @@
 import { $, Layer, dataUrl, niceStep, clamp, store } from "./util.js";
 import { ChannelPick } from "./channels.js";
 import { state, weightOf } from "./state.js";
+import { heat, percentiles } from "./heat.js";
+import { HelmetMap } from "./helmet.js";
 
 const PAD = { l: 62, r: 10, t: 6, b: 18 };
 const AMP = 0.3;
@@ -10,17 +12,6 @@ const MAX_TICKS = 8;
 const LABEL_MIN_ROW = 9, MIN_ROW = 14;
 const MEG_KEY = "megspeech-viz:meg-open";
 const COL = { grid: "#222937", axis: "#8b94a3", chan: "rgba(159,179,209,.75)", rms: "#5b8def", wave: "#7fdca4", head: "#ff6a5a", target: "rgba(91,141,239,.16)" };
-
-const HEAT = [[70, 95, 150], [55, 165, 170], [235, 200, 60], [255, 75, 40]], FAINT = 0.35;
-function heat(q) {
-  const x = q * (HEAT.length - 1), i = Math.min(HEAT.length - 2, Math.floor(x)), f = x - i;
-  return `rgba(${HEAT[i].map((c, k) => Math.round(c + (HEAT[i + 1][k] - c) * f)).join(",")},${FAINT + (1 - FAINT) * q})`;
-}
-function percentiles(weights) {
-  const q = new Float32Array(weights.length);
-  [...weights.keys()].sort((a, b) => weights[a] - weights[b]).forEach((c, r) => { q[c] = r / Math.max(1, weights.length - 1); });
-  return q;
-}
 
 const cache = new Map();
 function fetchBuf(url) {
@@ -72,6 +63,7 @@ export class Signals {
     }
     $("nch").oninput = () => this.drawMeg();
     this.pick = new ChannelPick(() => this.drawMeg());
+    this.helmet = new HelmetMap($("helmet"), this.pick, () => this.drawMeg());
     $("megtoggle").onclick = () => this.setMegOpen(!this.megOpen);
     this.setMegOpen(store.get(MEG_KEY, true));
     const loop = () => { this.paint(); if (!this.player.paused) requestAnimationFrame(loop); };
@@ -92,7 +84,10 @@ export class Signals {
     if (this.player.paused) this.player.play(); else this.player.pause();
   }
 
-  setSensors(sensors) { this.pick.setSensors(sensors, state.saliency.size > 0); }
+  setSensors(sensors) {
+    this.pick.setSensors(sensors, state.saliency.size > 0);
+    this.helmet.setSites(this.pick.located());
+  }
 
   async show(s) {
     const tok = ++this.token;
@@ -181,6 +176,7 @@ export class Signals {
     $("nchlabel").textContent = m ? `${n}/${total}` : "";
     const box = $("megbox").clientHeight;
     $("meg").style.height = `${Math.max(box, (n + RMS_ROWS) * MIN_ROW + PAD.t + PAD.b)}px`;
+    this.helmet.draw(weights, rows);
     this.megL.draw((ctx, W, H) => {
       this.axis(ctx, W, H);
       if (!m) return;
@@ -191,6 +187,10 @@ export class Signals {
       ctx.strokeStyle = COL.chan; ctx.lineWidth = 0.8;
       for (let r = 0; r < n; r++) {
         const c = rows[r], y0 = rmsBase + (r + 0.5) * rowH;
+        if (r && this.pick.siteOf(c) !== this.pick.siteOf(rows[r - 1])) {
+          ctx.strokeStyle = COL.grid; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(0, y0 - rowH / 2); ctx.lineTo(W, y0 - rowH / 2); ctx.stroke();
+        }
         ctx.strokeStyle = q ? heat(q[c]) : COL.chan;
         ctx.lineWidth = q ? 0.7 + q[c] : 0.8;
         this.trace(ctx, m.data, c * m.T, m.T, m.t0, m.sfreq, y0, rowH * AMP, W);

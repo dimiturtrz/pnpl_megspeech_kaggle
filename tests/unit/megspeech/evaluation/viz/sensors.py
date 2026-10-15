@@ -11,8 +11,18 @@ def test_layout() -> None:
     layout = Helmet.layout(Neuromag(info))
     assert layout["names"] == [name.replace(" ", "") for name in NAMES]
     assert layout["kinds"] == ["mag", "grad", "grad", "mag"]
+    assert layout["xy"] == Helmet.plane([name.replace(" ", "") for name in NAMES])
     regions = layout["regions"]
     assert isinstance(regions, dict)
     assert set(regions) == set(REGIONS)
     assert regions["Left-temporal"] == [0, 1, 2]
     assert regions["Right-temporal"] == [3]
+
+
+def test_plane() -> None:
+    left, right, off = Helmet.plane(["MEG0111", "MEG2421", "MEG9999"])
+    assert left is not None
+    assert right is not None
+    assert left[0] < right[0]
+    assert all(0 <= v <= 1 for v in (*left, *right))
+    assert off is None

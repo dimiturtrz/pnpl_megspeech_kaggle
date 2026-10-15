@@ -75,7 +75,7 @@ input[type=search] { margin-bottom:.5rem; }
 .fold { background:transparent; border:0; color:var(--mut); font:inherit; font-size:.85rem; font-weight:600; padding:0; cursor:pointer; text-align:left; }
 .fold .caret { display:inline-block; transition:transform .15s; }
 .mid.megoff .fold .caret { transform:rotate(-90deg); }
-.mid.megoff .megbox, .mid.megoff #nchbox { display:none; }
+.mid.megoff .megrow, .mid.megoff #nchbox { display:none; }
 .mid.megoff #pmeg, .mid.noaud #paud { flex:0 0 auto !important; }
 .nch { display:flex; align-items:center; gap:.4rem; }
 .nch input { accent-color:var(--accent); width:8rem; }
@@ -84,6 +84,9 @@ input[type=search] { margin-bottom:.5rem; }
 .gutter { flex:none; height:.45rem; margin:.15rem 0; cursor:row-resize; border-radius:.2rem; touch-action:none;
   background:linear-gradient(var(--line),var(--line)) center/2.5rem 2px no-repeat; }
 .gutter:hover { background-color:var(--line); }
+.megrow { flex:1; display:flex; gap:.4rem; min-height:3rem; }
+.helmet { flex:none; width:10rem; height:10rem; cursor:pointer; }
+.helmet[hidden] { display:none; }
 .megbox { flex:1; min-height:3rem; overflow-y:auto; position:relative; }
 .meg { position:absolute; inset:0 0 auto 0; height:100%; cursor:crosshair; }
 .wave { flex:1; min-height:3rem; cursor:crosshair; margin-bottom:.4rem; }
