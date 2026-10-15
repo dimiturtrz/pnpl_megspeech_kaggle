@@ -19,6 +19,7 @@ from megspeech.evaluation.viz.media import Stimulus
 from megspeech.evaluation.viz.outputs import Reader, Reading
 from megspeech.evaluation.viz.records import SAMPLES, Builder, SampleSet, Window
 from megspeech.evaluation.viz.sample import STRATA, Picker, Profiles, Sentences
+from megspeech.evaluation.viz.sensors import Helmet, Layout
 
 VIZ = "viz"
 MANIFEST = "manifest.json"
@@ -77,6 +78,7 @@ class Exporter:
     root: DataRoot | None = None
     sampler: Sampling = field(default_factory=Sampler)
     reader: Reading = field(default_factory=Reader)
+    helmet: Layout = field(default_factory=Helmet)
 
     @staticmethod
     def runs(root: DataRoot) -> list[Run]:
@@ -98,6 +100,7 @@ class Exporter:
             "strata": list(STRATA),
             "models": [output.manifest() for output in outputs],
             "samples": SAMPLES,
+            "sensors": self.helmet.describe(root),
         }
         (out / MANIFEST).write_text(json.dumps(manifest, indent=1), encoding="utf-8")
         return out

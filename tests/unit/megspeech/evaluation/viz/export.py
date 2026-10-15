@@ -40,14 +40,21 @@ class Read:
         )
 
 
+@dataclass(frozen=True)
+class Layout:
+    def describe(self, root: DataRoot) -> dict[str, object]:
+        return {"names": ["MEG0111"]}
+
+
 def test_run(tmp_path: Path) -> None:
     root = DataRoot(tmp_path)
     events(Run(meg(root.raw(), HELD)))
-    out = Exporter(root, Drawn(), Read()).run(ExportConfig(("m1", "m2"), n=1, seed=3, name="set"))
+    out = Exporter(root, Drawn(), Read(), Layout()).run(ExportConfig(("m1", "m2"), n=1, seed=3, name="set"))
     assert out == root.kind(VIZ) / "set"
     manifest = json.loads((out / MANIFEST).read_text(encoding="utf-8"))
     assert [m["name"] for m in manifest["models"]] == ["m1", "m2"]
     assert (manifest["name"], manifest["seed"], manifest["samples"]) == ("set", 3, SAMPLES)
+    assert manifest["sensors"] == {"names": ["MEG0111"]}
     assert json.loads((out / SAMPLES).read_text(encoding="utf-8")) == [{"id": "0000", "runs": 1}]
     assert json.loads((out / MODELS / "m2.json").read_text(encoding="utf-8"))["samples"] == {"0000": {"p_true": 0.5}}
     assert (out / "meg" / "0000.f32").stat().st_size == 2 * 3 * 4

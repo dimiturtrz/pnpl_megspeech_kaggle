@@ -61,7 +61,9 @@ def test_records() -> None:
     assert len(cast("list[object]", records["b"]["topk"])) == TOP
     assert records["b"]["emb"] == {"pca": [3.0, 4.0], "umap": [7.0, 8.0]}
     assert records["a"]["rank"] == 1
-    assert records["b"]["rank"] > TOP
+    rank = records["b"]["rank"]
+    assert isinstance(rank, int)
+    assert rank > TOP
 
 
 def test_rank() -> None:

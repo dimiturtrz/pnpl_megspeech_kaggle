@@ -44,7 +44,7 @@ function select(id) {
   renderText();
   panel.showSample();
   status("");
-  signals.show(state.byId.get(id), state.man.channel_names).catch((e) => status(`load error: ${e.message}`));
+  signals.show(state.byId.get(id)).catch((e) => status(`load error: ${e.message}`));
 }
 
 function refilter() {
@@ -71,6 +71,7 @@ async function main() {
   await load();
   const man = state.man;
   $("sub").textContent = `${man.name} · ${state.samples.length} samples · seed ${man.seed} · ${man.models.length} models`;
+  signals.setSensors(man.sensors);
   buildFilters(refilter);
   restore();
   window.addEventListener("hashchange", restore);

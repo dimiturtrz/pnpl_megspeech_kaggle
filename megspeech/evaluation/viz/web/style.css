@@ -114,3 +114,4 @@ audio[hidden] { display:none; }
 .thead { position:sticky; top:0; background:var(--panel); color:var(--mut); font-size:.72rem; z-index:1; }
 .thead > span { cursor:pointer; user-select:none; }
 .thead > span:hover { color:var(--ink); }
+#chsel { font-size:.75rem; padding:.1rem .3rem; }

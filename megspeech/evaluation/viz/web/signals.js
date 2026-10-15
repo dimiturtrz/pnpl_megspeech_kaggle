@@ -1,4 +1,5 @@
 import { $, Layer, dataUrl, niceStep, clamp, store } from "./util.js";
+import { ChannelPick } from "./channels.js";
 
 const PAD = { l: 46, r: 10, t: 6, b: 18 };
 const AMP = 0.3;
@@ -52,12 +53,13 @@ export class Signals {
     this.megL = new Layer($("meg"));
     this.audL = new Layer($("wave"));
     this.player = $("player");
-    this.meg = null; this.aud = null; this.target = null; this.names = null; this.win = [0, 1]; this.cursor = 0; this.token = 0; this.blobUrl = null;
+    this.meg = null; this.aud = null; this.target = null; this.win = [0, 1]; this.cursor = 0; this.token = 0; this.blobUrl = null;
     for (const L of [this.megL, this.audL]) {
       L.overlay = (ctx, W, H) => this.playhead(ctx, W, H);
       L.cv.addEventListener("click", (e) => this.seek(e, L));
     }
     $("nch").oninput = () => this.drawMeg();
+    this.pick = new ChannelPick(() => this.drawMeg());
     $("megtoggle").onclick = () => this.setMegOpen(!this.megOpen);
     this.setMegOpen(store.get(MEG_KEY, true));
     const loop = () => { this.paint(); if (!this.player.paused) requestAnimationFrame(loop); };
@@ -78,7 +80,9 @@ export class Signals {
     if (this.player.paused) this.player.play(); else this.player.pause();
   }
 
-  async show(s, channelNames) {
+  setSensors(sensors) { this.pick.setSensors(sensors); }
+
+  async show(s) {
     const tok = ++this.token;
     this.s = s;
     this.player.pause();
@@ -97,9 +101,7 @@ export class Signals {
       : [t0, megEnd];
     this.cursor = this.win[0];
     this.target = s.target_t ?? null;
-    this.names = channelNames?.length === C ? channelNames : null;
     $("nch").max = C;
-    if (+$("nch").value > C) $("nch").value = C;
     $("meghead").textContent = `${C} ch · ${sfreq} Hz · ${(T / sfreq).toFixed(2)} s`;
     $("audhead").textContent = this.aud ? `${this.aud.sfreq} Hz · ${(this.aud.pcm.length / this.aud.sfreq).toFixed(2)} s` : "none";
     if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
@@ -157,8 +159,9 @@ export class Signals {
 
   drawMeg() {
     if (!this.megOpen) return;
-    const m = this.meg, n = m ? Math.min(+$("nch").value, m.C) : 0;
-    $("nchlabel").textContent = m ? `${n}/${m.C}` : "";
+    const m = this.meg, { rows, total } = m ? this.pick.rows(m, this.target, +$("nch").value) : { rows: [], total: 0 };
+    const n = rows.length;
+    $("nchlabel").textContent = m ? `${n}/${total}` : "";
     this.megL.draw((ctx, W, H) => {
       this.axis(ctx, W, H);
       if (!m) return;
@@ -168,9 +171,9 @@ export class Signals {
       ctx.fillStyle = COL.rms; ctx.textBaseline = "middle"; ctx.fillText("RMS", 4, rmsBase - rowH);
       ctx.strokeStyle = COL.chan; ctx.lineWidth = 0.8;
       for (let r = 0; r < n; r++) {
-        const c = Math.floor((r * m.C) / n), y0 = rmsBase + (r + 0.5) * rowH;
+        const c = rows[r], y0 = rmsBase + (r + 0.5) * rowH;
         this.trace(ctx, m.data, c * m.T, m.T, m.t0, m.sfreq, y0, rowH * AMP, W);
-        if (rowH >= LABEL_MIN_ROW) { ctx.fillStyle = COL.axis; ctx.fillText(this.names?.[c] ?? `ch ${c}`, 4, y0); }
+        if (rowH >= LABEL_MIN_ROW) { ctx.fillStyle = COL.axis; ctx.fillText(this.pick.label(c), 4, y0); }
       }
     });
   }
