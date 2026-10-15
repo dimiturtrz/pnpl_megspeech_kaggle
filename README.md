@@ -24,8 +24,9 @@ measured draw noise ([where we are](interpretations/converging/2026-10-13_where_
 1. **Word encoder** — 1 s of MEG per word, decimated 5×, through a dilated conv stack plus a spatial-component span
    branch.
 2. **Sentence context** — a 4-layer transformer over every word of the sentence. Positions are the word onsets,
-   encoded as log time intervals (40 ms – 8 s). Dropping that encoding costs 2.3 pt on validation and 3.6 pt on the
-   local test: the timing of the words around a word carries information about it.
+   encoded as log time intervals (40 ms – 8 s). On full sentences the encoding is worth 3.6 pt on the local test; cut to
+   Kaggle-length spans it is worth ~0 (+0.15 pt local test, −0.3 pt validation; one seed, older recipe, 7gf.110). The
+   gain lives in long spans the Kaggle test does not have. A matched re-run on the current recipe is in progress.
 3. **Pretraining without word labels.** The stem never trains the 50-word classifier. Instead, each word window is
    contrastively aligned to three targets:
    - the wav2vec2 latent of the speech heard in that window;
