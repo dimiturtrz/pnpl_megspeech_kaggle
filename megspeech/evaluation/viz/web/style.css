@@ -41,7 +41,7 @@ select, input[type=search] { background:var(--bg); color:var(--ink); border:1px 
 input[type=search] { margin-bottom:.5rem; }
 
 .list { flex:1; min-height:8rem; overflow:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg); }
-.row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1.4rem; gap:.4rem; padding:.18rem .5rem;
+.row { display:grid; grid-template-columns:2.2em minmax(0,1fr) 1.4rem; gap:.4rem; padding:.18rem .5rem;
   font-size:.8rem; cursor:pointer; border-bottom:1px solid #1a1f28; font-variant-numeric:tabular-nums; }
 .row:hover { background:#1a2030; }
 .row.on { background:var(--hl); }
@@ -95,3 +95,8 @@ audio[hidden] { display:none; }
 .cgrad { flex:0 1 9rem; height:.6rem; border-radius:.3rem;
   background:linear-gradient(90deg,hsl(120,80%,50%),hsl(60,80%,50%),hsl(0,80%,50%)); }
 .mselect { width:100%; font:inherit; font-size:.85rem; }
+.rsrc { font-size:.7rem; opacity:.55; width:2.2em; flex:none; text-transform:uppercase; }
+.rctx { flex:1; min-width:0; display:flex; white-space:nowrap; overflow:hidden; font-size:.8rem; }
+.rctx > span { overflow:hidden; text-overflow:ellipsis; opacity:.7; }
+.rpre { flex:none; }
+.rctx > b { flex:none; padding:0 .3em; }

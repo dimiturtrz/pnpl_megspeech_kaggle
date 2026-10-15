@@ -52,9 +52,13 @@ export class SampleList {
     this.rows.clear();
     for (const s of state.visible) {
       const o = out(state.active, s.id);
-      const r = h("div", { className: "row", title: s.text },
-        h("span", { className: "rid", textContent: s.id }),
-        h("span", { className: "rlab", textContent: s.label }),
+      const [a, b] = s.target ?? [0, 0];
+      const r = h("div", { className: "row", title: `${s.id} · ${s.source} · ${s.text}` },
+        h("span", { className: "rsrc", textContent: s.source.slice(0, 3) }),
+        h("span", { className: "rctx" },
+          h("span", { className: "rpre", textContent: (a > 24 ? "…" : "") + s.text.slice(Math.max(0, a - 24), a) }),
+          h("b", { className: "rlab", textContent: s.text.slice(a, b) || s.label }),
+          h("span", { textContent: s.text.slice(b, b + 40) })),
         h("span", { className: `badge ${o ? (o.correct ? "ok" : "no") : ""}`, textContent: o ? (o.correct ? "✓" : "✗") : "·" }));
       r.dataset.id = s.id;
       this.rows.set(s.id, r);
