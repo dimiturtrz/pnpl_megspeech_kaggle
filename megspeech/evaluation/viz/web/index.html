@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>megspeech viz</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="head-text">
+      <h1>megspeech · viz</h1>
+      <p class="sub" id="sub"></p>
+    </div>
+    <p class="sub status" id="status"></p>
+  </header>
+
+  <main>
+    <section class="panel left">
+      <h2>models <span class="mut">metric on this sample · click a name to make it active</span></h2>
+      <div id="models" class="models"></div>
+      <h2>samples <span class="mut" id="count"></span></h2>
+      <div class="controls" id="filters"></div>
+      <input id="q" type="search" placeholder="search id / label / text" />
+      <div id="list" class="list"></div>
+    </section>
+
+    <section class="panel mid" id="mid">
+      <div class="textbox">
+        <p id="sentence" class="sentence"></p>
+        <div id="preds" class="preds"></div>
+        <p id="meta" class="hint"></p>
+      </div>
+      <div class="trackhead">
+        <button id="megtoggle" class="fold" aria-expanded="true"><span class="caret">▾</span> MEG <span class="mut" id="meghead"></span></button>
+        <label class="nch" id="nchbox"><span class="glabel">channels</span>
+          <input id="nch" type="range" min="1" max="64" value="24" />
+          <span id="nchlabel" class="tlabel"></span></label>
+      </div>
+      <canvas id="meg" class="meg"></canvas>
+      <div class="trackhead">
+        <h2>audio <span class="mut" id="audhead"></span></h2>
+        <span id="tlabel" class="tlabel"></span>
+      </div>
+      <canvas id="wave" class="wave"></canvas>
+      <audio id="player" controls preload="auto"></audio>
+    </section>
+
+    <section class="panel right">
+      <h2>top-k <span class="mut" id="activename"></span></h2>
+      <div id="topk" class="topk"></div>
+      <div id="agree" class="agree"></div>
+      <div class="trackhead">
+        <h2>embedding <span class="mut" id="embhead"></span></h2>
+        <div class="seg" id="colorby">
+          <button data-c="label" class="on">label</button><button data-c="error">error</button>
+        </div>
+      </div>
+      <div class="scatter-box"><canvas id="scatter"></canvas><div id="tip" class="tip" hidden></div></div>
+      <div class="cbar" id="cbar" hidden><span>0</span><div class="cgrad"></div><span>1</span><span class="mut">error = 1 − p(true)</span></div>
+      <p class="hint" id="schint"></p>
+    </section>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
