@@ -235,12 +235,15 @@ class Words:
     def embed(  # devtools-ignore: test-mirror
         cls, embedded: Embedded, reader: Reader, runs: list[Run], limit: int
     ) -> "Words":
-        """`runs`' words and their word embeddings, `CHUNK` runs on the device at a time, at most `limit` words."""
+        """`runs`' words and their word embeddings, `CHUNK` runs on the device at a time, at most `limit` words. The
+        reader keys `position` within a sentence; a per-run target table indexes by the word's place in its run, which
+        is its order there while the grouping carries every word (`Anchor.runs` refuses a run it does not)."""
         tables: list[pd.DataFrame] = []
         vectors: list[Tensor] = []
         for start in range(0, len(runs), CHUNK):
             for part, split in reader.splits(runs[start : start + CHUNK]).values():
-                tables.append(part[[Column.RUN, Column.POSITION, Column.TARGET, Column.TOKEN]])
+                ordered = part.assign(**{Column.POSITION: part.groupby(Column.RUN).cumcount().to_numpy()})
+                tables.append(ordered[[Column.RUN, Column.POSITION, Column.TARGET, Column.TOKEN]])
                 vectors.append(torch.from_numpy(embedded(split)[Tap.WORD]))
         return cls(pd.concat(tables, ignore_index=True), torch.cat(vectors)).sample(limit)
 
@@ -268,6 +271,33 @@ class Words:
     def labels(self, present: Bool[np.ndarray, " n"]) -> Int[Tensor, " m"]:
         """The 50-way target of each `present` word, IGNORE where it is outside the 50."""
         return torch.from_numpy(self.table[Column.TARGET].to_numpy(np.int64)[present])
+
+
+@dataclass(frozen=True)
+class Trained:
+    """A trained run's encoder and the reader of its own data config."""
+
+    embedded: Embedded
+    reader: Reader
+
+    @classmethod
+    def load(cls, root: DataRoot, run: str, device: torch.device) -> "Trained":  # devtools-ignore: test-mirror
+        directory = root.models() / run
+        data = DataConfig.saved(directory)
+        return cls(
+            Embedded.load(directory / "model.pt", device),
+            Reader(root, data, device, geometry=data.geometry(root, device)),
+        )
+
+    def words(self, runs: list[Run], limit: int) -> Words:  # devtools-ignore: test-mirror
+        """`runs`' words and this encoder's embedding of each, at most `limit`."""
+        return Words.embed(self.embedded, self.reader, runs, limit)
+
+    @staticmethod
+    def deep(root: DataRoot, *partitions: Partition) -> dict[Partition, list[Run]]:
+        """The Deep subject's runs of each of `partitions`."""
+        runs = [run for run in Run.everywhere(root) if run.subject == DEEP]
+        return {part: [run for run in runs if run.partition is part] for part in partitions}
 
 
 @dataclass(frozen=True)
@@ -338,16 +368,12 @@ def main() -> None:
     parser.add_argument("--shuffles", type=int, default=SHUFFLES)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    root, device = DataRoot.from_config(), Device.CUDA.as_torch()
-    directory = root.models() / args.run
-    data = DataConfig.saved(directory)
-    reader = Reader(root, data, device, geometry=data.geometry(root, device))
-    embedded = Embedded.load(directory / "model.pt", device)
-    runs = [run for run in Run.everywhere(root) if run.subject == DEEP]
-    parts = {part: [run for run in runs if run.partition is part] for part in (Partition.TRAIN, Partition.VALIDATION)}
+    root = DataRoot.from_config()
+    trained = Trained.load(root, args.run, Device.CUDA.as_torch())
+    parts = Trained.deep(root, Partition.TRAIN, Partition.VALIDATION)
     study = Study(
-        Words.embed(embedded, reader, parts[Partition.TRAIN], args.max_train),
-        Words.embed(embedded, reader, parts[Partition.VALIDATION], args.max_train),
+        trained.words(parts[Partition.TRAIN], args.max_train),
+        trained.words(parts[Partition.VALIDATION], args.max_train),
     )
     LOG.info("words: train %d val %d", len(study.train.table), len(study.val.table))
     LOG.info("meg-word probe BAcc@10 (all words): %.4f", study.meg_ceiling())

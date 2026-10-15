@@ -7,6 +7,7 @@ import pytest
 import torch
 
 from core.paths import DataRoot
+from megspeech.data.raw.runs import Partition
 from megspeech.evaluation.studies.teachers.alignment import (
     T5,
     Alignment,
@@ -16,6 +17,7 @@ from megspeech.evaluation.studies.teachers.alignment import (
     Lexical,
     Reach,
     Study,
+    Trained,
     Words,
 )
 from megspeech.objective.targets.speech import Targets
@@ -218,3 +220,10 @@ def test_report(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     assert f"| {T5} / official-val | 26 |" in caplog.text
     assert f"{T5} val corr by component" in caplog.text
     assert f"| {T5} / held-out train runs | no targets |" in caplog.text
+
+
+def test_deep(tmp_path: Path) -> None:
+    assert Trained.deep(DataRoot(tmp_path), Partition.TRAIN, Partition.VALIDATION) == {
+        Partition.TRAIN: [],
+        Partition.VALIDATION: [],
+    }
