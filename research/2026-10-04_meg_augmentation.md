@@ -71,7 +71,7 @@ from `.beads/issues.jsonl`. It runs no new experiment.
 
 ## 3. Transform table
 
-"Ours?" refers to `megspeech/training/regularise/augment.py` (`Augment`: `dropout`, `gain`, `jitter`, `mask`,
+"Ours?" refers to `megspeech/training/regularise/inputs/augment.py` (`Augment`: `dropout`, `gain`, `jitter`, `mask`,
 `band`, `noise`, all off by default) and to the beads results. Run prices assume our warm-start harness: about
 6 min per sent40 seed, about 25 min for 4 seeds. 4 seeds is the minimum to read a 1.5 pt delta against a ~2 pt
 seed band.

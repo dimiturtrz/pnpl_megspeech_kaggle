@@ -10,7 +10,7 @@ published methods make a few-shot per-subject adapt generalise, and which of the
 - An "adapt run" is one ep40 adapt from an existing stem. I did not measure its wall-clock.
 
 **Already built (not re-proposed):**
-- L2-SP pull toward the stem (`megspeech/training/regularise/pull.py`, 7gf.147.13, in flight).
+- L2-SP pull toward the stem (`megspeech/training/regularise/weights/pull.py`, 7gf.147.13, in flight).
 - Subject-matrix anchor (`regularise/anchor.py`, worse, 7gf.35.2).
 - Eval shrink toward subject 0's matrix (`SubjectLayer.shrink`, +.019 LB, 7gf.35.3).
 - Mean / source-mean unseen fallback (`model/input/subjects.py` `Unseen`, 7gf.147.1).
