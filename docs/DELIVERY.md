@@ -22,7 +22,7 @@ picks is in megspeech-7gf.29.1. The rebuild audit is megspeech-7gf.29.1.1.
 | Deep | d-ac05xfam8 | `ema-cd25-xsp10sem05-ac05x-s{k}-ft-s{k}`, k = 1..8 | none | built 10-13 |
 | Deep | d-old4 | `ema-cd25-xsp10sem05-s{k}-ft-s{k}`, k = 2..5 | none | bit-exact |
 | Broad | b-xc5k25b05ps | 29, listed in `xc5k25ps/metrics.json` | `--track broad --aligned --fallback.unseen mean --fallback.keep 0.25 --balance.steps 30 --balance.toward 0.05 --balance.per_subject` | built 10-13 |
-| Broad | b-xc5k25b0ps | same 29 | `--track broad --aligned --fallback.unseen mean --fallback.keep 0.25 --balance.steps 30 --balance.toward 0.0 --balance.per_subject` | rebuilt 10-13 |
+| Broad | b-xc5k25b0ps | same 29 | `--track broad --aligned --fallback.unseen mean --fallback.keep 0.25 --balance.steps 30 --balance.toward 0.0 --balance.per_subject` | CPU rebuild 10-15: top-1 .997, mean |dp| 4e-5 |
 | Broad | b-xc5k25 (non-transductive hedge) | same 29 | `--track broad --aligned --fallback.unseen mean --fallback.keep 0.25` | bit-exact 10-15 |
 
 ## Command
