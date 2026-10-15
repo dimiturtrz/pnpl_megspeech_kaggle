@@ -80,6 +80,7 @@ export class Signals {
 
   async show(s, channelNames) {
     const tok = ++this.token;
+    this.s = s;
     this.player.pause();
     const [megBuf, wavBuf] = await Promise.all([
       fetchBuf(dataUrl(s.meg.file)),
@@ -180,7 +181,7 @@ export class Signals {
       const a = this.aud;
       if (!a) {
         ctx.fillStyle = COL.axis; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "12px system-ui";
-        ctx.fillText(this.meg ? "no audio" : "", W / 2, (H - PAD.b) / 2);
+        ctx.fillText(this.meg ? `no audio — pnpl ships stimulus audio for Sherlock only (this is ${this.s?.source ?? "?"})` : "", W / 2, (H - PAD.b) / 2);
         ctx.textAlign = "left";
         return;
       }

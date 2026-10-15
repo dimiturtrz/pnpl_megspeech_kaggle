@@ -40,37 +40,87 @@ export class SampleList {
   constructor(onPick) {
     this.onPick = onPick;
     this.rows = new Map();
+    this.open = new Set();
     this.on = null;
     $("list").addEventListener("click", (e) => {
-      const r = e.target.closest(".row");
-      if (r) onPick(r.dataset.id);
+      const hit = e.target.closest("[data-id]");
+      if (hit) { onPick(hit.dataset.id); return; }
+      const head = e.target.closest(".sent");
+      if (head) this.toggle(head.dataset.key);
     });
   }
 
-  render() {
-    const frag = document.createDocumentFragment();
-    this.rows.clear();
+  static key(s) { return s.sentence ?? s.id; }
+
+  groups() {
+    const groups = new Map();
     for (const s of state.visible) {
-      const o = out(state.active, s.id);
-      const [a, b] = s.target ?? [0, 0];
-      const r = h("div", { className: "row", title: `${s.id} · ${s.source} · ${s.text}` },
-        h("span", { className: "rsrc", textContent: s.source.slice(0, 3) }),
-        h("span", { className: "rctx" },
-          h("span", { className: "rpre", textContent: (a > 24 ? "…" : "") + s.text.slice(Math.max(0, a - 24), a) }),
-          h("b", { className: "rlab", textContent: s.text.slice(a, b) || s.label }),
-          h("span", { textContent: s.text.slice(b, b + 40) })),
-        h("span", { className: `badge ${o ? (o.correct ? "ok" : "no") : ""}`, textContent: o ? (o.correct ? "✓" : "✗") : "·" }));
-      r.dataset.id = s.id;
-      this.rows.set(s.id, r);
-      frag.append(r);
+      const k = SampleList.key(s);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(s);
+    }
+    return groups;
+  }
+
+  toggle(k) {
+    if (this.open.has(k)) this.open.delete(k); else this.open.add(k);
+    this.render();
+  }
+
+  word(s) {
+    const o = out(state.active, s.id), [a, b] = s.target ?? [0, 0];
+    const mark = h("span", { className: `sw ${o ? (o.correct ? "ok" : "no") : ""}`, textContent: s.text.slice(a, b) || s.label });
+    mark.dataset.id = s.id;
+    this.rows.set(s.id, mark);
+    return [mark, b];
+  }
+
+  head(k, words) {
+    words = [...words].sort((x, y) => (x.target?.[0] ?? 0) - (y.target?.[0] ?? 0));
+    const text = words[0].text, parts = [];
+    let at = 0, right = 0;
+    for (const s of words) {
+      const [a] = s.target ?? [0, 0], [mark, b] = this.word(s);
+      parts.push(text.slice(at, a), mark);
+      at = b;
+      right += out(state.active, s.id)?.correct ? 1 : 0;
+    }
+    parts.push(text.slice(at));
+    const open = this.open.has(k);
+    const row = h("div", { className: `sent${open ? " open" : ""}`, title: `${words[0].source} · ${k}` },
+      h("span", { className: "rsrc", textContent: `${open ? "▾" : "▸"} ${words[0].source.slice(0, 3)}` }),
+      h("span", { className: "stext" }, ...parts),
+      h("span", { className: "badge", textContent: `${right}/${words.length}` }));
+    row.dataset.key = k;
+    return row;
+  }
+
+  render() {
+    const frag = document.createDocumentFragment(), groups = this.groups();
+    this.rows.clear();
+    for (const [k, words] of groups) {
+      frag.append(this.head(k, words));
+      if (!this.open.has(k)) continue;
+      for (const s of words) {
+        const o = out(state.active, s.id);
+        const r = h("div", { className: "row", title: `${s.id} · ${s.label}` },
+          h("span", { className: "rid", textContent: s.id }),
+          h("span", { className: "rlab", textContent: `${s.label}${o ? ` → ${o.pred}` : ""}` }),
+          h("span", { className: `badge ${o ? (o.correct ? "ok" : "no") : ""}`, textContent: o ? (o.correct ? "✓" : "✗") : "·" }));
+        r.dataset.id = s.id;
+        this.rows.set(s.id, r);
+        frag.append(r);
+      }
     }
     $("list").replaceChildren(frag);
-    $("count").textContent = `${state.visible.length} / ${state.samples.length}`;
+    $("count").textContent = `${groups.size} sentences · ${state.visible.length} / ${state.samples.length} words`;
     this.on = null;
     this.mark();
   }
 
   mark() {
+    const k = SampleList.key(state.byId.get(state.sel) ?? {});
+    if (state.sel && !this.open.has(k) && state.visSet.has(state.sel)) { this.open.add(k); this.render(); return; }
     this.on?.classList.remove("on");
     this.on = this.rows.get(state.sel) ?? null;
     this.on?.classList.add("on");

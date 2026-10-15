@@ -31,6 +31,7 @@ LOCAL_TEST = (Partition.VALIDATION, Partition.TEST)
 class ExportConfig:
     models: tuple[str, ...]
     n: int = 1000
+    """Sentences drawn; every labelled word in them is a sample."""
     seed: int = 0
     name: str = "default"
 
@@ -53,7 +54,7 @@ class Sampler:
         pool = words[words[Column.TARGET] != IGNORE].reset_index(drop=True)
         books = tuple(sorted(Run.tasks(pool[Column.RUN]).unique()))
         sources = Run.tasks(pool[Column.RUN]).map(Sources.stratum)
-        picked = Picker(seed=config.seed).pick(Profiles.of(pool, books), sources, config.n)
+        picked = Picker(seed=config.seed).whole(Profiles.of(pool, books), Sentences.keys(pool), sources, config.n)
         bounds = dict(zip(source.names, zip(source.offsets[:-1], source.offsets[1:], strict=True), strict=True))
         rows = pool.iloc[picked].reset_index(drop=True)
         rows = rows.assign(at=rows["at"] - rows[Column.RUN].map(lambda run: bounds[run][0]))

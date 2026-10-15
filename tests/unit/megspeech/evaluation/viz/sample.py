@@ -93,6 +93,20 @@ def test_pick() -> None:
     assert (picked >= 40).sum() == 3
 
 
+def test_whole() -> None:
+    table = profiles()
+    keys = pd.Series([f"s{i // 3}" for i in range(60)])
+    sources = pd.Series(["a"] * 30 + ["b"] * 30)
+    picked = Picker(draws=16, rounds=2, proposals=32).whole(table, keys, sources, 4)
+    assert len(picked) == 12
+    assert set(keys[picked].value_counts()) == {3}
+    assert (picked < 30).sum() == 6
+
+
+def test_keys() -> None:
+    assert Sentences.keys(words()).tolist() == [f"{MOCHA}/0"] * 3 + [f"{SHERLOCK}@4.0", f"{SHERLOCK}/1"]
+
+
 def test_lengths() -> None:
     table = words()
     assert Sentences(table).lengths(table).tolist() == [3, 3, 3, 1, 1]

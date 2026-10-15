@@ -1,6 +1,6 @@
 # viz — sample viewer
 
-Browse a random, stratified set of samples (default 1000, drawn the way the balanced VAL partition is: `megspeech/data/stratify.py`): MEG, audio and text in the middle, each
+Browse a random, stratified set of sentences (default 1000, drawn the way the balanced VAL partition is: `megspeech/data/stratify.py`; every labelled word in them is a sample): MEG, audio and text in the middle, each
 selected model's output on the right. Pattern follows `mindscape/neuroviz`: Python exports static
 files, a vanilla-JS canvas app reads them, no build step.
 
@@ -19,11 +19,11 @@ mounts `web/` at `/` and the export at `/data/`.
 | file | content |
 |---|---|
 | `manifest.json` | `{"name", "seed", "strata": [str], "models": [{"name", "track", "labels": [str], "metric": str, "score": float (the model's own metric on THIS sample)}], "channel_names": [str] (optional), "samples": "samples.json"}` |
-| `samples.json` | list of `{"id", "source", "subject", "session", "text", "target": [start, end] (char span of the scored item in `text`), "label", "target_t": [t_start, t_end] (seconds, same clock as `t0`; the scored word in the window), "strata": {str: str}, "meg": {"file", "channels", "times", "sfreq", "t0"}, "audio": {"file", "sfreq", "t0"} \| null}` |
+| `samples.json` | list of `{"id", "source", "subject", "session", "text", "target": [start, end] (char span of the scored item in `text`), "label", "sentence" (`run/sentence` key; the list groups samples by it), "target_t": [t_start, t_end] (seconds, same clock as `t0`; the scored word in the window), "strata": {str: str}, "meg": {"file", "channels", "times", "sfreq", "t0"}, "audio": {"file", "sfreq", "t0"} \| null}` |
 | `meg/<id>.f32` | little-endian float32, row-major `[channels, times]`, per-channel z-scored |
 | `audio/<id>.wav` | 16-bit PCM mono, the stimulus window aligned to the MEG window (`t0` in seconds, same clock) |
 | `models/<name>.json` | `{"name", "projection": "pca", "explained": [float, float], "samples": {id: {"pred", "correct", "p_true", "error" (= 1 - p_true, the mass on the other classes), "topk": [[label, prob]], "emb": [x, y]}}}` |
 
 Multiclass outputs have no positive/negative split, so the right panel shows the top-k bar list for
 the selected sample and a 2-D embedding scatter (pooled encoder embedding → PCA) with two colourings,
-by label and by error, not a score KDE. Each model gets its own PCA, so scatters are not comparable across models. The raw MEG panel is collapsible.
+by label and by error, not a score KDE. Each model gets its own PCA, so scatters are not comparable across models. The raw MEG panel and each sentence in the list are collapsible. Stimulus audio exists only for Sherlock: pnpl ships no `stimuli/` for TheMoth or MOCHATIMIT.

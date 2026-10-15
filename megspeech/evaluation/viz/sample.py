@@ -1,8 +1,8 @@
-"""The viewer's samples: labelled words drawn per source the way `Stratify` draws val's sessions, and their text.
+"""The viewer's samples: whole sentences drawn per source the way `Stratify` draws val's sessions, and their text.
 
-`Stratify` assigns whole sessions; here the unit is one word, so each word's profile is the same additive layout
-(`WORDS`...`KNOWN`, label counts, book counts) a session's sums to, and the pick is the draw of least summed scaled
-`Stratify.gaps` against the rest of its source. Its exhaustive pair-swap search is quadratic in the units, so over
+`Stratify` assigns whole sessions; here the unit is one sentence, whose profile is its words' sums in the same additive
+layout (`WORDS`...`KNOWN`, label counts, book counts) a session's sums to, and the pick is the draw of least summed
+scaled `Stratify.gaps` against the rest of its source. Its exhaustive pair-swap search is quadratic in the units, so over
 thousands of words it is replaced by rounds of sampled swaps.
 """
 
@@ -128,12 +128,31 @@ class Picker:
         ]
         return np.sort(np.concatenate(picked)) if picked else np.zeros(0, dtype=np.int64)
 
+    def whole(
+        self, profiles: Float[np.ndarray, "n d"], keys: "pd.Series[str]", sources: "pd.Series[str]", n: int
+    ) -> Int[np.ndarray, " k"]:
+        """Every row of the `n` units (rows sharing a `keys` value) `pick` draws, a unit's profile its rows' sum."""
+        codes, uniques = pd.factorize(keys)
+        units = np.zeros((len(uniques), profiles.shape[1]))
+        np.add.at(units, codes, profiles)
+        first = np.unique(codes, return_index=True)[1]
+        chosen = self.pick(units, pd.Series(sources.to_numpy()[first]), n)
+        return np.flatnonzero(np.isin(codes, chosen))
+
 
 @dataclass(frozen=True)
 class Sentences:
     """Every word of the runs the samples come from (`run`, `sentence`, `onset`, `word`), read for text."""
 
     words: pd.DataFrame
+
+    @staticmethod
+    def keys(rows: pd.DataFrame) -> "pd.Series[str]":
+        """Each of `rows`' sentence as `run/sentence`; a word outside any sentence is its own, `run@onset`."""
+        run = rows[Column.RUN].astype(str)
+        sentence = run + "/" + rows[Column.SENTENCE].astype(str)
+        alone = run + "@" + rows[Column.ONSET].astype(str)
+        return sentence.where(rows[Column.SENTENCE] != NO_SENTENCE, alone)
 
     def lengths(self, rows: pd.DataFrame) -> Int[np.ndarray, " n"]:
         """Each of `rows`' sentence length in words, 1 for a word outside any sentence."""

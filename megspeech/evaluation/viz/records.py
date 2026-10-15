@@ -118,11 +118,12 @@ class Builder:
         meg: dict[str, Float[np.ndarray, "c s"]] = {}
         audio: dict[str, tuple[int, Int[np.ndarray, " a"]]] = {}
         seconds = self.window.samples / self.window.rate
-        for name, (_, row), stratum in zip(names, rows.iterrows(), strata, strict=True):
+        keys = Sentences.keys(rows)
+        for name, (_, row), stratum, key in zip(names, rows.iterrows(), strata, keys, strict=True):
             start = self.window.start(int(row["at"]))
             signal = Meg(signals[row[Column.RUN]], self.window.rate)
             meg[name] = Meg.zscored(signal.window(start, self.window.samples))
-            record = self.record(name, row, stratum, start, meg[name].shape[0])
+            record = self.record(name, row, stratum, start, meg[name].shape[0]) | {"sentence": key}
             clip = stimuli[row[Column.RUN]].clip(start / self.window.rate, seconds)
             if clip is not None:
                 audio[name] = clip
