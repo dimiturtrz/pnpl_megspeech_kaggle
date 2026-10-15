@@ -5,7 +5,7 @@ from torch import Tensor, nn
 
 from megspeech.data.batching.split import EVAL_SPANS
 from megspeech.evaluation.scoring.evaluator import Evaluator
-from megspeech.evaluation.viz.embed import COMPONENTS, PROJECTORS, Embedder, Manifold, Principal, Projection
+from megspeech.evaluation.viz.models.embed import COMPONENTS, PROJECTORS, Embedder, Manifold, Principal, Projection
 from megspeech.model.sentence import SentenceNet
 from tests.unit.megspeech.features.trained import WORDS, split
 from tests.unit.megspeech.model.sentence import CONTEXT

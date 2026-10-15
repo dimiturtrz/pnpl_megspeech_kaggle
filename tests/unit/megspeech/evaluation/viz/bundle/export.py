@@ -8,9 +8,9 @@ import torch
 
 from core.paths import DataRoot
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation.viz.export import MANIFEST, MODELS, VIZ, ExportConfig, Exporter
-from megspeech.evaluation.viz.outputs import Outputs
-from megspeech.evaluation.viz.records import SAMPLES, SampleSet
+from megspeech.evaluation.viz.bundle.export import MANIFEST, MODELS, VIZ, ExportConfig, Exporter
+from megspeech.evaluation.viz.bundle.records import SAMPLES, SampleSet
+from megspeech.evaluation.viz.models.outputs import Outputs
 from tests.unit.megspeech.data.raw.runs import events, meg
 
 HELD = "sub-0_ses-11_task-Sherlock1_run-2"

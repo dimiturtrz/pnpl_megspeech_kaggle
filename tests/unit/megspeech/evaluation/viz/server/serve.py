@@ -2,7 +2,7 @@ import threading
 from pathlib import Path
 
 from core.paths import DataRoot
-from megspeech.evaluation.viz.serve import WEB, ServeConfig, Server
+from megspeech.evaluation.viz.server.serve import WEB, ServeConfig, Server
 
 
 def test_for_export(tmp_path: Path) -> None:

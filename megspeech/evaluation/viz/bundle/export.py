@@ -15,11 +15,11 @@ from megspeech.device import Device
 from megspeech.evaluation.loaded.ensemble import Loader
 from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.scoring.config import Scoring
-from megspeech.evaluation.viz.media import Stimulus
-from megspeech.evaluation.viz.outputs import Reader, Reading
-from megspeech.evaluation.viz.records import SAMPLES, Builder, SampleSet, Window
-from megspeech.evaluation.viz.sample import STRATA, Picker, Profiles, Sentences
-from megspeech.evaluation.viz.sensors import Helmet, Layout
+from megspeech.evaluation.viz.bundle.media import Stimulus
+from megspeech.evaluation.viz.bundle.records import SAMPLES, Builder, SampleSet, Window
+from megspeech.evaluation.viz.bundle.sample import STRATA, Picker, Profiles, Sentences
+from megspeech.evaluation.viz.bundle.sensors import Helmet, Layout
+from megspeech.evaluation.viz.models.outputs import Reader, Reading
 
 VIZ = "viz"
 MANIFEST = "manifest.json"

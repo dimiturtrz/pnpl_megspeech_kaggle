@@ -28,8 +28,8 @@ from megspeech.evaluation.metric.ruler import TOP, Graded, Ruler
 from megspeech.evaluation.saliency import Integrated
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.probabilities import Words
-from megspeech.evaluation.viz.embed import PROJECTORS, Embedder
-from megspeech.evaluation.viz.records import KEY
+from megspeech.evaluation.viz.bundle.records import KEY
+from megspeech.evaluation.viz.models.embed import PROJECTORS, Embedder
 
 METRIC = f"macro bAcc@{TOP}, unseen-span words"
 """The selection macro (`Ruler.point`): each counted domain's balanced top-10 accuracy over its unseen-span words."""

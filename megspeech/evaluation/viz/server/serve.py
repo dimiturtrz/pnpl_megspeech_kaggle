@@ -7,9 +7,9 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from core.paths import DataRoot
-from megspeech.evaluation.viz.handler import Handler
+from megspeech.evaluation.viz.server.handler import Handler
 
-WEB = Path(__file__).resolve().parent / "web"
+WEB = Path(__file__).resolve().parents[1] / "web"
 """The static viewer app, served at `/`."""
 
 VIZ = "viz"

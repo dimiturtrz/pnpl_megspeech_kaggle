@@ -11,8 +11,8 @@ from jaxtyping import Float, Int
 from megspeech.data.labels.vocabulary import PRIMARY
 from megspeech.data.raw.runs import Column
 from megspeech.data.raw.serialised import NAME
-from megspeech.evaluation.viz.media import Meg, Stimulus
-from megspeech.evaluation.viz.sample import Sentences, Strata
+from megspeech.evaluation.viz.bundle.media import Meg, Stimulus
+from megspeech.evaluation.viz.bundle.sample import Sentences, Strata
 
 SAMPLES = "samples.json"
 MEG, AUDIO = "meg", "audio"

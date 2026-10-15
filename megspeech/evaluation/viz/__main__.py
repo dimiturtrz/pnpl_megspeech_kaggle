@@ -14,9 +14,9 @@ from dataclasses import dataclass
 
 from megspeech.device import Device
 from megspeech.evaluation.viz.agreement import Agreement, Saliencies
-from megspeech.evaluation.viz.export import ExportConfig, Exporter, Sampler
-from megspeech.evaluation.viz.outputs import Reader
-from megspeech.evaluation.viz.serve import ServeConfig, Server
+from megspeech.evaluation.viz.bundle.export import ExportConfig, Exporter, Sampler
+from megspeech.evaluation.viz.models.outputs import Reader
+from megspeech.evaluation.viz.server.serve import ServeConfig, Server
 
 log = logging.getLogger(__name__)
 

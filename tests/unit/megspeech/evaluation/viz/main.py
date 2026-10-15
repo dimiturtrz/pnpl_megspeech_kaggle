@@ -6,9 +6,9 @@ import pytest
 import megspeech.evaluation.viz.__main__ as entry
 from megspeech.device import Device
 from megspeech.evaluation.viz.__main__ import Cli
-from megspeech.evaluation.viz.export import ExportConfig, Sampler
-from megspeech.evaluation.viz.outputs import Reader
-from megspeech.evaluation.viz.serve import ServeConfig
+from megspeech.evaluation.viz.bundle.export import ExportConfig, Sampler
+from megspeech.evaluation.viz.models.outputs import Reader
+from megspeech.evaluation.viz.server.serve import ServeConfig
 
 
 class FakeExporter:

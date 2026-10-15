@@ -1,7 +1,7 @@
 import mne
 
 from megspeech.data.raw.sources.masc import Neuromag
-from megspeech.evaluation.viz.sensors import REGIONS, Helmet
+from megspeech.evaluation.viz.bundle.sensors import REGIONS, Helmet
 
 NAMES = ("MEG 0111", "MEG 0112", "MEG 0113", "MEG 2421")
 

@@ -5,7 +5,7 @@ import pytest
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.data.raw.runs import NO_SENTENCE
 from megspeech.data.stratify import IOIS, KNOWN, LOG_IOI, SENTENCED, SENTENCES, WORDS, Stratify
-from megspeech.evaluation.viz.sample import LENGTHS, Picker, Profiles, Sentences, Strata
+from megspeech.evaluation.viz.bundle.sample import LENGTHS, Picker, Profiles, Sentences, Strata
 
 MOCHA = "sub-0_ses-2_task-MOCHATIMIT_run-1"
 SHERLOCK = "sub-0_ses-11_task-Sherlock1_run-2"

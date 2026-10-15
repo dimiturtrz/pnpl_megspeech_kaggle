@@ -8,9 +8,9 @@ from scipy.io import wavfile
 
 from megspeech.data.labels.vocabulary import PRIMARY
 from megspeech.data.raw.runs import NO_SENTENCE
-from megspeech.evaluation.viz.media import Stimulus
-from megspeech.evaluation.viz.records import SAMPLES, Builder, SampleSet, Window
-from megspeech.evaluation.viz.sample import Sentences
+from megspeech.evaluation.viz.bundle.media import Stimulus
+from megspeech.evaluation.viz.bundle.records import SAMPLES, Builder, SampleSet, Window
+from megspeech.evaluation.viz.bundle.sample import Sentences
 
 MOCHA = "sub-0_ses-2_task-MOCHATIMIT_run-1"
 SHERLOCK = "sub-0_ses-11_task-Sherlock1_run-2"

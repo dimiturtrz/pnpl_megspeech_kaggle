@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from scipy.io import wavfile
 
-from megspeech.evaluation.viz.media import PCM, Meg, Stimulus
+from megspeech.evaluation.viz.bundle.media import PCM, Meg, Stimulus
 from megspeech.objective.targets.speech import LAG, SAMPLING
 from tests.unit.megspeech.data.config import HELD
 from tests.unit.megspeech.objective.targets.speech import heard_run

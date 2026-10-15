@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from megspeech.evaluation.viz.serve import ServeConfig, Server
+from megspeech.evaluation.viz.server.serve import ServeConfig, Server
 
 INDEX = b"<!doctype html><title>viz</title>"
 MANIFEST = b'{"name": "default"}'

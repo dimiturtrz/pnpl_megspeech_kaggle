@@ -14,7 +14,7 @@ from megspeech.data.config import METRICS
 from megspeech.data.labels.vocabulary import PRIMARY, VOCAB_SIZE
 from megspeech.evaluation.loaded.exported import ExportedModel
 from megspeech.evaluation.metric.ruler import TOP, Graded
-from megspeech.evaluation.viz.outputs import LEVELS, METRIC, Located, Outputs, Predictions, Reader
+from megspeech.evaluation.viz.models.outputs import LEVELS, METRIC, Located, Outputs, Predictions, Reader
 
 RUN = "sub-0_ses-11_task-Sherlock1_run-2"
 PROJECTIONS = {"pca": {"explained": [0.2, 0.1]}, "umap": {"explained": []}}

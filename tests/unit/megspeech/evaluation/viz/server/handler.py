@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from megspeech.evaluation.viz.handler import Handler
+from megspeech.evaluation.viz.server.handler import Handler
 
 
 @pytest.fixture
