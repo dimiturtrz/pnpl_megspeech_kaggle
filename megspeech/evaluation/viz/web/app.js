@@ -25,7 +25,7 @@ function renderText() {
     + `<span>pred <b class="${exact ? "ok" : "no"}">${esc(o?.pred ?? "—")}</b></span>`
     + (o?.rank ? `<span class="${o.correct ? "ok" : "no"}">true word at rank ${o.rank}</span>` : "");
   const strata = Object.entries(s.strata ?? {}).filter(([k]) => k !== "source").map(([k, v]) => `${k}=${v}`).join(" · ");
-  $("meta").textContent = `${s.id} · ${s.source} · subject ${s.subject} · session ${s.session} · ${wordCount(s.text)} words${strata ? ` · ${strata}` : ""}`;
+  $("meta").textContent = `subject ${s.subject} · session ${s.session} · ${wordCount(s.text)} words${strata ? ` · ${strata}` : ""}`;
 }
 
 function writeHash() {

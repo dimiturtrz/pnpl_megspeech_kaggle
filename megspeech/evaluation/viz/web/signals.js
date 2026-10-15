@@ -108,7 +108,7 @@ export class Signals {
     $("nch").max = C;
     $("meghead").textContent = `${C} ch · ${sfreq} Hz · ${(T / sfreq).toFixed(2)} s`;
     $("audhead").textContent = this.aud ? `${this.aud.sfreq} Hz · ${(this.aud.pcm.length / this.aud.sfreq).toFixed(2)} s`
-      : `none — pnpl ships stimulus audio for Sherlock only`;
+      : "none";
     $("mid").classList.toggle("noaud", !this.aud);
     if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
     this.blobUrl = wavBuf ? URL.createObjectURL(new Blob([wavBuf], { type: "audio/wav" })) : null;
