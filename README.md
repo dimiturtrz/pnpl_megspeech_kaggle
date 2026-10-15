@@ -12,7 +12,7 @@ Metric: balanced top-1 accuracy over the 50-word vocabulary.
 
 | track | best public | local test | submission |
 |---|---|---|---|
-| Deep | .695 | .720 | 16 fine-tunes over 8 pretraining seeds |
+| Deep | .695 | .720 (full sentences; .691 cut to Kaggle-length spans) | 16 fine-tunes over 8 pretraining seeds |
 | Broad | .631 | — | 29 members, mean-subject fallback for unseen subjects, per-subject Sinkhorn on test outputs |
 
 For scale: the d'Ascoli et al. recipe reproduced here scores .444 public. The Kaggle leaders at 10-11 were at .775
