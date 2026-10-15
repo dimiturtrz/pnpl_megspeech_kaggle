@@ -18,6 +18,7 @@ picks is in megspeech-7gf.29.1. The rebuild audit is megspeech-7gf.29.1.1.
 
 | track | pick | members | flags | rebuild vs submitted |
 |---|---|---|---|---|
+| Deep | d-ac05xfam16 (recommended, owner tick pending) | the 8 below + `…-s1-ft-s2`, `…-s2-ft-ctl-s2`, `…-s{k}-ft-s{k+10}` k = 3..8 | none | built 10-15 |
 | Deep | d-ac05xfam8 | `ema-cd25-xsp10sem05-ac05x-s{k}-ft-s{k}`, k = 1..8 | none | built 10-13 |
 | Deep | d-old4 | `ema-cd25-xsp10sem05-s{k}-ft-s{k}`, k = 2..5 | none | bit-exact |
 | Broad | b-xc5k25b05ps | 29, listed in `xc5k25ps/metrics.json` | `--track broad --aligned --fallback.unseen mean --fallback.keep 0.25 --balance.steps 30 --balance.toward 0.05 --balance.per_subject` | built 10-13 |

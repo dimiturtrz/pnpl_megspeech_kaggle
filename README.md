@@ -6,6 +6,39 @@
 Decoding heard words from non-invasive MEG — an entry to the PNPL 2026 / LibriBrain100 competition
 (Deep: one subject, ~80 h; Broad: 32 subjects, minutes of calibration). Plan and numbers: [`docs/PLAN.md`](docs/PLAN.md).
 
+## Result
+
+Metric: balanced top-1 accuracy over the 50-word vocabulary.
+
+| track | best public | local test | submission |
+|---|---|---|---|
+| Deep | .695 | .720 | 16 fine-tunes over 8 pretraining seeds |
+| Broad | .631 | — | 29 members, mean-subject fallback for unseen subjects |
+
+For scale: the d'Ascoli et al. recipe reproduced here scores .444 public. The Kaggle leaders at 10-11 were at .775
+(Deep) and .732 (Broad), so this entry is not at the top. Every public delta under ~.03 between families is inside the
+measured draw noise ([where we are](interpretations/converging/2026-10-13_where_we_are.md)).
+
+## Method (Deep)
+
+1. **Word encoder** — 1 s of MEG per word, decimated 5×, through a dilated conv stack plus a spatial-component span
+   branch.
+2. **Sentence context** — a 4-layer transformer over every word of the sentence. Positions are the word onsets,
+   encoded as log time intervals (40 ms – 8 s). Dropping that encoding costs 2.3 pt on validation and 3.6 pt on the
+   local test: the timing of the words around a word carries information about it.
+3. **Pretraining without word labels.** The stem never trains the 50-word classifier. Instead, each word window is
+   contrastively aligned to three targets:
+   - the wav2vec2 latent of the speech heard in that window;
+   - the t5 embedding of the word, which also covers the ~60% of windows outside the vocabulary;
+   - the speech envelope.
+4. **Fine-tune** — the 50-word heads only, warm-started from the stem. Regularised with context dropout .25, EMA,
+   label smoothing and weight decay.
+5. **Ensemble** — diversity comes from the pretraining seed. A second fine-tune seed on the same stem is ~0, because
+   it shares the backbone's errors.
+
+What was tried and did not survive the local test is recorded in [`interpretations/`](interpretations/) and in the
+beads tracker. That includes KD, kNN readout, SAM, refits, TTA, time-stretch and source-mixing.
+
 ## Layout
 
 - `core/`, `megspeech/` — your packages. The guardrails target all of them; organise modules however the project needs.
