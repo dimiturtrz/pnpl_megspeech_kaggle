@@ -4,7 +4,7 @@ from torch import nn
 
 from megspeech.data.raw.runs import DEEP
 from megspeech.model.input.subjects import SubjectLayer, Unseen
-from megspeech.training.regularise.anchor import Anchor
+from megspeech.training.regularise.weights.anchor import Anchor
 
 GENERATOR = torch.Generator().manual_seed(0)
 STEPS = 200

@@ -8,7 +8,7 @@ import torch
 from jaxtyping import Float
 from torch import Tensor
 
-from megspeech.training.regularise.bgmix import BGMixKey
+from megspeech.training.regularise.inputs.bgmix import BGMixKey
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,8 @@ class Augment:
     tens of milliseconds, one or two samples at 50 Hz."""
     stretch: float = 0.0
     """Largest relative change of each training window's time scale around its word's onset, which stays put: a factor
-    per window, uniform in [1 - stretch, 1 + stretch] (`megspeech.training.regularise.stretch`); 0 stretches none."""
+    per window, uniform in [1 - stretch, 1 + stretch] (`megspeech.training.regularise.inputs.stretch`); 0 stretches
+    none."""
     mask: int = 0
     """Samples of one span per window, at a uniform start, zeroed on every sensor."""
     band: int = 0
@@ -37,20 +38,21 @@ class Augment:
     label); each window draws its share uniformly up to it. Real MEG, so it stays in the field's own subspace."""
     bgmix: float = 0.0
     """Probability a labelled training word's window becomes its (`bgmix_key`, label) template plus another labelled
-    word's residual (`megspeech.training.regularise.bgmix`, trial-level BGMix), the label kept; 0 mixes none."""
+    word's residual (`megspeech.training.regularise.inputs.bgmix`, trial-level BGMix), the label kept; 0 mixes none."""
     bgmix_key: BGMixKey = BGMixKey.SUBJECT
     """What a BGMix template is per word: its subject, or the dataset it was recorded in (`BGMixKey`)."""
     average: int = 1
     """Windows of the same (subject, label) each labelled training word's window is averaged with
-    (`megspeech.training.regularise.average`, MEGConformer's dynamic grouping), itself included; 1 averages none."""
+    (`megspeech.training.regularise.inputs.average`, MEGConformer's dynamic grouping), itself included; 1 averages
+    none."""
     average_chance: float = 1.0
     """Probability a labelled training word's window is averaged, when `average` is above 1."""
     spatial: float = 0.0
     """Radius of the sensor patch each window loses (`Regional`), as a share of the array's widest extent."""
     right_cut: float = 0.0
     """Share of labelled training words that end their span, reached by cutting random spans short after a random word
-    (`megspeech.training.regularise.rightcut`); the Kaggle test's is 156 of its 868 rows in multi-row epochs, 0.18.
-    0 cuts none."""
+    (`megspeech.training.regularise.inputs.rightcut`); the Kaggle test's is 156 of its 868 rows in multi-row epochs,
+    0.18. 0 cuts none."""
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.chance <= 1.0:

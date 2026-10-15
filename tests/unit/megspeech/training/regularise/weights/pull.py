@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from megspeech.model.input.subjects import SubjectLayer
-from megspeech.training.regularise.pull import Pull
+from megspeech.training.regularise.weights.pull import Pull
 
 GENERATOR = torch.Generator().manual_seed(0)
 STEPS = 200

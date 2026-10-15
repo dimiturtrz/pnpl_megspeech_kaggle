@@ -12,7 +12,7 @@ from megspeech.evaluation.scoring.telemetry import TelemetryConfig
 from megspeech.model.config import CONTEXT, ContextConfig, Encoder
 from megspeech.submission.config import ReportConfig
 from megspeech.training.optim import OptimConfig
-from megspeech.training.regularise.augment import Augment
+from megspeech.training.regularise.inputs.augment import Augment
 from megspeech.training.sampling.sampler import SamplerConfig
 
 

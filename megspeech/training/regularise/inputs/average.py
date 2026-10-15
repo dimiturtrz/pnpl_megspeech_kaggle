@@ -10,7 +10,7 @@ from torch import Tensor
 
 from megspeech.data.batching.split import Batch, Split
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
-from megspeech.training.regularise.bgmix import BGMix, Untouched
+from megspeech.training.regularise.inputs.bgmix import BGMix, Untouched
 
 UNUSED = 2.0
 """A sort key above every uniform draw: positions no partner may take."""

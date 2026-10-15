@@ -51,13 +51,13 @@ class OptimConfig:
     topk_margin: float = 1.0
     """The raw-logit gap the label must hold over the 10th competitor before its top-k term is ~0."""
     anchor: float = 1.0
-    """Share of each subject matrix's deviation from the Deep subject's that the run's decay leaves by its end, were
-    its gradient never to restore it (`megspeech.training.regularise.anchor`); 1 decays the matrices toward 0 like
+    """Share of each subject matrix's deviation from the Deep subject's that the run's decay leaves by its end, were its
+    gradient never to restore it (`megspeech.training.regularise.weights.anchor`); 1 decays the matrices toward 0 like
     every other weight. The Deep matrix is what a zero-shot subject is read through."""
     pull: float = 1.0
     """Share of each encoder weight's drift from where the run started (the `stem`'s) that a decoupled pull toward it
-    leaves by the run's end, were its gradient never to restore it (`megspeech.training.regularise.pull`, L2-SP); 1
-    never pulls. The subject matrices are the `anchor`'s."""
+    leaves by the run's end, were its gradient never to restore it (`megspeech.training.regularise.weights.pull`,
+    L2-SP); 1 never pulls. The subject matrices are the `anchor`'s."""
     anchor_toward: str = "deep"
     """The matrix `anchor` pulls toward, an `Unseen` value: `deep` the Deep subject's, `mean` the mean of every trained
     subject's matrix, `source` the mean over the subjects of its own recording source, `identity`."""
@@ -71,8 +71,8 @@ class OptimConfig:
     """Final strength `lambda` of the word head's implicit semantic data augmentation (`megspeech.objective.isda`,
     Wang et al. 2019), raised linearly as `isda * epoch / epochs`; 0 augments nothing."""
     sharpness: float = 0.0
-    """SAM radius (`megspeech.training.regularise.sharpness`): each step's gradient is taken `sharpness` along the
-    normalised gradient, at twice a step's compute; 0 descends plainly."""
+    """SAM radius (`megspeech.training.regularise.weights.sharpness`): each step's gradient is taken `sharpness` along
+    the normalised gradient, at twice a step's compute; 0 descends plainly."""
     adaptive: bool = False
     """Make the `sharpness` ball scale-adaptive (ASAM): each weight is perturbed in proportion to its magnitude."""
     compiled: bool = True

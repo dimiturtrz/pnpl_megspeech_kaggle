@@ -41,12 +41,12 @@ from megspeech.training.hook import Scheduled
 from megspeech.training.loop.ema import Ema, Unaveraged
 from megspeech.training.loop.trainer import Trainer, TrainState
 from megspeech.training.optim import OptimConfig
-from megspeech.training.regularise.anchor import Anchor
-from megspeech.training.regularise.augment import Augment
-from megspeech.training.regularise.pull import Pull
-from megspeech.training.regularise.rightcut import RightCut, Whole
-from megspeech.training.regularise.sharpness import Adaptive, Flat, Sharp
-from megspeech.training.regularise.stretch import Stretch
+from megspeech.training.regularise.inputs.augment import Augment
+from megspeech.training.regularise.inputs.rightcut import RightCut, Whole
+from megspeech.training.regularise.inputs.stretch import Stretch
+from megspeech.training.regularise.weights.anchor import Anchor
+from megspeech.training.regularise.weights.pull import Pull
+from megspeech.training.regularise.weights.sharpness import Adaptive, Flat, Sharp
 from megspeech.training.sampling.curriculum import Annealed, Natural, Robust, Schedule
 from megspeech.training.sampling.pairing import Pairing, Unpaired
 from megspeech.training.sampling.sampler import SamplerConfig

@@ -4,8 +4,8 @@ import torch
 from megspeech.data.batching.split import Split
 from megspeech.data.spans.spans import Spans
 from megspeech.model.config import Covariance
-from megspeech.training.regularise.bgmix import MIN_CELL
-from megspeech.training.regularise.noise import SAMPLES, NoiseSample, TotalSample
+from megspeech.training.regularise.inputs.bgmix import MIN_CELL
+from megspeech.training.regularise.inputs.noise import SAMPLES, NoiseSample, TotalSample
 
 CPU = torch.device("cpu")
 THIN = 2

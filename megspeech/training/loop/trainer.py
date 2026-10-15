@@ -43,15 +43,15 @@ from megspeech.training.config import RunConfig
 from megspeech.training.hook import Scheduled, StepHook
 from megspeech.training.loop.ema import Ema, Unaveraged
 from megspeech.training.loop.gradnorm import GradNorms
-from megspeech.training.regularise.anchor import Anchor
-from megspeech.training.regularise.average import GroupAverage
-from megspeech.training.regularise.bgmix import BGMix, Untouched
-from megspeech.training.regularise.noise import SAMPLES
-from megspeech.training.regularise.pull import Pull
-from megspeech.training.regularise.regional import Regional
-from megspeech.training.regularise.rightcut import RightCut, Whole
-from megspeech.training.regularise.sharpness import Flat, Sharp
-from megspeech.training.regularise.stretch import Stretch
+from megspeech.training.regularise.inputs.average import GroupAverage
+from megspeech.training.regularise.inputs.bgmix import BGMix, Untouched
+from megspeech.training.regularise.inputs.noise import SAMPLES
+from megspeech.training.regularise.inputs.regional import Regional
+from megspeech.training.regularise.inputs.rightcut import RightCut, Whole
+from megspeech.training.regularise.inputs.stretch import Stretch
+from megspeech.training.regularise.weights.anchor import Anchor
+from megspeech.training.regularise.weights.pull import Pull
+from megspeech.training.regularise.weights.sharpness import Flat, Sharp
 from megspeech.training.sampling.curriculum import Curriculum, Natural, Observation, Schedule
 from megspeech.training.sampling.pairing import Pairing, Unpaired
 from megspeech.training.sampling.sampler import Sampler

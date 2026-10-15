@@ -7,7 +7,7 @@ from megspeech.data.batching.windows import Windows
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.spans.spans import MAX_GAP, PAD, Spans
-from megspeech.training.regularise.rightcut import RightCut, Whole
+from megspeech.training.regularise.inputs.rightcut import RightCut, Whole
 
 RATE = 10.0
 SHARE = 0.3

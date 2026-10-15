@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from megspeech.training.regularise.sharpness import ETA, Adaptive, Flat, Sharp
+from megspeech.training.regularise.weights.sharpness import ETA, Adaptive, Flat, Sharp
 
 RHO = 0.5
 

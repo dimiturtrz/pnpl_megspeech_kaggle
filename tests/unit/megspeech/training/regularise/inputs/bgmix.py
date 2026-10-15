@@ -8,7 +8,7 @@ from scipy import stats
 from megspeech.data.batching.split import Batch, Split
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.spans.spans import Spans
-from megspeech.training.regularise.bgmix import MIN_CELL, BGMix, BGMixKey, Untouched
+from megspeech.training.regularise.inputs.bgmix import MIN_CELL, BGMix, BGMixKey, Untouched
 
 CPU = torch.device("cpu")
 CHANNELS = 2

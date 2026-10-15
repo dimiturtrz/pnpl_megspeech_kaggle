@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from megspeech.data.config import DataConfig
-from megspeech.training.regularise.stretch import Stretch
+from megspeech.training.regularise.inputs.stretch import Stretch
 
 PIVOT = 10
 SAMPLES = 50

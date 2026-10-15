@@ -7,9 +7,9 @@ import torch
 from megspeech.data.batching.split import Batch, Split
 from megspeech.data.labels.vocabulary import IGNORE
 from megspeech.data.spans.spans import Spans
-from megspeech.training.regularise.augment import Augment
-from megspeech.training.regularise.average import GroupAverage
-from megspeech.training.regularise.bgmix import Untouched
+from megspeech.training.regularise.inputs.augment import Augment
+from megspeech.training.regularise.inputs.average import GroupAverage
+from megspeech.training.regularise.inputs.bgmix import Untouched
 
 CPU = torch.device("cpu")
 CHANNELS = 2

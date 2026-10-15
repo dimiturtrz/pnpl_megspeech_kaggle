@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from megspeech.training.regularise.augment import Augment
+from megspeech.training.regularise.inputs.augment import Augment
 
 
 def test_call() -> None:

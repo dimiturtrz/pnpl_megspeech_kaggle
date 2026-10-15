@@ -16,7 +16,7 @@ from megspeech.submission.config import ReportConfig
 from megspeech.training.auxiliary import AuxiliaryConfig
 from megspeech.training.config import METRICS, RunConfig, StopConfig
 from megspeech.training.optim import OptimConfig
-from megspeech.training.regularise.augment import Augment
+from megspeech.training.regularise.inputs.augment import Augment
 from megspeech.training.sampling.curriculum import Base
 
 

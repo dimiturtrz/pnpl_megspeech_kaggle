@@ -115,7 +115,8 @@ class ContextConfig:
     whiten: bool = False
     """Decorrelate the scaled sensors by their training covariance before the subject layer (`input.whitener`)."""
     covariance: Covariance = Covariance.TOTAL
-    """Which covariance `whiten` inverts; the noise's is fit on training residuals (`training.regularise.noise`)."""
+    """Which covariance `whiten` inverts; the noise's is fit on training residuals
+    (`training.regularise.inputs.noise`)."""
     rhythm: bool = False
     """A timing head's logits added to the context head's (`context.timing.TimingHead`); with `intervals` none, the
     transformer is told no gaps and timing reaches the words only through that head."""

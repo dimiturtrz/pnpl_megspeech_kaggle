@@ -13,7 +13,7 @@ from torch import Tensor, nn
 
 from megspeech.model.input.subjects import SubjectLayer
 from megspeech.training.hook import StepHook
-from megspeech.training.regularise.anchor import Anchor
+from megspeech.training.regularise.weights.anchor import Anchor
 
 
 @dataclass(frozen=True)

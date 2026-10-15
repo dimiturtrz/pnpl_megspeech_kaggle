@@ -10,7 +10,7 @@ from torch import Tensor
 
 from megspeech.data.batching.split import Split
 from megspeech.model.config import Covariance
-from megspeech.training.regularise.bgmix import MIN_CELL, BGMix, BGMixKey
+from megspeech.training.regularise.inputs.bgmix import MIN_CELL, BGMix, BGMixKey
 
 LOG = logging.getLogger(__name__)
 

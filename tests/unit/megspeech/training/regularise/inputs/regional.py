@@ -3,7 +3,7 @@ from pathlib import Path
 import torch
 
 from core.paths import DataRoot
-from megspeech.training.regularise.regional import Regional
+from megspeech.training.regularise.inputs.regional import Regional
 
 POSITIONS = torch.tensor([[0.0, 0.0, 0.0], [0.1, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.5, 0.0]])
 
