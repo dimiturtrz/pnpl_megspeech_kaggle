@@ -1,22 +1,33 @@
-import { setLabels } from "./util.js";
+import { setLabels, wordCount } from "./util.js";
 export const state = {
   man: null,
   samples: [],
   byId: new Map(),
   models: new Map(),
-  checked: new Set(),
   active: null,
   sel: null,
   colorBy: "label",
   focus: null,
   projection: null,
-  filter: { strata: {}, correct: "all", q: "" },
+  filter: { strata: {}, ranges: {}, correct: "all", q: "" },
   visible: [],
   visSet: new Set(),
 };
 
 export const out = (model, id) => state.models.get(model)?.samples[id];
-export const checkedModels = () => state.man.models.map((m) => m.name).filter((n) => state.checked.has(n));
+
+export const RANGES = {
+  length: { label: "sentence words", of: (s) => wordCount(s.text) },
+};
+
+const within = (v, [lo, hi]) => (lo == null || v >= lo) && (hi == null || v <= hi);
+
+export const activeFilters = () => {
+  const f = state.filter;
+  return Object.values(f.strata).filter(Boolean).length
+    + Object.values(f.ranges).filter(([lo, hi]) => lo != null || hi != null).length
+    + (f.correct !== "all");
+};
 
 const CORRECT = {
   all: () => true,
@@ -28,6 +39,7 @@ export function applyFilter() {
   const f = state.filter, q = f.q.trim().toLowerCase(), keep = CORRECT[f.correct];
   state.visible = state.samples.filter((s) =>
     Object.entries(f.strata).every(([k, v]) => !v || s.strata?.[k] === v)
+    && Object.entries(f.ranges).every(([k, r]) => within(RANGES[k].of(s), r))
     && keep(out(state.active, s.id))
     && (!q || `${s.id} ${s.label} ${s.text}`.toLowerCase().includes(q)));
   state.visSet = new Set(state.visible.map((s) => s.id));
@@ -49,6 +61,5 @@ export async function load() {
   for (const s of samples) state.byId.set(s.id, s);
   state.man.models.forEach((m, i) => state.models.set(m.name, models[i]));
   state.active = state.man.models[0]?.name ?? null;
-  for (const m of state.man.models) state.checked.add(m.name);
   setLabels(state.man.models[0]?.labels ?? []);
 }

@@ -1,5 +1,5 @@
 import { state, out } from "./state.js";
-import { $, h, esc, Layer, labelColor, errorColor, store } from "./util.js";
+import { $, h, esc, Layer, labelColor, errorColor, store, wordCount } from "./util.js";
 import { Legend, sourceColor } from "./legend.js";
 
 const PAD = 16;
@@ -26,10 +26,9 @@ const COLORINGS = {
     hint: "colour = error (1 − p true), green → red" },
 };
 
-const words = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
 const relative = (s) => {
-  const n = words(s.text);
-  return n > 1 ? words(s.text.slice(0, s.target?.[0] ?? 0)) / (n - 1) : 0;
+  const n = wordCount(s.text);
+  return n > 1 ? wordCount(s.text.slice(0, s.target?.[0] ?? 0)) / (n - 1) : 0;
 };
 
 export class ModelPanel {

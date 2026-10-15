@@ -9,6 +9,7 @@ export function h(tag, props = {}, ...kids) {
 export const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 export const dataUrl = (file) => `data/${file}`;
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+export const wordCount = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
 
 const GOLDEN = 137.508;
 const LIGHTS = [62, 48, 74];

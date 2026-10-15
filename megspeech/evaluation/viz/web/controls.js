@@ -1,4 +1,4 @@
-import { state, out } from "./state.js";
+import { state, out, RANGES, activeFilters } from "./state.js";
 import { $, h } from "./util.js";
 
 const fmtScore = (v) => (typeof v === "number" ? v.toFixed(3) : "");
@@ -23,16 +23,48 @@ function select(box, label, options, current, set, onChange) {
   box.append(h("label", { className: "mapgroup" }, h("span", { className: "glabel", textContent: label }), s));
 }
 
+function range(box, k, { label, of }, onChange) {
+  const vals = state.samples.map(of), lo = Math.min(...vals), hi = Math.max(...vals);
+  const cur = state.filter.ranges[k] ?? [null, null];
+  const bound = (i, word) => {
+    const e = h("input", { type: "number", min: lo, max: hi, step: 1, placeholder: [lo, hi][i], value: cur[i] ?? "" });
+    e.oninput = () => {
+      const r = [...(state.filter.ranges[k] ?? [null, null])];
+      r[i] = e.value === "" ? null : Number(e.value);
+      state.filter.ranges[k] = r;
+      onChange();
+    };
+    return [h("span", { className: "mut", textContent: word }), e];
+  };
+  box.append(h("div", { className: "mapgroup wide" }, h("span", { className: "glabel", textContent: label }),
+    h("div", { className: "range" }, ...bound(0, "from"), ...bound(1, "to"))));
+}
+
 export function buildFilters(onChange) {
-  const box = $("filters");
+  const box = $("filters"), dlg = $("filterbox"), btn = $("filterbtn");
+  const changed = () => {
+    const n = activeFilters();
+    btn.textContent = n ? `filters · ${n}` : "filters";
+    btn.classList.toggle("on", n > 0);
+    onChange();
+  };
   box.replaceChildren();
   for (const k of state.man.strata) {
+    if (RANGES[k]) { range(box, k, RANGES[k], changed); continue; }
     const vals = [...new Set(state.samples.map((s) => s.strata?.[k]).filter((v) => v != null))].sort();
     select(box, k, [["", "all"], ...vals.map((v) => [v, v])], state.filter.strata[k] ?? "",
-      (v) => { state.filter.strata[k] = v; }, onChange);
+      (v) => { state.filter.strata[k] = v; }, changed);
   }
   select(box, "active model", [["all", "all"], ["correct", "✓ correct"], ["wrong", "✗ wrong"]], state.filter.correct,
-    (v) => { state.filter.correct = v; }, onChange);
+    (v) => { state.filter.correct = v; }, changed);
+  btn.onclick = () => dlg.showModal();
+  dlg.onclick = (e) => { if (e.target === dlg) dlg.close(); };
+  $("filterdone").onclick = () => dlg.close();
+  $("filterreset").onclick = () => {
+    Object.assign(state.filter, { strata: {}, ranges: {}, correct: "all" });
+    buildFilters(onChange);
+    changed();
+  };
   $("q").oninput = () => { state.filter.q = $("q").value; onChange(); };
 }
 

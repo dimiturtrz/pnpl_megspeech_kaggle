@@ -30,4 +30,5 @@ panel header) coloured by label, word, source, position in the sentence or error
 scatter lists the categories by count; hovering a chip highlights its points, clicking pins it. Only the active model's
 prediction is shown. UMAP (cosine, 15 neighbours, min_dist 0.1,
 seed 0) keeps local neighbourhoods, so word clusters show; PCA's two axes explain little of the variance (the header
-shows how much). Both are fitted per model, so scatters are not comparable across models. The raw MEG panel and each sentence in the list are collapsible. Stimulus audio exists only for Sherlock: pnpl ships no `stimuli/` for TheMoth or MOCHATIMIT.
+shows how much). Both are fitted per model, so scatters are not comparable across models. Filters (source, sentence length in words from/to, active model right/wrong) open in a popup next to the
+search box; the button shows how many are set. The raw MEG panel and each sentence in the list are collapsible. Stimulus audio exists only for Sherlock: pnpl ships no `stimuli/` for TheMoth or MOCHATIMIT.

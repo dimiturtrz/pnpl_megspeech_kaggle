@@ -20,8 +20,15 @@
       <h2>model</h2>
       <div id="models" class="models"></div>
       <h2>samples <span class="mut" id="count"></span></h2>
-      <div class="controls" id="filters"></div>
-      <input id="q" type="search" placeholder="search id / label / text" />
+      <div class="searchrow">
+        <input id="q" type="search" placeholder="search id / label / text" />
+        <button id="filterbtn" class="filterbtn">filters</button>
+      </div>
+      <dialog id="filterbox" class="filterbox">
+        <h2>filters</h2>
+        <div class="controls" id="filters"></div>
+        <div class="dlgfoot"><button id="filterreset">reset</button><button id="filterdone">done</button></div>
+      </dialog>
       <div id="list" class="list"></div>
     </section>
 

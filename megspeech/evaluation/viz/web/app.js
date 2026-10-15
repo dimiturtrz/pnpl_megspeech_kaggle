@@ -1,5 +1,5 @@
 import { state, load, applyFilter, out } from "./state.js";
-import { $, esc } from "./util.js";
+import { $, esc, wordCount } from "./util.js";
 import { buildModels, buildFilters, SampleList } from "./controls.js";
 import { Signals } from "./signals.js";
 import { ModelPanel } from "./model.js";
@@ -22,7 +22,7 @@ function renderText() {
   $("preds").innerHTML = `<span>label <b class="ok">${esc(s.label)}</b></span>`
     + `<span>pred <b class="${o?.correct ? "ok" : "no"}">${esc(o?.pred ?? "—")}</b> ${o ? (o.correct ? "✓" : "✗") : ""}</span>`;
   const strata = Object.entries(s.strata ?? {}).map(([k, v]) => `${k}=${v}`).join(" · ");
-  $("meta").textContent = `${s.id} · ${s.source} · subject ${s.subject} · session ${s.session}${strata ? ` · ${strata}` : ""}`;
+  $("meta").textContent = `${s.id} · ${s.source} · subject ${s.subject} · session ${s.session} · ${wordCount(s.text)} words${strata ? ` · ${strata}` : ""}`;
 }
 
 function writeHash() {
@@ -31,7 +31,7 @@ function writeHash() {
 
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1)), m = p.get("m");
-  if (m && state.models.has(m)) { state.active = m; state.checked.add(m); }
+  if (m && state.models.has(m)) state.active = m;
   return p.get("s");
 }
 
