@@ -20,9 +20,11 @@ function renderText() {
   const [a, b] = s.target ?? [0, 0];
   $("sentence").innerHTML = `${esc(s.text.slice(0, a))}<mark>${esc(s.text.slice(a, b))}</mark>${esc(s.text.slice(b))}`;
   const o = out(state.active, s.id);
+  const exact = o?.pred === s.label;
   $("preds").innerHTML = `<span>label <b class="ok">${esc(s.label)}</b></span>`
-    + `<span>pred <b class="${o?.correct ? "ok" : "no"}">${esc(o?.pred ?? "—")}</b> ${o ? (o.correct ? "✓" : "✗") : ""}</span>`;
-  const strata = Object.entries(s.strata ?? {}).map(([k, v]) => `${k}=${v}`).join(" · ");
+    + `<span>pred <b class="${exact ? "ok" : "no"}">${esc(o?.pred ?? "—")}</b></span>`
+    + (o?.rank ? `<span class="${o.correct ? "ok" : "no"}">true word at rank ${o.rank}</span>` : "");
+  const strata = Object.entries(s.strata ?? {}).filter(([k]) => k !== "source").map(([k, v]) => `${k}=${v}`).join(" · ");
   $("meta").textContent = `${s.id} · ${s.source} · subject ${s.subject} · session ${s.session} · ${wordCount(s.text)} words${strata ? ` · ${strata}` : ""}`;
 }
 
@@ -70,7 +72,7 @@ function restore() {
 async function main() {
   await load();
   const man = state.man;
-  $("sub").textContent = `${man.name} · ${state.samples.length} samples · seed ${man.seed} · ${man.models.length} models`;
+  $("sub").textContent = `${man.name} · ${state.samples.length} words · seed ${man.seed} · ${man.models.length} models`;
   signals.setSensors(man.sensors);
   buildFilters(refilter);
   restore();

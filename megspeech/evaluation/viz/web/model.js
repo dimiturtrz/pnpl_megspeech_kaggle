@@ -54,13 +54,14 @@ export class ModelPanel {
     state.focus = null;
     store.set(COLOR_KEY, state.colorBy);
     for (const b of $("colorby").children) b.classList.toggle("on", b.dataset.c === state.colorBy);
-    $("schint").textContent = `${COLORINGS[state.colorBy].hint} · filled = correct · hollow = wrong · faint = filtered out · ↑/↓ step · space play`;
+    $("schint").title = `${COLORINGS[state.colorBy].hint}
+filled = correct · hollow = wrong · faint = filtered out
+click a point to open it · ↑/↓ step · space play`;
     if (redraw) this.draw();
   }
 
   showSample() {
     const s = state.byId.get(state.sel);
-    $("activename").textContent = state.active ?? "";
     if (!s) return;
     this.topk(s);
     if (COLORINGS[state.colorBy].follows) this.draw();

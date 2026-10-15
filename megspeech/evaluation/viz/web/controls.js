@@ -1,21 +1,30 @@
 import { state, out, RANGES, activeFilters, errorOf } from "./state.js";
 import { $, h, store, errorColor } from "./util.js";
+import { sourceColor } from "./legend.js";
 
 const fmtScore = (v) => (typeof v === "number" ? v.toFixed(3) : "");
+const MEANS = {
+  "bacc@1": "balanced top-1 accuracy: per word, the share of its samples predicted exactly; mean over words",
+  "f1@1": "top-1 F1 per word, mean over words",
+  map: "mean average precision: per word, the samples ranked by that word's probability",
+  mrr: "mean reciprocal rank of the true word over all samples",
+};
+const meaning = (k) => MEANS[k] ?? (k.startsWith("bacc@")
+  ? `balanced top-${k.slice(5)} accuracy: per word, the share of its samples with it in the top ${k.slice(5)}; mean over words`
+  : k);
+const chip = (label, value, title, cls = "metric") =>
+  h("span", { className: cls, title }, h("b", { textContent: fmtScore(value) }), ` ${label}`);
 
 export function buildModels(onChange) {
   const box = $("models");
   const pick = h("select", { className: "mselect", title: "active model" });
-  for (const m of state.man.models) {
-    pick.append(h("option", { value: m.name, textContent: `${fmtScore(m.score)}  ${m.name}`.trim() }));
-  }
+  for (const m of state.man.models) pick.append(h("option", { value: m.name, textContent: m.name }));
   pick.value = state.active ?? "";
   pick.onchange = () => { state.active = pick.value; onChange(); };
-  const metric = state.man.models[0]?.metric ?? "score";
-  const extra = Object.entries(state.man.models.find((m) => m.name === state.active)?.metrics ?? {})
-    .map(([k, v]) => `${k} ${v.toFixed(3)}`).join(" · ");
-  box.replaceChildren(pick, h("div", { className: "mut", textContent: `${metric} on this sample` }),
-    ...(extra ? [h("div", { className: "mut", textContent: `all sampled words: ${extra}` })] : []));
+  const m = state.man.models.find((x) => x.name === state.active);
+  const head = chip("score", m?.score, `${m?.metric ?? "score"} — the competition metric, on this sample`, "metric lead");
+  const all = Object.entries(m?.metrics ?? {}).map(([k, v]) => chip(k, v, `${meaning(k)} · every sampled word`));
+  box.replaceChildren(pick, h("div", { className: "metrics" }, head, ...all));
 }
 
 function select(box, label, options, current, set, onChange) {
@@ -79,12 +88,11 @@ const COLUMNS = [
   { key: "id", title: "#", by: (s) => s.id, text: (s) => s.id, cls: () => "mut" },
   { key: "word", title: "word", by: (s) => s.label, text: (s) => s.label },
   { key: "pred", title: "pred", by: (s, o) => o?.pred ?? "", text: (s, o) => o?.pred ?? "—",
-    cls: (s, o) => (o ? (o.correct ? "ok" : "no") : "") },
-  { key: "error", title: "error", by: (s, o) => (o ? errorOf(o) : -1), text: (s, o) => (o ? errorOf(o).toFixed(2) : ""), num: true,
+    cls: (s, o) => (o ? (o.pred === s.label ? "ok" : "no") : "") },
+  { key: "error", title: "err", title_: "1 − p(true word); sort", by: (s, o) => (o ? errorOf(o) : -1), text: (s, o) => (o ? errorOf(o).toFixed(2) : ""), num: true,
     tint: (s, o) => (o ? errorColor(errorOf(o)) : null) },
   { key: "rank", title: "rank", by: rankOf, text: (s, o) => (o ? (rankOf(s, o) === Infinity ? `>${o.topk.length}` : rankOf(s, o)) : ""),
     num: true, title_: "rank of the true word among all words" },
-  { key: "src", title: "src", by: (s) => s.source, text: (s) => s.source.slice(0, 3), cls: () => "mut" },
 ];
 const DESCENDING = new Set(["error", "rank"]);
 
@@ -126,13 +134,14 @@ export class SampleTable {
 
   row(s) {
     const o = out(state.active, s.id);
-    const r = h("div", { className: "trow", title: s.text }, ...COLUMNS.map((c) => {
+    const r = h("div", { className: "trow", title: `${s.source}: ${s.text}` }, ...COLUMNS.map((c) => {
       const cell = h("span", { className: `${c.num ? "num " : ""}${c.cls?.(s, o) ?? ""}`, textContent: c.text(s, o) });
       const tint = c.tint?.(s, o);
       if (tint) cell.style.color = tint;
       return cell;
     }));
     r.dataset.id = s.id;
+    r.style.borderLeftColor = sourceColor(s.source);
     this.rows.set(s.id, r);
     return r;
   }
@@ -141,7 +150,8 @@ export class SampleTable {
     this.rows.clear();
     $("list").replaceChildren(this.header(), ...state.visible.map((s) => this.row(s)));
     const sentences = new Set(state.visible.map((s) => s.sentence ?? s.id)).size;
-    $("count").textContent = `${sentences} sentences · ${state.visible.length} / ${state.samples.length} words`;
+    const of = state.visible.length === state.samples.length ? "" : ` of ${state.samples.length}`;
+    $("count").textContent = `${state.visible.length}${of} words · ${sentences} sentences`;
     this.on = null;
     this.mark();
   }

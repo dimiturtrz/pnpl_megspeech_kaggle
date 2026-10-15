@@ -103,7 +103,9 @@ export class Signals {
     this.target = s.target_t ?? null;
     $("nch").max = C;
     $("meghead").textContent = `${C} ch · ${sfreq} Hz · ${(T / sfreq).toFixed(2)} s`;
-    $("audhead").textContent = this.aud ? `${this.aud.sfreq} Hz · ${(this.aud.pcm.length / this.aud.sfreq).toFixed(2)} s` : "none";
+    $("audhead").textContent = this.aud ? `${this.aud.sfreq} Hz · ${(this.aud.pcm.length / this.aud.sfreq).toFixed(2)} s`
+      : `none — pnpl ships stimulus audio for Sherlock only`;
+    $("mid").classList.toggle("noaud", !this.aud);
     if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
     this.blobUrl = wavBuf ? URL.createObjectURL(new Blob([wavBuf], { type: "audio/wav" })) : null;
     this.player.hidden = !wavBuf;
@@ -182,12 +184,7 @@ export class Signals {
     this.audL.draw((ctx, W, H) => {
       this.axis(ctx, W, H);
       const a = this.aud;
-      if (!a) {
-        ctx.fillStyle = COL.axis; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "12px system-ui";
-        ctx.fillText(this.meg ? `no audio — pnpl ships stimulus audio for Sherlock only (this is ${this.s?.source ?? "?"})` : "", W / 2, (H - PAD.b) / 2);
-        ctx.textAlign = "left";
-        return;
-      }
+      if (!a) return;
       ctx.strokeStyle = COL.wave; ctx.lineWidth = 1;
       const y0 = (PAD.t + H - PAD.b) / 2;
       this.trace(ctx, a.pcm, 0, a.pcm.length, a.t0, a.sfreq, y0, (H - PAD.t - PAD.b) / 2, W);
