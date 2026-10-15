@@ -24,6 +24,21 @@ uv sync --extra dev --extra devtools
 nox -s lint test cov
 ```
 
+## Sample viewer
+
+A browser tool for reading what a model gets wrong, word by word. It shows a stratified set of sentences:
+
+- **Sentence card** — every scored word is underlined and coloured by its error percentile within the active model. Click a word to select it. Its rank is coloured on the same scale.
+- **MEG traces** — channels picked by spread, model weight, word-evoked RMS, sensor kind, region, or helmet neighbourhood. A resizable helmet map shows each location's saliency.
+- **Model panel** — the selected models' outputs for the same word, side by side.
+
+```bash
+uv run python -m megspeech.evaluation.viz export --models <run> [<run> ...]
+uv run python -m megspeech.evaluation.viz serve   # http://localhost:8000
+```
+
+Details: [`megspeech/evaluation/viz/README.md`](megspeech/evaluation/viz/README.md).
+
 ## Gates
 
 `nox -s lint test cov` (or `nox -s gates`) runs exactly what CI runs:
