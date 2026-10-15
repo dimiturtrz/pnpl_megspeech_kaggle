@@ -70,7 +70,7 @@ Per-epoch telemetry for ema-cd25-xsp10sem05-ft-s1:
 | Ensemble-level gains | label-free members (+.007 public Deep), KD students (+.009, old ruler) | ~1 pt is the bound: seed-to-seed correlation is .97 |
 | Null or killed on ONE run | ~45 | — |
 | Null or killed on an OLD ruler or recipe | ~40 | Pre-EMA, sentence cut (overstates by 3.6–5.4 pt), or the n=2512 val that also selected tau and epoch. On that ruler, local vs public Spearman was −0.29 (h1u.13), so those nulls AND those gains are both unranked. |
-| Harness-suspected verdicts | ~12 | fp16-NaN augments, patience-8 truncation, unnormalised KD teacher, type-level POS tags, unwhitened teachers (99y: only 11–24 predictable dims), phoneme accuracy never logged, MEG-XL LoRA divergence, the set-pool crash (fixed in 539ec2c) |
+| Harness-suspected verdicts | ~12 | fp16-NaN augments, patience-8 truncation, unnormalised KD teacher, type-level POS tags, unwhitened teachers (99y: only 11–24 predictable dims; its wav2vec2 row read misplaced targets, fixed 10-15: 27 family-significant dims, teacher-probe .94 not .22 — megspeech-e1s), phoneme accuracy never logged, MEG-XL LoRA divergence, the set-pool crash (fixed in 539ec2c) |
 | Proposed, never run | ~35 | See below |
 
 ### By axis
