@@ -27,8 +27,9 @@ measured draw noise ([where we are](interpretations/converging/2026-10-13_where_
    encoded as log time intervals (40 ms – 8 s). Retraining the current recipe without them (two seeds, megspeech-vk2)
    costs 7.4 pt on the local test at Kaggle-length spans (.691 → .616) but only 0.5 pt on validation (.610 → .605).
    Most of the local-test loss is on TheMoth, it holds on sentences absent from training (so it is not memorisation),
-   and it shows up far more in balanced than in plain top-1 accuracy, which makes it a rare-word effect. The two
-   partitions disagree, so the size of the gain on new stimuli is open.
+   and it shows up far more in balanced than in plain top-1 accuracy, which makes it a rare-word effect. On new
+   stimuli it is worth ~0: the same two-seed blends score .663 vs .661 on the Kaggle public test, although they
+   disagree on 54% of top-1 picks. Validation was right; the local-test gain is specific to TheMoth.
 3. **Pretraining without word labels.** The stem never trains the 50-word classifier. Instead, each word window is
    contrastively aligned to three targets:
    - the wav2vec2 latent of the speech heard in that window;
