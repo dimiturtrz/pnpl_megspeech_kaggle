@@ -18,7 +18,14 @@ const chip = (label, value, title, cls = "metric") =>
 export function buildModels(onChange) {
   const box = $("models");
   const pick = h("select", { className: "mselect", title: "active model" });
-  for (const m of state.man.models) pick.append(h("option", { value: m.name, textContent: m.name }));
+  for (const m of state.man.models) {
+    const score = fmtScore(m.score);
+    pick.append(h("option", {
+      value: m.name,
+      textContent: score ? `${m.name} · ${score}` : m.name,
+      title: score ? `${m.metric ?? "score"} ${score} — the competition metric, on this sample` : "",
+    }));
+  }
   pick.value = state.active ?? "";
   pick.onchange = () => { state.active = pick.value; onChange(); };
   const m = state.man.models.find((x) => x.name === state.active);
