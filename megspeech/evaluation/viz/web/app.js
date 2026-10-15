@@ -3,6 +3,7 @@ import { $, esc, wordCount } from "./util.js";
 import { buildModels, buildFilters, SampleTable } from "./controls.js";
 import { Signals } from "./signals.js";
 import { ModelPanel } from "./model.js";
+import { Split } from "./split.js";
 
 const TYPING = new Set(["INPUT", "SELECT", "TEXTAREA"]);
 const KEYS = { ArrowDown: () => list.step(1), ArrowUp: () => list.step(-1), " ": () => signals.togglePlay() };
@@ -81,11 +82,13 @@ async function main() {
     e.preventDefault();
     act();
   });
+  new Split($("mid"), ["ptext", "pmeg", "paud"].map($), [1, 2, 1], "megspeech-viz:split");
   let pending = 0;
-  new ResizeObserver(() => {
+  const resized = new ResizeObserver(() => {
     cancelAnimationFrame(pending);
     pending = requestAnimationFrame(() => { signals.draw(); panel.draw(); });
-  }).observe(document.querySelector("main"));
+  });
+  for (const el of [document.querySelector("main"), $("megbox"), $("wave")]) resized.observe(el);
 }
 
 main().catch((e) => status(`load error: ${e.message} — serve with \`python -m megspeech.evaluation.viz serve\``));

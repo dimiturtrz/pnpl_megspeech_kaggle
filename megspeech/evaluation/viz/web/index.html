@@ -29,11 +29,12 @@
     </section>
 
     <section class="panel mid" id="mid">
-      <div class="textbox">
+      <div class="pane textbox" id="ptext">
         <p id="sentence" class="sentence"></p>
         <div id="preds" class="preds"></div>
         <p id="meta" class="hint"></p>
       </div>
+      <div class="pane" id="pmeg">
       <div class="trackhead">
         <button id="megtoggle" class="fold" aria-expanded="true"><span class="caret">▾</span> MEG <span class="mut" id="meghead"></span></button>
         <span class="heatkey" id="heatkey" title="trace colour: the channel's model-weight percentile for this word" hidden><span class="glabel">weight</span><i></i></span>
@@ -43,12 +44,15 @@
           <span id="nchlabel" class="tlabel"></span></label>
       </div>
       <div id="megbox" class="megbox"><canvas id="meg" class="meg"></canvas></div>
+      </div>
+      <div class="pane" id="paud">
       <div class="trackhead">
         <h2>audio <span class="mut" id="audhead"></span></h2>
         <span id="tlabel" class="tlabel"></span>
       </div>
       <canvas id="wave" class="wave"></canvas>
       <audio id="player" controls preload="auto"></audio>
+      </div>
     </section>
 
     <section class="panel right">
