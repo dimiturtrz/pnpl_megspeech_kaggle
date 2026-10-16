@@ -1,0 +1,341 @@
+diff --git a/megspeech/evaluation/group.py b/megspeech/evaluation/group.py
+index 9866f86..112be29 100644
+--- a/megspeech/evaluation/group.py
++++ b/megspeech/evaluation/group.py
+@@ -13,6 +13,7 @@ from megspeech.evaluation.exported import ExportedModel
+ from megspeech.evaluation.reader import Reader
+ from megspeech.evaluation.scoring.config import Scoring
+ from megspeech.evaluation.scoring.evaluator import Evaluator
++from megspeech.evaluation.scoring.expert import Expert
+ from megspeech.evaluation.scoring.score import SelectionConfig
+ 
+ 
+@@ -44,6 +45,7 @@ class Group:
+             shifts=scoring.shifts,
+             adapted=scoring.adapted,
+             word_share=scoring.word_share,
++            expert=Expert.of(self.root, scoring.expert, scoring.expert_weight, self.device),
+         )
+         return ExportedModel(
+             **{field.name: getattr(reader, field.name) for field in fields(Reader)},
+diff --git a/megspeech/evaluation/scoring/config.py b/megspeech/evaluation/scoring/config.py
+index 66d2ef8..941b0cd 100644
+--- a/megspeech/evaluation/scoring/config.py
++++ b/megspeech/evaluation/scoring/config.py
+@@ -37,6 +37,11 @@ class Scoring:
+     word_share: float = 0.0
+     """Weight of the word head against the context head in the log-probabilities scored and submitted
+     (`Evaluator.head`): 0 the context head, 1 the word head, between them their log-probability mix."""
++    expert: str = ""
++    """A timing expert under models/ (`megspeech.training.cli.timing`) added to the context head's log-probabilities;
++    empty reads the model alone. The expert reads only onsets, which the Kaggle test gives."""
++    expert_weight: float = 0.0
++    """Weight on the expert's log-probabilities (`Timing.fused`); 0 is the context head alone."""
+     partition: Partition = Partition.VALIDATION
+     """The labelled partition scored (`DataConfig.ruled`): val selects; the local test only reports, once, on a model
+     already chosen (megspeech-7gf.81)."""
+diff --git a/megspeech/evaluation/scoring/evaluator.py b/megspeech/evaluation/scoring/evaluator.py
+index 3935d0b..f1b6e44 100644
+--- a/megspeech/evaluation/scoring/evaluator.py
++++ b/megspeech/evaluation/scoring/evaluator.py
+@@ -17,6 +17,7 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
+ from megspeech.device import Device
+ from megspeech.evaluation.metric.balance import Sinkhorn
+ from megspeech.evaluation.metric.ruler import Coverage, Graded, Ruler
++from megspeech.evaluation.scoring.expert import Expert
+ from megspeech.evaluation.scoring.score import ADJUSTMENTS, MIN_NOVEL, Epoch, Head, Report, Score
+ from megspeech.model.words.layers.centring import RunCentring
+ from megspeech.model.words.layers.norm import MaskedBatchNorm1d
+@@ -54,12 +55,15 @@ class Evaluator:
+     word_share: float = 0.0
+     """Weight of the word head in the log-probabilities every selection and submission reads (`head`): 0 the context
+     head, 1 the word head, between them their log-probability mix."""
++    expert: Expert = Expert()
++    """A timing expert added to the context head's averaged log-probabilities (`Expert.fused`); none by default."""
+ 
+     def logits(self, model: nn.Module, split: Split) -> dict[Head, Float[Tensor, "n v"]]:
+         """Both heads' log-probabilities for every word of `split`, averaged over the `shifts`, in word order."""
+         model = self.adapt(model, split) if self.adapted else model
+         reads = [self.read(model, replace(split, windows=split.windows.shifted(shift))) for shift in self.shifts]
+-        return {head: torch.stack([read[head].log_softmax(-1) for read in reads]).mean(0) for head in Head}
++        averaged = {head: torch.stack([read[head].log_softmax(-1) for read in reads]).mean(0) for head in Head}
++        return self.expert.fused(averaged, split)
+ 
+     def head(self, logits: dict[Head, Float[Tensor, "n v"]]) -> Float[Tensor, "n v"]:
+         """The log-probabilities scored and submitted: the `word_share` mix of the word and context heads."""
+diff --git a/megspeech/evaluation/scoring/expert.py b/megspeech/evaluation/scoring/expert.py
+new file mode 100644
+index 0000000..4fb9c40
+--- /dev/null
++++ b/megspeech/evaluation/scoring/expert.py
+@@ -0,0 +1,57 @@
++"""A timing expert fused into the context head: the null expert leaves every head's log-probabilities as they are."""
++
++import json
++from dataclasses import dataclass
++
++import torch
++from jaxtyping import Float
++from torch import Tensor
++
++from core.paths import DataRoot
++from megspeech.data.batching.split import Split
++from megspeech.data.config import METRICS
++from megspeech.data.labels.vocabulary import VOCAB_SIZE
++from megspeech.data.spans.spans import PAD
++from megspeech.evaluation.scoring.score import Head
++from megspeech.model.context.timing_only import FILE, TimingOnly
++
++
++@dataclass(frozen=True)
++class Expert:
++    """No expert: `fused` returns the log-probabilities it is given."""
++
++    def fused(self, logits: dict[Head, Float[Tensor, "n v"]], split: Split) -> dict[Head, Float[Tensor, "n v"]]:
++        return logits
++
++    @staticmethod
++    def of(root: DataRoot, name: str, weight: float, device: torch.device) -> "Expert":
++        """The expert `name` under models/ at `weight`, or no expert when `name` is empty."""
++        return Timing.load(root, name, weight, device) if name else Expert()
++
++
++@dataclass(frozen=True)
++class Timing(Expert):
++    """A trained timing expert, read as every word's log-probability over the vocabulary, added to the context head
++    `weight` times."""
++
++    model: TimingOnly
++    weight: float
++
++    @classmethod
++    def load(cls, root: DataRoot, name: str, weight: float, device: torch.device) -> "Timing":
++        layers = json.loads((root.models() / name / METRICS).read_text())["expert"].get("layers", 0)
++        model = TimingOnly(VOCAB_SIZE, layers)
++        model.timing.load_state_dict(torch.load(root.models() / name / FILE, weights_only=True))
++        return cls(model.to(device).eval(), weight)
++
++    def words(self, split: Split) -> Float[Tensor, "n v"]:
++        """Each of `split`'s words' log-probabilities from its span's onsets; zero for words no span holds."""
++        mask = split.index != PAD
++        with torch.no_grad():
++            logp = self.model.timing(split.onset, mask).float().log_softmax(-1)
++        out = torch.zeros(len(split.y), logp.shape[-1], device=logp.device)
++        out[split.index[mask]] = logp[mask]
++        return out
++
++    def fused(self, logits: dict[Head, Float[Tensor, "n v"]], split: Split) -> dict[Head, Float[Tensor, "n v"]]:
++        return {**logits, Head.CONTEXT: logits[Head.CONTEXT] + self.weight * self.words(split)}
+diff --git a/megspeech/evaluation/studies/timefusion.py b/megspeech/evaluation/studies/timefusion.py
+index fa2a5fc..5e922e2 100644
+--- a/megspeech/evaluation/studies/timefusion.py
++++ b/megspeech/evaluation/studies/timefusion.py
+@@ -7,27 +7,19 @@ decision beyond the model's own.
+ """
+ 
+ import argparse
+-import json
+ import logging
+ from dataclasses import dataclass
+ 
+-import torch
+-from jaxtyping import Float
+-from torch import Tensor
+-
+ from core.paths import DataRoot
+ from megspeech.data.batching.split import Split
+-from megspeech.data.config import METRICS
+-from megspeech.data.labels.vocabulary import VOCAB_SIZE
+ from megspeech.data.raw.runs import Run
+-from megspeech.data.spans.spans import PAD
+ from megspeech.device import Device
+ from megspeech.evaluation.group import Group
+ from megspeech.evaluation.loaded import LoadedModel
+ from megspeech.evaluation.loading import Loader
+ from megspeech.evaluation.scoring.config import Scoring
++from megspeech.evaluation.scoring.expert import Timing
+ from megspeech.evaluation.scoring.score import Head
+-from megspeech.model.context.timing_only import FILE, TimingOnly
+ from megspeech.model.input.subjects import Fallback, Unseen
+ 
+ LOG = logging.getLogger(__name__)
+@@ -36,35 +28,12 @@ WEIGHTS = (0.0, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0)
+ """Weights on the expert's log-probability; 0 is the context head alone."""
+ 
+ 
+-@dataclass(frozen=True)
+-class Expert:
+-    """A trained timing expert, read as every word's log-probability over the vocabulary."""
+-
+-    model: TimingOnly
+-
+-    @classmethod
+-    def load(cls, root: DataRoot, name: str, device: torch.device) -> "Expert":  # devtools-ignore: test-mirror
+-        layers = json.loads((root.models() / name / METRICS).read_text())["expert"].get("layers", 0)
+-        model = TimingOnly(VOCAB_SIZE, layers)
+-        model.timing.load_state_dict(torch.load(root.models() / name / FILE, weights_only=True))
+-        return cls(model.to(device).eval())
+-
+-    def words(self, split: Split) -> Float[Tensor, "n v"]:
+-        """Each of `split`'s words' log-probabilities from its span's onsets; zero for words no span holds."""
+-        mask = split.index != PAD
+-        with torch.no_grad():
+-            logp = self.model.timing(split.onset, mask).float().log_softmax(-1)
+-        out = torch.zeros(len(split.y), logp.shape[-1], device=logp.device)
+-        out[split.index[mask]] = logp[mask]
+-        return out
+-
+-
+ @dataclass(frozen=True)
+ class TimeFusion:
+     """A loaded model's held-out domains read with and without the timing expert."""
+ 
+     loaded: LoadedModel
+-    expert: Expert
++    expert: Timing
+ 
+     def domain(self, split: Split) -> dict[float, float]:  # devtools-ignore: test-mirror
+         """BAcc@10 on `split`'s unseen-span words at every fusion weight."""
+@@ -97,7 +66,7 @@ def main() -> None:
+     root, device = DataRoot.from_config(), args.device.as_torch()
+     loaded = Loader.of(Group(root, Scoring(fallback=Fallback(Unseen.DEEP)), device), args.names)
+     runs = Run.discover(root.raw())
+-    fusion = TimeFusion(loaded, Expert.load(root, args.expert, device))
++    fusion = TimeFusion(loaded, Timing.load(root, args.expert, 0.0, device))
+     for part, held in (("val", loaded.data.held(runs)), ("local test", loaded.data.tested(runs))):
+         table = fusion.table(held)
+         for name, scores in table.items():
+diff --git a/tests/unit/megspeech/evaluation/scoring/evaluator.py b/tests/unit/megspeech/evaluation/scoring/evaluator.py
+index 6170248..b67edb8 100644
+--- a/tests/unit/megspeech/evaluation/scoring/evaluator.py
++++ b/tests/unit/megspeech/evaluation/scoring/evaluator.py
+@@ -11,7 +11,9 @@ from megspeech.data.labels.vocabulary import VOCAB_SIZE
+ from megspeech.data.spans.spans import Spans
+ from megspeech.evaluation.metric.balance import Sinkhorn
+ from megspeech.evaluation.scoring.evaluator import Calibration, Evaluator
++from megspeech.evaluation.scoring.expert import Timing
+ from megspeech.evaluation.scoring.score import ADJUSTMENTS, Head, Score
++from megspeech.model.context.timing_only import TimingOnly
+ from megspeech.model.words.layers.norm import MaskedBatchNorm1d
+ 
+ SAMPLES = 50
+@@ -43,6 +45,16 @@ def test_logits() -> None:
+     assert torch.allclose(shifted[Head.CONTEXT], out[Head.CONTEXT], atol=1e-5)
+ 
+ 
++def test_logits_fused() -> None:
++    """An expert is added to the context head after the shift average; the word head is untouched."""
++    domain = split()
++    expert = Timing(TimingOnly(VOCAB_SIZE, layers=1).eval(), 0.5)
++    plain = Evaluator(CPU, shifts=(-1, 0, 1)).logits(Constant(), domain)
++    fused = Evaluator(CPU, shifts=(-1, 0, 1), expert=expert).logits(Constant(), domain)
++    assert torch.allclose(fused[Head.CONTEXT], plain[Head.CONTEXT] + 0.5 * expert.words(domain), atol=1e-5)
++    assert torch.equal(fused[Head.WORD], plain[Head.WORD])
++
++
+ class Normed(Constant):
+     def __init__(self) -> None:
+         super().__init__()
+diff --git a/tests/unit/megspeech/evaluation/scoring/expert.py b/tests/unit/megspeech/evaluation/scoring/expert.py
+new file mode 100644
+index 0000000..baa8362
+--- /dev/null
++++ b/tests/unit/megspeech/evaluation/scoring/expert.py
+@@ -0,0 +1,70 @@
++import json
++from pathlib import Path
++
++import torch
++from jaxtyping import Float
++from torch import Tensor
++
++from core.paths import DataRoot
++from megspeech.data.batching.split import Split
++from megspeech.data.config import METRICS
++from megspeech.data.constants import CHANNELS
++from megspeech.data.labels.vocabulary import VOCAB_SIZE
++from megspeech.data.spans.spans import Spans
++from megspeech.evaluation.scoring.expert import Expert, Timing
++from megspeech.evaluation.scoring.score import Head
++from megspeech.model.context.timing_only import FILE, TimingOnly
++
++CPU = torch.device("cpu")
++ROWS = 6
++WEIGHT = 0.5
++
++
++def split() -> Split:
++    onset = torch.arange(ROWS, dtype=torch.float64).numpy() * 0.2 + (torch.arange(ROWS) // 3).numpy() * 5.0
++    return Split.from_arrays(
++        torch.zeros(ROWS, CHANNELS, 4).numpy(), (torch.arange(ROWS) % 3).numpy(), Spans.by_gap(onset), CPU
++    )
++
++
++def logits() -> dict[Head, Float[Tensor, "n v"]]:
++    return {head: torch.randn(ROWS, VOCAB_SIZE).log_softmax(-1) for head in Head}
++
++
++def timing(weight: float = WEIGHT) -> Timing:
++    return Timing(TimingOnly(VOCAB_SIZE, layers=1).eval(), weight)
++
++
++def test_words() -> None:
++    """Every spanned word gets a normalised row over the vocabulary, in the split's word order."""
++    words = timing().words(split())
++    assert words.shape == (ROWS, VOCAB_SIZE)
++    assert torch.allclose(words.exp().sum(-1), torch.ones(ROWS))
++
++
++def test_fused() -> None:
++    """No expert returns the logits as given; a weighted one moves the context head only; weight 0 moves nothing."""
++    given = logits()
++    assert Expert().fused(given, split()) is given
++    expert = timing()
++    out = expert.fused(given, split())
++    assert torch.allclose(out[Head.CONTEXT], given[Head.CONTEXT] + WEIGHT * expert.words(split()))
++    assert not torch.equal(out[Head.CONTEXT], given[Head.CONTEXT])
++    assert torch.equal(out[Head.WORD], given[Head.WORD])
++    assert torch.equal(timing(0.0).fused(given, split())[Head.CONTEXT], given[Head.CONTEXT])
++
++
++def test_load(tmp_path: Path) -> None:
++    root = DataRoot(tmp_path)
++    directory = root.models() / "t"
++    directory.mkdir(parents=True)
++    saved = TimingOnly(VOCAB_SIZE, layers=1).timing.state_dict()
++    torch.save(saved, directory / FILE)
++    (directory / METRICS).write_text(json.dumps({"expert": {"layers": 1}}))
++    loaded = Timing.load(root, "t", WEIGHT, CPU)
++    assert loaded.weight == WEIGHT
++    assert all(torch.equal(loaded.model.timing.state_dict()[key], value) for key, value in saved.items())
++
++
++def test_of(tmp_path: Path) -> None:
++    assert Expert.of(DataRoot(tmp_path), "", WEIGHT, CPU) == Expert()
+diff --git a/tests/unit/megspeech/evaluation/studies/timefusion.py b/tests/unit/megspeech/evaluation/studies/timefusion.py
+deleted file mode 100644
+index bd8d5c6..0000000
+--- a/tests/unit/megspeech/evaluation/studies/timefusion.py
++++ /dev/null
+@@ -1,21 +0,0 @@
+-import torch
+-
+-from megspeech.data.batching.split import Split
+-from megspeech.data.constants import CHANNELS
+-from megspeech.data.spans.spans import Spans
+-from megspeech.evaluation.studies.timefusion import Expert
+-from megspeech.model.context.timing_only import TimingOnly
+-
+-CPU = torch.device("cpu")
+-ROWS = 6
+-
+-
+-def test_words() -> None:
+-    """Every spanned word gets a normalised row over the vocabulary, in the split's word order."""
+-    onset = torch.arange(ROWS, dtype=torch.float64).numpy() * 0.2 + (torch.arange(ROWS) // 3).numpy() * 5.0
+-    split = Split.from_arrays(
+-        torch.zeros(ROWS, CHANNELS, 4).numpy(), (torch.arange(ROWS) % 3).numpy(), Spans.by_gap(onset), CPU
+-    )
+-    words = Expert(TimingOnly(7, layers=1).eval()).words(split)
+-    assert words.shape == (ROWS, 7)
+-    assert torch.allclose(words.exp().sum(-1), torch.ones(ROWS))
