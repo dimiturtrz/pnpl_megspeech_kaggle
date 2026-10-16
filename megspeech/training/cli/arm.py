@@ -1,12 +1,15 @@
 """Run one recipe arm: a stem from `<base>-s<seed>`, then its fine-tune from `<base>-s<seed>-ft-s<seed>` started on that
-stem, the same flags in both stages. A stem already saved is reused, so a run that died after it resumes at the
-fine-tune. Each stage reports val and local test when it ends.
+stem, the same flags in both stages plus `--stem-flags` in the stem alone. A stem already saved is reused, so a run that
+died after it resumes at the fine-tune. Each stage reports val and local test when it ends.
 
 uv run python -m megspeech.training.cli.arm --base ema-cd25-xsp10sem05-ac05x --seed 1 --tag h512 \
     -- --context.conv.hidden 512
+uv run python -m megspeech.training.cli.arm --base ema-cd25-xsp10sem05-ac05x --seed 1 --tag stem20 \
+    --stem-flags="--optim.epochs 20"
 """
 
 import argparse
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -24,6 +27,7 @@ class Arm:
     seed: int
     tag: str
     flags: tuple[str, ...] = ()
+    stem_flags: tuple[str, ...] = ()
 
     @property
     def stem(self) -> str:
@@ -36,7 +40,7 @@ class Arm:
     def commands(self, models: Path) -> list[list[str]]:
         """The training commands still to run: the fine-tune, preceded by the stem unless `models` holds it."""
         shared = ["--optim.seed", str(self.seed), *self.flags]
-        stem = [*TRAIN, "--origin", f"{self.base}-s{self.seed}", *shared, "--name", self.stem]
+        stem = [*TRAIN, "--origin", f"{self.base}-s{self.seed}", *shared, *self.stem_flags, "--name", self.stem]
         origin = f"{self.base}-s{self.seed}-ft-s{self.seed}"
         fine = [*TRAIN, "--origin", origin, "--optim.stem", self.stem, *shared, "--name", self.fine]
         return [fine] if (models / self.stem / WEIGHTS).is_file() else [stem, fine]
@@ -51,10 +55,12 @@ class Arm:
         parser.add_argument("--base", required=True, help="recipe whose -s<seed> stem and -ft-s<seed> runs are origins")
         parser.add_argument("--seed", type=int, required=True)
         parser.add_argument("--tag", required=True)
+        parser.add_argument("--stem-flags", default="", help="training flags for the stem alone, one quoted string")
         parser.add_argument("flags", nargs=argparse.REMAINDER, help="training flags for both stages, after --")
         args = parser.parse_args()
         flags = tuple(flag for flag in args.flags if flag != "--")
-        Arm(args.base, args.seed, args.tag, flags).run(DataRoot.from_config().models())
+        arm = Arm(args.base, args.seed, args.tag, flags, tuple(shlex.split(args.stem_flags)))
+        arm.run(DataRoot.from_config().models())
 
 
 if __name__ == "__main__":

@@ -29,6 +29,13 @@ def test_commands(tmp_path: Path) -> None:
     assert ARM.commands(tmp_path) == [fine]
 
 
+def test_commands_stem_flags(tmp_path: Path) -> None:
+    short = Arm("base", 2, "stem20", (), ("--optim.epochs", "20"))
+    stem, fine = short.commands(tmp_path)
+    assert stem[-4:-2] == ["--optim.epochs", "20"]
+    assert "--optim.epochs" not in fine
+
+
 def test_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ran: list[list[str]] = []
     monkeypatch.setattr(module.subprocess, "run", lambda command, *, check: ran.append(command) if check else None)
@@ -40,7 +47,19 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     runs: list[tuple[Arm, Path]] = []
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda _: DataRoot(tmp_path)))
     monkeypatch.setattr(Arm, "run", lambda arm, models: runs.append((arm, models)))
-    argv = ["arm", "--base", "base", "--seed", "2", "--tag", "h512", "--", "--context.conv.hidden", "512"]
+    argv = [
+        "arm",
+        "--base",
+        "base",
+        "--seed",
+        "2",
+        "--tag",
+        "h512",
+        "--stem-flags=",
+        "--",
+        "--context.conv.hidden",
+        "512",
+    ]
     monkeypatch.setattr(sys, "argv", argv)
     Arm.main()
     assert runs == [(ARM, DataRoot(tmp_path).models())]
