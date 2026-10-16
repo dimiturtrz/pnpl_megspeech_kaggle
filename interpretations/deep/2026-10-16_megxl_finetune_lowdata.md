@@ -26,8 +26,8 @@ training log's VAL minus VAL with the MEG shuffled across words, at the last epo
 | A: CNN s3 | .462 | .529 | .462 | .395 | +.013 | .448 | — |
 | A mean (seed SD ~.017) | .453 | | | | | .460 | — |
 | B: MEG-XL spanned, encoder lr .1, 8 epochs (~63 min) s1 | .473 | .507 | .510 | .402 | +.030 | PENDING | .544 |
-| B s2 | PENDING | | | | | | — |
-| C: B with encoder lr .3 (instrument) s1 | PENDING | | | | | — | — |
+| B s2 | stopped at epoch 2 (deadline) | | | | | | — |
+| C: B with encoder lr .3 (instrument) s1, stopped after epoch 6 | .427 (ep 6) | | | | +.050 | — | — |
 
 ## Reading
 
@@ -41,3 +41,7 @@ encoder carries to new ones. This is the paper's low-data claim, seen where our 
 
 Not ruled out: one MEG-XL seed and one CNN seed on public; whether the edge survives at full data (the full-data CNN
 loses only ~.03 to public); other encoder learning rates (C, .3, reads more MEG: neural +.06 at epoch 5).
+
+In the final ensemble: `d-ac05xfam16` plus this 5%-data MEG-XL at weight 1/17 scored VAL .6482 (.6474 without), local test
+.7223 (.7204), public .69233 (.69483). A member scoring .544 on public alone, at that weight, neither helps nor hurts.
+A MEG-XL trained on all the data is the test this did not reach.
