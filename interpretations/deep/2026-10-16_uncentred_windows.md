@@ -53,3 +53,23 @@ Not ruled out:
 d-uncfam4 scored .69383 on public: +.003 over its control family (.69083), −.001 under the scored fam16 (.69483). The
 third recording set sides with neither partition: the slow level is neutral there, not the +.022 VAL promised or the
 −.019 the local test charged. Not the scored entry.
+
+## Follow-up: levelled runs (megspeech-y9k)
+
+`--no-data.centred --data.levelled`: each run at its own median 0 / IQR 1 before windows are cut, so the window keeps
+its slow level but loses the per-recording offset. Pre-registered keep: 2-seed local test mean ≥ .712 and VAL mean
+≥ .6457.
+
+| arm | VAL | local test |
+|---|---|---|
+| unclv s1-ft-s1 | .6485 | .7001 |
+| unclv s2-ft-s2 | .6459 | .7041 |
+| unclv 2-seed mean | .6472 | .7021 |
+| unc 2-seed mean (offset kept) | .6531 | .7107 |
+| base s1 / s2 | .6387 / .6407 | .7088 / — |
+
+Fails on the local test (.7021 against .712). Removing the offset takes away part of the VAL gain (.6531 → .6472, still
++.008 over the base seeds), and the local test does not recover; it falls further. So part of what the uncentred
+windows added on VAL was the recording offset, as suspected, and what is left of the slow level after levelling does
+not transfer to pnpl's recordings either. The level is not a lever on this input. Still open: the level as a separate,
+per-session normalised channel beside the centred window.
