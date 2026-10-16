@@ -49,7 +49,7 @@ class Span(Encoding):
 
     def features(self, spans: SpanInput) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"]]:
         """The transformer's input at each span position, and the position's word embedding (zeros when empty)."""
-        slots = self.centred(spans, self.words.positions(self.prepare(spans.x, spans.subject), spans.onset, spans.slot))
+        slots = self.centred(spans, self.words.positions(self.prepared(spans)))
         return self.chunked(spans, slots), slots
 
     def centred(self, spans: SpanInput, slots: Float[Tensor, "g w e"]) -> Float[Tensor, "g w e"]:

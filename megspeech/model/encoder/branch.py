@@ -49,4 +49,4 @@ class Branch(Encoding):
 
     def projected(self, spans: SpanInput) -> Float[Tensor, "g w d"]:
         """Each span position's features through this encoder, projected to the transformer's width."""
-        return self.project(self.words.positions(self.prepare(spans.x, spans.subject), spans.onset, spans.slot))
+        return self.project(self.words.positions(self.prepared(spans)))

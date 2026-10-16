@@ -9,8 +9,8 @@ import pytest
 from huggingface_hub import HfFileSystem
 
 from core.paths import DataRoot
-from megspeech.data.raw import librispeechfetch as module
-from megspeech.data.raw.librispeechfetch import Fetch
+from megspeech.data.raw import librispeech_alignments as module
+from megspeech.data.raw.librispeech_alignments import Fetch
 
 
 class Remote:

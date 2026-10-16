@@ -23,7 +23,7 @@ from megspeech.data.labels.librispeech import (
     Word,
     main,
 )
-from megspeech.data.raw.librispeechfetch import Fetch
+from megspeech.data.raw.librispeech_alignments import Fetch
 
 CHAPTERS = """; header
 ;
@@ -279,4 +279,4 @@ def test_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = world(tmp_path)
     monkeypatch.setattr(module.DataRoot, "from_config", classmethod(lambda cls: root))
     main(["--pause", "0.5"])
-    assert (root.processed(module.PROCESSED) / module.OUTPUT).exists()
+    assert (root.processed(module.DATASET) / module.OUTPUT).exists()

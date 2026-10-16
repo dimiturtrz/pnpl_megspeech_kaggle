@@ -7,6 +7,7 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.model.words.heads import WordHead
 from megspeech.model.words.readout import WordReadout
 
@@ -39,12 +40,10 @@ class WordEncoder(nn.Module, ABC):
     def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:
         """`valid` rows alone set any batch statistics; the rest are padding."""
 
-    def positions(
-        self, x: Float[Tensor, "r c t"], onset: Float[Tensor, "g w"], slot: Int[Tensor, "g w"]
-    ) -> Float[Tensor, "g w e"]:
-        """Each span position's embedding of its row of `x`, zeros where `slot == len(x)` marks it empty. `onset` is
-        read only by encoders whose rows are spans, not words."""
-        return self.placed(self.embed(x, self.occupied(x, slot)), slot)
+    def positions(self, spans: SpanInput) -> Float[Tensor, "g w e"]:
+        """Each span position's embedding of its row of `spans.x`, zeros where it is empty. `spans.onset` is read
+        only by encoders whose rows are spans, not words."""
+        return self.placed(self.embed(spans.x, self.occupied(spans.x, spans.slot)), spans.slot)
 
     @staticmethod
     def occupied(x: Float[Tensor, "r c t"], slot: Int[Tensor, "g w"]) -> Bool[Tensor, " r"]:

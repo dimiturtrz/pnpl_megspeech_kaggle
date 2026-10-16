@@ -10,8 +10,8 @@ uv run python -m megspeech.evaluation.viz serve [--port 8000]   # http://localho
 uv run python -m megspeech.evaluation.viz agree [--name default]   # logs the export's saliency agreement report (agreement.py)
 ```
 
-Exports land under the data root (`paths.yaml`), `viz/<export-name>/` — never in git. `serve`
-mounts `web/` at `/` and the export at `/data/`.
+Exports land under the data root (`paths.yaml`), `processed/pnpl_libribrain/viz/<export-name>/` — never in git.
+`serve` mounts `web/` at `/` and the export at `/data/`.
 
 ## Data contract (`/data/`)
 

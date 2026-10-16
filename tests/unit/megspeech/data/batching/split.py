@@ -396,11 +396,11 @@ def windows(count: int = 3) -> Windows:
 
 def test_under(tmp_path: Path):
     root = DataRoot(tmp_path)
-    assert Features.under(root, "x").directory == root.kind("models") / FEATURES / "x"
+    assert Features.under(root, "x").directory == root.processed() / FEATURES / "x"
     assert Features.under(root, "").directory is None
     joined = Features.under(root, "x+y")
-    assert joined.directory == root.kind("models") / FEATURES / "x"
-    assert joined.joined == (Features(root.kind("models") / FEATURES / "y"),)
+    assert joined.directory == root.processed() / FEATURES / "x"
+    assert joined.joined == (Features(root.processed() / FEATURES / "y"),)
 
 
 def test_path(tmp_path: Path):

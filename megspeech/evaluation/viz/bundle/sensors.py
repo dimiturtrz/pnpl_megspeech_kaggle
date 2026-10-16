@@ -8,7 +8,7 @@ import numpy as np
 
 from core.paths import DataRoot
 from megspeech.data.raw.fetch import NEUROMAG
-from megspeech.data.raw.sources.masc import Neuromag
+from megspeech.data.raw.sources.meg_masc import Neuromag
 
 REGIONS = (
     "Left-temporal",

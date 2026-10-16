@@ -4,6 +4,7 @@ import pytest
 import torch
 
 from core.paths import DataRoot
+from megspeech.data.batching.split import SpanInput
 from megspeech.model.words.conv import ConvConfig
 from megspeech.model.words.spanned import WORD, SpannedConfig, SpanWords
 from megspeech.model.words.trunk import DOWNSAMPLING, Geometry, Trunk
@@ -18,6 +19,10 @@ def words(spanned: SpannedConfig = TINY) -> SpanWords:
     return SpanWords(Trunk(Features(), Geometry.of(CHANNELS)), ConvConfig(), spanned, SENSORS)
 
 
+def spans(x: torch.Tensor, onset: torch.Tensor, slot: torch.Tensor) -> SpanInput:
+    return SpanInput(x, onset, slot, torch.zeros(len(x), dtype=torch.long))
+
+
 def test_pretrained(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     trunk = Trunk(Features(), Geometry.of(CHANNELS))
     monkeypatch.setattr(Trunk, "pretrained", classmethod(lambda _cls, _root: trunk))
@@ -29,7 +34,7 @@ def test_positions():
     x = torch.randn(2, SENSORS, 3 * DOWNSAMPLING)
     onset = torch.tensor([[0.0, 0.3], [0.0, 0.0]])
     slot = torch.tensor([[0, 0], [1, 2]])
-    out = encoder.positions(x, onset, slot)
+    out = encoder.positions(spans(x, onset, slot))
     assert out.shape == (2, 2, 5)
     assert out[0].abs().sum() > 0
     assert out[1, 0].abs().sum() > 0
@@ -40,7 +45,7 @@ def test_positions():
 def test_positions_pads_to_whole_tokens():
     encoder = words()
     out = encoder.positions(
-        torch.randn(1, SENSORS, 2 * DOWNSAMPLING + 5), torch.zeros(1, 1), torch.zeros(1, 1, dtype=torch.long)
+        spans(torch.randn(1, SENSORS, 2 * DOWNSAMPLING + 5), torch.zeros(1, 1), torch.zeros(1, 1, dtype=torch.long))
     )
     assert out.shape == (1, 1, 5)
 
@@ -48,7 +53,7 @@ def test_positions_pads_to_whole_tokens():
 def test_positions_full_precision_trains_the_trunk():
     encoder = words(SpannedConfig(components=3, width=5, full_precision=True))
     x = torch.randn(1, SENSORS, 2 * DOWNSAMPLING, requires_grad=False)
-    encoder.positions(x, torch.zeros(1, 1), torch.zeros(1, 1, dtype=torch.long)).sum().backward()
+    encoder.positions(spans(x, torch.zeros(1, 1), torch.zeros(1, 1, dtype=torch.long))).sum().backward()
     assert encoder.trunk.module.scale.grad is not None
     assert encoder.reduce[1].weight.grad is not None
 

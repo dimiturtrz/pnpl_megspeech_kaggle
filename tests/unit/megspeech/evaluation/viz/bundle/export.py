@@ -8,7 +8,8 @@ import torch
 
 from core.paths import DataRoot
 from megspeech.data.raw.runs import Run
-from megspeech.evaluation.viz.bundle.export import MANIFEST, MODELS, VIZ, ExportConfig, Exporter
+from megspeech.evaluation.viz import VIZ
+from megspeech.evaluation.viz.bundle.export import MANIFEST, MODELS, ExportConfig, Exporter
 from megspeech.evaluation.viz.bundle.records import SAMPLES, SampleSet
 from megspeech.evaluation.viz.models.outputs import Outputs
 from tests.unit.megspeech.data.raw.runs import events, meg
@@ -57,7 +58,7 @@ def test_run(tmp_path: Path) -> None:
     root = DataRoot(tmp_path)
     events(Run(meg(root.raw(), HELD)))
     out = Exporter(root, Drawn(), Read(), Layout()).run(ExportConfig(("m1", "m2"), n=1, seed=3, name="set"))
-    assert out == root.kind(VIZ) / "set"
+    assert out == root.processed() / VIZ / "set"
     manifest = json.loads((out / MANIFEST).read_text(encoding="utf-8"))
     assert [m["name"] for m in manifest["models"]] == ["m1", "m2"]
     assert (manifest["name"], manifest["seed"], manifest["samples"]) == ("set", 3, SAMPLES)

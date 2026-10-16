@@ -4,7 +4,9 @@ from pathlib import Path
 import pytest
 
 import megspeech.evaluation.viz.__main__ as entry
+from core.paths import COMPETITION
 from megspeech.device import Device
+from megspeech.evaluation.viz import VIZ
 from megspeech.evaluation.viz.__main__ import Cli
 from megspeech.evaluation.viz.bundle.export import ExportConfig, Sampler
 from megspeech.evaluation.viz.models.outputs import Reader
@@ -61,14 +63,14 @@ def test_export() -> None:
 @pytest.mark.usefixtures("fakes")
 def test_serve(tmp_path: Path) -> None:
     Cli().serve(argparse.Namespace(port=0, name="x"))
-    assert FakeServer.seen == [ServeConfig(data=tmp_path / "viz" / "x", port=0)]
+    assert FakeServer.seen == [ServeConfig(data=tmp_path / "processed" / COMPETITION / VIZ / "x", port=0)]
 
 
 @pytest.mark.usefixtures("fakes")
 def test_run(tmp_path: Path) -> None:
     Cli().run(["serve", "--port", "9001", "--name", "y"])
     Cli().run(["export", "--models", "m"])
-    assert FakeServer.seen == [ServeConfig(data=tmp_path / "viz" / "y", port=9001)]
+    assert FakeServer.seen == [ServeConfig(data=tmp_path / "processed" / COMPETITION / VIZ / "y", port=9001)]
     assert FakeExporter.seen == [ExportConfig(models=("m",))]
     assert FakeExporter.devices == [Device.CPU, Device.CPU]
 
@@ -94,5 +96,5 @@ def test_agree(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     monkeypatch.setattr(entry, "Agreement", FakeAgreement)
     with caplog.at_level("INFO"):
         Cli().agree(argparse.Namespace(name="z"))
-    assert seen == [tmp_path / "viz" / "z"]
+    assert seen == [tmp_path / "processed" / COMPETITION / VIZ / "z"]
     assert '"of": "maps"' in caplog.text

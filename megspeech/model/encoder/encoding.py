@@ -5,6 +5,7 @@ from typing import Self, override
 from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.model.config import ContextConfig
 from megspeech.model.encoder.builder import WordBuilder
 from megspeech.model.encoder.motion import Moving
@@ -52,6 +53,10 @@ class Encoding(nn.Module):
         """Each window as the word encoder reads it: levelled, scaled, whitened, in its subject's space, normalised."""
         sensors = self.subjects(self.whiten(self.scale(self.levels(x, subject))), subject)
         return self.words.normalise(sensors, x.ne(0).any(dim=1, keepdim=True))
+
+    def prepared(self, spans: SpanInput) -> SpanInput:
+        """`spans` over their windows as the word encoder reads them (`prepare`)."""
+        return spans.reading(self.prepare(spans.x, spans.subject))
 
     def encoder(self) -> list[nn.Parameter]:
         """The stage-1 parameters, every one a word's embedding and word-head logits depend on: the subject layer, the

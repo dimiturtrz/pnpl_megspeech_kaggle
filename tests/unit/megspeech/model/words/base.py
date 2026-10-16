@@ -5,12 +5,17 @@ import torch
 from jaxtyping import Bool, Float
 from torch import Tensor
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.words.base import WordEncoder
 
 SAMPLES = 50
 STEPS = 7
 GENERATOR = torch.Generator().manual_seed(0)
+
+
+def spans(x: Float[Tensor, "r c t"], slot: Tensor) -> SpanInput:
+    return SpanInput(x, torch.zeros(slot.shape), slot, torch.zeros(len(x), dtype=torch.long))
 
 
 class Pooled(WordEncoder):
@@ -72,7 +77,7 @@ def test_positions() -> None:
     encoder = Pooled()
     x = torch.randn(3, 5, SAMPLES, generator=GENERATOR)
     slot = torch.tensor([[0, 2, 3], [1, 3, 3]])
-    out = encoder.positions(x, torch.zeros(2, 3), slot)
+    out = encoder.positions(spans(x, slot))
     assert out.shape == (2, 3, 5)
     assert torch.equal(out[0, 1], x[2].mean(-1))
     assert torch.all(out[slot == 3] == 0)
@@ -105,7 +110,7 @@ def test_positions_timed() -> None:
     x = torch.randn(3, 5, SAMPLES, generator=GENERATOR)
     slot = torch.tensor([[0, 2, 3], [1, 3, 3]])
     embedded, times = encoder.positions_timed(x, slot)
-    assert torch.equal(embedded, encoder.positions(x, torch.zeros(2, 3), slot))
+    assert torch.equal(embedded, encoder.positions(spans(x, slot)))
     assert times.shape == (2, 3, 5, STEPS)
     assert torch.equal(times[0, 1], x[2, :, :STEPS])
     assert torch.all(times[slot == 3] == 0)
@@ -144,7 +149,7 @@ def test_positions_tapped() -> None:
     x = torch.randn(3, 5, SAMPLES, generator=GENERATOR)
     slot = torch.tensor([[0, 2, 3], [1, 3, 3]])
     embedded, pooled = encoder.positions_tapped(x, slot, (0,), (1,))
-    assert torch.equal(embedded, encoder.positions(x, torch.zeros(2, 3), slot))
+    assert torch.equal(embedded, encoder.positions(spans(x, slot)))
     assert torch.equal(pooled[0, 1], x[2, :, :1].flatten())
     assert torch.all(pooled[slot == 3] == 0)
 

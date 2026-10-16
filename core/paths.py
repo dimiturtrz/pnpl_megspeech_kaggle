@@ -3,13 +3,14 @@
 One data root per machine, recorded in the gitignored `paths.yaml`. `MEGSPEECH_DATA` overrides it, so a
 runner with no dataset can point at an empty directory and the data-gated tests skip instead of erroring.
 
-The root is per MODALITY (`D:/data/neural`), shared with every project reading that modality, and the
-competition is a directory under each kind:
+The root is per MODALITY (`D:/data/neural`), shared with every project reading that modality. Each dataset has ONE
+slug, the same under every kind and as its adapter's module name (`megspeech.data.raw.sources.<dataset>`):
 
-    <data>/raw/pnpl_libribrain/            as downloaded, never written to
-    <data>/processed/pnpl_libribrain/      derived data
-    <data>/models/pnpl_libribrain/         our checkpoints + their run records
-    <data>/models/foreign/<name>/          third-party weights (MEG-XL, ...)
+    <data>/raw/<dataset>/                  as downloaded, never written to
+    <data>/processed/<dataset>/            derived data; the competition's (`pnpl_libribrain`) holds
+                                           features/, viz/, submissions/, studies/, dascoli_ref/ beside its caches
+    <data>/models/<dataset>/               our checkpoints + their run records
+    <data>/models/foreign/<name>/          third-party weights (MEG-XL, ...), ours or another project's
 
 A kind resolves to `<data>/<kind>` unless paths.yaml names it as a top-level key, which redirects that
 kind alone. Every configured path goes through `NativePath.resolve`, so a path written on one OS either

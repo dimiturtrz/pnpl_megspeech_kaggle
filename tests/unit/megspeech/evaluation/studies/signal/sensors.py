@@ -7,7 +7,7 @@ import pytest
 
 from megspeech.data.cache.run_cache import RunCache
 from megspeech.data.raw.runs import Run
-from megspeech.data.raw.sources.masc import Neuromag
+from megspeech.data.raw.sources.meg_masc import Neuromag
 from megspeech.evaluation.studies.signal.sensors import (
     BANDS,
     DISTANCES,

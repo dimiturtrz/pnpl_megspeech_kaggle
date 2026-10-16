@@ -15,13 +15,13 @@ from megspeech.device import Device
 from megspeech.evaluation.loaded.ensemble import Loader
 from megspeech.evaluation.loaded.group import Group
 from megspeech.evaluation.scoring.config import Scoring
+from megspeech.evaluation.viz import VIZ
 from megspeech.evaluation.viz.bundle.media import Stimulus
 from megspeech.evaluation.viz.bundle.records import SAMPLES, Builder, SampleSet, Window
 from megspeech.evaluation.viz.bundle.sample import STRATA, Picker, Profiles, Sentences
 from megspeech.evaluation.viz.bundle.sensors import Helmet, Layout
 from megspeech.evaluation.viz.models.outputs import Reader, Reading
 
-VIZ = "viz"
 MANIFEST = "manifest.json"
 MODELS = "models"
 LOCAL_TEST = (Partition.VALIDATION, Partition.TEST)
@@ -73,7 +73,8 @@ class Sampler:
 
 @dataclass(frozen=True)
 class Exporter:
-    """Writes `<data>/viz/<name>/`: the manifest, the samples and their media, each model's outputs."""
+    """Writes `processed/pnpl_libribrain/viz/<name>/`: the manifest, the samples and their media, each model's
+    outputs."""
 
     root: DataRoot | None = None
     sampler: Sampling = field(default_factory=Sampler)
@@ -87,7 +88,7 @@ class Exporter:
 
     def run(self, config: ExportConfig) -> Path:
         root = self.root or DataRoot.from_config()
-        out = root.kind(VIZ) / config.name
+        out = root.processed() / VIZ / config.name
         runs = self.runs(root)
         samples = self.sampler.draw(root, config, runs)
         samples.write(out)

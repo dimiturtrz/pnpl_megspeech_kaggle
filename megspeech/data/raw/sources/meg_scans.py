@@ -1,12 +1,12 @@
 """MEG-SCANS (OpenNeuro ds006468, Gerrit et al., CC0) audiobook recordings rewritten as LibriBrain runs: each Triux
-Neuromag-306 recording cleaned as Kymata's are (`megspeech.data.raw.sources.kymata`: SSS with head-position
+Neuromag-306 recording cleaned as Kymata's are (`megspeech.data.raw.sources.kymata_soto`: SSS with head-position
 correction, mains notch, 0.1 Hz high-pass, 250 Hz), its German words in pnpl's columns.
 
 The recordings are raw and carry the subject's own cross-talk and calibration files. A run is one audiobook part
 (`task-audiobook{1,2}_run-0{1,2}`, ~9.5 min) played once; its forced-aligned words
 (`stimuli/audiobooks/*_stim.TextGrid`, seconds from the wav's start) are placed on a clock fitted from the audio the
-recording carries on `MISC001` (`kymatasync`): the 1 Hz pulse train the events file holds starts ~0.66 s before the
-audio and is not used.
+recording carries on `MISC001` (`kymata_soto_sync`): the 1 Hz pulse train the events file holds starts ~0.66 s before
+the audio and is not used.
 
 The words are German, so each segment carries the `GERMAN` prefix: `Vocabulary.spelled` keeps it, so none is spelled
 as an English vocabulary word (`so`, `in`, `an`, `was` are both) and every one is `IGNORE` for the word and context
@@ -15,7 +15,7 @@ Only the words are written, no phonemes: the aligner's IPA is not the ARPAbet th
 `timechapter` column is the word's start in the stimulus wav, which `megspeech.objective.targets.scansloudness` reads
 to cut the envelope target for the acoustic auxiliary.
 
-    uv run python -m megspeech.data.raw.sources.scans                  # every audiobook recording, into processed/scans
+    uv run python -m megspeech.data.raw.sources.meg_scans   # every audiobook recording, into processed/meg_scans
 """
 
 import argparse
@@ -35,10 +35,10 @@ from megspeech.data.raw.events import Event, Events, Kind
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.serialised import Corpus, RunName
 from megspeech.data.raw.sources.appleseed import Story
-from megspeech.data.raw.sources.kymata import Recording as Triux
-from megspeech.data.raw.sources.kymata import Study
-from megspeech.data.raw.sources.kymatasync import Alignment, Clock
-from megspeech.data.raw.sources.masc import COLUMNS, Neuromag
+from megspeech.data.raw.sources.kymata_soto import Recording as Triux
+from megspeech.data.raw.sources.kymata_soto import Study
+from megspeech.data.raw.sources.kymata_soto_sync import Alignment, Clock
+from megspeech.data.raw.sources.meg_masc import COLUMNS, Neuromag
 from megspeech.data.raw.textgrid import TextGrid
 
 LOG = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ OFFSET_BOUNDS = (-0.2, 0.2)
 """Seconds from the coarse audio match a play's fitted start may lie: that match is biased by up to half the clip's
 drift (~0.14 s), which the fit itself corrects."""
 
-SCANS = Study("meg_scans", "scans")
+SCANS = Study("meg_scans")
 
 
 @dataclass(frozen=True)
@@ -145,7 +145,7 @@ class Recording(Triux):
 
 @dataclass(frozen=True)
 class Scans(Corpus[Neuromag]):
-    """MEG-SCANS' recordings and the LibriBrain-shaped runs they become under `processed/scans`."""
+    """MEG-SCANS' recordings and the LibriBrain-shaped runs they become under `processed/meg_scans`."""
 
     @classmethod
     def under(cls, root: DataRoot) -> "Scans":
@@ -168,7 +168,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workers", type=int, default=WORKERS)
     parser.add_argument("--subjects", type=int, nargs="*", default=[], help="run subject numbers (401+); default all")
-    parser.add_argument("--target", type=Path, default=None, help="write the runs here instead of processed/scans")
+    parser.add_argument("--target", type=Path, default=None, help="write the runs here instead of processed/meg_scans")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()

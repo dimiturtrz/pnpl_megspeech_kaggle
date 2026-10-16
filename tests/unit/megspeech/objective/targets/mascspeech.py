@@ -9,14 +9,14 @@ from core.paths import DataRoot
 from megspeech.data.config import Cut
 from megspeech.data.raw.fetch import MASC
 from megspeech.data.raw.runs import Run
-from megspeech.data.raw.sources.masc import Masc, Recording
+from megspeech.data.raw.sources.meg_masc import Masc, Recording
 from megspeech.objective.targets import mascspeech as module
 from megspeech.objective.targets import speech
 from megspeech.objective.targets.loudness import CUT, LENGTH, Loudness
 from megspeech.objective.targets.mascspeech import Told, Wavs
 from megspeech.objective.targets.speech import SAMPLING, STEM, Targets, Teacher
 from tests.unit.megspeech.data.raw.runs import meg
-from tests.unit.megspeech.data.raw.sources.masc import NAME, SOUNDS, recording
+from tests.unit.megspeech.data.raw.sources.meg_masc import NAME, SOUNDS, recording
 from tests.unit.megspeech.objective.targets.scansloudness import root
 from tests.unit.megspeech.objective.targets.speech import CPU, DIM, SECONDS, Loader, Root, loud
 

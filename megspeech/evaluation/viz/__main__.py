@@ -29,14 +29,16 @@ class Cli:
         """The `export` / `serve` / `agree` parser; each subcommand binds its handler as `run`."""
         parser = argparse.ArgumentParser(prog="python -m megspeech.evaluation.viz")
         commands = parser.add_subparsers(required=True)
-        export = commands.add_parser("export", help="write a sample set + model outputs under <data>/viz/<name>/")
+        export = commands.add_parser(
+            "export", help="write a sample set + model outputs under processed/<competition>/viz/<name>/"
+        )
         export.add_argument("--models", nargs="+", required=True)
         export.add_argument("--n", type=int, default=1000)
         export.add_argument("--seed", type=int, default=0)
         export.add_argument("--name", default="default")
         export.add_argument("--device", default=Device.CPU, help="where models read and attribute")
         export.set_defaults(run=self.export)
-        serve = commands.add_parser("serve", help="serve web/ at / and <data>/viz/<name>/ at /data/")
+        serve = commands.add_parser("serve", help="serve web/ at / and processed/<competition>/viz/<name>/ at /data/")
         serve.add_argument("--port", type=int, default=8000)
         serve.add_argument("--name", default="default")
         serve.set_defaults(run=self.serve)

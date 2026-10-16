@@ -12,8 +12,8 @@ from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.constants import SFREQ
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.runs import Run
-from megspeech.data.raw.sources import masc as module
-from megspeech.data.raw.sources.masc import COLUMNS, HIGHPASS, Masc, Neuromag, Recording, main
+from megspeech.data.raw.sources import meg_masc as module
+from megspeech.data.raw.sources.meg_masc import COLUMNS, HIGHPASS, Masc, Neuromag, Recording, main
 
 CON = "sub-01_ses-0_task-2_meg.con"
 NAME = "sub-101_ses-0_task-MASC2_run-1"

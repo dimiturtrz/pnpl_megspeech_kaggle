@@ -68,8 +68,7 @@ class SentenceNet(Span):
     ) -> tuple[Float[Tensor, "g w h"], Float[Tensor, "g w e"], Float[Tensor, "g w v"], Float[Tensor, "g w v"]]:
         """The refined positions and the word embeddings, then the context head's logits with the timing head's
         added, and the word head's, both corrected by the pyramid readout."""
-        prepared = self.prepare(spans.x, spans.subject)
-        slots, taps = self.pyramid.positions(self.words, prepared, spans.onset, spans.slot)
+        slots, taps = self.pyramid.positions(self.words, self.prepared(spans))
         slots = self.centred(spans, slots)
         refined, slots, context, word = self.finish(self.chunked(spans, slots), slots, spans.onset, spans.mask)
         return refined, slots, *self.pyramid.correct(taps, refined, context, word)

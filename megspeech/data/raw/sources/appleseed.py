@@ -31,7 +31,7 @@ from megspeech.data.raw.events import Event, Events, Kind
 from megspeech.data.raw.fetch import APPLESEED, NEUROMAG
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.serialised import Corpus, RunName
-from megspeech.data.raw.sources.masc import COLUMNS, HIGHPASS, Neuromag
+from megspeech.data.raw.sources.meg_masc import COLUMNS, HIGHPASS, Neuromag
 from megspeech.data.raw.textgrid import Interval, TextGrid
 
 LOG = logging.getLogger(__name__)

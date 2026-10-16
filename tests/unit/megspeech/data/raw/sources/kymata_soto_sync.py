@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from scipy.io import wavfile
 
-from megspeech.data.raw.sources.kymatasync import DRIFT_BOUNDS, FALLBACK, RATE, Alignment, Clock, Envelope
+from megspeech.data.raw.sources.kymata_soto_sync import DRIFT_BOUNDS, FALLBACK, RATE, Alignment, Clock, Envelope
 
 CLIP = 40
 WINDOW = 10

@@ -7,9 +7,10 @@ from dataclasses import dataclass
 from typing import override
 
 import torch
-from jaxtyping import Float, Int
+from jaxtyping import Float
 from torch import Tensor, nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.words.base import EPSILON, WordEncoder
 
@@ -51,9 +52,7 @@ class Depth(nn.Module, ABC):
     """How a `SentenceNet` reads its encoder and corrects its heads' logits."""
 
     @abstractmethod
-    def positions(
-        self, words: WordEncoder, x: Float[Tensor, "r c t"], onset: Float[Tensor, "g w"], slot: Int[Tensor, "g w"]
-    ) -> tuple[Float[Tensor, "g w e"], Float[Tensor, "g w k"]]:
+    def positions(self, words: WordEncoder, spans: SpanInput) -> tuple[Float[Tensor, "g w e"], Float[Tensor, "g w k"]]:
         """Each span position's word embedding, and the features `correct` reads beside the refined positions."""
 
     @abstractmethod
@@ -79,10 +78,8 @@ class Surface(Depth):
     """The encoder's last map alone, the logits uncorrected and every weight trainable."""
 
     @override
-    def positions(
-        self, words: WordEncoder, x: Float[Tensor, "r c t"], onset: Float[Tensor, "g w"], slot: Int[Tensor, "g w"]
-    ) -> tuple[Float[Tensor, "g w e"], Float[Tensor, "g w k"]]:
-        slots = words.positions(x, onset, slot)
+    def positions(self, words: WordEncoder, spans: SpanInput) -> tuple[Float[Tensor, "g w e"], Float[Tensor, "g w k"]]:
+        slots = words.positions(spans)
         return slots, slots[..., :0]
 
     @override
@@ -122,10 +119,8 @@ class Pyramid(Depth):
         nn.init.zeros_(self.out.bias)
 
     @override
-    def positions(
-        self, words: WordEncoder, x: Float[Tensor, "r c t"], onset: Float[Tensor, "g w"], slot: Int[Tensor, "g w"]
-    ) -> tuple[Float[Tensor, "g w e"], Float[Tensor, "g w k"]]:
-        return words.positions_tapped(x, slot, self.taps, self.levels)
+    def positions(self, words: WordEncoder, spans: SpanInput) -> tuple[Float[Tensor, "g w e"], Float[Tensor, "g w k"]]:
+        return words.positions_tapped(spans.x, spans.slot, self.taps, self.levels)
 
     @override
     def correct(

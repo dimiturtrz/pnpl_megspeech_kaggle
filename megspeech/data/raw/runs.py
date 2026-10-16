@@ -17,8 +17,8 @@ from megspeech.data.constants import TAIL
 from megspeech.data.raw.events import Event, Events
 from megspeech.data.raw.fetch import APPLESEED, MASC
 from megspeech.data.raw.serialised import NAME, RunName, Serialised
-from megspeech.data.raw.sources.kymata import KYMATA
-from megspeech.data.raw.sources.scans import SCANS
+from megspeech.data.raw.sources.kymata_soto import KYMATA
+from megspeech.data.raw.sources.meg_scans import SCANS
 from megspeech.data.raw.sources.smn4lang import SMN4LANG
 
 DEEP = 0
@@ -160,9 +160,8 @@ class Run:
 
     @classmethod
     def everywhere(cls, root: DataRoot) -> list["Run"]:
-        """LibriBrain's runs, then every other study's recordings rewritten as runs (`megspeech.data.raw.sources.masc`,
-        `megspeech.data.raw.sources.appleseed`, `megspeech.data.raw.sources.kymata`, `megspeech.data.raw.sources.scans`,
-        `megspeech.data.raw.sources.smn4lang`)."""
+        """LibriBrain's runs, then every other study's recordings rewritten as runs (`megspeech.data.raw.sources`:
+        `meg_masc`, `appleseed`, `kymata_soto`, `meg_scans`, `smn4lang`)."""
         studies = (MASC, APPLESEED, KYMATA, SCANS, SMN4LANG)
         rewritten = (root.processed(study.dataset) for study in studies)
         return [*cls.discover(root.raw()), *(run for processed in rewritten for run in cls.discover(processed))]

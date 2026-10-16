@@ -6,7 +6,7 @@ uses): both arrays sample one field outside the head, so the field each KIT grad
 Neuromag coils, through the recording's own device-to-head transform onto the head frame of MNE's Neuromag test
 recording. LibriBrain's files are Maxwell-filtered with head-position correction, so one standard head position fits.
 
-    uv run python -m megspeech.data.raw.sources.masc   # every downloaded recording, into processed/meg_masc
+    uv run python -m megspeech.data.raw.sources.meg_masc   # every downloaded recording, into processed/meg_masc
 """
 
 import argparse

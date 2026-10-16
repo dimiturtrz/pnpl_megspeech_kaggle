@@ -19,7 +19,7 @@ from megspeech.data.batching.windows import Windows
 from megspeech.data.config import DataConfig
 from megspeech.data.corpus import Corpus
 from megspeech.data.raw.fetch import NEUROMAG
-from megspeech.data.raw.sources.masc import Neuromag
+from megspeech.data.raw.sources.meg_masc import Neuromag
 from megspeech.device import Device
 
 LOG = logging.getLogger(__name__)

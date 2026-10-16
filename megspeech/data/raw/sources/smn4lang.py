@@ -43,11 +43,11 @@ from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.serialised import Corpus, RunName
 from megspeech.data.raw.sources.appleseed import Story
-from megspeech.data.raw.sources.kymata import Study
-from megspeech.data.raw.sources.kymatasync import Clock
-from megspeech.data.raw.sources.masc import HIGHPASS, Neuromag
-from megspeech.data.raw.sources.scans import Book
-from megspeech.data.raw.sources.scans import Recording as Played
+from megspeech.data.raw.sources.kymata_soto import Study
+from megspeech.data.raw.sources.kymata_soto_sync import Clock
+from megspeech.data.raw.sources.meg_masc import HIGHPASS, Neuromag
+from megspeech.data.raw.sources.meg_scans import Book
+from megspeech.data.raw.sources.meg_scans import Recording as Played
 from megspeech.data.raw.textgrid import Interval, TextGrid
 
 LOG = logging.getLogger(__name__)
@@ -183,7 +183,7 @@ class Recording(Played):
         return [Clock(marks[START] if trusted else marks[END] - duration, 0.0, 0.0)]
 
 
-SMN4LANG = Study("smn4lang", "smn4lang")
+SMN4LANG = Study("smn4lang")
 
 
 @dataclass(frozen=True)

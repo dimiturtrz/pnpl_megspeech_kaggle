@@ -1,6 +1,6 @@
 """MEG-MASC's per-word speech targets: the wav2vec2 latents (`megspeech.objective.targets.speech`) and the envelope
 windows (`megspeech.objective.targets.loudness`) of each converted run's heard words, read from the stimulus wav each
-word was played in at its `start` there (`megspeech.data.raw.sources.masc.Recording.heard`), so the speech, acoustic
+word was played in at its `start` there (`megspeech.data.raw.sources.meg_masc.Recording.heard`), so the speech, acoustic
 and audio auxiliaries train on MASC as on LibriBrain.
 
 A story plays as several wavs, so a run's rows are gathered wav by wav; every subject heard the same wavs, so each is
@@ -26,7 +26,7 @@ from megspeech.data.config import Cut
 from megspeech.data.raw.events import Event, Events
 from megspeech.data.raw.fetch import MASC
 from megspeech.data.raw.runs import Run
-from megspeech.data.raw.sources.masc import Masc, Recording
+from megspeech.data.raw.sources.meg_masc import Masc, Recording
 from megspeech.objective.targets.loudness import Loudness
 from megspeech.objective.targets.speech import DEVICE, LAG, Chapter, Reading, Targets
 

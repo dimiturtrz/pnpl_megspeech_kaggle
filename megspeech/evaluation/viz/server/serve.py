@@ -1,4 +1,4 @@
-"""Serve the viewer: `web/` at `/`, one export under the data root's `viz/<name>/` at `/data/`."""
+"""Serve the viewer: `web/` at `/`, one export under `processed/pnpl_libribrain/viz/<name>/` at `/data/`."""
 
 import logging
 from dataclasses import dataclass
@@ -7,13 +7,11 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from core.paths import DataRoot
+from megspeech.evaluation.viz import VIZ
 from megspeech.evaluation.viz.server.handler import Handler
 
 WEB = Path(__file__).resolve().parents[1] / "web"
 """The static viewer app, served at `/`."""
-
-VIZ = "viz"
-"""The data-root kind exports live under: `<data>/viz/<name>/`."""
 
 HOST = "127.0.0.1"
 
@@ -31,7 +29,7 @@ class ServeConfig:
     @classmethod
     def for_export(cls, name: str, port: int, root: DataRoot | None = None) -> "ServeConfig":
         """The config serving export `name` from the data root (paths.yaml unless `root` is given)."""
-        return cls(data=(root or DataRoot.from_config()).kind(VIZ) / name, port=port)
+        return cls(data=(root or DataRoot.from_config()).processed() / VIZ / name, port=port)
 
 
 class Server:

@@ -13,7 +13,7 @@ from megspeech.data.constants import SFREQ
 from megspeech.data.raw.fetch import APPLESEED
 from megspeech.data.raw.sources import appleseed as module
 from megspeech.data.raw.sources.appleseed import Appleseed, Bads, Recording, Reference, Story, main
-from megspeech.data.raw.sources.masc import COLUMNS, HIGHPASS, Neuromag
+from megspeech.data.raw.sources.meg_masc import COLUMNS, HIGHPASS, Neuromag
 from megspeech.data.raw.textgrid import TextGrid
 
 FIF = "sub-08_task-Appleseed_split-01_meg.fif"

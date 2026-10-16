@@ -30,7 +30,7 @@ from megspeech.data.constants import RATE
 from megspeech.data.labels.vocabulary import PRIMARY
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.runs import Partition, Run
-from megspeech.data.raw.sources.masc import Neuromag
+from megspeech.data.raw.sources.meg_masc import Neuromag
 from megspeech.device import Device
 from megspeech.evaluation.loaded.ensemble import Loader
 from megspeech.evaluation.loaded.group import Group

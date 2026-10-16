@@ -73,7 +73,7 @@ uv venv --python 3.11 .venv
 uv pip install --python .venv torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cu121
 uv pip install --python .venv -e neuralset[dev] -e neuraltrain pnpl lightning wandb x_transformers transformers sentencepiece
 # kenlm only if lm_path is used. neuraltrain pulls braindecode@git
-$env:SAVEPATH = "D:/data/neural/scratch/dascoli"
+$env:SAVEPATH = "D:/data/neural/processed/pnpl_libribrain/dascoli_ref"
 $env:DATAPATH = "D:/data/neural"
 $env:LIBRIBRAIN100_PATH = "<pnpl HF root under D:/data/neural/raw>"   # verify the dir Run B used
 .venv/Scripts/python -m sentence_decoding.grids.libribrain100

@@ -1,7 +1,7 @@
 """LibriSpeech word onsets cut into sentence spans: a pretraining corpus for the timing-only model.
 
     uv run --no-sync python -m megspeech.data.labels.librispeech --fetch   # alignments + metadata, into raw/
-    uv run --no-sync python -m megspeech.data.labels.librispeech           # build processed/librispeech_spans
+    uv run --no-sync python -m megspeech.data.labels.librispeech           # build processed/librispeech_alignments
 
 Sources, each CC BY 4.0 (licence read on the primary page):
 
@@ -39,11 +39,10 @@ from jaxtyping import Bool, Float
 
 from core.paths import DataRoot
 from megspeech.data.labels.vocabulary import ABSENT, PRIMARY
-from megspeech.data.raw.librispeechfetch import Fetch
+from megspeech.data.raw.librispeech_alignments import DATASET, Fetch
 
 LOG = logging.getLogger(__name__)
 
-PROCESSED = "librispeech_spans"
 OUTPUT = "spans.parquet"
 UNKNOWN = "<unk>"
 """What the aligner writes for a word outside its lexicon."""
@@ -269,7 +268,7 @@ class Corpus:
 
     def __init__(self, root: DataRoot, *, min_words: int = MIN_WORDS, pause: float | None = None) -> None:
         self.fetch = Fetch(root)
-        self.out = root.processed(PROCESSED)
+        self.out = root.processed(DATASET)
         self.min_words = min_words
         self.pause = pause
 

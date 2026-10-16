@@ -11,10 +11,10 @@ from scipy.io import wavfile
 
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.constants import SFREQ
-from megspeech.data.raw.sources import kymata as module
-from megspeech.data.raw.sources.kymata import KYMATA, Clip, Kymata, Recording, Study, main
-from megspeech.data.raw.sources.kymatasync import Alignment, Clock, Envelope
-from megspeech.data.raw.sources.masc import COLUMNS, HIGHPASS, Neuromag
+from megspeech.data.raw.sources import kymata_soto as module
+from megspeech.data.raw.sources.kymata_soto import KYMATA, Clip, Kymata, Recording, Study, main
+from megspeech.data.raw.sources.kymata_soto_sync import Alignment, Clock, Envelope
+from megspeech.data.raw.sources.meg_masc import COLUMNS, HIGHPASS, Neuromag
 
 FIF = "sub-E3b_task-en_run-2_meg.fif"
 NAME = "sub-323_ses-1_task-Kymata_run-2"
@@ -101,7 +101,7 @@ def clocked(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_home(tmp_path: Path) -> None:
     root = DataRoot(tmp_path)
-    assert Study("a", "b").home(root) == root.raw("a")
+    assert Study("a").home(root) == root.raw("a")
 
 
 def test_tier(tmp_path: Path) -> None:

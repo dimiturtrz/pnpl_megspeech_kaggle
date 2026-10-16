@@ -6,10 +6,10 @@ listening could we still add?
 
 **Already pooled or converted:**
 - LibriBrain subject 0.
-- MEG-MASC (`megspeech/data/raw/sources/masc.py`).
+- MEG-MASC (`megspeech/data/raw/sources/meg_masc.py`).
 - Appleseed ds007870 (`appleseed.py`).
-- Kymata-SOTO (`kymata.py` + `kymatasync.py`).
-- MEG-SCANS ds006468 (`scans.py`, German, converted under megspeech-u2m.3).
+- Kymata-SOTO (`kymata_soto.py` + `kymata_soto_sync.py`).
+- MEG-SCANS ds006468 (`meg_scans.py`, German, converted under megspeech-u2m.3).
 
 **Scope.**
 - Desk research only. Nothing was downloaded.
@@ -39,7 +39,7 @@ listening could we still add?
 | stimulus | audiobook, 9 parts x ~10m50s | 60 stories | 10 Sherlock Holmes stories | isolated sentences (9-15 words) + scrambled lists | |
 | word onsets ship? | **yes**: per-run `events.tsv` (`onset duration trial_type stimulus`, `Word` rows, ~1850 in run 1) | **yes**: `derivatives/annotations/time_align`, Kaldi GMM-HMM char + word on/offsets in story audio | **yes**: Penn Forced Aligner, TextGrid per story | **partial**: only first and target word onsets, set manually in Praat | |
 | size / access | 478 GB snapshot (meg + mri), open | 678 GB snapshot (meg + mri + dwi); **MEG raw already on disk, 304 GB** in `raw/smn4lang` | DUA: owner login + click-through; size *unverified* | DUA: owner login + click-through; size *unverified* | |
-| ingest effort | **S**: `scans.py` clone (SSS with the shipped cal/crosstalk, word events from `events.tsv`, French prefix -> IGNORE). No audio clock fit: the onsets are already on the MEG clock. Head-position (cHPI) presence *unverified*. | **S-M**: Neuromag path as `scans.py`; alignments are relative to story audio, so a run-start offset from the triggers is needed (per-run `events.tsv` not inspected). Mandarin -> IGNORE. | **M + owner step**: CTF-275 reader + field map (the `masc.py` pattern), TextGrid via `textgrid.py`, plus excluding stories that overlap LibriBrain's Sherlock val/local test | **M + owner step**: as Armeni, plus the sentence/list task structure; few word labels | -- |
+| ingest effort | **S**: `meg_scans.py` clone (SSS with the shipped cal/crosstalk, word events from `events.tsv`, French prefix -> IGNORE). No audio clock fit: the onsets are already on the MEG clock. Head-position (cHPI) presence *unverified*. | **S-M**: Neuromag path as `scans.py`; alignments are relative to story audio, so a run-start offset from the triggers is needed (per-run `events.tsv` not inspected). Mandarin -> IGNORE. | **M + owner step**: CTF-275 reader + field map (the `masc.py` pattern), TextGrid via `textgrid.py`, plus excluding stories that overlap LibriBrain's Sherlock val/local test | **M + owner step**: as Armeni, plus the sentence/list task structure; few word labels | -- |
 
 ## Licence lines, quoted
 - **Le Petit Prince (ds007523).**
@@ -81,7 +81,7 @@ reference for the converters. I did not check whether our pinned `pnpl>=0.2.0` s
 ## Ranking: expected value / effort
 
 1. **Le Petit Prince MEG (ds007523).**
-   - Cheapest valid add: open, CC0, same scanner family, word onsets already on the MEG clock, and an `scans.py`-sized
+   - Cheapest valid add: open, CC0, same scanner family, word onsets already on the MEG clock, and an `meg_scans.py`-sized
      converter.
    - 58 subjects is the most subject diversity on offer for the cross-subject Broad stem.
    - Value is capped by the German +.004 prior. It is worth one run only as the **dose instrument**: about 6x

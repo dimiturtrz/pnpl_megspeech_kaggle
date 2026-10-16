@@ -2,12 +2,13 @@ import threading
 from pathlib import Path
 
 from core.paths import DataRoot
+from megspeech.evaluation.viz import VIZ
 from megspeech.evaluation.viz.server.serve import WEB, ServeConfig, Server
 
 
 def test_for_export(tmp_path: Path) -> None:
     config = ServeConfig.for_export("run7", 9000, DataRoot(tmp_path))
-    assert config == ServeConfig(data=tmp_path / "viz" / "run7", port=9000, web=WEB)
+    assert config == ServeConfig(data=DataRoot(tmp_path).processed() / VIZ / "run7", port=9000, web=WEB)
 
 
 def test_url(tmp_path: Path) -> None:

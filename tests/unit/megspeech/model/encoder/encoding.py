@@ -4,6 +4,7 @@ import pytest
 import torch
 from torch import nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
 from megspeech.model.config import ContextConfig
 from megspeech.model.encoder.encoding import Encoding
@@ -29,6 +30,18 @@ def test_embed() -> None:
 def test_prepare() -> None:
     x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
     assert encoding().prepare(x, torch.zeros(3, dtype=torch.long)).shape == x.shape
+
+
+def test_prepared() -> None:
+    """The spans keep their positions and read their windows as `prepare` leaves them."""
+    made = encoding()
+    x = torch.randn(3, CHANNELS, SAMPLES, generator=GENERATOR)
+    subject = torch.zeros(3, dtype=torch.long)
+    spans = SpanInput(x, torch.zeros(1, 2), torch.tensor([[0, 2]]), subject)
+    prepared = made.prepared(spans)
+    assert torch.equal(prepared.x, made.prepare(x, subject))
+    assert prepared.slot is spans.slot
+    assert prepared.onset is spans.onset
 
 
 def test_encoder() -> None:

@@ -1,5 +1,5 @@
 """The speech envelope each word's window heard in the non-English audiobook runs, MEG-SCANS' German parts
-(`megspeech.data.raw.sources.scans`) and SMN4Lang's Mandarin stories (`megspeech.data.raw.sources.smn4lang`):
+(`megspeech.data.raw.sources.meg_scans`) and SMN4Lang's Mandarin stories (`megspeech.data.raw.sources.smn4lang`):
 `megspeech.objective.targets.loudness`' targets for them, so the acoustic auxiliary (`--optim.acoustic`) trains on them.
 
 A run's stimulus is one wav (each study names it by the run's key), its words' onsets the events' `timechapter`
@@ -16,8 +16,8 @@ from typing import ClassVar, override
 from core.paths import DataRoot
 from megspeech.data.config import Cut
 from megspeech.data.raw.runs import Run
-from megspeech.data.raw.sources.kymata import Study
-from megspeech.data.raw.sources.scans import SCANS, STIMULI, TASK
+from megspeech.data.raw.sources.kymata_soto import Study
+from megspeech.data.raw.sources.meg_scans import SCANS, STIMULI, TASK
 from megspeech.data.raw.sources.smn4lang import SMN4LANG, STORIES
 from megspeech.objective.targets.loudness import Loudness
 from megspeech.objective.targets.speech import Chapter, Heard, Targets

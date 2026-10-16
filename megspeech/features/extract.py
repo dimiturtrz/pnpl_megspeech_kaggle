@@ -214,7 +214,7 @@ class Read(StrEnum):
 @dataclass
 class Export:
     """The MEG of the training split, every validation domain and the Deep Kaggle test, whose extracted features are
-    saved under models/features/<name>, one file per split, beside the settings that made them."""
+    saved under processed/pnpl_libribrain/features/<name>, one file per split, beside the settings that made them."""
 
     corpus: Corpus
     kaggle: Split
@@ -246,7 +246,8 @@ class Export:
 
 
 def main() -> None:
-    """Save the features of the training split, validation domains and Deep Kaggle test under models/features/<name>."""
+    """Save the features of the training split, validation domains and Deep Kaggle test under
+    processed/pnpl_libribrain/features/<name>."""
     tree = Tree(RunConfig)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--name", required=True)

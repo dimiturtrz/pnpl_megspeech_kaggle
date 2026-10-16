@@ -8,11 +8,11 @@ head position, mains notch, 0.1 Hz high-pass, 250 Hz. Both arrays are Neuromag-3
 the channels are only put in LibriBrain's order.
 
 Each run plays the same ~400 s podcast clip twice; the clip's forced alignment (`stimuli/audio/mfa_*.txt`, seconds
-from the clip's start) is placed on each play's fitted clock (`kymatasync`): the audio the recording carries on
+from the clip's start) is placed on each play's fitted clock (`kymata_soto_sync`): the audio the recording carries on
 `MISC006` gives the play's start and the stimulus clock's drift, the start trigger only says where to look.
 
-    uv run python -m megspeech.data.raw.sources.kymata                  # every recording, into processed/kymata
-    uv run python -m megspeech.data.raw.sources.kymata --events-only  # rewrite events of converted runs, MEG untouched
+    uv run python -m megspeech.data.raw.sources.kymata_soto                # every recording, into processed/kymata_soto
+    uv run python -m megspeech.data.raw.sources.kymata_soto --events-only  # rewrite converted runs' events only
 """
 
 import argparse
@@ -37,8 +37,8 @@ from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.mains import Mains
 from megspeech.data.raw.serialised import Corpus, RunName
 from megspeech.data.raw.sources.appleseed import Story
-from megspeech.data.raw.sources.kymatasync import Alignment, Clock, Envelope
-from megspeech.data.raw.sources.masc import COLUMNS, HIGHPASS, ORIGIN, Neuromag
+from megspeech.data.raw.sources.kymata_soto_sync import Alignment, Clock, Envelope
+from megspeech.data.raw.sources.meg_masc import COLUMNS, HIGHPASS, ORIGIN, Neuromag
 from megspeech.data.raw.textgrid import Interval, TextGrid
 
 LOG = logging.getLogger(__name__)
@@ -72,16 +72,15 @@ SILENCES = {"<sp>", "spn"}
 
 @dataclass(frozen=True)
 class Study:
-    """A dataset kept under `raw/<raw>` as downloaded by hand and rewritten under `processed/<dataset>`."""
+    """A dataset kept under `raw/<dataset>` as downloaded by hand and rewritten under `processed/<dataset>`."""
 
-    raw: str
     dataset: str
 
     def home(self, root: DataRoot) -> Path:
-        return root.raw(self.raw)
+        return root.raw(self.dataset)
 
 
-KYMATA = Study("kymata_soto", "kymata")
+KYMATA = Study("kymata_soto")
 
 
 @dataclass(frozen=True)
@@ -219,7 +218,7 @@ class Recording:
 
 @dataclass(frozen=True)
 class Kymata(Corpus[Neuromag]):
-    """Kymata's recordings and the LibriBrain-shaped runs they become under `processed/kymata`."""
+    """Kymata's recordings and the LibriBrain-shaped runs they become under `processed/kymata_soto`."""
 
     @classmethod
     def under(cls, root: DataRoot) -> "Kymata":
@@ -262,7 +261,9 @@ def main() -> None:
     parser.add_argument("--events-only", action="store_true", help="rewrite events of converted runs, not their MEG")
     parser.add_argument("--workers", type=int, default=None, help=f"default {WORKERS}, {EVENT_WORKERS} events-only")
     parser.add_argument("--subjects", type=int, nargs="*", default=[], help="run subject numbers (301+); default all")
-    parser.add_argument("--target", type=Path, default=None, help="write the runs here instead of processed/kymata")
+    parser.add_argument(
+        "--target", type=Path, default=None, help="write the runs here instead of processed/kymata_soto"
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     root = DataRoot.from_config()

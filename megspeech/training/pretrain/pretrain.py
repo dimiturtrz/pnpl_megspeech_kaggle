@@ -23,7 +23,7 @@ from megspeech.data.cache.run_cache import DeviceRecording
 from megspeech.data.config import METRICS, DataConfig
 from megspeech.data.raw.fetch import NEUROMAG
 from megspeech.data.raw.runs import DEEP, Run
-from megspeech.data.raw.sources.masc import Neuromag
+from megspeech.data.raw.sources.meg_masc import Neuromag
 from megspeech.device import Device
 from megspeech.model.config import CONTEXT, ContextConfig, Covariance
 from megspeech.model.input.scaler import Scaler

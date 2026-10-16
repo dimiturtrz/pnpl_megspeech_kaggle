@@ -408,7 +408,7 @@ class Features:
         """The features `name` names; `a+b` joins `b`'s after `a`'s."""
         if not name:
             return cls()
-        first, *rest = (root.kind("models") / FEATURES / part for part in name.split(JOIN))
+        first, *rest = (root.processed() / FEATURES / part for part in name.split(JOIN))
         return cls(first, tuple(cls(directory) for directory in rest))
 
     def path(self, split: str) -> Path:

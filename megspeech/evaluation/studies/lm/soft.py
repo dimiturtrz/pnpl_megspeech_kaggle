@@ -27,6 +27,7 @@ import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from operator import itemgetter
 from pathlib import Path
 
@@ -55,7 +56,14 @@ WIDTHS = (4, 2)
 """Word candidates kept at the nearest neighbour, then the next; `RIGHT` deep, as `lmbound`'s right channel."""
 JOINT = (3, 5)
 """Left, then right configurations crossed in `pmi-right`."""
-CHANNELS = {"pmi": 0, "pmi-right": RIGHT}
+
+
+class Channel(StrEnum):
+    PMI = "pmi"
+    PMI_RIGHT = "pmi-right"
+
+
+CHANNELS: dict[str, int] = {Channel.PMI: 0, Channel.PMI_RIGHT: RIGHT}
 BATCH = 8
 """Contexts per LM forward, each carrying every candidate."""
 LOG_EVERY = 500
@@ -142,8 +150,8 @@ class Neighbours:
         right = [(self.spelled(states, at + 1), weight) for states, weight in outward(members[at + 1 :], WIDTHS)]
         first, second = (heapq.nlargest(k, side, itemgetter(1)) for k, side in zip(JOINT, (left, right), strict=True))
         return {
-            "pmi": Weighted.of([((words, ()), weight) for words, weight in left]),
-            "pmi-right": Weighted.of(
+            Channel.PMI: Weighted.of([((words, ()), weight) for words, weight in left]),
+            Channel.PMI_RIGHT: Weighted.of(
                 [((before, after), wb * wa) for (before, wb), (after, wa) in itertools.product(first, second)]
             ),
         }
@@ -352,7 +360,7 @@ class Kaggle:
 
     def lone(self, others: dict[str, Float[Tensor, "n c"]]) -> float:
         """The largest channel magnitude over the rows alone in their span: 0 when the channel is sound."""
-        alone = [row.contexts == (EMPTY,) for row in self.weighted["pmi-right"]]
+        alone = [row.contexts == (EMPTY,) for row in self.weighted[Channel.PMI_RIGHT]]
         return max(float(other[torch.tensor(alone)].abs().max()) for other in others.values())
 
 

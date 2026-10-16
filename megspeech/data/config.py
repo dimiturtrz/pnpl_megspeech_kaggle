@@ -134,8 +134,9 @@ class DataConfig:
     others still train the word head and every per-window term and still feed their spans as context input, but
     the context head cannot memorise a story they repeat (megspeech-7gf.152)."""
     features: str = ""
-    """Features a frozen encoder saved under models/features/<name> (`megspeech.data.batching.split`), read in
-    place of every split's MEG; `a+b` joins several encoders' per word (megspeech-7gf.77); empty reads the MEG."""
+    """Features a frozen encoder saved under processed/pnpl_libribrain/features/<name>
+    (`megspeech.data.batching.split`), read in place of every split's MEG; `a+b` joins several encoders' per word
+    (megspeech-7gf.77); empty reads the MEG."""
     cleaning: Cleaning = Cleaning.NONE
     """Artifacts removed from every recording before it is cached (`megspeech.data.cache.cleaning`): which cache
     training and the Kaggle test read."""

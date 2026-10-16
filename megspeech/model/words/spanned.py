@@ -15,6 +15,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from core.paths import DataRoot
+from megspeech.data.batching.split import SpanInput
 from megspeech.model.words.base import WordEncoder
 from megspeech.model.words.conv import ConvConfig
 from megspeech.model.words.trunk import DOWNSAMPLING, LATENT, RATE, Trunk
@@ -64,23 +65,21 @@ class SpanWords(WordEncoder):
         return (self.trunk,)
 
     @override
-    def positions(
-        self, x: Float[Tensor, "g c t"], onset: Float[Tensor, "g w"], slot: Int[Tensor, "g w"]
-    ) -> Float[Tensor, "g w e"]:
-        """Each span's words' embeddings, zeros at empty positions (`slot == len(x)`)."""
-        mask = slot < len(x)
-        x = nn.functional.pad(x, (0, -x.shape[-1] % DOWNSAMPLING))
+    def positions(self, spans: SpanInput) -> Float[Tensor, "g w e"]:
+        """Each span's words' embeddings, zeros at empty positions; a row of `spans.x` is a whole span."""
+        mask = spans.mask
+        x = nn.functional.pad(spans.x, (0, -spans.x.shape[-1] % DOWNSAMPLING))
         with torch.autocast(x.device.type, enabled=not self.full):
             tokens = self.trunk(x.float() if self.full else x)
-        weights = self.weights((onset * RATE).round().long(), tokens.shape[2], self.read) * mask[..., None]
+        weights = self.weights((spans.onset * RATE).round().long(), tokens.shape[2], self.read) * mask[..., None]
         pooled = torch.einsum("gckf,gwk->gwcf", self.reduce(tokens), weights.to(tokens.dtype))
         return self.mix(pooled.flatten(2)) * mask[..., None]
 
     @override
     def embed(self, x: Float[Tensor, "b c t"], valid: Bool[Tensor, " b"] | None = None) -> Float[Tensor, "b e"]:
         """A window as a span of one word at its first sample."""
-        rows = torch.arange(len(x), device=x.device)[:, None]
-        return self.positions(x, x.new_zeros(len(x), 1), rows)[:, 0]
+        rows = torch.arange(len(x), device=x.device)
+        return self.positions(SpanInput(x, x.new_zeros(len(x), 1), rows[:, None], rows))[:, 0]
 
     @staticmethod
     def weights(start: Int[Tensor, "g w"], tokens: int, read: int = WORD) -> Float[Tensor, "g w k"]:

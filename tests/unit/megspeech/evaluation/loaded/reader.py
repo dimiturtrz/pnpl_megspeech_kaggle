@@ -29,7 +29,7 @@ def test_load(tmp_path: Path) -> None:
 def test_features(tmp_path: Path) -> None:
     assert reader(tmp_path).features.directory is None
     frozen = replace(reader(tmp_path), data=DataConfig(features="frozen"))
-    assert frozen.features.directory == DataRoot(tmp_path).kind("models") / FEATURES / "frozen"
+    assert frozen.features.directory == DataRoot(tmp_path).processed() / FEATURES / "frozen"
 
 
 def test_splits(tmp_path: Path) -> None:

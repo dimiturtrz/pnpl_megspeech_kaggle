@@ -2,6 +2,7 @@ import pytest
 import torch
 from torch import nn
 
+from megspeech.data.batching.split import SpanInput
 from megspeech.data.constants import CHANNELS
 from megspeech.data.labels.vocabulary import VOCAB_SIZE
 from megspeech.model.words.conv import ConvConfig, ConvWords
@@ -21,6 +22,10 @@ def inputs() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     refined = torch.randn(2, 3, WIDTH, generator=GENERATOR)
     logits = torch.randn(2, 3, VOCAB_SIZE, generator=GENERATOR)
     return x, refined, logits
+
+
+def spans(x: torch.Tensor) -> SpanInput:
+    return SpanInput(x, ONSET, SLOT, torch.zeros(len(x), dtype=torch.long))
 
 
 def pyramid() -> tuple[Pyramid, ConvWords]:
@@ -63,8 +68,8 @@ def test_surface_positions() -> None:
     """The surface's embeddings are the encoder's own, with no taps."""
     _, words = pyramid()
     x, _, _ = inputs()
-    plain, none = Surface().positions(words, x, ONSET, SLOT)
-    assert torch.equal(plain, words.positions(x, ONSET, SLOT))
+    plain, none = Surface().positions(words, spans(x))
+    assert torch.equal(plain, words.positions(spans(x)))
     assert none.shape == (2, 3, 0)
 
 
@@ -73,8 +78,8 @@ def test_pyramid_positions() -> None:
     position is empty."""
     model, words = pyramid()
     x, _, _ = inputs()
-    slots, taps = model.positions(words, x, ONSET, SLOT)
-    assert torch.allclose(slots, words.positions(x, ONSET, SLOT))
+    slots, taps = model.positions(words, spans(x))
+    assert torch.allclose(slots, words.positions(spans(x)))
     assert taps.shape == (2, 3, SMALL.hidden * 2 * 3)
     assert torch.all(taps[len(x) == SLOT] == 0)
 

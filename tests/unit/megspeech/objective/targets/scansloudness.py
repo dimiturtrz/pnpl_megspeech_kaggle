@@ -8,7 +8,7 @@ from scipy.io import wavfile
 from core.paths import ENV_OVERRIDE, DataRoot
 from megspeech.data.config import Cut
 from megspeech.data.raw.runs import Run
-from megspeech.data.raw.sources.scans import SCANS, STIMULI
+from megspeech.data.raw.sources.meg_scans import SCANS, STIMULI
 from megspeech.data.raw.sources.smn4lang import SMN4LANG, STORIES
 from megspeech.objective.targets.loudness import CUT, LENGTH, Loudness
 from megspeech.objective.targets.scansloudness import Audiobook, Narrated

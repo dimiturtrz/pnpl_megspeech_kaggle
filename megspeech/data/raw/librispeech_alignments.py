@@ -19,11 +19,8 @@ LOG = logging.getLogger(__name__)
 ALIGNMENTS_REPO = "datasets/gilkeyio/librispeech-alignments/data"
 """Where the aligned parquet shards live on the hub."""
 
-RAW = "librispeech_alignments"
-RAW = "librispeech_alignments"
-PROCESSED = "librispeech_spans"
-OUTPUT = "spans.parquet"
-DOWNLOAD_THREADS = 4
+DATASET = "librispeech_alignments"
+"""The dataset's slug under `raw/` (shards + metadata) and `processed/` (the span table built from them)."""
 DOWNLOAD_THREADS = 4
 
 METADATA_ARCHIVES = {
@@ -49,7 +46,7 @@ class Fetch:
     """Downloads the alignment shards and the metadata archives into the raw directory."""
 
     def __init__(self, root: DataRoot) -> None:
-        self.home = root.raw(RAW)
+        self.home = root.raw(DATASET)
         self.meta = self.home / "meta"
 
     def alignments(self, source: HfFileSystem) -> list[Path]:

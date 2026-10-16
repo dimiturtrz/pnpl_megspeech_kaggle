@@ -237,7 +237,7 @@ are the system's and the same in every recording, are the sensor geometry MEG-XL
 
 MASC = OsfProject("ag3kj", "meg_masc")
 """MEG-MASC (Gwilliams et al. 2023, CC0): 27 subjects hearing four English stories on a KIT-208 system, ~100 GB of
-BIDS; `megspeech.data.raw.sources.masc` rewrites it as LibriBrain runs."""
+BIDS; `megspeech.data.raw.sources.meg_masc` rewrites it as LibriBrain runs."""
 MASC_PARTS = (MASC, OsfProject("h2tzn", MASC.dataset), OsfProject("u5327", MASC.dataset))
 """OSF caps a project's storage, so MEG-MASC is three projects (subjects 01-11 in the first) merged into one tree."""
 
