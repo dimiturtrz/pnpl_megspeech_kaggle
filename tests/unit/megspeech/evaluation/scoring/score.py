@@ -5,9 +5,18 @@ from pathlib import Path
 
 import pytest
 
+from megspeech.data.batching.split import BATCH, EVAL_SPANS
 from megspeech.data.config import METRICS
 from megspeech.evaluation.metric.ruler import Interval
-from megspeech.evaluation.scoring.score import ADJUSTMENTS, MIN_NOVEL, UNSELECTED, Epoch, Score, SelectionConfig
+from megspeech.evaluation.scoring.score import (
+    ADJUSTMENTS,
+    MIN_NOVEL,
+    UNSELECTED,
+    Epoch,
+    Forward,
+    Score,
+    SelectionConfig,
+)
 
 
 def test_best() -> None:
@@ -73,3 +82,19 @@ def test_steering() -> None:
     bare = replace(row, fit=None, shuffled=None).steering()
     assert bare["gap"] is None
     assert bare["neural"] is None
+
+
+def test_spans() -> None:
+    assert Forward().spans() == EVAL_SPANS
+    assert Forward(BATCH // 8).spans() == EVAL_SPANS // 8
+    assert Forward(1).spans() >= 1
+
+
+def test_fewest(tmp_path: Path) -> None:
+    """Runs share the smallest batch any of them trained at; a record without an optim section trained at `BATCH`."""
+    configs: dict[str, dict[str, dict[str, int]]] = {"small": {"optim": {"batch": BATCH // 8}}, "default": {}}
+    for name, config in configs.items():
+        (tmp_path / name).mkdir()
+        (tmp_path / name / METRICS).write_text(json.dumps({"config": config}))
+    assert Forward.fewest([tmp_path / "default"]) == Forward()
+    assert Forward.fewest([tmp_path / "default", tmp_path / "small"]) == Forward(BATCH // 8)

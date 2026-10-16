@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from core.tree import Tree
+from megspeech.data.batching.split import BATCH, EVAL_SPANS
 from megspeech.data.config import METRICS
 from megspeech.evaluation.metric.ruler import Coverage, Interval
 
@@ -42,6 +43,24 @@ class SelectionConfig:
         if len(chosen) != 1:
             raise ValueError(f"runs selected by {sorted(chosen, key=repr)}; an ensemble needs one")
         return chosen.pop()
+
+
+@dataclass(frozen=True)
+class Forward:
+    """How many spans one evaluation forward reads, beside a training step of `batch` spans."""
+
+    batch: int = BATCH
+
+    def spans(self) -> int:
+        """As many times `batch` as `EVAL_SPANS` is `BATCH`, since a forward without gradients holds none of
+        training's activations; a small batch for a heavy encoder shrinks both."""
+        return max(1, EVAL_SPANS * self.batch // BATCH)
+
+    @classmethod
+    def fewest(cls, directories: Sequence[Path]) -> "Forward":
+        """The smallest training batch the runs in `directories` saved; a record without one trained at `BATCH`."""
+        configs = (json.loads((directory / METRICS).read_text())["config"] for directory in directories)
+        return cls(min(config.get("optim", {}).get("batch", BATCH) for config in configs))
 
 
 class Head(StrEnum):

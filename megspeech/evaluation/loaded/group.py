@@ -13,7 +13,7 @@ from megspeech.evaluation.loaded.exported import ExportedModel
 from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
-from megspeech.evaluation.scoring.score import SelectionConfig
+from megspeech.evaluation.scoring.score import Forward, SelectionConfig
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,7 @@ class Group:
             smooth=scoring.smooth,
             shifts=scoring.shifts,
             adapted=scoring.adapted,
+            spans=Forward.fewest(directories).spans(),
             word_share=scoring.word_share,
         )
         return ExportedModel(

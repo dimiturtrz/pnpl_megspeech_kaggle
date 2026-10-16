@@ -54,7 +54,7 @@ class Evaluator:
     adapted: bool = False
     """Read every split through a copy of the model whose batch-norm statistics are the split's own (`adapt`)."""
     spans: int = EVAL_SPANS
-    """Spans one forward reads; a heavy encoder reads fewer to fit in memory (`OptimConfig.eval_spans`)."""
+    """Spans one forward reads; a heavy encoder reads fewer to fit in memory (`Forward`)."""
     word_share: float = 0.0
     """Weight of the word head in the log-probabilities every selection and submission reads (`head`): 0 the context
     head, 1 the word head, between them their log-probability mix."""

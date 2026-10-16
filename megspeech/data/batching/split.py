@@ -21,7 +21,11 @@ from megspeech.data.constants import RATE, TAIL
 from megspeech.data.labels.vocabulary import IGNORE, VOCAB_SIZE
 from megspeech.data.spans.spans import PAD, Spans
 
+BATCH = 64
+"""Spans one training step reads by default."""
+
 EVAL_SPANS = 256
+"""Spans one evaluation forward reads beside a training step of `BATCH` spans."""
 
 DENSE = 4
 """Validation spans this long or longer look like Kaggle test sentences (94% of which carry 4-9 words)."""
