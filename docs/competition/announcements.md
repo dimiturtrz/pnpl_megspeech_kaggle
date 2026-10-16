@@ -56,8 +56,8 @@ average or the best counts. Host (Gereon Elvers), verbatim:
 > Could you point me to where you you've read the "you may choose 10 submissons which count towards the final
 > ranking" wording? It might've been left in somewhere by accident.
 
-Consequence for us: with no manual selection, Deep would be scored on d-old4 (best public .69133), not d-ac05xfam8.
-The picks in `../DELIVERY.md` must be ticked by hand on each track's Submissions tab.
+Consequence for us: with no manual selection, each track is scored on its best public entry. As of 2026-10-16 that is
+Deep d-ac05xfam16 (.69483) and Broad b-xc5k25b0ps (.63097), the recommended picks in `../DELIVERY.md`, so no tick is needed.
 
 Checked 2026-10-13: Deep forum 11867573 has 2 topics, Broad forum 11867592 has only topic 741919 (above). No other
 organiser post on data use.
