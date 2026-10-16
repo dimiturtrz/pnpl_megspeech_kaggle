@@ -1,4 +1,5 @@
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -12,6 +13,7 @@ from megspeech.evaluation.studies.experts.paradigms import (
     BANDS,
     COVARIANCE_COMPONENTS,
     SEGMENTS,
+    Arm,
     Extractor,
     Features,
     Paradigm,
@@ -104,7 +106,23 @@ def test_designs() -> None:
     def features(count: int) -> dict[Paradigm, torch.Tensor]:
         return {paradigm: torch.ones(count, 5) for paradigm in Paradigm}
 
-    train, val = Features(features(3), features(2)).designs(rows(3), rows(2), (Paradigm.BAND, Paradigm.LEVEL))
+    both = Features(features(3), features(2))
+    train, val = both.designs(rows(3), rows(2), Arm("two", (Paradigm.BAND, Paradigm.LEVEL)))
     assert train.x.shape == (3, 4 + 10)
     assert val.x.shape == (2, 4 + 10)
-    assert torch.equal(val.base, rows(2).base)
+    alone, _ = both.designs(rows(3), rows(2), Arm("alone", (Paradigm.BAND,), alone=True))
+    assert alone.x.shape == (3, 5)
+    assert torch.equal(alone.base, torch.zeros(3, 4))
+
+
+def test_save(tmp_path: Path) -> None:
+    features = Features({p: torch.ones(2, 3) for p in Paradigm}, {p: torch.zeros(1, 3) for p in Paradigm})
+    features.save(tmp_path / "f.pt")
+    loaded = Features.load(tmp_path / "f.pt")
+    assert torch.equal(loaded.oof[Paradigm.BAND], features.oof[Paradigm.BAND])
+    assert set(loaded.val) == set(Paradigm)
+
+
+def test_load(tmp_path: Path) -> None:
+    Features({p: torch.ones(1, 1) for p in Paradigm}, {p: torch.ones(1, 1) for p in Paradigm}).save(tmp_path / "f.pt")
+    assert Features.load(tmp_path / "f.pt").val[Paradigm.LEVEL].item() == 1.0

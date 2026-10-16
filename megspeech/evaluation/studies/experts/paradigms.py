@@ -16,6 +16,7 @@ import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from pathlib import Path
 
 import torch
 from jaxtyping import Float
@@ -129,20 +130,42 @@ class Features:
     def joined(parts: list[dict[Paradigm, Tensor]]) -> dict[Paradigm, Tensor]:
         return {paradigm: torch.cat([part[paradigm] for part in parts]) for paradigm in Paradigm}
 
-    def designs(self, oof: Rows, val: Rows, kinds: tuple[Paradigm, ...]) -> tuple[Design, Design]:
-        """The booster's training and validation designs: the base's log-probabilities beside the `kinds` features."""
+    def designs(self, oof: Rows, val: Rows, arm: "Arm") -> tuple[Design, Design]:
+        """The booster's training and validation designs: the `arm`'s features beside the base's log-probabilities, or
+        alone over a uniform base when `arm.alone`."""
 
         def design(rows: Rows, features: dict[Paradigm, Tensor]) -> Design:
-            return Design(torch.cat([rows.base, *(features[kind] for kind in kinds)], dim=1), rows.base, rows.y)
+            base = torch.zeros_like(rows.base) if arm.alone else rows.base
+            columns = [*(() if arm.alone else (rows.base,)), *(features[kind] for kind in arm.kinds)]
+            return Design(torch.cat(columns, dim=1), base, rows.y)
 
         return design(oof, self.oof), design(val, self.val)
 
+    def save(self, path: Path) -> None:
+        torch.save({part: {k.value: v for k, v in getattr(self, part).items()} for part in ("oof", "val")}, path)
 
-ARMS: dict[str, tuple[Paradigm, ...]] = {
-    "base-only": (),
-    **{paradigm.value: (paradigm,) for paradigm in Paradigm},
-    "all": tuple(Paradigm),
-}
+    @classmethod
+    def load(cls, path: Path) -> "Features":
+        saved = torch.load(path)
+        return cls({Paradigm(k): v for k, v in saved["oof"].items()}, {Paradigm(k): v for k, v in saved["val"].items()})
+
+
+@dataclass(frozen=True)
+class Arm:
+    """Which paradigm features a booster reads, and whether it reads them without the base: what they decode alone."""
+
+    name: str
+    kinds: tuple[Paradigm, ...]
+    alone: bool = False
+
+
+ARMS = (
+    Arm("base-only", ()),
+    *(Arm(paradigm.value, (paradigm,)) for paradigm in Paradigm),
+    Arm("all", tuple(Paradigm)),
+    *(Arm(f"alone-{paradigm.value}", (paradigm,), alone=True) for paradigm in Paradigm),
+    Arm("alone-all", tuple(Paradigm), alone=True),
+)
 
 
 def main() -> None:
@@ -155,16 +178,17 @@ def main() -> None:
     loaded = Loader.of(Group(root, Scoring(), device), [args.base])
     domains, _ = loaded.domains(loaded.ruled(Run.discover(root.raw())))
     dump = Dump.load(Dump.path(root, args.base))
-    held = [split for _, split in Dump.held(root, args.folds, device)]
-    spatial = Spatial.fitted(held, COMPONENTS)
-    extract = Extractor(spatial)
-    features = Features(
-        Features.joined([extract(s) for s in held]), Features.joined([extract(s) for s in domains.values()])
-    )
-    if not torch.equal(torch.cat([s.y.cpu() for s in held]), dump.oof.y):
-        raise ValueError("the held-out splits are not the dump's out-of-fold rows")
+    cached = Dump.path(root, f"{args.base}-paradigms")
+    if not cached.exists():
+        held = [split for _, split in Dump.held(root, args.folds, device)]
+        if not torch.equal(torch.cat([split.y.cpu() for split in held]), dump.oof.y):
+            raise ValueError("the held-out splits are not the dump's out-of-fold rows")
+        extract = Extractor(Spatial.fitted(held, COMPONENTS))
+        oof, val = ([extract(split) for split in splits] for splits in (held, domains.values()))
+        Features(Features.joined(oof), Features.joined(val)).save(cached)
+    features = Features.load(cached)
     study = Study(dump.oof, dump.val, dump.domains, loaded.evaluator, loaded.log_prior, domains, device)
-    results = [study.scored(name, *features.designs(dump.oof, dump.val, kinds)) for name, kinds in ARMS.items()]
+    results = [study.scored(arm.name, *features.designs(dump.oof, dump.val, arm)) for arm in ARMS]
     out = Dump.path(root, args.base).parent / f"{args.base}-paradigms.json"
     out.write_text(json.dumps(results, indent=1))
 
