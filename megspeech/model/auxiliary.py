@@ -1,5 +1,6 @@
 """The sentence model trained beside auxiliary heads on its word embeddings or its span-refined positions."""
 
+from collections.abc import Callable
 from enum import StrEnum
 from typing import override
 
@@ -28,7 +29,12 @@ class Tap(StrEnum):
 
     def width(self, net: SentenceNet) -> int:
         """Width of the representation this tap reads off `net`."""
-        return {Tap.WORD: net.words.width, Tap.CONTEXT: net.width, Tap.TIME: net.words.time_width()}[self]
+        widths: dict[Tap, Callable[[], int]] = {
+            Tap.WORD: lambda: net.words.width,
+            Tap.CONTEXT: lambda: net.width,
+            Tap.TIME: net.words.time_width,
+        }
+        return widths[self]()
 
     def pick(
         self,

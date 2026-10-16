@@ -59,6 +59,16 @@ def test_width() -> None:
     assert Tap.TIME.width(model) == model.words.time_width()
 
 
+def test_width_pooled_never_reads_time() -> None:
+    model = net()
+
+    def untimed() -> int:
+        raise NotImplementedError
+
+    model.words.time_width = untimed
+    assert [tap.width(model) for tap in Tap.pooled()] == [model.words.width, 16]
+
+
 def test_pooled() -> None:
     assert Tap.pooled() == (Tap.WORD, Tap.CONTEXT)
 
