@@ -17,8 +17,8 @@ Family against d-ac05xfam (4 seeds, VAL .6459, local test .7289): keep iff VAL â
 
 ## Result (macro bacc@10, tau 0.5)
 
-| arm | VAL | local test |
-|---|---|---|
+| arm | VAL | local test | public |
+|---|---|---|---|
 | base s1-ft-s1 / s2-ft-s2 | .6387 / .6407 | .7088 / â€” |
 | unc s1-ft-s1 | .6494 | .6958 |
 | unc s2-ft-s2 | .6567 | .7255 |
