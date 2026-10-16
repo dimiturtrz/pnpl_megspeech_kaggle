@@ -21,7 +21,7 @@ note rates each against what could change, from the numbers we already hold.
 
 | what changes | rating | evidence |
 |---|---|---|
-| Transductive balancing | moderate, measured | Per-subject Sinkhorn to equal class mass. Gained on two separate natural-speech sets: Broad ruler +.026 (`xc5k25s` vs raw, [ruler breakdown](../broad/2026-10-10_ruler_breakdown.md)), public +.011 alone and +.019 with the mean fallback ([fallback shrink](../broad/2026-10-10_subject_fallback_shrink.md)). On 310-word subsamples it still gains +.013, and the subjects with fewest words gain most. Not measured: a test with far fewer rows per subject, or a much more skewed word distribution. |
+| Transductive balancing | none in this pick | `b0` is balancing strength 0: no Sinkhorn. The dose series on public runs the other way from the Broad ruler: strength 0 / .05 / .10 / .25 / .50 scored .631 / .629 / .627 / .626 / .585 on public against ruler .639 / .647 / .652 / .659 / .652. The pick reads each test row on its own, so it cannot fit the test's word distribution. The ruler-best dose (.25, `b-xc5k25ps`) is the hedge for a final test whose word mix is like the ruler's. |
 | New subjects | unmeasured, being measured | The 0% group (subjects 33–39, 7/39 of public rows) already reads through the mean subject matrix. But no number scores a subject the adapt never saw: the .6137 "zero-shot" read kept each subject in the backbone and in the mean. megspeech-cbb trains the adapt without 10 of subjects 1–32 and scores them zero-shot. |
 | New text | covered | The Broad ruler scores only unseen-span words (`split.novel`), so the context head cannot recall the story there. |
 
