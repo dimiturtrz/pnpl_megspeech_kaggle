@@ -25,4 +25,19 @@ The model is signal-bound, not capacity-bound: extra width fits faster and lands
 
 ## Stem length: 20 epochs
 
-Pending.
+| seed | VAL (stem20 / base) | local test (stem20 / base) |
+|---|---|---|
+| 1 | .6444 / .6387 | .6874 / .7088 |
+| 2 | .6398 / .6407 | .7066 / .7131 |
+
+Mean local test .697: again equal to the redrawn-seed mean, −1.4 against the favourable base draw. The stem took
+12 min instead of 25, and seed 2 led base fine-tune VAL by ~1.5 pt at epochs 14–18 before converging to it.
+
+## Reading
+
+Neither direction moves the local test: wider (h512) and less-fit (stem20) both land at the redrawn-seed mean, and
+only the 80-epoch stem fell below it. Stem fit between 20 and 40 epochs is flat; the transfer gap is not set by how
+hard the stem fits. With capacity and stem length at the redrawn-seed mean, sensor augmentation below it
+(2026-10-16_sensor_augment.md) and ensemble size
+(2026-10-16_stem_seeds.md) saturated, the recipe is at its signal ceiling for single-subject Deep.
+Base s1/s2 (.711) were a favourable draw; comparing new arms against them overstates every loss by ~1.4 pt.
