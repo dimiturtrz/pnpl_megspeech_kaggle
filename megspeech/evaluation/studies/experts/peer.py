@@ -12,6 +12,7 @@ official ruler `megspeech.submission` reports. The booster's epoch count is pick
 import argparse
 import json
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass, fields
 from pathlib import Path
 
@@ -34,7 +35,7 @@ from megspeech.evaluation.loaded.reader import Reader
 from megspeech.evaluation.scoring.config import Scoring
 from megspeech.evaluation.scoring.evaluator import Evaluator
 from megspeech.evaluation.scoring.score import Head
-from megspeech.evaluation.studies.experts.boosted import ARMS, Arm, Boosting, Rows, Spanned
+from megspeech.evaluation.studies.experts.boosted import ARMS, Arm, Boosting, Design, Rows, Spanned
 from megspeech.evaluation.studies.pos.syntax import Embedded
 from megspeech.objective.targets.t5 import Lexicon
 
@@ -123,19 +124,25 @@ class Dump:
         saved = torch.load(path)
         return cls(Rows(**saved["oof"]), Rows(**saved["val"]), tuple(saved["domains"]))
 
+    @staticmethod
+    def held(  # devtools-ignore: test-mirror
+        root: DataRoot, folds: list[str], device: torch.device
+    ) -> Iterator[tuple[int, Split]]:
+        """Each fold's index and the splits of the sessions its model held out, fold by fold."""
+        for k, name in enumerate(folds):
+            data = DataConfig.shared([root.models() / name], DataConfig.grouping)
+            reader = Reader(root, data, device, geometry=data.geometry(root, device))
+            held = data.split(Run.everywhere(root))[Partition.VALIDATION]
+            LOG.info("fold %d (%s): %d held-out sessions", k, name, len(held))
+            yield from ((k, split) for _, split in reader.splits(held).values())
+
     @classmethod
     def build(  # devtools-ignore: test-mirror
         cls, root: DataRoot, folds: list[str], base: str, domains: dict[str, Split], device: torch.device
     ) -> "Dump":
         """Fold `k`'s model read on the sessions it held out, and `base` read on the official validation `domains`."""
-        out_of_fold: list[Rows] = []
-        for k, name in enumerate(folds):
-            probe = Probe.load(root.models() / name, root, device)
-            data = DataConfig.shared([root.models() / name], DataConfig.grouping)
-            reader = Reader(root, data, device, geometry=data.geometry(root, device))
-            held = data.split(Run.everywhere(root))[Partition.VALIDATION]
-            out_of_fold += [probe.rows(split, k) for _, split in reader.splits(held).values()]
-            LOG.info("fold %d (%s): %d held-out sessions", k, name, len(held))
+        probes = [Probe.load(root.models() / name, root, device) for name in folds]
+        out_of_fold = [probes[k].rows(split, k) for k, split in cls.held(root, folds, device)]
         probe = Probe.load(root.models() / base, root, device)
         val = [probe.rows(split, g) for g, split in enumerate(domains.values())]
         return cls(Rows.stacked(out_of_fold), Rows.stacked(val), tuple(domains))
@@ -162,20 +169,25 @@ class Study:
         return self.evaluator.summarised(logits, self.domains, self.log_prior, 0, 0.0).macro.bacc10
 
     def arm(self, arm: Arm) -> dict[str, object]:  # devtools-ignore: test-mirror
-        """`arm`'s epoch count from the last fold's rows, then its official scores over `SEEDS` fitted on every fold."""
-        train = self.oof.design(arm.kinds, neighbours=arm.neighbours).to(self.device)
+        """`arm`'s booster, scored as `scored` scores one."""
+        train = self.oof.design(arm.kinds, neighbours=arm.neighbours)
+        return self.scored(arm.name, train, self.val.design(arm.kinds, neighbours=arm.neighbours))
+
+    def scored(self, name: str, train: Design, val: Design) -> dict[str, object]:  # devtools-ignore: test-mirror
+        """A booster's epoch count from the last fold's rows of `train`, then its official scores on `val` over `SEEDS`
+        fitted on every fold."""
+        train, val = train.to(self.device), val.to(self.device)
         held = (self.oof.group == torch.max(self.oof.group)).to(self.device)
         watched = train.where(held).labelled()
         _, curve = Boosting(seed=0).fit(train.where(~held), EPOCHS, watched)
         epochs = int(np.argmin(curve)) + 1
         base_loss = functional.cross_entropy(watched.base, watched.y).item()
-        val = self.val.design(arm.kinds, neighbours=arm.neighbours).to(self.device)
         scores = []
         for seed in SEEDS:
             model, _ = Boosting(seed=seed).fit(train, epochs)
             scores.append(self.official(model.predict(val).cpu()))
-        LOG.info("%s epochs %d fold-CE base %.4f -> %.4f official %s", arm.name, epochs, base_loss, min(curve), scores)
-        return {"arm": arm.name, "epochs": epochs, "base_ce": base_loss, "boosted_ce": min(curve), "official": scores}
+        LOG.info("%s epochs %d fold-CE base %.4f -> %.4f official %s", name, epochs, base_loss, min(curve), scores)
+        return {"arm": name, "epochs": epochs, "base_ce": base_loss, "boosted_ce": min(curve), "official": scores}
 
 
 def main() -> None:
