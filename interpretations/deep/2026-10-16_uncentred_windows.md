@@ -27,8 +27,8 @@ Family against d-ac05xfam (4 seeds, VAL .6459, local test .7289): keep iff VAL �
 | unc s3-ft-s3 | .6577 | .7178 |
 | unc s4-ft-s4 | .6605 | .6833 |
 | unc 4-seed mean | .6561 | .7056 |
-| d-uncfam4 blend | .6687 | .7096 |
-| d-ac05xfam (control) | .6459 | .7289 |
+| d-uncfam4 blend | .6687 | .7096 | public .69383 |
+| d-ac05xfam (control) | .6459 | .7289 | public .69083 |
 
 ## Reading
 
@@ -47,5 +47,9 @@ top of a frozen base read on out-of-fold rows.
 Not ruled out:
 - A high-passed level (keep < 1 Hz, drop the DC offset) that keeps an SCP but loses the per-recording offset.
 - The level as a separate, per-session normalised input channel beside the centred window.
-- The public leaderboard as the arbiter: it is a third recording set, and an owner-approved instrument slot would say
-  which partition the final test resembles.
+
+## Public (owner-approved instrument slot)
+
+d-uncfam4 scored .69383 on public: +.003 over its control family (.69083), −.001 under the scored fam16 (.69483). The
+third recording set sides with neither partition: the slow level is neutral there, not the +.022 VAL promised or the
+−.019 the local test charged. Not the scored entry.
