@@ -22,7 +22,7 @@ note rates each against what could change, from the numbers we already hold.
 | what changes | rating | evidence |
 |---|---|---|
 | Transductive balancing | none in this pick | `b0` is balancing strength 0: no Sinkhorn. The dose series on public runs the other way from the Broad ruler: strength 0 / .05 / .10 / .25 / .50 scored .631 / .629 / .627 / .626 / .585 on public against ruler .639 / .647 / .652 / .659 / .652. The pick reads each test row on its own, so it cannot fit the test's word distribution. The ruler-best dose (.25, `b-xc5k25ps`) is the hedge for a final test whose word mix is like the ruler's. |
-| New subjects | unmeasured, being measured | The 0% group (subjects 33–39, 7/39 of public rows) already reads through the mean subject matrix. But no number scores a subject the adapt never saw: the .6137 "zero-shot" read kept each subject in the backbone and in the mean. megspeech-cbb trains the adapt without 10 of subjects 1–32 and scores them zero-shot. |
+| New subjects | small exposure | An adapt that never saw 10 of subjects 1–32 reads them .037 below one that did, but its 22 seen subjects lose .022 too (a smaller adapt is weaker for everyone). The cost of being unseen is about .015 ± .011. Low-row subjects lose most. [Note](../broad/2026-10-16_heldout_subjects.md). |
 | New text | covered | The Broad ruler scores only unseen-span words (`split.novel`), so the context head cannot recall the story there. |
 
 ## Not ruled out
