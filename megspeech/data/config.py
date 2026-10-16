@@ -93,6 +93,9 @@ class DataConfig:
     per source so a smaller share is a subset of a larger one (the data-scaling curve, megspeech-7gf.104)."""
     val: Val = Val.CARVED
     """Which sessions are withheld as val (selects epoch and tau) and which are the local test (reports); see `Val`."""
+    centred: bool = True
+    """Whether each window is centred on its own mean; False keeps the slow level (ch. 3's SCP) the model otherwise
+    never sees (megspeech-508)."""
     delay: float = 0.0
     """Seconds after each word's onset its `window` starts: 0.2 reads the recognition stage past the acoustic one."""
     segment: float = 0.0
@@ -211,9 +214,16 @@ class DataConfig:
         return Cut(self.samples, self.to_samples(self.delay))
 
     def reading(self, windows: Windows) -> Windows:
-        """`windows` cut as this config reads them: `window` from `delay` after each onset, centred on itself."""
+        """`windows` cut as this config reads them: `window` from `delay` after each onset, centred on itself
+        when `centred`."""
         length, offset = self.cut()
-        return replace(self.spanned(windows), length=length, offset=offset, segment=self.to_samples(self.segment))
+        return replace(
+            self.spanned(windows),
+            length=length,
+            offset=offset,
+            segment=self.to_samples(self.segment),
+            centred=self.centred,
+        )
 
     def spanned(self, windows: Windows) -> Windows:
         """`windows` stopped `span_lag` after each word's next onset, never before its own first sample; as they are

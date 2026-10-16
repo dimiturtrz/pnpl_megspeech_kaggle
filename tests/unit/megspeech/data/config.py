@@ -325,6 +325,8 @@ def test_reading() -> None:
     assert (delayed.length, delayed.offset) == (round(0.2 * RATE), round(0.2 * RATE))
     assert DataConfig().reading(Windows(torch.zeros(1, 10), at, at)).segment == 0
     assert DataConfig(segment=9.0).reading(Windows(torch.zeros(1, 10), at, at)).segment == 9 * RATE
+    assert DataConfig().reading(Windows(torch.zeros(1, 10), at, at)).centred
+    assert not DataConfig(centred=False).reading(Windows(torch.zeros(1, 10), at, at)).centred
 
 
 def test_segment_validated() -> None:
