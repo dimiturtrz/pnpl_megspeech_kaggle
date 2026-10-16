@@ -53,6 +53,8 @@ class Evaluator:
     """Samples every window is read moved by; the reads' log-probabilities are averaged (test-time augmentation)."""
     adapted: bool = False
     """Read every split through a copy of the model whose batch-norm statistics are the split's own (`adapt`)."""
+    spans: int = EVAL_SPANS
+    """Spans one forward reads; a heavy encoder reads fewer to fit in memory (`OptimConfig.eval_spans`)."""
     word_share: float = 0.0
     """Weight of the word head in the log-probabilities every selection and submission reads (`head`): 0 the context
     head, 1 the word head, between them their log-probability mix."""
@@ -93,10 +95,10 @@ class Evaluator:
 
         Every batch reserves room for full spans, so a compiled model sees one shape (and the last batch's).
         """
-        words, rows = len(split.y), EVAL_SPANS * split.index.shape[1]
+        words, rows = len(split.y), self.spans * split.index.shape[1]
         out = {head: torch.zeros(words + 1, VOCAB_SIZE, device=self.device) for head in Head}
         with torch.no_grad(), Device.autocast():
-            for spans in torch.arange(len(split.index), device=self.device).split(EVAL_SPANS):
+            for spans in torch.arange(len(split.index), device=self.device).split(self.spans):
                 batch = split.batch(spans, rows)
                 context, word = model(batch.inputs())
                 at = batch.words_at(words)

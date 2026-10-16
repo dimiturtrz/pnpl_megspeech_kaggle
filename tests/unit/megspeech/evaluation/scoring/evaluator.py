@@ -230,3 +230,9 @@ def test_head() -> None:
     assert torch.equal(Evaluator(CPU).head(logits), context)
     assert torch.equal(Evaluator(CPU, word_share=1.0).head(logits), logits[Head.WORD])
     assert torch.allclose(Evaluator(CPU, word_share=0.25).head(logits), torch.tensor([[-0.5, -0.75]]))
+
+
+def test_swept_spans_agree() -> None:
+    """Reading one span per forward gives the words the full batch gives."""
+    whole, single = Evaluator(CPU).read(Constant(), split()), Evaluator(CPU, spans=1).read(Constant(), split())
+    assert all(torch.equal(whole[head], single[head]) for head in Head)

@@ -3,16 +3,19 @@
 import math
 from dataclasses import dataclass
 
+from megspeech.data.batching.split import EVAL_SPANS
 from megspeech.training.adversary import AdversaryConfig
 from megspeech.training.auxiliary import AuxiliaryConfig
 from megspeech.training.teacher import TeacherConfig
 from megspeech.training.transfer import TransferConfig
 
+BATCH = 64
+
 
 @dataclass(frozen=True)
 class OptimConfig:
     epochs: int = 40
-    batch: int = 64
+    batch: int = BATCH
     lr: float = 1e-3
     weight_decay: float = 0.05
     label_smoothing: float = 0.1
@@ -79,3 +82,8 @@ class OptimConfig:
     """Compile the model's forward and backward into CUDA graphs; batches have fixed shapes, so they replay."""
     pretrained: float = 0.1
     """Retired with the end-to-end MEG-XL encoder it scaled; kept so the configs saved with it still load."""
+
+    def eval_spans(self) -> int:
+        """Spans one evaluation forward reads: as many times the training batch as the default's, since a forward
+        without gradients holds none of training's activations; a small batch for a heavy encoder shrinks both."""
+        return max(1, EVAL_SPANS * self.batch // BATCH)

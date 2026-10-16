@@ -144,8 +144,8 @@ class Trainer:
             anchored.report(config.context.anchor)
             prototypes = anchored.reduce(config.context.anchor_dim).vectors
         device = corpus.train.y.device
-        evaluator = Evaluator(device, corpus.seen, config.selection.min_novel)
         optim = config.optim
+        evaluator = Evaluator(device, corpus.seen, config.selection.min_novel, spans=optim.eval_spans())
         auxiliary = Auxiliary.of(
             optim.auxiliaries, optim.adversarial, Tables(root, device, corpus.positions, config.data.cut())
         )
