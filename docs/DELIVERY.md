@@ -1,60 +1,91 @@
-# Final-evaluation delivery
+# Verification package
 
-The organisers rank on held-out data "recorded with stimuli that are entirely different from anything released", and
-ask top teams for "runable model checkpoints" (`competition/rules.md:27-30`). This page lists what to hand over for
-each pick, and the command that turns checkpoints and a holdout directory into a submission. The rationale for the
-picks is in megspeech-7gf.29.1. The rebuild audit is megspeech-7gf.29.1.1.
+For the PNPL 2026 organisers: the checkpoints, configuration, dependencies and commands that reproduce our two
+ranked submissions, one per track. Rules context: `competition/rules.md:27-30` asks top teams for "runable model
+checkpoints".
 
-## Inputs
+## What is ranked
 
-- **Checkpoints:** `<data>/models/pnpl_libribrain/<member>/` for each member below (`model.pt`, `metrics.json`).
-- **Checkpoint archive:** `megspeech_verification_checkpoints.zip` (1.3 GiB, Google Drive: <LINK>). Unzip into
-  `<data>/models/`. It holds every member of all picks except d-old4, plus each ensemble's `metrics.json` and its
-  submitted CSV, so you can diff the rebuild against it. d-old4's member weights were deleted in the 2026-10-20 disk
-  cleanup. Rebuilding them means retraining on the 10-07 code. Kaggle ranks d-ac05xfam16 (picks unticked).
-- **Data root:** `paths.yaml` → `data:`. Holdout archives go in `raw/<pnpl HOLDOUT_SUBDIR>/subjNN_holdout{01_sentence,2_word}.npz`,
-  in the layout of `pnpl.competition.holdout`, which the organisers' own loader reads.
-- Inference also reads one training-run h5 to get the channel layout (`KaggleCache.layout`) and the training word
-  table for the prior.
-- Archives replaced after caching are re-cached (7gf.29.1.2). A fresh `processed/` is still the clean option.
+No submission was ticked on Kaggle, so each track scores its best-public one:
 
-## Picks
-
-Every Kaggle submission (146 Deep, 113 Broad) is listed in [`submissions.csv`](submissions.csv): its public score, its
-model dir, its leaf models, and whether they survive on disk and in the archive. A probability mix's models are
-resolved from the names in its description. 'No model dir' means the CSV was written outside `models/` under
-another name.
-
-
-| track | pick | members | flags | rebuild vs submitted |
+| track | submission | public | models | blend record |
 |---|---|---|---|---|
-| Deep | d-ac05xfam16 (scored: Kaggle default, best public .69483) | the 8 below + `…-s1-ft-s2`, `…-s2-ft-ctl-s2`, `…-s{k}-ft-s{k+10}` k = 3..8 | none | built 10-15; CPU rebuild bit-exact (960 rows, max abs Δp 0) |
-| Deep | d-ac05xfam8 | `ema-cd25-xsp10sem05-ac05x-s{k}-ft-s{k}`, k = 1..8 | none | built 10-13 |
-| Deep | d-old4 | `ema-cd25-xsp10sem05-s{k}-ft-s{k}`, k = 2..5 | none | bit-exact |
-| Broad | b-xc5k25b05ps (output dir `zz-b-xc5k25b05ps`) | 29, listed in `xc5k25ps/metrics.json` | `--track broad --aligned --fallback.unseen mean --fallback.keep 0.25 --balance.steps 30 --balance.toward 0.05 --balance.per_subject` | built 10-13 |
-| Broad | b-xc5k25b0ps (scored: Kaggle default, best public .63097; output dir `zz-b-xc5k25b0ps`) | same 29 | `--track broad --aligned --fallback.unseen mean --fallback.keep 0.25 --balance.steps 30 --balance.toward 0.0 --balance.per_subject` | CPU rebuild 10-15: top-1 .997, mean |dp| 4e-5 |
-| Broad | b-xc5k25 (non-transductive hedge) | same 29 | `--track broad --aligned --fallback.unseen mean --fallback.keep 0.25` | bit-exact 10-15 |
+| Deep | `d-ac05xfam16` | .69483 | 16 | `d-ac05xfam16/metrics.json` |
+| Broad | `b-xc5k25b0ps` | .63097 | 29 | `zz-b-xc5k25b0ps/metrics.json` |
 
-## Command
+## Files
 
-```bash
-uv run python -m megspeech.submission <members...> --out <dir> [--track broad] [flags] [--device cpu]
+`megspeech_verification_checkpoints.zip` (1.3 GiB, shared by link with this repo), unzipped into `<data>/models/`:
+
+```
+pnpl_libribrain/
+  d-ac05xfam16/        Deep blend: metrics.json (members + scoring) and the submitted submission.csv
+  ema-cd25-…-ft-…/     Deep members, 16 dirs: model.pt, context.json, metrics.json
+  zz-b-xc5k25b0ps/     Broad blend: metrics.json (members + scoring) and the submitted broad_submission.csv
+  bg90-…/, bgmix05-…/, ema-bgmix05-…/   Broad members, 29 dirs: model.pt, context.json, metrics.json
+  d-ac05xfam8/, zz-b-xc5k25b05ps/, xc5k25/   other picks, built from the same models (below)
 ```
 
-This writes `<dir>/submission.csv` (or `broad_submission.csv`) and `metrics.json`. Since 7gf.29.1.1, `metrics.json`
-records the members together with the scoring flags.
+Which model dir belongs to which track is the `members` list in each blend's `metrics.json`. The two lists are
+disjoint. Every member's `metrics.json` `config` is its complete training configuration, and the blend's
+`config.scoring` holds its inference flags. `hits.pt` and `probs.pt` are local-test outputs, which inference never
+reads.
 
-## Organiser data
+[`submissions.csv`](submissions.csv) lists all 259 Kaggle submissions: public score, model dir, models, and whether
+the weights survive.
 
-- **Format:** the test rows are read by `pnpl.competition.holdout.LibriBrainCompetitionHoldout`, the organisers'
-  own loader. New data in that layout runs unchanged. Any other layout needs an adapter to it.
-- **Training data is required too.** The command re-selects its temperature on the labelled local test, so the
-  training data has to be present (`python -m megspeech.data.raw.fetch`, public). The local test does not depend on the
-  test rows, so new test data gets the same temperature.
-- **Runtime on CPU:** about 10 min for a 4-member Deep blend. Broad's 29 members take over an hour.
+## Setup
+
+```bash
+git clone https://github.com/dimiturtrz/pnpl_megspeech_kaggle && cd pnpl_megspeech_kaggle
+uv sync                                   # Python >=3.12; exact versions pinned in uv.lock (torch from the cu130 index)
+cp paths.example.yaml paths.yaml          # set  data: <data>
+uv run python -m megspeech.data.raw.fetch # public LibriBrain training data from HF (no token), ~120 GB
+unzip megspeech_verification_checkpoints.zip -d <data>/models/
+```
+
+- **Test data:** holdout archives go in `<data>/raw/pnpl_libribrain/COMPETITION_HOLDOUT/subjNN_holdout{01_sentence,2_word}.npz`,
+  in the layout `pnpl.competition.holdout.LibriBrainCompetitionHoldout` reads. New data in that layout runs
+  unchanged. Clear `<data>/processed/` before swapping archives (re-caching is automatic, but a fresh cache is the
+  clean option).
+- **Why training data is needed at inference:** the softmax temperature is re-selected on the labelled local test
+  (pnpl validation + test). One training h5 also gives the channel layout, and the training word table gives the
+  prior. None of this depends on the test rows.
+
+## Run
+
+```bash
+uv run python -m megspeech.submission --rebuild d-ac05xfam16    --out verify-deep  --device cpu   # Deep, ~10 min per 4 members on CPU
+uv run python -m megspeech.submission --rebuild zz-b-xc5k25b0ps --out verify-broad --device cpu   # Broad, >1 h CPU
+```
+
+`--rebuild` reads members, scoring flags and track from the blend's record. Output goes to
+`<data>/models/pnpl_libribrain/verify-*/` (`submission.csv` or `broad_submission.csv` plus `metrics.json`). Drop
+`--device cpu` to use a GPU.
+
+On our machine, a CPU rebuild of the released holdout matched what we submitted. Deep was bit-exact (960 rows, max
+|Δp| 0). Broad agreed on 99.7% of top-1 picks, with mean |Δp| 4e-5 from float order.
+
+## Other picks
+
+| track | submission | how |
+|---|---|---|
+| Deep | `d-ac05xfam8` | `--rebuild d-ac05xfam8`: 8 of the 16 Deep models |
+| Deep | `d-old4` | weights deleted in a 2026-10-20 disk cleanup. Not reproducible without retraining |
+| Broad | `b-xc5k25b05ps` | `--rebuild zz-b-xc5k25b05ps`: same 29 models, Sinkhorn toward the prior^.05 |
+| Broad | `b-xc5k25` | `--rebuild xc5k25`: same 29 models, no Sinkhorn (public .61238) |
+
+## Training
+
+`uv run python -m megspeech.training.cli.train --origin <member> --name <new>` re-runs a member from its recorded
+config. The config names its warm start, a pretrained stem from `megspeech.training.cli.pretrain`. Stems are not in
+the archive. The inference rebuild above is audited. An end-to-end retrain has not been re-run.
 
 ## Disclose
 
-- **Broad b0ps / b05ps:** the Sinkhorn balancing is transductive. It runs per subject over the test rows' output
-  probabilities. b-xc5k25 has none.
+- **Broad `b-xc5k25b0ps` is transductive.** It runs 30 Sinkhorn steps per subject over the test rows' output
+  probabilities, toward equal predicted mass per word (`megspeech/evaluation/metric/balance.py`). Its Kaggle
+  description says "no Sinkhorn (toward 0)". That is wrong: toward 0 means a uniform target, not no balancing.
+  `b-xc5k25` is the same models without it.
+- Deep uses no test-time adaptation.
 - No cross-track mapping is used (`competition/announcements.md`).
