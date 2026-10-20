@@ -87,8 +87,8 @@ checkpoints (`docs/competition/rules.md:27-30`). The public board is therefore n
   configs on current code (7gf.29.1.1); only retraining d-old4 would need the 10-07 code.
 - **Broad:** hedge across the balancing axis, where ruler and public disagree. #1 b-xc5k25b05ps (Sinkhorn toward .05:
   ruler .6471, public .62914): public falls monotonically with dose and cliffs at .5, so the organisers' marginals
-  sit away from the ruler's; .05 keeps the public within .002 of none and takes +.008 ruler (prereg met, 10-13).
-  #2 b-xc5k25b0ps (public .63097, ruler .6390): no transduction. The two differ on 37% of rows. b-xc5k25ps
+  sit away from the ruler's; .05 keeps the public within .002 of toward 0 and takes +.008 ruler (prereg met, 10-13).
+  #2 b-xc5k25b0ps (public .63097, ruler .6390): Sinkhorn toward 0, equal class mass: still transductive. The two differ on 37% of rows. b-xc5k25ps
   (toward .25, ruler .6591, public .62587) is dropped: its +.012 ruler is below the bar and sits nearer the cliff.
   None uses the cross-track mapping. Disclose the Sinkhorn with #1's checkpoints.
 - The rationale is in 7gf.29.1. The pick itself is the owner's action in the Kaggle web UI, and it is required: unticked, Kaggle scores the best-public submission (host, topic 748465; `docs/competition/announcements.md`).

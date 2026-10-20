@@ -5,6 +5,7 @@
 
 Decoding heard words from non-invasive MEG — an entry to the PNPL 2026 / LibriBrain100 competition
 (Deep: one subject, ~80 h; Broad: 32 subjects, minutes of calibration). Plan and numbers: [`docs/PLAN.md`](docs/PLAN.md).
+Organiser verification (checkpoints, rebuild commands, disclosures): [`docs/DELIVERY.md`](docs/DELIVERY.md).
 
 ## Result
 
