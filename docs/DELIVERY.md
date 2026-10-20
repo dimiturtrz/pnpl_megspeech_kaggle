@@ -8,6 +8,10 @@ picks is in megspeech-7gf.29.1. The rebuild audit is megspeech-7gf.29.1.1.
 ## Inputs
 
 - **Checkpoints:** `<data>/models/pnpl_libribrain/<member>/` for each member below (`model.pt`, `metrics.json`).
+- **Checkpoint archive:** `megspeech_verification_checkpoints.zip` (1.3 GiB, Google Drive: <LINK>). Unzip into
+  `<data>/models/`. It holds every member of all picks except d-old4, plus each ensemble's `metrics.json` and its
+  submitted CSV, so you can diff the rebuild against it. d-old4's member weights were deleted in the 2026-10-20 disk
+  cleanup. Rebuilding them means retraining on the 10-07 code. Kaggle ranks d-ac05xfam16 (picks unticked).
 - **Data root:** `paths.yaml` → `data:`. Holdout archives go in `raw/<pnpl HOLDOUT_SUBDIR>/subjNN_holdout{01_sentence,2_word}.npz`,
   in the layout of `pnpl.competition.holdout`, which the organisers' own loader reads.
 - Inference also reads one training-run h5 to get the channel layout (`KaggleCache.layout`) and the training word
