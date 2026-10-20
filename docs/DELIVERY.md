@@ -81,6 +81,25 @@ On our machine, a CPU rebuild of the released holdout matched what we submitted.
 config. The config names its warm start, a pretrained stem from `megspeech.training.cli.pretrain`. Stems are not in
 the archive. The inference rebuild above is audited. An end-to-end retrain has not been re-run.
 
+## External data and models
+
+The rules do not address these (`competition/rules.md:35`), so we list them. Both ranked submissions train on
+LibriBrain data only: `pnpl/LibriBrain`, `pnpl/LibriBrain2`, and the competition release. No other MEG dataset is
+used, and nothing outside it is read at inference.
+
+- **Deep:** the 8 pretraining stems (`ema-cd25-xsp10sem05-ac05x-s{1..8}`, recorded in each member's
+  `config.optim.stem`) use three frozen, public targets during pretraining only:
+  - `facebook/wav2vec2-large-xlsr-53` latents of the heard speech (weight 1.0);
+  - `google-t5/t5-large` layer-12 embeddings of each heard word (weight .5);
+  - the speech envelope (weight .5).
+
+  The audio is the Sherlock chapter audio released with LibriBrain (`megspeech.data.raw.fetch`). The words and
+  timings come from LibriBrain's event files. The 50-word fine-tune and inference use MEG only.
+- **Broad:** no pretrained or external model. Training uses subject 0 plus the Broad subjects' released labelled
+  data, the latter for per-subject adaptation.
+- **Not in either ranked submission:** MEG-XL, GPT-2 language-model fusion, hubert and data2vec targets, and other
+  MEG corpora (MEG-MASC and others). `fetch.py` can download these for studies; they are not needed to rebuild.
+
 ## Disclose
 
 - **Broad `b-xc5k25b0ps` is transductive.** It runs 30 Sinkhorn steps per subject over the test rows' output
