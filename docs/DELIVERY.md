@@ -20,6 +20,12 @@ picks is in megspeech-7gf.29.1. The rebuild audit is megspeech-7gf.29.1.1.
 
 ## Picks
 
+Every Kaggle submission (146 Deep, 113 Broad) is listed in [`submissions.csv`](submissions.csv): its public score, its
+model dir, its leaf models, and whether they survive on disk and in the archive. A probability mix's models are
+resolved from the names in its description. 'No model dir' means the CSV was written outside `models/` under
+another name.
+
+
 | track | pick | members | flags | rebuild vs submitted |
 |---|---|---|---|---|
 | Deep | d-ac05xfam16 (scored: Kaggle default, best public .69483) | the 8 below + `…-s1-ft-s2`, `…-s2-ft-ctl-s2`, `…-s{k}-ft-s{k+10}` k = 3..8 | none | built 10-15; CPU rebuild bit-exact (960 rows, max abs Δp 0) |
